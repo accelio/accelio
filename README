@@ -1,0 +1,135 @@
+libxio
+------
+
+libxio (a.k.a lib accelio) is a lightweight messaging library layered on top
+of rdma. the library provides asynchronous messaging designed for zero
+copy messaging and lock free scalability. 
+
+Building and installation
+--------------------------
+
+to build the library follow the following steps:
+  - run ./autogen.sh
+  - run ./configure
+  - run make
+  - follow examples in ./examples/
+
+Examples
+--------
+
+The following examples are provided:
+
+	1. hello world - a minimal single process, single thread "hello world"
+			 server and client.
+
+	2. hello world mt - a multithreaded client, and multithreaded server 
+			    demonstrating how to scale and work in multi
+			    threaded environment.
+
+	3. R-AIO	 -  Linux's Remote AIO API over libxio. The example contains
+			    a DSO library, a server application and simple clients
+			    the client demonstrates reading of files from the server.
+			    the interface to the library is libraio.h.
+
+	4. fio		 -  a new ioengine for fio application demonstrating the use of 
+			    libraio. The fio application is a benchmark application
+			    allowing multithreaded/multiprocessed benchmarks of io devices. 
+			    The application is used to provide a neutral benchmark for the
+			    libxio performance.
+
+each example contains simple scripts showing how to run the example from the
+local directory
+
+Configuration options:
+----------------------
+
+	1. Huge pages - libxio allocates huge pages for its internal buffers
+			and memory. The user should enable huge pages to gain
+			best performance.
+			for enabling huge pages run:
+
+				echo 3000 > /proc/sys/vm/nr_hugepages
+			
+			as root.
+
+	2. fio -	libxio contains example ioengine for fio application.
+			since the fio example depends on fio sources, 
+			to download the source code do:
+
+			git clone git://git.kernel.org/pub/scm/linux/kernel/git/axboe/fio.git
+
+			set FIO_ROOT environment variable pointing to fio sources:
+
+			export FIO_ROOT=/home/fio
+	
+			libxio lookup for FIO_ROOT environment variable to
+			find the fio sources
+
+			The fio build is not enabled by default. to enable the fio example:
+
+			run configure as follows:
+
+			./configure --enable-fio=yes FIO_ROOT=/home/fio
+
+
+Building blocks:
+----------------
+
+libxio is a software library that provides asynchronous messaging notifications. 
+The libxio API provides a mechanism to send and receive asynchronous messages between peers.
+Upon message arrival, an asynchronous callback is triggered to the application.
+The library is built around message pump. The library provides default
+implementation around epoll but the library can use third party mechanism such
+ACE, libevent etc.
+
+the library provides several primitives that enables it user to quickly
+develop event driven network servers.
+
+	1. event loop - event loop or message pump is the mechanism that execute a callback function when a 
+		        specific event occurs on a file descriptor or after a timeout has been reached.
+			Before you can use any interesting libxio function, you need to allocate one or more 
+			event loop structures. If you want to have multiple threads polling for IO, 
+			you need to have an xio_event_loop for each thread. the library provides default 
+			minimalistic event loop around epoll. the user may replace the default implementation 
+			with its own event loop. this is done by setting 2 user defined callbacks which
+			enables the library to add or remove fd to/from the event loop to the context.
+
+	2. xio_context - xio context represents a thread semantics . the context contains information 
+			 about the running thread such as the cpu id, numa node etc. 
+			 upon context creation, the user sets its event loop object and a 
+			 structure that contain user callbacks to add/remove fds to this event loop.
+			 if the user utilize the default implementation, it can set operations to NULL.
+	
+	3. xio_session - xio session is central concept in libxio.  a session is a semi-permanent interactive 
+			 information interchange, also known as a dialogue, a conversation or a meeting, between 
+			 two or more communicating devices.  A session is set up or established at a certain point 
+			 in time, and torn down at a later point in time. An established communication session 
+			 may involve more than one message in each direction. An established session is the basic 
+			 requirement to perform a connection-oriented communication. a single xio_session may 
+			 be associated with multiple xio_connection. libxio
+			 sessions are created with url. the url is in form of: "<scheme>://<address>:<port>/resource"
+			 a session may represent a remote resource that requester requests from the remote responder.
+			 upon opening a session, the user provides a structure of callbacks that shall be triggered upon
+			 network events, such as session events, arriving messages, errors etc.
+
+	4. xio_connection - connection is a requester side handle that enables the peer to send a message to remote peer.
+			    application typically open one connection per session per thread. for example 
+			    if a session is maintained by 4 worker threads than each thread should have its own connection.
+	
+	5. xio_server - the server object represents the passive side object. the server is created by calling xio_bind.
+			there are two types of xio servers: the first is acceptor which accepts incoming connections, and
+			handles them. it may forward incoming connection to a backend worker thread or redirect it to 
+			another server it may also reject or accept the connection. the second server type 
+			is worker thread. worker threads are inteneded to work on the background an parallelize 
+			the workload upon all cores scaling  out the application. a server can also be a mixure 
+			of acceptor and worker. which mean that the same server accepts the connection and 
+			also processes the message requests.
+
+	6. xio_mr -	the mr represents memory region that was registered for RDMA operations. 
+			Doing memory registration, allows the RDMA device to read and write data to this memory.
+			Performing this registration takes some time, so performing memory registration isn’t 
+			recommended in the data path, when fast response is required.
+			There are two models of working with memory regions: 
+			the first is that the application registers its buffers and the other is that
+			the library registers the buffers and allows the application to access them directly.
+
