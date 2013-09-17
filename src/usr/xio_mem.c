@@ -1,0 +1,100 @@
+/*
+ * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two licenses.
+ * You may choose to be licensed under the terms of the GNU General Public
+ * License (GPL) Version 2, available from the file COPYING in the main
+ * directory of this source tree, or the Mellanox Technologies® BSD license
+ * below:
+ *
+ *      - Redistribution and use in source and binary forms, with or without
+ *        modification, are permitted provided that the following conditions
+ *        are met:
+ *
+ *      - Redistributions of source code must retain the above copyright
+ *        notice, this list of conditions and the following disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *        contributors may be used to endorse or promote products derived from
+ *        this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+#include "xio_os.h"
+#include "xio_common.h"
+
+#define HUGE_PAGE_SZ			(2*1024*1024)
+
+
+/*---------------------------------------------------------------------------*/
+/* malloc_huge_pages	                                                     */
+/*---------------------------------------------------------------------------*/
+void *malloc_huge_pages(size_t size)
+{
+	/* Use 1 extra page to store allocation metadata */
+	/* (libhugetlbfs is more efficient in this regard) */
+	size_t real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
+
+	void *ptr = mmap64(NULL, real_size, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS |
+			MAP_POPULATE | MAP_HUGETLB, -1, 0);
+	if (ptr == MAP_FAILED) {
+		/* The mmap() call failed. Try to malloc instead */
+		int page_size = sysconf(_SC_PAGESIZE);
+		WARN_LOG("mmap64 rdma pool sz:%zu failed (errno=%d %m)\n",
+			 real_size, errno);
+		real_size = ALIGN(size + HUGE_PAGE_SZ, page_size);
+		posix_memalign(&ptr, page_size, real_size);
+		if (ptr == NULL) {
+			ERROR_LOG("posix_memalign failed sz:%zu. %m\n",
+				  real_size);
+			return NULL;
+		}
+		real_size = 0;
+	} else {
+		DEBUG_LOG("Allocated huge page sz:%zu\n", real_size);
+	}
+	/* Save real_size since mmunmap() requires a size parameter */
+	*((size_t *)ptr) = real_size;
+	/* Skip the page with metadata */
+	return ptr + HUGE_PAGE_SZ;
+}
+
+/*---------------------------------------------------------------------------*/
+/* free_huge_pages	                                                     */
+/*---------------------------------------------------------------------------*/
+void free_huge_pages(void *ptr)
+{
+	if (ptr == NULL)
+		return;
+	/* Jump back to the page with metadata */
+	void *real_ptr = (char *)ptr - HUGE_PAGE_SZ;
+	/* Read the original allocation size */
+	size_t real_size = *((size_t *)real_ptr);
+
+	if (real_size != 0)
+		/* The memory was allocated via mmap()
+		   and must be deallocated via munmap()
+		   */
+		munmap(real_ptr, real_size);
+	else
+		/* The memory was allocated via malloc()
+		   and must be deallocated via free()
+		   */
+		free(real_ptr);
+}

@@ -1,0 +1,8 @@
+
+version 2.0
+
+ - configure.ac revisited
+
+version 1.0
+
+ - simple lib with one class and one depending binary
