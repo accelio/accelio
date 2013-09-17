@@ -812,7 +812,7 @@ int xio_reject(struct xio_session *session,
 	       size_t user_context_len)
 {
 	int			retval = 0;
-	struct xio_msg	*msg;
+	struct xio_msg		*msg;
 	struct xio_connection	*connection;
 
 	msg = xio_session_write_reject_rsp(session,
@@ -872,6 +872,8 @@ static int xio_on_connection_rejected(struct xio_session *session,
 				 connections_list_entry) {
 		if (connection && !connection->conn) {
 			event.conn	= connection;
+			event.conn_user_context =
+				connection->cb_user_context;
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
 						session, &event,

@@ -1948,7 +1948,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 {
 	int			retval = 0;
 	union xio_transport_event_data event_data;
-	struct xio_conn	*conn = rdma_hndl->base.observer;
+	struct xio_conn		*conn = rdma_hndl->base.observer;
 	struct xio_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
@@ -1997,6 +1997,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	omsg->status = rsp_hdr.status;
 	omsg->type =  task->tlv_type;
+
+	/* handle the headers */
 	if (omsg->in.header.iov_base) {
 		/* copy header to user buffers */
 		size_t hdr_len = 0;
@@ -2018,8 +2020,9 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		memclonev(&omsg->in.header, NULL, &imsg->in.header, 1);
 	}
 
-	/* if data arrived, set the pointers */
-	if (rsp_hdr.opcode == XIO_IB_SEND) {
+	switch (rsp_hdr.opcode) {
+	case XIO_IB_SEND:
+		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
 			imsg->in.data_iov[0].iov_base	= ulp_hdr +
 				imsg->in.header.iov_len + rsp_hdr.ulp_pad_len;
@@ -2049,10 +2052,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				if (omsg->in.data_iov[0].iov_base)  {
 					/* user porvided buffer so do copy */
 					datalen = memcpyv(
-					(struct xio_iovec *)omsg->in.data_iov,
-					omsg->in.data_iovlen, 0,
-					(struct xio_iovec *)imsg->in.data_iov,
-					imsg->in.data_iovlen, 0);
+					  (struct xio_iovec *)omsg->in.data_iov,
+					  omsg->in.data_iovlen, 0,
+					  (struct xio_iovec *)imsg->in.data_iov,
+					  imsg->in.data_iovlen, 0);
 
 					omsg->in.data_iovlen =
 						imsg->in.data_iovlen;
@@ -2060,10 +2063,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					/* use provided only length - set user
 					 * pointers */
 					memclonev(
-					(struct xio_iovec *)omsg->in.data_iov,
-					(int *)&omsg->in.data_iovlen,
-					(struct xio_iovec *)imsg->in.data_iov,
-					imsg->in.data_iovlen);
+					  (struct xio_iovec *)omsg->in.data_iov,
+					  (int *)&omsg->in.data_iovlen,
+					  (struct xio_iovec *)imsg->in.data_iov,
+					  imsg->in.data_iovlen);
 				}
 			} else {
 				omsg->in.data_iovlen = imsg->in.data_iovlen;
@@ -2074,7 +2077,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				  (struct xio_iovec *)imsg->in.data_iov,
 				  imsg->in.data_iovlen);
 		}
-	} else if (rsp_hdr.opcode == XIO_IB_RDMA_WRITE) {
+		break;
+	case XIO_IB_RDMA_WRITE:
 		imsg->in.data_iov[0].iov_base	=
 			ptr_from_int64(rdma_sender_task->read_sge[0].addr);
 		imsg->in.data_iov[0].iov_len	= rsp_hdr.ulp_imm_len;
@@ -2085,7 +2089,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			/* data was copied directly to user buffer */
 			/* need to update the buffer length */
 			omsg->in.data_iov[0].iov_len =
-						imsg->in.data_iov[0].iov_len;
+				imsg->in.data_iov[0].iov_len;
 		} else  {
 			/* user provided buffer but not mr */
 			/* deep copy */
@@ -2109,14 +2113,18 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			} else {
 				/* use provided only length - set user
 				 * pointers */
-				 memclonev(
-					(struct xio_iovec *)omsg->in.data_iov,
-					(int *)&omsg->in.data_iovlen,
-					(struct xio_iovec *)imsg->in.data_iov,
-					imsg->in.data_iovlen);
+				memclonev((struct xio_iovec *)omsg->in.data_iov,
+					  (int *)&omsg->in.data_iovlen,
+					  (struct xio_iovec *)imsg->in.data_iov,
+					  imsg->in.data_iovlen);
 			}
 		}
+		break;
+	default:
+		ERROR_LOG("unexpected opcode\n");
+		break;
 	}
+
 partial_msg:
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
@@ -2295,29 +2303,34 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	else
 		imsg->in.header.iov_base	= NULL;
 
-	if (req_hdr.opcode == XIO_IB_SEND) {
+	switch (req_hdr.opcode) {
+	case XIO_IB_SEND:
 		if (req_hdr.ulp_imm_len) {
 			/* incoming data via SEND */
 			/* if data arrived, set the pointers */
 			imsg->in.data_iov[0].iov_len	= req_hdr.ulp_imm_len;
 			imsg->in.data_iov[0].iov_base	= ulp_hdr +
-					imsg->in.header.iov_len +
-					req_hdr.ulp_pad_len;
+				imsg->in.header.iov_len +
+				req_hdr.ulp_pad_len;
 			imsg->in.data_iovlen		= 1;
 		} else {
 			/* no data at all */
 			imsg->in.data_iov[0].iov_base	= NULL;
 			imsg->in.data_iovlen		= 0;
 		}
-	} else if (req_hdr.opcode == XIO_IB_RDMA_READ) {
-			/* schedule request for RDMA READ. in case of error
-			 * don't schedule the rdma read operation */
-			TRACE_LOG("scheduling rdma read\n");
-			retval = xio_sched_rdma_rd_req(rdma_hndl, task);
-			if (retval == 0)
-				return 0;
-	}
-
+		break;
+	case XIO_IB_RDMA_READ:
+		/* schedule request for RDMA READ. in case of error
+		 * don't schedule the rdma read operation */
+		TRACE_LOG("scheduling rdma read\n");
+		retval = xio_sched_rdma_rd_req(rdma_hndl, task);
+		if (retval == 0)
+			return 0;
+		break;
+	default:
+		ERROR_LOG("unexpected opcode\n");
+		break;
+	};
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
