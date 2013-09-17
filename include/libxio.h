@@ -203,6 +203,7 @@ struct xio_msg {
 struct xio_session_event_data {
 	struct xio_connection	*conn;		/* optional connection for
 						   connection events */
+	void			*conn_user_context;
 	enum xio_session_event	event;
 	enum xio_status		reason;
 };

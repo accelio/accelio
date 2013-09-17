@@ -857,7 +857,9 @@ static int xio_on_connection_rejected(struct xio_session *session,
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_REJECT_EVENT,
 		.reason = session->reject_reason,
-		.conn   = connection
+		.conn   = connection,
+		.conn_user_context =
+			(connection) ? connection->cb_user_context : NULL
 	};
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -1286,6 +1288,8 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 			event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 			event.reason = XIO_E_SUCCESS;
 			event.conn = connection;
+			event.conn_user_context = connection->cb_user_context;
+
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
 						session, &event,
@@ -1304,6 +1308,7 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 			event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 			event.reason = XIO_E_SUCCESS;
 			event.conn = connection;
+			event.conn_user_context = connection->cb_user_context;
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
 						session, &event,
@@ -1373,7 +1378,8 @@ static int xio_on_conn_closed(struct xio_session *session,
 			struct xio_session_event_data  event = {
 				.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
 				.reason = XIO_E_SUCCESS,
-				.conn = connection
+				.conn = connection,
+				.conn_user_context = connection->cb_user_context
 			};
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
@@ -1421,6 +1427,7 @@ static int xio_on_conn_refused(struct xio_session *session,
 					 &session->connections_list,
 					 connections_list_entry) {
 			ev_data.conn =  connection;
+			ev_data.conn_user_context = connection->cb_user_context;
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
 						session, &ev_data,
@@ -1433,6 +1440,7 @@ static int xio_on_conn_refused(struct xio_session *session,
 			return -1;
 		}
 		ev_data.conn =  connection;
+		ev_data.conn_user_context = connection->cb_user_context;
 		if (session->ses_ops.on_session_event)
 			session->ses_ops.on_session_event(
 					session, &ev_data,
@@ -1565,7 +1573,12 @@ static int xio_on_conn_error(struct xio_session *session,
 		.reason = event_data->error.reason
 
 	};
-	struct xio_session		*the_session = session;
+	struct xio_session  *the_session = session;
+	struct xio_connection *connection = xio_session_find_conn(session, conn);
+
+	ev_data.conn =  connection;
+	ev_data.conn_user_context =
+		(connection) ? connection->cb_user_context : NULL;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -1874,7 +1887,9 @@ int xio_session_disconnect(struct xio_session *session,
 			struct xio_session_event_data  event = {
 				.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
 				.reason = XIO_E_SUCCESS,
-				.conn = connection
+				.conn = connection,
+				.conn_user_context = connection->cb_user_context
+
 			};
 			spin_lock(&session->conn_list_lock);
 			teardown = (session->conns_nr == 1);
