@@ -188,7 +188,7 @@ struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
 	enum xio_ib_op_code		ib_op;
 	uint16_t			more_in_batch;
-	uint16_t			pad;
+	uint16_t			sn;
 
 	struct xio_work_req		txd;
 	struct xio_work_req		rxd;

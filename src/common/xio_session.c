@@ -60,17 +60,21 @@
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
-static int xio_on_recv_req(struct xio_connection *connection,
+static int xio_on_req_recv(struct xio_connection *connection,
 				  struct xio_task *task);
-static int xio_on_recv_rsp(struct xio_connection *connetion,
+static int xio_on_rsp_recv(struct xio_connection *connetion,
 				  struct xio_task *task);
-static int xio_on_send_rsp_comp(struct xio_connection *connection,
+static int xio_on_ow_req_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
-static int xio_on_recv_setup_req(struct xio_connection *connection,
+static int xio_on_ow_rsp_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
-static int xio_on_send_setup_rsp_comp(struct xio_connection *connection,
+static int xio_on_rsp_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
-static int xio_on_recv_setup_rsp(struct xio_connection *connection,
+static int xio_on_setup_req_recv(struct xio_connection *connection,
+				  struct xio_task *task);
+static int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
+				  struct xio_task *task);
+static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				  struct xio_task *task);
 static int xio_on_conn_event(void *observer, void *sender, int event,
 			       void *event_data);
@@ -335,9 +339,9 @@ static struct xio_msg *xio_session_write_setup_req(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_recv_setup_req			                             */
+/* xio_on_setup_req_recv			                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_recv_setup_req(struct xio_connection *connection,
+static int xio_on_setup_req_recv(struct xio_connection *connection,
 				  struct xio_task *task)
 {
 	struct xio_msg			*msg = &task->imsg;
@@ -885,9 +889,9 @@ static int xio_on_connection_rejected(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_recv_setup_rsp			                             */
+/* xio_on_setup_rsp_recv			                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_recv_setup_rsp(struct xio_connection *connection,
+static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				  struct xio_task *task)
 {
 	struct xio_msg			*msg = &task->imsg;
@@ -1130,9 +1134,9 @@ static int xio_on_recv_setup_rsp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_send_setup_rsp_comp			                             */
+/* xio_on_setup_rsp_send_comp			                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_send_setup_rsp_comp(
+static int xio_on_setup_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
@@ -1152,9 +1156,9 @@ static int xio_on_send_setup_rsp_comp(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_recv_req				                             */
+/* xio_on_req_recv				                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_recv_req(struct xio_connection *connection,
+static int xio_on_req_recv(struct xio_connection *connection,
 		struct xio_task *task)
 {
 	struct xio_session_hdr	hdr;
@@ -1191,9 +1195,9 @@ static int xio_on_recv_req(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_recv_rsp				                             */
+/* xio_on_rsp_recv				                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_recv_rsp(struct xio_connection *connection,
+static int xio_on_rsp_recv(struct xio_connection *connection,
 			   struct xio_task *task)
 {
 	struct xio_session_hdr	hdr;
@@ -1242,26 +1246,21 @@ static int xio_on_recv_rsp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_send_rsp				                             */
+/* xio_on_rsp_send_comp				                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_send_rsp_comp(
+static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	if (task->tlv_type == XIO_ONE_WAY_RSP) {
-		xio_connection_release_ow_rsp(connection, task->omsg);
-		xio_conn_put_task(task->sender_task->conn, task->sender_task);
-		task->sender_task = NULL;
-	} else {
-		/* send completion notification only to server to
-		 * release responses
-		 */
-		if (connection->ses_ops.on_msg_send_complete) {
-			connection->ses_ops.on_msg_send_complete(
-					connection->session, task->omsg,
-					connection->cb_user_context);
-		}
+	/* send completion notification only to responder to
+	 * release responses
+	 */
+	if (connection->ses_ops.on_msg_send_complete) {
+		connection->ses_ops.on_msg_send_complete(
+				connection->session, task->omsg,
+				connection->cb_user_context);
 	}
+
 	/* recycle the task */
 	xio_conn_put_task(task->conn, task);
 
@@ -1271,6 +1270,48 @@ static int xio_on_send_rsp_comp(
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_on_ow_rsp_send_comp				                     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_ow_rsp_send_comp(
+		struct xio_connection *connection,
+		struct xio_task *task)
+{
+	xio_connection_release_ow_rsp(connection, task->omsg);
+	xio_conn_put_task(task->sender_task->conn, task->sender_task);
+	task->sender_task = NULL;
+
+	/* recycle the task */
+	xio_conn_put_task(task->conn, task);
+
+	/* now try to send */
+	xio_connection_xmit_msgs(connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_ow_req_send_comp				                     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_ow_req_send_comp(
+		struct xio_connection *connection,
+		struct xio_task *task)
+{
+	if (connection->ses_ops.on_msg_delivered)
+		connection->ses_ops.on_msg_delivered(
+				connection->session,
+				task->omsg,
+				task->imsg.more_in_batch,
+				connection->cb_user_context);
+
+	/* recycle the task */
+	xio_conn_put_task(task->conn, task);
+
+	/* now try to send */
+	xio_connection_xmit_msgs(connection);
+
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_conn_disconnected			                             */
@@ -1321,6 +1362,9 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_teardown						     */
+/*---------------------------------------------------------------------------*/
 static void xio_session_notify_teardown(struct xio_session *session, int reason)
 {
 	struct xio_session_event_data  event = {
@@ -1334,7 +1378,7 @@ static void xio_session_notify_teardown(struct xio_session *session, int reason)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_closed				                             */
+/* xio_on_conn_closed							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_conn_closed(struct xio_session *session,
 				      struct xio_conn *conn,
@@ -1576,7 +1620,8 @@ static int xio_on_conn_error(struct xio_session *session,
 
 	};
 	struct xio_session  *the_session = session;
-	struct xio_connection *connection = xio_session_find_conn(session, conn);
+	struct xio_connection *connection =
+				xio_session_find_conn(session, conn);
 
 	ev_data.conn =  connection;
 	ev_data.conn_user_context =
@@ -1629,17 +1674,17 @@ static int xio_on_new_message(struct xio_session *session,
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
 	case XIO_ONE_WAY_REQ:
-		retval = xio_on_recv_req(connection, task);
+		retval = xio_on_req_recv(connection, task);
 		break;
 	case XIO_MSG_RSP:
 	case XIO_ONE_WAY_RSP:
-		retval = xio_on_recv_rsp(connection, task);
+		retval = xio_on_rsp_recv(connection, task);
 		break;
 	case XIO_SESSION_SETUP_REQ:
-		retval = xio_on_recv_setup_req(connection, task);
+		retval = xio_on_setup_req_recv(connection, task);
 		break;
 	case XIO_SESSION_SETUP_RSP:
-		retval = xio_on_recv_setup_rsp(connection, task);
+		retval = xio_on_setup_rsp_recv(connection, task);
 		break;
 	default:
 		retval = -1;
@@ -1676,14 +1721,22 @@ static int xio_on_send_completion(struct xio_session *session,
 		}
 	}
 
-	if (task->tlv_type == XIO_MSG_RSP ||
-	    task->tlv_type == XIO_ONE_WAY_RSP)
-		retval = xio_on_send_rsp_comp(connection, task);
-	else if ((task->tlv_type == XIO_MSG_REQ) ||
-		(task->tlv_type == XIO_ONE_WAY_REQ))
-		retval = 0;
-	else if (task->tlv_type == XIO_SESSION_SETUP_RSP)
-		retval = xio_on_send_setup_rsp_comp(connection, task);
+	switch (task->tlv_type) {
+	case XIO_MSG_RSP:
+		retval = xio_on_rsp_send_comp(connection, task);
+		break;
+	case XIO_ONE_WAY_REQ:
+		retval = xio_on_ow_req_send_comp(connection, task);
+		break;
+	case XIO_ONE_WAY_RSP:
+		retval = xio_on_ow_rsp_send_comp(connection, task);
+		break;
+	case XIO_SESSION_SETUP_RSP:
+		retval = xio_on_setup_rsp_send_comp(connection, task);
+		break;
+	default:
+		break;
+	}
 
 	if (retval != 0)
 		ERROR_LOG("receiving new message failed. type:0x%x\n",

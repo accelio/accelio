@@ -481,12 +481,11 @@ int xio_send_msg(struct xio_connection *conn,
  * Note: the message is allocated by the application and is not freed.
  *	 by this function.
  *
- * @rsp: The released response
+ * @msg: The released message
  *
  * RETURNS: success (0), or a (negative) error value.
  */
-int xio_release_msg(struct xio_msg *rsp);
-
+int xio_release_msg(struct xio_msg *msg);
 
 /*---------------------------------------------------------------------------*/
 /* XIO server API							     */

@@ -59,7 +59,7 @@ struct xio_task {
 	uint16_t		refcnt;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
-	uint32_t		pad;		/* pad			*/
+	uint32_t		ack_ow;		/* force acknowledge for ow */
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;

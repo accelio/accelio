@@ -71,7 +71,9 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			    struct xio_task *task);
 static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			    struct xio_task *task);
-static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
+static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
+			    struct xio_task *task);
+static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 			    struct xio_task *task);
 static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 				struct xio_task *task);
@@ -263,6 +265,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 		xio_rdma_write_sn(task, rdma_hndl->sn, rdma_hndl->ack_sn,
 				  rdma_hndl->credits);
+		rdma_task->sn = rdma_hndl->sn;
 		rdma_hndl->sn++;
 		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
 		rdma_hndl->credits = 0;
@@ -633,11 +636,11 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		if (IS_REQUEST(ptask->tlv_type)) {
 			rdma_hndl->max_sn++;
 			rdma_hndl->reqs_in_flight_nr--;
-			xio_conn_put_task(rdma_hndl->base.observer, ptask);
+			xio_rdma_on_req_send_comp(rdma_hndl, ptask);
 		} else if (IS_RESPONSE(ptask->tlv_type)) {
 			rdma_hndl->max_sn++;
 			rdma_hndl->rsps_in_flight_nr--;
-			xio_rdma_on_send_rsp_comp(rdma_hndl, ptask);
+			xio_rdma_on_rsp_send_comp(rdma_hndl, ptask);
 		} else if (IS_NOP(ptask->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_conn_put_task(rdma_hndl->base.observer, ptask);
@@ -683,6 +686,12 @@ static void xio_rdma_rd_comp_handler(
 	rdma_hndl->rdma_in_flight--;
 	rdma_hndl->sqe_avail++;
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->io_list);
+
+	/* raise flag for acknowledge one way messages which are sent by
+	 * RDMA READ - the upper layer should send acknowledge to that
+	 * message for peer resourse release */
+	if (task->tlv_type == XIO_ONE_WAY_REQ)
+		task->ack_ow = 1;
 
 	xio_xmit_rdma_rd(rdma_hndl);
 
@@ -1700,6 +1709,14 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("rdma_prep_req_out_data failed\n");
 		return -1;
 	}
+
+	/* raise flag for acknowledge one way messages which are sent by
+	 * SEND  - message ack will happen in tx_comp */
+	if ((task->tlv_type == XIO_ONE_WAY_REQ) &&
+	    (rdma_task->ib_op != XIO_IB_RDMA_READ))  {
+		task->ack_ow = 1;
+	}
+
 	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
 
 	/* add tlv */
@@ -1923,11 +1940,10 @@ cleanup:
 	return -1;
 }
 
-
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_on_send_rsp_comp						     */
+/* xio_rdma_on_rsp_send_comp						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
+static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 			    struct xio_task *task)
 {
 	union xio_transport_event_data event_data;
@@ -1937,6 +1953,37 @@ static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
 
 	xio_rdma_notify_observer(rdma_hndl,
 				 XIO_TRANSPORT_SEND_COMPLETION, &event_data);
+
+		return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_on_req_send_comp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_on_req_send_comp(
+		struct xio_rdma_transport *rdma_hndl,
+		struct xio_task *task)
+{
+	struct xio_rdma_task		*rdma_task;
+	union xio_transport_event_data event_data;
+
+	switch (task->tlv_type) {
+	case XIO_ONE_WAY_REQ:
+		if (task->ack_ow) {
+			rdma_task		= task->dd_data;
+			task->ack_ow		= 0;
+			event_data.msg.op	= XIO_WC_OP_SEND;
+			event_data.msg.task	= task;
+			xio_rdma_notify_observer(rdma_hndl,
+						XIO_TRANSPORT_SEND_COMPLETION,
+						&event_data);
+		}
+		xio_conn_put_task(rdma_hndl->base.observer, task);
+		break;
+	default:
+		xio_conn_put_task(rdma_hndl->base.observer, task);
+		break;
+	}
 	return 0;
 }
 
@@ -2438,6 +2485,8 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		req.credits		= 0;
 		xio_rdma_write_setup_msg(rdma_hndl, task, &req);
 	} else {
+		rdma_hndl->sim_peer_credits += rdma_hndl->credits;;
+
 		rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
 		xio_rdma_write_setup_msg(rdma_hndl,
 					 task, &rdma_hndl->setup_rsp);

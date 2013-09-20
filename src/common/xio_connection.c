@@ -393,6 +393,10 @@ int xio_connection_ack_ow_req(struct xio_connection *conn,
 		ERROR_LOG("request not found\n");
 		return -1;
 	}
+	if (task->ack_ow)
+		task->ack_ow = 0;
+	else
+		return 0;
 
 	/* add ref to task avoiding race when user call release or send
 	 * completion
