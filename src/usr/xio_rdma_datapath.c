@@ -2226,6 +2226,13 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	/* option 1: user provides call back that fills application memory */
 	/* option 2: use internal buffer pool				   */
 
+	/* hint the upper layer of sizes */
+	for (i = 0;  i < rdma_task->req_write_num_sge; i++) {
+		task->imsg.in.data_iov[i].iov_base  = NULL;
+		task->imsg.in.data_iov[i].iov_len  = rdma_task->req_write_sge[i].length;
+	}
+	task->imsg.in.data_iovlen = rdma_task->req_write_num_sge;
+
 	xio_rdma_assign_in_buf(rdma_hndl, task, &user_assign_flag);
 
 	if (user_assign_flag) {
