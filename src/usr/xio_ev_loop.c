@@ -224,12 +224,12 @@ void *xio_ev_loop_init()
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_run                                                         */
+/* xio_ev_loop_run_helper                                                    */
 /*---------------------------------------------------------------------------*/
-int xio_ev_loop_run(void *loop_hndl)
+inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
-	int			nevent = 0, i, timeout = -1;
+	int			nevent = 0, i;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
 	int			retval;
@@ -262,12 +262,33 @@ retry:
 						  " failed. %m\n");
 			}
 		}
+	} else {
+		/* timed out */
+		loop->stop_loop = 1;
+	
+		/* TODO: timeout should be updated by the elapsed duration of each loop */
 	}
 	if (likely(loop->stop_loop == 0))
 		goto retry;
 
 	loop->stop_loop = 0;
 	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_run_timeout                                              */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec)
+{
+	return xio_ev_loop_run_helper(loop_hndl, timeout_msec);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_run                                                           */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_run(void *loop_hndl)
+{
+	return xio_ev_loop_run_helper(loop_hndl, -1 /* block indefinitely */);
 }
 
 /*---------------------------------------------------------------------------*/
