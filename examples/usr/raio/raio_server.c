@@ -235,7 +235,7 @@ static void *portal_server_cb(void *data)
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
-			  NULL, tdata);
+			  NULL, 0, tdata);
 	if (server == NULL)
 		goto cleanup;
 
@@ -374,7 +374,7 @@ int main(int argc, char *argv[])
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
-	server = xio_bind(ctx, &server_ops, url, NULL, &server_data);
+	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
 	if (server == NULL)
 		goto cleanup;
 

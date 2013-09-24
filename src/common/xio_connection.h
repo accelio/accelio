@@ -62,7 +62,7 @@ struct xio_connection {
 
 	int				conn_idx;
 	int				state;
-	uint32_t			msg_flags;
+	uint32_t			pad;
 	int32_t				send_req_toggle;
 
 	struct xio_msg_list		reqs_msgq;

@@ -113,8 +113,8 @@ enum xio_ev_loop_events {
 	XIO_POLLOUT			= 0x002
 };
 
-enum xio_msg_flags {
-	XIO_MSG_DONTQUEUE		= 0x001, /*  do not queue messages */
+enum xio_session_flags {
+	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
 };
 
 enum xio_session_event {

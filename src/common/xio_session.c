@@ -1893,7 +1893,7 @@ struct xio_session *xio_session_init(
 
 	session->trans_sn		= initial_sn;
 	session->state			= XIO_SESSION_STATE_INIT;
-	session->msg_flags		= flags;
+	session->session_flags		= flags;
 
 	memcpy(&session->ses_ops, attr->ses_ops,
 	       sizeof(*attr->ses_ops));

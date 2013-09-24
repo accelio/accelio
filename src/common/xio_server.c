@@ -51,7 +51,7 @@ struct xio_server {
 	char				*uri;
 	struct xio_context		*ctx;
 	struct xio_session_ops		ops;
-	uint32_t			msg_flags;
+	uint32_t			session_flags;
 	uint32_t			pad;
 	void				*cb_private_data;
 };
@@ -112,7 +112,7 @@ static int xio_on_new_message(struct xio_server *server,
 				&attr,
 				server->uri,
 				0,
-				server->msg_flags,
+				server->session_flags,
 				server->cb_private_data);
 
 		if (session == NULL) {
@@ -210,7 +210,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 				struct xio_session_ops *ops,
 				const char *uri,
 				uint16_t *src_port,
-				uint32_t msg_flags,
+				uint32_t session_flags,
 				void *cb_private_data)
 {
 	struct xio_server	*server;
@@ -236,7 +236,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	server->ctx = ctx;
 	server->cb_private_data	= cb_private_data;
 	server->uri = kstrdup(uri, GFP_KERNEL);
-	server->msg_flags = msg_flags;
+	server->session_flags = session_flags;
 	memcpy(&server->ops, ops, sizeof(*ops));
 
 	server->listener = xio_conn_open(ctx, uri, server,

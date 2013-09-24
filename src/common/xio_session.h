@@ -78,7 +78,7 @@ struct xio_session {
 	uint64_t			trans_sn; /* transaction sn */
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
-	uint32_t			msg_flags;
+	uint32_t			session_flags;
 	uint32_t			conns_nr;
 
 	struct list_head		sessions_list_entry;
@@ -187,6 +187,10 @@ static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 	return -1;
 }
 
+static inline int xio_session_not_queueing(struct xio_session *session)
+{
+	return (session->session_flags & XIO_SESSION_FLAG_DONTQUEUE);
+}
 
 #endif /*XIO_SESSION_H */
 

@@ -101,7 +101,6 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		connection->conn	= NULL;
 		connection->ctx		= ctx;
 		connection->conn_idx	= conn_idx;
-		connection->msg_flags	= session->msg_flags;
 		connection->cb_user_context = cb_user_context;
 		memcpy(&connection->ses_ops, &session->ses_ops,
 		       sizeof(session->ses_ops));
@@ -282,7 +281,7 @@ static int xio_connection_xmit(struct xio_connection *conn)
 				if (EAGAIN != xio_errno())
 					break;
 				/* if user requested not to queue messages */
-				if (conn->msg_flags & XIO_MSG_DONTQUEUE)
+				if (xio_session_not_queueing(conn->session))
 					break;
 				xio_msg_list_insert_head(msgq, msg);
 				retval = 0;
@@ -322,7 +321,7 @@ int xio_send_request(struct xio_connection *conn,
 		ERROR_LOG("invalid out message\n");
 		return -1;
 	}
-	if ((conn->msg_flags & XIO_MSG_DONTQUEUE) &&
+	if (xio_session_not_queueing(conn->session) &&
 	    (conn->state != CONNECTION_STATE_ONLINE)) {
 		xio_set_error(EAGAIN);
 		return -1;
@@ -356,7 +355,7 @@ int xio_send_response(struct xio_msg *msg)
 		return -1;
 	}
 
-	if ((conn->msg_flags & XIO_MSG_DONTQUEUE) &&
+	if (xio_session_not_queueing(conn->session) &&
 	    (conn->state != CONNECTION_STATE_ONLINE)) {
 		xio_set_error(EAGAIN);
 		return -1;
@@ -443,7 +442,7 @@ int xio_send_msg(struct xio_connection *conn,
 		return -1;
 	}
 
-	if ((conn->msg_flags & XIO_MSG_DONTQUEUE) &&
+	if (xio_session_not_queueing(conn->session) &&
 	    (conn->state != CONNECTION_STATE_ONLINE)) {
 		xio_set_error(EAGAIN);
 		return -1;
@@ -473,7 +472,7 @@ int xio_connection_xmit_msgs(struct xio_connection *conn)
 {
 	if (conn->state == CONNECTION_STATE_ONLINE) {
 		return xio_connection_xmit(conn);
-	} else if (conn->msg_flags & XIO_MSG_DONTQUEUE) {
+	} else if (xio_session_not_queueing(conn->session)) {
 		xio_set_error(EAGAIN);
 		return -1;
 	}
