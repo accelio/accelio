@@ -44,7 +44,7 @@
 #include "xio_connection.h"
 #include "xio_session.h"
 
-#define MSG_POOL_SZ	4096
+#define MSG_POOL_SZ	1024
 
 
 /*---------------------------------------------------------------------------*/
@@ -158,6 +158,7 @@ int xio_connection_send(struct xio_connection *conn,
 	} else {
 		if ((msg->type == XIO_MSG_TYPE_REQ) ||
 		    (msg->type == XIO_SESSION_SETUP_REQ) ||
+		    (msg->type == XIO_FIN_REQ) ||
 		    (msg->type == XIO_ONE_WAY_REQ)) {
 			task = xio_conn_get_primary_task(conn->conn);
 			if (task == NULL) {
@@ -203,6 +204,8 @@ int xio_connection_send(struct xio_connection *conn,
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
 
+	/* if fin ask for signal */
+	task->force_signal = IS_FIN(task->tlv_type);
 
 	/* write session header */
 	hdr.flags		= msg->flags;
@@ -313,6 +316,11 @@ int xio_send_request(struct xio_connection *conn,
 		     struct xio_msg *msg)
 {
 	int		valid;
+
+	if (conn->state == CONNECTION_STATE_CLOSING) {
+		xio_set_error(ESHUTDOWN);
+		return -1;
+	}
 
 	valid = xio_session_is_valid_in_req(conn->session, msg);
 	if (!valid) {
@@ -476,7 +484,8 @@ int xio_send_msg(struct xio_connection *conn,
 /*---------------------------------------------------------------------------*/
 int xio_connection_xmit_msgs(struct xio_connection *conn)
 {
-	if (conn->state == CONNECTION_STATE_ONLINE) {
+	if ((conn->state == CONNECTION_STATE_ONLINE) ||
+	    (conn->state == CONNECTION_STATE_CLOSING)) {
 		return xio_connection_xmit(conn);
 	} else if (xio_session_not_queueing(conn->session)) {
 		xio_set_error(EAGAIN);
@@ -651,17 +660,6 @@ int xio_release_msg(struct xio_msg *msg)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_disconnect							     */
-/*---------------------------------------------------------------------------*/
-int xio_disconnect(struct xio_connection *conn)
-{
-	conn->state = CONNECTION_STATE_CLOSE;
-	xio_session_disconnect(conn->session, conn);
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_poll_completions							     */
 /*---------------------------------------------------------------------------*/
 int xio_poll_completions(struct xio_connection *conn,
@@ -673,4 +671,111 @@ int xio_poll_completions(struct xio_connection *conn,
 		return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_send_fin_req							     */
+/*---------------------------------------------------------------------------*/
+static int xio_send_fin_req(struct xio_connection *conn)
+{
+	struct xio_msg *msg;
+
+	msg = xio_msg_list_first(&conn->one_way_msg_pool);
+	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
+
+	msg->type = XIO_FIN_REQ;
+
+	/* reset the in side of the message */
+	msg->in.header.iov_base = NULL;
+	msg->in.header.iov_len = 0;
+	msg->in.data_iovlen = 0;
+
+	/* insert to the head of the queue */
+	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
+
+	/* do not xmit until connection is assigned */
+	if (conn->state == CONNECTION_STATE_ONLINE) {
+		return xio_connection_xmit(conn);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_fin_rsp							     */
+/*---------------------------------------------------------------------------*/
+static int xio_send_fin_rsp(struct xio_connection *conn, struct xio_task *task)
+{
+	struct xio_msg *msg;
+
+	msg = xio_msg_list_first(&conn->one_way_msg_pool);
+	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
+
+
+	msg->type = XIO_FIN_RSP;
+	msg->request = &task->imsg;
+
+	/* reset the in side of the message */
+	msg->in.header.iov_base = NULL;
+	msg->in.header.iov_len = 0;
+	msg->in.data_iovlen = 0;
+
+	/* insert to the head of the queue */
+	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);
+
+	/* do not xmit until connection is assigned */
+	if (conn->state == CONNECTION_STATE_ONLINE) {
+		return xio_connection_xmit(conn);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_release_fin						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_release_fin(struct xio_connection *conn,
+			       struct xio_msg *msg)
+{
+	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_do_disconnect							     */
+/*---------------------------------------------------------------------------*/
+int xio_do_disconnect(struct xio_connection *conn)
+{
+	conn->state = CONNECTION_STATE_CLOSE;
+	xio_session_disconnect(conn->session, conn);
+
+	return 0;
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_disconnect							     */
+/*---------------------------------------------------------------------------*/
+int xio_disconnect(struct xio_connection *conn)
+{
+	if (conn->state == CONNECTION_STATE_ONLINE) {
+		xio_send_fin_req(conn);
+		conn->state = CONNECTION_STATE_CLOSING;
+	} else {
+		xio_do_disconnect(conn);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ack_disconnect							     */
+/*---------------------------------------------------------------------------*/
+int xio_ack_disconnect(struct xio_connection *conn, struct xio_task *task)
+{
+	if (conn->state == CONNECTION_STATE_ONLINE) {
+		xio_send_fin_rsp(conn, task);
+		conn->state = CONNECTION_STATE_CLOSING;
+	}
+
+	return 0;
+}
 

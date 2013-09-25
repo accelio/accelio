@@ -68,7 +68,7 @@ struct xio_task {
 	uint32_t		rtid;		/* remote task id	*/
 	enum xio_task_state	state;		/* task state enum	*/
 	uint32_t		omsg_flags;
-	uint32_t		pad;
+	uint32_t		force_signal;
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;

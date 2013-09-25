@@ -44,6 +44,7 @@
 enum xio_connection_state {
 		CONNECTION_STATE_INIT,
 		CONNECTION_STATE_ONLINE,
+		CONNECTION_STATE_CLOSING,	/* user initiate */
 		CONNECTION_STATE_CLOSE,		/* user close */
 		CONNECTION_STATE_DISCONNECT,	/* peer close */
 		CONNECTION_STATE_CLOSED,
@@ -121,6 +122,15 @@ int xio_connection_release_read_receipt(struct xio_connection *conn,
 
 void xio_release_response_task(struct xio_task *task);
 
+
+int xio_connection_release_fin(struct xio_connection *conn,
+			       struct xio_msg *msg);
+
+int xio_do_disconnect(struct xio_connection *conn);
+
+
+int xio_ack_disconnect(struct xio_connection *conn,
+		       struct xio_task *task);
 
 
 #endif /*XIO_CONNECTION_H */

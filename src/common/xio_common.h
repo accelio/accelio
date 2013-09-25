@@ -83,6 +83,7 @@ extern int _xio_errno;
 #define XIO_ACK			(1 << 7)
 #define XIO_CONN_SETUP		(1 << 8)
 #define XIO_SESSION_SETUP	(1 << 9)
+#define XIO_FIN			(1 << 10)
 
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
@@ -95,6 +96,8 @@ extern int _xio_errno;
 #define XIO_SESSION_SETUP_RSP	(XIO_SESSION_SETUP | XIO_RESPONSE)
 #define XIO_ONE_WAY_REQ		XIO_MSG_TYPE_ONE_WAY
 #define XIO_ONE_WAY_RSP		(XIO_ONE_WAY | XIO_RESPONSE)
+#define XIO_FIN_REQ		(XIO_FIN | XIO_REQUEST)
+#define XIO_FIN_RSP		(XIO_FIN | XIO_RESPONSE)
 
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
@@ -104,6 +107,7 @@ extern int _xio_errno;
 #define IS_SESSION_SETUP(type)		((type) & XIO_SESSION_SETUP)
 #define IS_CONN_SETUP(type)		((type) & XIO_CONN_SETUP)
 #define IS_ONE_WAY(type)		((type) & XIO_ONE_WAY)
+#define IS_FIN(type)			((type) & XIO_FIN)
 
 
 /**

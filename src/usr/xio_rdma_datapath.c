@@ -563,16 +563,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* call recv completion  */
 	switch (task->tlv_type) {
-	case XIO_MSG_REQ:
-	case XIO_ONE_WAY_REQ:
-	case XIO_SESSION_SETUP_REQ:
-		xio_rdma_on_recv_req(rdma_hndl, task);
-		break;
-	case XIO_MSG_RSP:
-	case XIO_ONE_WAY_RSP:
-	case XIO_SESSION_SETUP_RSP:
-		xio_rdma_on_recv_rsp(rdma_hndl, task);
-		break;
 	case XIO_CREDIT_NOP:
 		xio_rdma_on_recv_nop(rdma_hndl, task);
 		break;
@@ -581,8 +571,13 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_on_setup_msg(rdma_hndl, task);
 		break;
 	default:
-		ERROR_LOG("unknown message type:%d\n",
-			  task->tlv_type);
+		if (IS_REQUEST(task->tlv_type))
+			xio_rdma_on_recv_req(rdma_hndl, task);
+		else if (IS_RESPONSE(task->tlv_type))
+			xio_rdma_on_recv_rsp(rdma_hndl, task);
+		else
+			ERROR_LOG("unknown message type:0x%x\n",
+				  task->tlv_type);
 		break;
 	}
 
@@ -1733,7 +1728,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (sge_len < MAX_INLINE_DATA)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
-	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD) {
+	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->force_signal) {
 		/* avoid race between send completion and response arrival */
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
@@ -1894,7 +1889,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 	}
 
-	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD) {
+	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->force_signal) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->rsp_sig_cnt = 0;
 	}
@@ -2728,22 +2723,18 @@ int xio_rdma_send(struct xio_transport_base *transport,
 	int	retval = -1;
 
 	switch (task->tlv_type) {
-	case XIO_MSG_REQ:
-	case XIO_ONE_WAY_REQ:
-	case XIO_SESSION_SETUP_REQ:
-		retval = xio_rdma_send_req(rdma_hndl, task);
-		break;
-	case XIO_MSG_RSP:
-	case XIO_ONE_WAY_RSP:
-	case XIO_SESSION_SETUP_RSP:
-		retval = xio_rdma_send_rsp(rdma_hndl, task);
-		break;
 	case XIO_CONN_SETUP_REQ:
 	case XIO_CONN_SETUP_RSP:
 		retval = xio_rdma_send_setup_msg(rdma_hndl, task);
 		break;
 	default:
-		ERROR_LOG("unknown message type:%d\n", task->tlv_type);
+		if (IS_REQUEST(task->tlv_type))
+			retval = xio_rdma_send_req(rdma_hndl, task);
+		else if (IS_RESPONSE(task->tlv_type))
+			retval = xio_rdma_send_rsp(rdma_hndl, task);
+		else
+			ERROR_LOG("unknown message type:0x%x\n",
+				  task->tlv_type);
 		break;
 	}
 
