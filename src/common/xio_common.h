@@ -69,7 +69,10 @@ extern int _xio_errno;
 /**
  * message flags
  */
-#define	XIO_MSG_FLAG_UNSOLICITED	(1 << 0)
+
+/* response flags */
+#define XIO_MSG_RSP_FLAG_FIRST		0x1
+#define XIO_MSG_RSP_FLAG_LAST		0x2
 
 /**
  *  TLV types
@@ -132,6 +135,7 @@ struct __attribute__((__packed__)) xio_tlv {
 struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
 	uint64_t		serial_num;
+	uint32_t		flags;
 };
 
 struct __attribute__((__packed__)) xio_conn_setup_req {

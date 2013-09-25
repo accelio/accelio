@@ -293,6 +293,7 @@ static int on_message(struct xio_session *session,
 		  test_config.data_len);
 
 	/* try to send it */
+	new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 	if (xio_send_msg(conn, new_msg) == -1) {
 		if (xio_errno() != EAGAIN)
 			printf("**** [%p] Error - xio_send_msg " \
@@ -536,6 +537,7 @@ int main(int argc, char *argv[])
 			   test_config.data_len);
 
 		/* try to send it */
+		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 		if (xio_send_msg(conn, msg) == -1) {
 			printf("**** sent %d messages\n", i);
 			if (xio_errno() != EAGAIN)

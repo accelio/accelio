@@ -244,6 +244,20 @@ static int on_session_established(struct xio_session *session,
 
 	return 0;
 }
+/*---------------------------------------------------------------------------*/
+/* on_msg_delivered							     */
+/*---------------------------------------------------------------------------*/
+static int on_msg_delivered(struct xio_session *session,
+			struct xio_msg *msg,
+			int more_in_batch,
+			void *cb_user_context)
+{
+	/*
+	printf("**** on message delivered\n");
+	*/
+
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* on_response								     */
@@ -283,6 +297,7 @@ static int on_response(struct xio_session *session,
 			  test_config.data_len);
 
 		/* try to send it */
+		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
 		if (xio_send_request(conn, msg) == -1) {
 			if (xio_errno() != EAGAIN)
 				printf("**** [%p] Error - xio_send_request " \
@@ -319,6 +334,7 @@ int on_msg_error(struct xio_session *session,
 struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  on_session_established,
+	.on_msg_delivered		=  on_msg_delivered,
 	.on_msg				=  on_response,
 	.on_msg_error			=  on_msg_error
 };
@@ -537,6 +553,7 @@ int main(int argc, char *argv[])
 			   test_config.data_len);
 
 		/* try to send it */
+		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
 		if (xio_send_request(conn, msg) == -1) {
 			printf("**** sent %d messages\n", i);
 			if (xio_errno() != EAGAIN)

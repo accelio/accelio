@@ -223,6 +223,7 @@ static int on_message(struct xio_session *session,
 	msg_write(new_msg, "hello world response header", test_config.hdr_len,
 		  "hello world response data", test_config.data_len);
 
+	new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 	if (xio_send_msg(connection, new_msg) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));

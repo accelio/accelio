@@ -42,6 +42,13 @@
 #include "xio_mbuf.h"
 #include "xio_transport.h"
 
+enum xio_task_state {
+	XIO_TASK_STATE_INIT,
+	XIO_TASK_STATE_DELIVERED,
+	XIO_TASK_STATE_READ,
+};
+
+
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
@@ -59,7 +66,9 @@ struct xio_task {
 	uint16_t		refcnt;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
-	uint32_t		ack_ow;		/* force acknowledge for ow */
+	enum xio_task_state	state;		/* task state enum	*/
+	uint32_t		omsg_flags;
+	uint32_t		pad;
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;
@@ -124,6 +133,7 @@ static inline struct xio_task *xio_tasks_pool_get(
 	q->nr--;
 	assert(t->refcnt == 0);
 	t->refcnt++;
+	t->tlv_type = 0xbeef;  /* poison the type */
 	return t;
 }
 
@@ -150,9 +160,9 @@ static inline void xio_tasks_pool_put(struct xio_task *t)
 {
 	struct xio_tasks_pool *q = t->pool;
 
-//	if (!(t >= q->array[0] && t <= q->array[q->max-1]))
-//		ERROR_LOG("task is not in range %p =< %p =< %p\n",
-//			  q->array[0], t, q->array[q->max-1]);
+	if (0 && (!(t >= q->array[0] && t <= q->array[q->max-1])))
+		ERROR_LOG("task is not in range %p =< %p =< %p\n",
+			  q->array[0], t, q->array[q->max-1]);
 
 	if (t->refcnt  > 1)  {
 		t->refcnt--;

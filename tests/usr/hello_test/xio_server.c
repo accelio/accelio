@@ -215,13 +215,14 @@ static int on_request(struct xio_session *session,
 
 	/* fill response */
 	msg_write(rsp, "hello world response header", test_config.hdr_len,
-		  "hello world response data", test_config.data_len);
+			"hello world response data", test_config.data_len);
 
 	if (xio_send_response(rsp) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
-		       session, xio_strerror(xio_errno()));
+				session, xio_strerror(xio_errno()));
 		msg_pool_put(pool, req);
 	}
+
 
 	return 0;
 }

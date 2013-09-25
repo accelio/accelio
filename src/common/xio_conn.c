@@ -57,10 +57,14 @@ static int xio_conn_primary_pool_setup(struct xio_conn *conn);
 /*---------------------------------------------------------------------------*/
 static void xio_pre_put_task(struct xio_task *task)
 {
-	task->imsg.user_context	      = 0;
-	task->imsg.in.header.iov_base = NULL;
-	task->imsg.in.header.iov_len  = 0;
-	task->imsg.in.data_iovlen     = 0;
+	task->imsg.user_context		= 0;
+	task->imsg.in.header.iov_base	= NULL;
+	task->imsg.in.header.iov_len	= 0;
+	task->imsg.in.data_iovlen	= 0;
+	task->imsg.flags		= 0;
+	task->omsg			= NULL;
+	task->tlv_type			= 0xdead;
+	task->omsg_flags		= 0;
 }
 
 /*---------------------------------------------------------------------------*/

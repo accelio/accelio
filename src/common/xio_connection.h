@@ -113,10 +113,10 @@ static inline void xio_connection_set_state(
 	conn->state = state;
 }
 
-int xio_connection_ack_ow_req(struct xio_connection *conn,
+int xio_connection_send_read_receipt(struct xio_connection *conn,
 			      struct xio_msg *msg);
 
-int xio_connection_release_ow_rsp(struct xio_connection *conn,
+int xio_connection_release_read_receipt(struct xio_connection *conn,
 				  struct xio_msg *msg);
 
 void xio_release_response_task(struct xio_task *task);

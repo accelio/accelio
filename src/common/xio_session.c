@@ -66,8 +66,8 @@ static int xio_on_rsp_recv(struct xio_connection *connetion,
 				  struct xio_task *task);
 static int xio_on_ow_req_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
-static int xio_on_ow_rsp_send_comp(struct xio_connection *connection,
-				  struct xio_task *task);
+//static int xio_on_ow_rsp_send_comp(struct xio_connection *connection,
+//				  struct xio_task *task);
 static int xio_on_rsp_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
 static int xio_on_setup_req_recv(struct xio_connection *connection,
@@ -223,6 +223,7 @@ int xio_session_write_header(struct xio_task *task,
 	/* fill header */
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
 	PACK_LLVAL(hdr, tmp_hdr, serial_num);
+	PACK_LVAL(hdr, tmp_hdr, flags);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 
@@ -243,6 +244,7 @@ static int xio_session_read_header(struct xio_task *task,
 	/* fill request */
 	UNPACK_LLVAL(tmp_hdr, hdr, serial_num);
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
+	UNPACK_LVAL(tmp_hdr, hdr, flags);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 
@@ -790,7 +792,7 @@ int xio_redirect(struct xio_session *session,
 			  session);
 	}
 	msg->request = session->setup_req;
-	msg->type	= XIO_SESSION_SETUP_RSP;
+	msg->type    = XIO_SESSION_SETUP_RSP;
 
 	connection = list_first_entry(
 				&session->connections_list,
@@ -1164,7 +1166,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_session_hdr	hdr;
 	struct xio_msg		*msg = &task->imsg;
 
-
 	/* server side after accept change the state upon first message */
 	if (connection->session->state == XIO_SESSION_STATE_ACCEPTED)
 		connection->session->state = XIO_SESSION_STATE_ONLINE;
@@ -1174,12 +1175,19 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		return -1;
 
 	msg->sn = hdr.serial_num;
+	msg->flags = hdr.flags;
 	task->connection = connection;
 
 	xio_connection_queue_io_task(connection, task);
 
-	if (msg->type == XIO_ONE_WAY_REQ)
-		xio_connection_ack_ow_req(connection, msg);
+	task->state = XIO_TASK_STATE_DELIVERED;
+
+	/* add reference count to protect against release in callback */
+	/* add ref to task avoiding race when user call release or send
+	 * completion
+	 */
+	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+		xio_task_addref(task);
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg)
@@ -1187,6 +1195,16 @@ static int xio_on_req_recv(struct xio_connection *connection,
 				connection->session, msg,
 				msg->more_in_batch,
 				connection->cb_user_context);
+
+	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
+		if (task->state == XIO_TASK_STATE_DELIVERED) {
+			xio_connection_send_read_receipt(connection, msg);
+		} else {
+			/* free the ref added in this function */
+			xio_conn_put_task(task->conn, task);
+		}
+
+	}
 
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
@@ -1203,6 +1221,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_session_hdr	hdr;
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_msg		*omsg;
+	struct xio_task		*sender_task = task->sender_task;
 
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)
@@ -1211,34 +1230,51 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	msg->sn = hdr.serial_num;
 
 	/* one way messages do not have sender task */
-	task->sender_task->omsg->request = msg;
-	omsg = task->sender_task->omsg;
+	omsg = sender_task->omsg;
+	omsg->request = msg;
 
 	task->connection = connection;
 
 	/* store the task in io queue */
 	xio_connection_queue_io_task(connection, task);
 
-	/* notify the upper layer */
-	if (omsg->type == XIO_ONE_WAY_RSP) {
-		omsg->sn = msg->sn;
-		if (connection->ses_ops.on_msg_delivered)
-			connection->ses_ops.on_msg_delivered(
+	if (task->tlv_type == XIO_ONE_WAY_RSP) {
+		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
+		    ERROR_LOG("protocol requires first flag to be set. flags:0x%x\n",
+			      hdr.flags);
+	    omsg->sn = msg->sn; /* one way do have response */
+	    if (connection->ses_ops.on_msg_delivered)
+		    connection->ses_ops.on_msg_delivered(
+				    connection->session,
+				    omsg,
+				    task->imsg.more_in_batch,
+				    connection->cb_user_context);
+	    sender_task->omsg = NULL;
+	    xio_release_response_task(task);
+	} else   {
+		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
+			if (connection->ses_ops.on_msg_delivered)
+				connection->ses_ops.on_msg_delivered(
+						connection->session,
+						omsg,
+						task->imsg.more_in_batch,
+						connection->cb_user_context);
+			/* standalone receipt */
+			if ((hdr.flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==  XIO_MSG_RSP_FLAG_FIRST) {
+				/* recycle the receipt */
+				xio_conn_put_task(task->conn, task);
+			}
+		}
+		if (hdr.flags & XIO_MSG_RSP_FLAG_LAST) {
+			if (connection->ses_ops.on_msg)
+				connection->ses_ops.on_msg(
 					connection->session,
 					omsg,
 					task->imsg.more_in_batch,
 					connection->cb_user_context);
-
-		xio_release_response_task(task);
-
-	} else {
-		if (connection->ses_ops.on_msg)
-			connection->ses_ops.on_msg(
-					connection->session,
-					omsg,
-					task->imsg.more_in_batch,
-					connection->cb_user_context);
+		}
 	}
+
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
 
@@ -1252,37 +1288,25 @@ static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	/* send completion notification only to responder to
-	 * release responses
+	/*
+	 * completion of receipt
 	 */
-	if (connection->ses_ops.on_msg_send_complete) {
-		connection->ses_ops.on_msg_send_complete(
-				connection->session, task->omsg,
-				connection->cb_user_context);
+	if ((task->omsg_flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+	     XIO_MSG_RSP_FLAG_FIRST) {
+		xio_connection_release_read_receipt(connection, task->omsg);
+		xio_release_response_task(task);
+	} else {
+		/* send completion notification only to responder to
+		 * release responses
+		 */
+		if (connection->ses_ops.on_msg_send_complete) {
+			connection->ses_ops.on_msg_send_complete(
+					connection->session, task->omsg,
+					connection->cb_user_context);
+		}
+		/* recycle the task */
+		xio_conn_put_task(task->conn, task);
 	}
-
-	/* recycle the task */
-	xio_conn_put_task(task->conn, task);
-
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_ow_rsp_send_comp				                     */
-/*---------------------------------------------------------------------------*/
-static int xio_on_ow_rsp_send_comp(
-		struct xio_connection *connection,
-		struct xio_task *task)
-{
-	xio_connection_release_ow_rsp(connection, task->omsg);
-	xio_conn_put_task(task->sender_task->conn, task->sender_task);
-	task->sender_task = NULL;
-
-	/* recycle the task */
-	xio_conn_put_task(task->conn, task);
 
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
@@ -1297,15 +1321,9 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	if (connection->ses_ops.on_msg_delivered)
-		connection->ses_ops.on_msg_delivered(
-				connection->session,
-				task->omsg,
-				task->imsg.more_in_batch,
-				connection->cb_user_context);
-
 	/* recycle the task */
-	xio_conn_put_task(task->conn, task);
+	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT))
+		xio_conn_put_task(task->conn, task);
 
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
@@ -1517,7 +1535,6 @@ static int xio_on_conn_established(struct xio_session *session,
 			session->state = XIO_SESSION_STATE_CONNECT;
 
 			msg->type      = XIO_SESSION_SETUP_REQ;
-
 			xio_connection_send(session->lead_conn, msg);
 		}
 		break;
@@ -1722,14 +1739,16 @@ static int xio_on_send_completion(struct xio_session *session,
 	}
 
 	switch (task->tlv_type) {
+	case XIO_MSG_REQ:
+	case XIO_SESSION_SETUP_REQ:
+		retval = 0;
+		break;
 	case XIO_MSG_RSP:
+	case XIO_ONE_WAY_RSP:
 		retval = xio_on_rsp_send_comp(connection, task);
 		break;
 	case XIO_ONE_WAY_REQ:
 		retval = xio_on_ow_req_send_comp(connection, task);
-		break;
-	case XIO_ONE_WAY_RSP:
-		retval = xio_on_ow_rsp_send_comp(connection, task);
 		break;
 	case XIO_SESSION_SETUP_RSP:
 		retval = xio_on_setup_rsp_send_comp(connection, task);

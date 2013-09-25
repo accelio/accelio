@@ -44,7 +44,7 @@
 #include "xio_connection.h"
 #include "xio_session.h"
 
-#define MSG_POOL_SZ	1024
+#define MSG_POOL_SZ	4096
 
 
 /*---------------------------------------------------------------------------*/
@@ -129,7 +129,10 @@ int xio_connection_send(struct xio_connection *conn,
 	int			is_req = 0;
 
 
-	if (msg->type == XIO_ONE_WAY_RSP) {
+	if (IS_RESPONSE(msg->type) &&
+	    ((msg->flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+	    XIO_MSG_RSP_FLAG_FIRST)) {
+		/* this is a receipt message */
 		task = xio_conn_get_primary_task(conn->conn);
 		if (task == NULL) {
 			ERROR_LOG("tasks pool is empty\n");
@@ -151,7 +154,7 @@ int xio_connection_send(struct xio_connection *conn,
 		task->omsg	  = msg;
 		hdr.serial_num	  = msg->request->sn;
 		task->rtid	  = req_task->rtid;
-		is_req = 1;
+		is_req		  = 1;
 	} else {
 		if ((msg->type == XIO_MSG_TYPE_REQ) ||
 		    (msg->type == XIO_SESSION_SETUP_REQ) ||
@@ -198,10 +201,12 @@ int xio_connection_send(struct xio_connection *conn,
 	task->session		= conn->session;
 	task->conn		= conn->conn;
 	task->omsg		= msg;
+	task->omsg_flags	= msg->flags;
 
 
 	/* write session header */
-	hdr.dest_session_id = conn->session->peer_session_id;
+	hdr.flags		= msg->flags;
+	hdr.dest_session_id	= conn->session->peer_session_id;
 	if (xio_session_write_header(task, &hdr) != 0)
 		goto cleanup;
 
@@ -305,7 +310,7 @@ static int xio_connection_xmit(struct xio_connection *conn)
 /* xio_send_request							     */
 /*---------------------------------------------------------------------------*/
 int xio_send_request(struct xio_connection *conn,
-				  struct xio_msg *msg)
+		     struct xio_msg *msg)
 {
 	int		valid;
 
@@ -361,7 +366,14 @@ int xio_send_response(struct xio_msg *msg)
 		return -1;
 	}
 
+	msg->flags = XIO_MSG_RSP_FLAG_LAST;
+	if ((msg->request->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) &&
+	    (task->state == XIO_TASK_STATE_DELIVERED))
+		msg->flags |= XIO_MSG_RSP_FLAG_FIRST;
+	task->state = XIO_TASK_STATE_READ;
+
 	msg->type = XIO_MSG_TYPE_RSP;
+
 	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);
 
 	/* do not xmit until connection is assigned */
@@ -372,10 +384,10 @@ int xio_send_response(struct xio_msg *msg)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ack_msg								     */
+/* xio_connection_send_read_receipt					     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_ack_ow_req(struct xio_connection *conn,
-			      struct xio_msg *msg)
+int xio_connection_send_read_receipt(struct xio_connection *conn,
+				     struct xio_msg *msg)
 {
 	struct xio_msg *rsp;
 	struct xio_task *task;
@@ -392,21 +404,15 @@ int xio_connection_ack_ow_req(struct xio_connection *conn,
 		ERROR_LOG("request not found\n");
 		return -1;
 	}
-	if (task->ack_ow)
-		task->ack_ow = 0;
-	else
-		return 0;
-
-	/* add ref to task avoiding race when user call release or send
-	 * completion
-	 */
-	xio_task_addref(task);
 
 	rsp = xio_msg_list_first(&conn->one_way_msg_pool);
 	xio_msg_list_remove(&conn->one_way_msg_pool, rsp);
 
-	rsp->type = XIO_ONE_WAY_RSP;
+	rsp->type = (msg->type & ~XIO_REQUEST) | XIO_RESPONSE;
 	rsp->request = msg;
+
+	rsp->flags = XIO_MSG_RSP_FLAG_FIRST;
+	task->state = XIO_TASK_STATE_READ;
 
 	rsp->out.header.iov_len = 0;
 	rsp->out.data_iovlen = 0;
@@ -420,7 +426,7 @@ int xio_connection_ack_ow_req(struct xio_connection *conn,
 	return 0;
 }
 
-int xio_connection_release_ow_rsp(struct xio_connection *conn,
+int xio_connection_release_read_receipt(struct xio_connection *conn,
 				  struct xio_msg *msg)
 {
 	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg);
@@ -630,7 +636,7 @@ int xio_release_msg(struct xio_msg *msg)
 
 
 	if (task->tlv_type != XIO_ONE_WAY_REQ) {
-		ERROR_LOG("xio_release_msg failed. invalid type, 0x%d\n",
+		ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 			  task->tlv_type);
 		xio_set_error(EINVAL);
 		return -1;

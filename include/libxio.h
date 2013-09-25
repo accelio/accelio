@@ -117,6 +117,11 @@ enum xio_session_flags {
 	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
 };
 
+enum xio_msg_flags {
+	/* request flags */
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1
+};
+
 enum xio_session_event {
 	XIO_SESSION_REJECT_EVENT,
 	XIO_SESSION_TEARDOWN_EVENT,
@@ -194,7 +199,7 @@ struct xio_msg {
 	enum xio_msg_type	type;
 	int		        more_in_batch;	/* more messages are expected */
 	int			status;
-	int			reserved;
+	int			flags;
 	void			*user_context;	/* for user usage - not sent */
 	struct xio_msg		*next;          /* internal use */
 	struct xio_msg		**prev;		/* internal use */
