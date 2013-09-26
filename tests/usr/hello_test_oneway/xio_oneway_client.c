@@ -179,7 +179,8 @@ static void process_message(struct xio_msg *msg)
 
 		data_len = txlen > rxlen ? txlen : rxlen;
 		data_len = data_len/1024;
-		print_counter = data_len ? PRINT_COUNTER/data_len : PRINT_COUNTER;
+		print_counter = data_len ?
+			PRINT_COUNTER/data_len : PRINT_COUNTER;
 	}
 	if (++cnt == print_counter) {
 		char		timeb[40];
@@ -550,7 +551,7 @@ int main(int argc, char *argv[])
 		}
 		i++;
 		if (i == 256)
-		    break;
+			break;
 	}
 
 	/* the default xio supplied main loop */

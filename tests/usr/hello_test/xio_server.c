@@ -215,11 +215,11 @@ static int on_request(struct xio_session *session,
 
 	/* fill response */
 	msg_write(rsp, "hello world response header", test_config.hdr_len,
-			"hello world response data", test_config.data_len);
+		  "hello world response data", test_config.data_len);
 
 	if (xio_send_response(rsp) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
-				session, xio_strerror(xio_errno()));
+		       session, xio_strerror(xio_errno()));
 		msg_pool_put(pool, req);
 	}
 
@@ -266,12 +266,13 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	if (first_time) {
 		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
 		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = xio_reg_mr(msg->in.data_iov[0].iov_base,
-				msg->in.data_iov[0].iov_len);
+		msg->in.data_iov[0].mr =
+			xio_reg_mr(msg->in.data_iov[0].iov_base,
+				   msg->in.data_iov[0].iov_len);
 		buf = msg->in.data_iov[0].iov_base;
 		mr = msg->in.data_iov[0].mr;
 		first_time = 0;
-	}else {
+	} else {
 		msg->in.data_iov[0].iov_base = buf;
 		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
 		msg->in.data_iov[0].mr = mr;

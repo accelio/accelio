@@ -549,7 +549,6 @@ static int xio_conn_on_recv_msg(struct xio_conn *conn,
 					XIO_CONNECTION_NEW_MESSAGE,
 					&conn_event_data);
 			return 0;
-
 		}
 	}
 	if (task->sender_task) {

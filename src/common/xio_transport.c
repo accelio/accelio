@@ -85,7 +85,8 @@ struct xio_transport *xio_get_transport(const char *name)
 	if (transport->init) {
 		int retval = transport->init(transport);
 		if (retval != 0) {
-			ERROR_LOG("%s transport initialization failed.\n", name);
+			ERROR_LOG("%s transport initialization failed.\n",
+				  name);
 			return NULL;
 		}
 	}

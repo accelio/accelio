@@ -672,8 +672,8 @@ int xio_ev_loop_run(void *loop);
  * xio_ev_loop_run_timeout - event loop main loop with limited blocking duration.
  *
  * @loop: pointer to event loop
- * @timeout_msec: The timeout argument specifies the minimum number of milliseconds 
- *                that xio_ev_loop_run will block before exiting
+ * @timeout_msec: The timeout argument specifies the minimum number of
+ *		  milliseconds that xio_ev_loop_run will block before exiting
  */
 int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
 

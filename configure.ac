@@ -68,9 +68,9 @@ AC_MSG_CHECKING([whether to build with raio example library])
 AC_ARG_ENABLE([raio_build],
 	      [AS_HELP_STRING([--disable-raio-build],
 			      [disable raio library generation - default:no ])],
-			       [enable_raio_build=$enableval],
-			       [enable_raio_build=no])
-AC_MSG_RESULT([$enable_raio_build])
+			       [disable_raio_build=$enableval],
+			       [disable_raio_build=no])
+AC_MSG_RESULT([$disable_raio_build])
 
 ##########################################################################
 # fio compilation support
@@ -108,7 +108,7 @@ else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 examples/usr/hello_world";
 	subdirs2="$subdirs2 examples/usr/hello_world_mt";
-if test "$enable_raio_build" != "no"; then
+if test "$disable_raio_build" != "yes"; then
 	subdirs2="$subdirs2 examples/usr/raio";
 if test "$enable_fio_build" != "no"; then
 	subdirs2="$subdirs2 examples/usr/fio";

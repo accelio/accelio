@@ -1244,7 +1244,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 			/* free the ref added in this function */
 			xio_conn_put_task(task->conn, task);
 		}
-
 	}
 
 	/* now try to send */
@@ -1281,11 +1280,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
 		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
-		    ERROR_LOG("protocol requires first flag to be set. flags:0x%x\n",
-			      hdr.flags);
-	    omsg->sn = msg->sn; /* one way do have response */
-	    if (connection->ses_ops.on_msg_delivered)
-		    connection->ses_ops.on_msg_delivered(
+			ERROR_LOG("protocol requires first flag to be set. " \
+				  "flags:0x%x\n", hdr.flags);
+		omsg->sn = msg->sn; /* one way do have response */
+		if (connection->ses_ops.on_msg_delivered)
+			connection->ses_ops.on_msg_delivered(
 				    connection->session,
 				    omsg,
 				    task->imsg.more_in_batch,
@@ -1301,7 +1300,9 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 						task->imsg.more_in_batch,
 						connection->cb_user_context);
 			/* standalone receipt */
-			if ((hdr.flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==  XIO_MSG_RSP_FLAG_FIRST) {
+			if ((hdr.flags &
+			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+					XIO_MSG_RSP_FLAG_FIRST) {
 				/* recycle the receipt */
 				xio_conn_put_task(task->conn, task);
 			}
@@ -1332,7 +1333,8 @@ static int xio_on_rsp_send_comp(
 	/*
 	 * completion of receipt
 	 */
-	if ((task->omsg_flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+	if ((task->omsg_flags &
+	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
 	     XIO_MSG_RSP_FLAG_FIRST) {
 		xio_connection_release_read_receipt(connection, task->omsg);
 		xio_release_response_task(task);

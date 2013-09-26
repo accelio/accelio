@@ -265,8 +265,8 @@ retry:
 	} else {
 		/* timed out */
 		loop->stop_loop = 1;
-	
-		/* TODO: timeout should be updated by the elapsed duration of each loop */
+		/* TODO: timeout should be updated by the elapsed duration of
+		 * each loop */
 	}
 	if (likely(loop->stop_loop == 0))
 		goto retry;

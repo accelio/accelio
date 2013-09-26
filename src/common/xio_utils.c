@@ -644,7 +644,7 @@ void msg_reset(struct xio_msg *msg)
 unsigned int xio_get_nodeid(unsigned int cpu_id)
 {
 	DIR *directory_parent, *directory_node;
-	struct dirent *de,*dn;
+	struct dirent *de, *dn;
 	char directory_path[255];
 	unsigned int cpu;
 	int node_id = 0;
@@ -660,14 +660,16 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 		while ((de = readdir(directory_parent)) != NULL) {
 			if (strncmp(de->d_name, "node", 4))
 				continue;
-			sprintf(directory_path,"/sys/devices/system/node/%s",de->d_name);
+			sprintf(directory_path, "/sys/devices/system/node/%s",
+				de->d_name);
 			directory_node = opendir(directory_path);
 			while ((dn = readdir(directory_node)) != NULL) {
 				if (strncmp(dn->d_name, "cpu", 3))
 					continue;
-				cpu = strtoul(dn->d_name+3,NULL,0);
-				if ( cpu == cpu_id ){
-					node_id = strtoul(de->d_name+4, NULL, 0);
+				cpu = strtoul(dn->d_name+3, NULL, 0);
+				if (cpu == cpu_id) {
+					node_id = strtoul(de->d_name + 4,
+							  NULL, 0);
 					found = 1;
 					break;
 				}

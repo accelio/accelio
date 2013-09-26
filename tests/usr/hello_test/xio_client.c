@@ -271,7 +271,7 @@ static int on_response(struct xio_session *session,
 
 	if (msg->status)
 		printf("**** message completed with error. [%s]\n",
-				xio_strerror(msg->status));
+		       xio_strerror(msg->status));
 
 	/* message is no longer needed */
 	xio_release_response(msg);

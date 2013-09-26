@@ -2200,7 +2200,8 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	/* hint the upper layer of sizes */
 	for (i = 0;  i < rdma_task->req_write_num_sge; i++) {
 		task->imsg.in.data_iov[i].iov_base  = NULL;
-		task->imsg.in.data_iov[i].iov_len  = rdma_task->req_write_sge[i].length;
+		task->imsg.in.data_iov[i].iov_len  =
+					rdma_task->req_write_sge[i].length;
 	}
 	task->imsg.in.data_iovlen = rdma_task->req_write_num_sge;
 
@@ -2463,7 +2464,7 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		req.credits		= 0;
 		xio_rdma_write_setup_msg(rdma_hndl, task, &req);
 	} else {
-		rdma_hndl->sim_peer_credits += rdma_hndl->credits;;
+		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
 
 		rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
 		xio_rdma_write_setup_msg(rdma_hndl,

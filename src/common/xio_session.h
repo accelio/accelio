@@ -108,8 +108,8 @@ struct xio_session {
 	uint16_t			last_opened_service;
 
 	uint32_t			reject_reason;
-	struct mutex                    lock;
-	spinlock_t                      conn_list_lock;
+	struct mutex                    lock;	   /* lock open connection */
+	spinlock_t                      conn_list_lock; /* lock for conn list */
 	int				pad;
 	struct xio_connection		*lead_conn;
 	struct xio_connection		*redir_conn;
@@ -189,7 +189,7 @@ static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 
 static inline int xio_session_not_queueing(struct xio_session *session)
 {
-	return (session->session_flags & XIO_SESSION_FLAG_DONTQUEUE);
+	return session->session_flags & XIO_SESSION_FLAG_DONTQUEUE;
 }
 
 #endif /*XIO_SESSION_H */

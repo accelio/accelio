@@ -301,8 +301,10 @@ int xio_connection_flush(struct xio_connection *connection)
 		}
 		xio_conn_put_task(task->conn, task);
 
-		if ((msg->type == XIO_ONE_WAY_RSP) || (msg->type == XIO_FIN_RSP))
-			xio_msg_list_insert_tail(&connection->one_way_msg_pool, msg);
+		if ((msg->type == XIO_ONE_WAY_RSP) ||
+		    (msg->type == XIO_FIN_RSP))
+			xio_msg_list_insert_tail(&connection->one_way_msg_pool,
+						 msg);
 	}
 	while (!xio_msg_list_empty(&connection->reqs_msgq)) {
 		msg = xio_msg_list_first(&connection->reqs_msgq);
@@ -686,9 +688,8 @@ static int xio_send_fin_req(struct xio_connection *conn)
 	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE) {
+	if (conn->state == CONNECTION_STATE_ONLINE)
 		return xio_connection_xmit(conn);
-	}
 
 	return 0;
 }
@@ -716,9 +717,8 @@ static int xio_send_fin_rsp(struct xio_connection *conn, struct xio_task *task)
 	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE) {
+	if (conn->state == CONNECTION_STATE_ONLINE)
 		return xio_connection_xmit(conn);
-	}
 
 	return 0;
 }
