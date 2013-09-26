@@ -74,7 +74,8 @@ enum xio_optlevel {
 };
 
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,  /* int */
+	XIO_OPTNAME_ENABLE_MEM_POOL,		/* int */
+	XIO_OPTNAME_DISABLE_DMA_LATENCY,	/* int */
 };
 
 /*  A number random enough not to collide with different errno ranges.       */

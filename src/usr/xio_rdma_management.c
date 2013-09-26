@@ -53,7 +53,8 @@
 
 
 /* default option values */
-#define XIO_OPTNAME_DEF_ENABLE_MEM_POOL		1
+#define XIO_OPTNAME_DEF_ENABLE_MEM_POOL			1
+#define XIO_OPTNAME_DEF_DISABLE_DMA_LATENCY		0
 
 
 /*---------------------------------------------------------------------------*/
@@ -74,6 +75,7 @@ double g_mhz;
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
 	.enable_mem_pool		= XIO_OPTNAME_DEF_ENABLE_MEM_POOL,
+	.disable_dma_latency		= XIO_OPTNAME_DEF_DISABLE_DMA_LATENCY,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1846,6 +1848,12 @@ static int xio_rdma_set_opt(void *xio_obj,
 	case XIO_OPTNAME_ENABLE_MEM_POOL:
 		VALIDATE_SZ(sizeof(int));
 		rdma_options.enable_mem_pool = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_DISABLE_DMA_LATENCY:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.disable_dma_latency = *((int *)optval);
+		return 0;
 		break;
 	default:
 		break;
@@ -1864,6 +1872,12 @@ static int xio_rdma_get_opt(void  *xio_obj,
 	case XIO_OPTNAME_ENABLE_MEM_POOL:
 		*((int *)optval) = rdma_options.enable_mem_pool;
 		*optlen = sizeof(int);
+		return 0;
+		break;
+	case XIO_OPTNAME_DISABLE_DMA_LATENCY:
+		*((int *)optval) = rdma_options.disable_dma_latency;
+		*optlen = sizeof(int);
+		return 0;
 		break;
 	default:
 		break;
@@ -1928,6 +1942,8 @@ static int xio_set_cpu_latency()
 	int32_t latency = 0;
 	int fd;
 
+	if (rdma_options.disable_dma_latency)
+		return 0;
 
 	DEBUG_LOG("setting latency to %d us\n", latency);
 	fd = open("/dev/cpu_dma_latency", O_WRONLY);
