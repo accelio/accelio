@@ -1479,6 +1479,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 		spin_unlock(&session->conn_list_lock);
 	} else {
 		connection = xio_session_find_conn(session, conn);
+		xio_connection_flush(connection);
 		if (session->type == XIO_SESSION_REQ) {
 			struct xio_session_event_data  event = {
 				.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,

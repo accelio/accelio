@@ -235,14 +235,62 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_connection_flush							     */
 /*---------------------------------------------------------------------------*/
-static int xio_connection_flush(struct xio_connection *conn)
+int xio_connection_flush(struct xio_connection *connection)
 {
 	struct xio_msg		*msg;
 	struct xio_task		*task = NULL;
+	struct xio_task		*ptask, *pnext_task;
 
-	while (!xio_msg_list_empty(&conn->rsps_msgq)) {
-		msg = xio_msg_list_first(&conn->rsps_msgq);
-		xio_msg_list_remove(&conn->rsps_msgq, msg);
+	if (!(connection->conn))
+		return 0;
+
+	if (!list_empty(&connection->post_io_tasks_list)) {
+		TRACE_LOG("post_io_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->post_io_tasks_list,
+					 tasks_list_entry) {
+			TRACE_LOG("post_io_list: task %p, refcnt:%d, " \
+				  "type 0x%x ltid:%d\n",
+				  ptask, ptask->refcnt,
+				  ptask->tlv_type, ptask->ltid);
+			xio_conn_put_task(connection->conn, ptask);
+		}
+	}
+
+	if (!list_empty(&connection->pre_send_list)) {
+		TRACE_LOG("pre_send_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->pre_send_list,
+					 tasks_list_entry) {
+			TRACE_LOG("pre_send_list: task %p, refcnt:%d, " \
+				  "type 0x%x ltid:%d\n",
+				  ptask, ptask->refcnt,
+				  ptask->tlv_type, ptask->ltid);
+			if (ptask->sender_task) {
+				/* the tx task is returend back to pool */
+				xio_conn_put_task(ptask->sender_task->conn,
+						  ptask->sender_task);
+				ptask->sender_task = NULL;
+			}
+			xio_conn_put_task(ptask->conn, ptask);
+		}
+	}
+
+	if (!list_empty(&connection->io_tasks_list)) {
+		TRACE_LOG("io_tasks_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->io_tasks_list,
+					 tasks_list_entry) {
+			TRACE_LOG("io_tasks_list: task %p, refcnt:%d, " \
+				  "type 0x%x ltid:%d\n",
+				  ptask, ptask->refcnt,
+				  ptask->tlv_type, ptask->ltid);
+		}
+	}
+
+	while (!xio_msg_list_empty(&connection->rsps_msgq)) {
+		msg = xio_msg_list_first(&connection->rsps_msgq);
+		xio_msg_list_remove(&connection->rsps_msgq, msg);
 		task = container_of(msg->request, struct xio_task, imsg);
 			/* after send success release it */
 		if (task->sender_task) {
@@ -253,13 +301,18 @@ static int xio_connection_flush(struct xio_connection *conn)
 		}
 		xio_conn_put_task(task->conn, task);
 
-		if (msg->type == XIO_ONE_WAY_RSP)
-			xio_msg_list_insert_tail(&conn->one_way_msg_pool, msg);
+		if ((msg->type == XIO_ONE_WAY_RSP) || (msg->type == XIO_FIN_RSP))
+			xio_msg_list_insert_tail(&connection->one_way_msg_pool, msg);
 	}
-	while (!xio_msg_list_empty(&conn->reqs_msgq)) {
-		msg = xio_msg_list_first(&conn->reqs_msgq);
-		xio_msg_list_remove(&conn->reqs_msgq, msg);
+	while (!xio_msg_list_empty(&connection->reqs_msgq)) {
+		msg = xio_msg_list_first(&connection->reqs_msgq);
+		xio_msg_list_remove(&connection->reqs_msgq, msg);
 	}
+
+
+	/* inventory */
+	xio_conn_primary_free_tasks(connection->conn);
+
 
 	return 0;
 }
@@ -496,71 +549,10 @@ int xio_connection_xmit_msgs(struct xio_connection *conn)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_conn_close						     */
-/*---------------------------------------------------------------------------*/
-int xio_connection_conn_close(struct xio_connection *connection)
-{
-	struct xio_task *ptask, *pnext_task;
-
-	xio_connection_flush(connection);
-
-	if (!list_empty(&connection->post_io_tasks_list)) {
-		TRACE_LOG("post_io_list not empty!\n");
-		list_for_each_entry_safe(ptask, pnext_task,
-					 &connection->post_io_tasks_list,
-					 tasks_list_entry) {
-			TRACE_LOG("post_io_list: task %p, refcnt:%d, " \
-				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
-				  ptask->tlv_type, ptask->ltid);
-			xio_conn_put_task(connection->conn, ptask);
-		}
-	}
-
-	if (!list_empty(&connection->pre_send_list)) {
-		TRACE_LOG("pre_send_list not empty!\n");
-		list_for_each_entry_safe(ptask, pnext_task,
-					 &connection->pre_send_list,
-					 tasks_list_entry) {
-			TRACE_LOG("pre_send_list: task %p, refcnt:%d, " \
-				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
-				  ptask->tlv_type, ptask->ltid);
-			if (ptask->sender_task) {
-				/* the tx task is returend back to pool */
-				xio_conn_put_task(ptask->sender_task->conn,
-						  ptask->sender_task);
-				ptask->sender_task = NULL;
-			}
-			xio_conn_put_task(ptask->conn, ptask);
-		}
-	}
-
-	if (!list_empty(&connection->io_tasks_list)) {
-		TRACE_LOG("io_tasks_list not empty!\n");
-		list_for_each_entry_safe(ptask, pnext_task,
-					 &connection->io_tasks_list,
-					 tasks_list_entry) {
-			TRACE_LOG("io_tasks_list: task %p, refcnt:%d, " \
-				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
-				  ptask->tlv_type, ptask->ltid);
-		}
-	}
-
-	/* inventory */
-	xio_conn_primary_free_tasks(connection->conn);
-
-	return 0;
-}
-/*---------------------------------------------------------------------------*/
 /* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_close(struct xio_connection *connection)
 {
-	if (connection->conn)
-		xio_connection_conn_close(connection);
-
 	xio_free_ow_msg_pool(connection);
 	kfree(connection);
 
@@ -680,6 +672,8 @@ static int xio_send_fin_req(struct xio_connection *conn)
 
 	msg = xio_msg_list_first(&conn->one_way_msg_pool);
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
+
+	printf("here\n");
 
 	msg->type = XIO_FIN_REQ;
 
