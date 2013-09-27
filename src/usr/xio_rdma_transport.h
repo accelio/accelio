@@ -102,11 +102,11 @@ enum xio_ib_op_code {
 };
 
 #ifndef IBV_DEVICE_MR_ALLOCATE
- #  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
- #endif
- #ifndef IBV_ACCESS_ALLOCATE_MR
- #  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
- #endif /* M-pages compatibility */
+#  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
+#endif
+#ifndef IBV_ACCESS_ALLOCATE_MR
+#  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
+#endif /* M-pages compatibility */
 
 
 struct xio_rdma_transport;

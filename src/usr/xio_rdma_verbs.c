@@ -99,7 +99,7 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode)
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr								     */
 /*---------------------------------------------------------------------------*/
-struct xio_mr *xio_reg_mr(void *addr, size_t length)
+static struct xio_mr *xio_reg_mr_ex(void *addr, size_t length, int access)
 {
 	struct xio_mr			*tmr;
 	struct xio_mr_elem		*tmr_elem;
@@ -131,14 +131,17 @@ struct xio_mr *xio_reg_mr(void *addr, size_t length)
 	INIT_LIST_HEAD(&tmr->dm_list);
 
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		mr = ibv_reg_mr(dev->pd,
-				addr, length,
-				IBV_ACCESS_LOCAL_WRITE |
-				IBV_ACCESS_REMOTE_WRITE|
-				IBV_ACCESS_REMOTE_READ);
+		mr = ibv_reg_mr(dev->pd, addr, length, access);
 		if (mr == NULL) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
+
+			if ((access & IBV_ACCESS_ALLOCATE_MR) &&
+			    !(dev->device_attr.device_cap_flags &
+				    IBV_DEVICE_MR_ALLOCATE)) {
+		                 ERROR_LOG("allocations are ot available on %s",
+			                    dev->verbs->device->name);
+			}
 			goto cleanup2;
 		}
 		tmr_elem = calloc(1, sizeof(*tmr_elem));
@@ -168,6 +171,17 @@ cleanup3:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_reg_mr								     */
+/*---------------------------------------------------------------------------*/
+struct xio_mr *xio_reg_mr(void *addr, size_t length)
+{
+	return xio_reg_mr_ex(addr, length,
+			     IBV_ACCESS_LOCAL_WRITE |
+			     IBV_ACCESS_REMOTE_WRITE|
+			     IBV_ACCESS_REMOTE_READ);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_dereg_mr								     */
 /*---------------------------------------------------------------------------*/
 int xio_dereg_mr(struct xio_mr **p_tmr)
@@ -193,6 +207,48 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 	*p_tmr = NULL;
 
 	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_alloc								     */
+/*---------------------------------------------------------------------------*/
+struct xio_buf *xio_alloc(size_t length)
+{
+	struct xio_buf	*buf;
+
+
+	buf = calloc(1, sizeof(*buf));
+	if (!buf) {
+		xio_set_error(errno);
+		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
+		return NULL;
+	}
+	buf->mr = xio_reg_mr_ex(buf->addr, length,
+			    IBV_ACCESS_LOCAL_WRITE |
+			    IBV_ACCESS_REMOTE_WRITE|
+			    IBV_ACCESS_REMOTE_READ |
+			    IBV_ACCESS_ALLOCATE_MR);
+	if (!buf->mr) {
+		ERROR_LOG("xio_reg_mr_ex failed\n");
+		return NULL;
+	}
+	buf->length = length;
+
+	return buf;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_free								     */
+/*---------------------------------------------------------------------------*/
+int xio_free(struct xio_buf **buf)
+{
+	struct xio_mr		*tmr = (*buf)->mr;
+	int			retval = xio_dereg_mr(&tmr);
+
+	free(*buf);
+	*buf = NULL;
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
