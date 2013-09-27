@@ -140,6 +140,7 @@ struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
 	uint64_t		serial_num;
 	uint32_t		flags;
+	uint32_t		receipt_result;
 };
 
 struct __attribute__((__packed__)) xio_conn_setup_req {

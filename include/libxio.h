@@ -70,12 +70,13 @@ enum xio_proto {
 };
 
 enum xio_optlevel {
+	XIO_OPTLEVEL_ACCELIO,
 	XIO_OPTLEVEL_RDMA,
 };
 
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,		/* int */
-	XIO_OPTNAME_DISABLE_DMA_LATENCY,	/* int */
+	XIO_OPTNAME_ENABLE_MEM_POOL,		/* rdma - int */
+	XIO_OPTNAME_DISABLE_DMA_LATENCY,	/* rdma - int */
 };
 
 /*  A number random enough not to collide with different errno ranges.       */
@@ -144,6 +145,11 @@ enum xio_msg_type {
 	XIO_MSG_TYPE_ONE_WAY		= (XIO_ONE_WAY | XIO_REQUEST),
 };
 
+enum xio_receipt_result {
+	XIO_READ_RECEIPT_ACCEPT,
+	XIO_READ_RECEIPT_REJECT,
+};
+
 /*---------------------------------------------------------------------------*/
 /* opaque data structures                                                    */
 /*---------------------------------------------------------------------------*/
@@ -201,6 +207,8 @@ struct xio_msg {
 	int		        more_in_batch;	/* more messages are expected */
 	int			status;
 	int			flags;
+	enum xio_receipt_result	receipt_res;
+	int			reserved;
 	void			*user_context;	/* for user usage - not sent */
 	struct xio_msg		*next;          /* internal use */
 	struct xio_msg		**prev;		/* internal use */

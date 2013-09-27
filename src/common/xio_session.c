@@ -228,6 +228,7 @@ int xio_session_write_header(struct xio_task *task,
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
 	PACK_LLVAL(hdr, tmp_hdr, serial_num);
 	PACK_LVAL(hdr, tmp_hdr, flags);
+	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 
@@ -249,6 +250,7 @@ static int xio_session_read_header(struct xio_task *task,
 	UNPACK_LLVAL(tmp_hdr, hdr, serial_num);
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
 	UNPACK_LVAL(tmp_hdr, hdr, flags);
+	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 
@@ -1282,7 +1284,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
-		omsg->sn = msg->sn; /* one way do have response */
+		omsg->sn	  = msg->sn; /* one way do have response */
+		omsg->receipt_res = hdr.receipt_result;
 		if (connection->ses_ops.on_msg_delivered)
 			connection->ses_ops.on_msg_delivered(
 				    connection->session,
@@ -1293,12 +1296,14 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	    xio_release_response_task(task);
 	} else   {
 		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
-			if (connection->ses_ops.on_msg_delivered)
+			if (connection->ses_ops.on_msg_delivered) {
+				omsg->receipt_res = hdr.receipt_result;
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
 						task->imsg.more_in_batch,
 						connection->cb_user_context);
+			}
 			/* standalone receipt */
 			if ((hdr.flags &
 			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==

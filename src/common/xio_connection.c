@@ -125,7 +125,7 @@ int xio_connection_send(struct xio_connection *conn,
 	int			retval = 0;
 	struct xio_task		*task = NULL;
 	struct xio_task		*req_task = NULL;
-	struct xio_session_hdr	hdr;
+	struct xio_session_hdr	hdr = {0};
 	int			is_req = 0;
 
 
@@ -150,11 +150,14 @@ int xio_connection_send(struct xio_connection *conn,
 			return -1;
 		}
 		list_move_tail(&task->tasks_list_entry, &conn->pre_send_list);
-		task->sender_task = req_task;
-		task->omsg	  = msg;
-		hdr.serial_num	  = msg->request->sn;
-		task->rtid	  = req_task->rtid;
-		is_req		  = 1;
+
+		task->sender_task	= req_task;
+		task->omsg		= msg;
+		task->rtid		= req_task->rtid;
+
+		hdr.serial_num		= msg->request->sn;
+		hdr.receipt_result	= msg->receipt_res;
+		is_req			= 1;
 	} else {
 		if ((msg->type == XIO_MSG_TYPE_REQ) ||
 		    (msg->type == XIO_SESSION_SETUP_REQ) ||
