@@ -1886,41 +1886,6 @@ static int xio_rdma_get_opt(void  *xio_obj,
 	return -1;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_init						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_transport_init(struct xio_transport *transport)
-{
-	int		retval = 0;
-
-	spin_lock(&mngmt_lock);
-
-	if (transport_init)
-		goto cleanup;
-
-	xio_device_thread_init();
-
-	retval = xio_device_list_init();
-	if (retval != 0) {
-		ERROR_LOG("Failed to initalize device list\n");
-		retval = -1;
-		goto cleanup;
-	}
-
-	/* storage for all memory registerations */
-	xio_mr_list_init();
-
-	xio_rdma_mempool_array_init();
-
-
-	transport_init  = 1;
-
-cleanup:
-	spin_unlock(&mngmt_lock);
-
-	return retval;
-}
-
 /*
  * To dynamically control C-states, open the file /dev/cpu_dma_latency and
  * write the maximum allowable latency to it. This will prevent C-states with
@@ -1956,6 +1921,44 @@ static int xio_set_cpu_latency()
 		return -1;
 	}
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_init						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_transport_init(struct xio_transport *transport)
+{
+	int		retval = 0;
+
+	spin_lock(&mngmt_lock);
+
+	if (transport_init)
+		goto cleanup;
+
+	/* set cpu latency until process is down */
+	xio_set_cpu_latency();
+
+	xio_device_thread_init();
+
+	retval = xio_device_list_init();
+	if (retval != 0) {
+		ERROR_LOG("Failed to initalize device list\n");
+		retval = -1;
+		goto cleanup;
+	}
+
+	/* storage for all memory registerations */
+	xio_mr_list_init();
+
+	xio_rdma_mempool_array_init();
+
+
+	transport_init  = 1;
+
+cleanup:
+	spin_unlock(&mngmt_lock);
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2083,9 +2086,6 @@ __attribute__((constructor)) void xio_rdma_transport_constructor(void)
 				  retval, strerror(retval));
 	}
 	g_mhz = get_cpu_mhz(0);
-
-	/* set cpu latency until process is down */
-	xio_set_cpu_latency();
 
 	/* register the transport */
 	xio_reg_transport(transport);
