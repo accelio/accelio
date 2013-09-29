@@ -51,7 +51,7 @@ struct xio_rdma_mp_mem {
 	void		*cache;
 };
 
-#define XIO_CHUNKS_SIZE_NR	4
+#define XIO_MEM_SLOTS_NR	4
 
 #define XIO_16K_BLOCK_SZ	(16*1024)
 #define XIO_16K_MIN_NR		128
