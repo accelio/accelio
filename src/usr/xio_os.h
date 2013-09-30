@@ -44,6 +44,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <malloc.h>
 #include <fcntl.h>
@@ -65,9 +66,11 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/mman.h>
+#include <linux/printk.h>
 #include <linux/usr.h>
 
 #endif /* XIO_OS_H */

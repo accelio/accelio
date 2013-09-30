@@ -32,6 +32,7 @@ libxio_so_SOURCES =	$(libxioinc_HEADERS)		\
 			xio_mem.c			\
 			xio_task.c			\
 			xio_context.c			\
+			./linux/hexdump.c		\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\

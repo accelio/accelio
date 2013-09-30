@@ -169,12 +169,6 @@ enum xio_wc_op {
 	XIO_WC_OP_SEND,
 };
 
-enum xio_prefix_type {
-	DUMP_PREFIX_NONE,
-	DUMP_PREFIX_ADDRESS,
-	DUMP_PREFIX_OFFSET
-};
-
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
@@ -215,9 +209,6 @@ size_t		xio_write_tlv(uint16_t type, uint64_t len, uint8_t *buffer);
 
 size_t		xio_read_tlv(uint16_t *type, uint64_t *len, void **value,
 			       uint8_t *buffer);
-
-void		print_hex_dump_bytes(const char *prefix_str, int prefix_type,
-				     const void *buf, size_t len);
 
 size_t		memcpyv(const struct xio_iovec *dst, int dparts, int doff,
 			const struct xio_iovec *src, int sparts, int soff);

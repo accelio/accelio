@@ -33,6 +33,11 @@
 #endif
 #endif
 
+extern const char hex_asc[];
+#define hex_asc_lo(x)	hex_asc[((x) & 0x0f)]
+#define hex_asc_hi(x)	hex_asc[((x) & 0xf0) >> 4]
+
+
 /**
  * container_of - cast a member of a structure out to the containing structure
  * @ptr:	the pointer to the member.
@@ -46,6 +51,7 @@
 	(type *)((char *)__mptr - offsetof(type, member)); })
 
 #endif
+
 
 struct mutex {
 	pthread_mutex_t lock;
