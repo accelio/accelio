@@ -116,7 +116,7 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%zd, datalen:%zd\n",
 		  mbuf, mbuf->buf.head, mbuf->buf.tail, mbuf->buf.buflen,
 		  mbuf->buf.datalen);
-	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%zd, val:%p\n",
+	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%llu, val:%p\n",
 		  mbuf, mbuf->tlv.head, mbuf->tlv.tail, mbuf->tlv.type,
 		  mbuf->tlv.len, mbuf->tlv.val);
 	DEBUG_LOG("curr: mbuf:%p curr:%p\n", mbuf, mbuf->curr);
@@ -162,11 +162,13 @@ static inline int xio_mbuf_tlv_start(struct xio_mbuf *mbuf)
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_read_first_tlv(struct xio_mbuf *mbuf)
 {
+	int len;
+
 	mbuf->tlv.head	  = mbuf->buf.head;
 	mbuf->curr	  = mbuf->tlv.head;
 
-	int len = xio_read_tlv(&mbuf->tlv.type, &mbuf->tlv.len,
-				 &mbuf->tlv.val, mbuf->tlv.head);
+	len = xio_read_tlv(&mbuf->tlv.type, &mbuf->tlv.len,
+			   &mbuf->tlv.val, mbuf->tlv.head);
 	if (len == -1 || ((mbuf->tlv.head + len) >  mbuf->buf.tail)) {
 		ERROR_LOG("xio_mbuf_first_read_tlv failed. tlv.head:%p, " \
 			  "len:%d, buf.tail:%p\n",
@@ -183,10 +185,12 @@ static inline int xio_mbuf_read_first_tlv(struct xio_mbuf *mbuf)
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_read_next_tlv(struct xio_mbuf *mbuf)
 {
+	int len;
+
 	mbuf->tlv.head	  = mbuf->tlv.tail;
 
-	int len = xio_read_tlv(&mbuf->tlv.type, &mbuf->tlv.len,
-				    &mbuf->tlv.val, mbuf->tlv.head);
+	len = xio_read_tlv(&mbuf->tlv.type, &mbuf->tlv.len,
+			   &mbuf->tlv.val, mbuf->tlv.head);
 	if (len == -1 || ((mbuf->tlv.head + len) >  mbuf->buf.tail)) {
 		ERROR_LOG("xio_mbuf_next_read_tlv failed. tlv.head:%p, " \
 			  "len:%d, buf.tail:%p\n",
@@ -205,11 +209,12 @@ static inline int xio_mbuf_read_next_tlv(struct xio_mbuf *mbuf)
 static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint16_t type,
 				       uint16_t len)
 {
+	int retval;
+
 	mbuf->tlv.type = type;
 	mbuf->tlv.len = len;
 
-	int retval = xio_write_tlv(mbuf->tlv.type, mbuf->tlv.len,
-				     mbuf->tlv.head);
+	retval = xio_write_tlv(mbuf->tlv.type, mbuf->tlv.len, mbuf->tlv.head);
 	if (retval == -1 || ((mbuf->tlv.head + retval) >  mbuf->buf.tail)) {
 		ERROR_LOG("xio_mbuf_write_tlv failed. tlv.head:%p, " \
 			  "len:%d, buf.tail:%p\n",

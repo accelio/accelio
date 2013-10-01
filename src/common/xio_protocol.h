@@ -438,7 +438,7 @@ static inline size_t xio_write_string(const char *b, size_t maxlength,
  * @return new position of the last used byte in the buffer
  */
 static inline size_t xio_read_string(char *b, size_t maxlength,
-				       int bindex, const uint8_t *buffer)
+				     int bindex, const uint8_t *buffer)
 {
 	uint16_t	length = 0;
 	int		i;
@@ -447,7 +447,7 @@ static inline size_t xio_read_string(char *b, size_t maxlength,
 	xio_read_uint16(&length, bindex, buffer);
 
 	/* Copy string into buffer, ensuring not to exceed the buffer size */
-	for (i = 0; i < min(length, maxlength); i++)
+	for (i = 0; i < min((size_t) length, maxlength); i++)
 		b[i] = buffer[bindex+i+2];
 
 	/* Enforce null termination at end of buffer */
