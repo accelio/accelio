@@ -132,6 +132,9 @@ static int xio_on_new_message(struct xio_server *server,
 						    server->cb_private_data);
 		connection = xio_session_assign_conn(session, conn);
 
+		/* set this connection as the lead connection */
+		session->lead_conn = connection;
+
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 	} else { /* migration */
 
@@ -150,6 +153,9 @@ static int xio_on_new_message(struct xio_server *server,
 		connection = xio_session_alloc_conn(session, server->ctx, 0,
 						    server->cb_private_data);
 		connection = xio_session_assign_conn(session, conn);
+
+		/* cancel the lead connection */
+		session->lead_conn = NULL;
 
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 
