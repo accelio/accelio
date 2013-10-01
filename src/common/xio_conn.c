@@ -652,6 +652,7 @@ static int xio_conn_initial_pool_setup(struct xio_conn *conn)
 			goto cleanup;
 		}
 		conn->initial_tasks_pool->array[i]->release = xio_conn_put_task;
+		conn->initial_tasks_pool->array[i]->conn = conn;
 	}
 
 	/* pool is ready for use */
@@ -750,6 +751,7 @@ static int xio_conn_primary_pool_setup(struct xio_conn *conn)
 			goto cleanup;
 		}
 		conn->primary_tasks_pool->array[i]->release = xio_conn_put_task;
+		conn->primary_tasks_pool->array[i]->conn = conn;
 	}
 
 	/* pool is ready for use */
