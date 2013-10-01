@@ -1015,6 +1015,8 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 
 			event_data->assign_in_buf.is_assigned =
 				conn_event_data.assign_in_buf.is_assigned;
+
+			return 0;
 		}
 	}
 	/* route the message to any of the sessions */
