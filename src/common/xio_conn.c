@@ -364,7 +364,7 @@ static int xio_conn_send_setup_req(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (conn->refcnt != 1)
+	if (atomic_read(&conn->refcnt) != 1)
 		return 0;
 
 	task = xio_conn_get_initial_task(conn);
@@ -818,7 +818,7 @@ struct xio_conn *xio_conn_create(
 	conn->transport		= parent_conn->transport;
 	conn->initial_pool_ops	= parent_conn->initial_pool_ops;
 	conn->primary_pool_ops	= parent_conn->primary_pool_ops;
-	conn->refcnt		= 1;
+	atomic_set(&conn->refcnt, 1);
 	conn->is_first_msg	= 1;
 
 	INIT_LIST_HEAD(&conn->observers_list);
@@ -1124,9 +1124,9 @@ struct xio_conn *xio_conn_open(
 				return NULL;
 			}
 		}
-		conn->refcnt++;
+		atomic_inc(&conn->refcnt);
 		ERROR_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
-			  conn->refcnt);
+			  atomic_read(&conn->refcnt));
 		return conn;
 	}
 
@@ -1167,7 +1167,7 @@ struct xio_conn *xio_conn_open(
 		return NULL;
 	}
 	conn->transport		= transport;
-	conn->refcnt		= 1;
+	atomic_set(&conn->refcnt, 1);
 
 	xio_conns_store_add(conn, &conn->cid);
 
@@ -1203,7 +1203,7 @@ int xio_conn_connect(struct xio_conn *conn,
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (conn->refcnt == 1) {
+	if (atomic_read(&conn->refcnt) == 1) {
 		retval = conn->transport->connect(conn->transport_hndl,
 						  portal_uri);
 		if (retval != 0) {
@@ -1228,7 +1228,7 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (conn->refcnt == 1) {
+	if (atomic_read(&conn->refcnt) == 1) {
 		retval = conn->transport->listen(conn->transport_hndl,
 						 portal_uri, src_port);
 		if (retval != 0) {
@@ -1252,7 +1252,7 @@ int xio_conn_accept(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (conn->refcnt == 1) {
+	if (atomic_read(&conn->refcnt) == 1) {
 		retval = conn->transport->accept(conn->transport_hndl);
 		if (retval != 0) {
 			ERROR_LOG("transport accept failed.\n");
@@ -1274,7 +1274,7 @@ int xio_conn_reject(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (conn->refcnt == 1) {
+	if (atomic_read(&conn->refcnt) == 1) {
 		retval = conn->transport->reject(conn->transport_hndl);
 		if (retval != 0) {
 			ERROR_LOG("transport reject failed.\n");
@@ -1289,13 +1289,18 @@ int xio_conn_reject(struct xio_conn *conn)
 /*---------------------------------------------------------------------------*/
 void xio_conn_close(struct xio_conn *conn)
 {
-	if (conn->refcnt == 0)
+	int was = __atomic_add_unless(&conn->refcnt, -1, 0);
+
+	/* was allready 0 */
+	if (!was)
 		return;
 
-	if (--conn->refcnt == 0) {
+	if (was == 1) {
+		/* now it is zero */
 		if (conn->transport->close)
 			conn->transport->close(conn->transport_hndl);
 	} else {
+		/* not yet zero */
 		xio_conn_notify_all(conn, XIO_CONNECTION_CLOSED, NULL);
 	}
 }

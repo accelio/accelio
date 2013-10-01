@@ -122,7 +122,7 @@ struct xio_conn {
 	struct xio_tasks_pool		*initial_tasks_pool;
 	struct xio_tasks_pool_ops	*initial_pool_ops;
 
-	int				refcnt;
+	atomic_t			refcnt;
 	int				cid;
 	int				is_first_msg;
 	int				pad;
