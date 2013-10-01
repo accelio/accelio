@@ -35,8 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include <infiniband/verbs.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+
 #include <rdma/rdma_cma.h>
 
 #include "libxio.h"
@@ -46,37 +47,21 @@
 #include "xio_transport.h"
 #include "xio_conn.h"
 #include "xio_protocol.h"
-#include "get_clock.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
 
-
-/* default option values */
-#define XIO_OPTNAME_DEF_ENABLE_MEM_POOL			1
-#define XIO_OPTNAME_DEF_DISABLE_DMA_LATENCY		0
-
+MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
+MODULE_DESCRIPTION("XIO library "
+	   "v" DRV_VERSION " (" DRV_RELDATE ")");
+MODULE_LICENSE("Dual BSD/GPL");
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
+static struct xio_rdma_mempool		*mempool;
 static struct xio_rdma_mempool		**mempool_array;
 static int				mempool_array_len;
-static spinlock_t			mngmt_lock;
-static int				transport_init = 0;
-
-
-LIST_HEAD(dev_list);
-static LIST_HEAD(cm_list);
-
-static struct xio_dev_tdata		dev_tdata;
-double g_mhz;
-
-/* rdma options */
-struct xio_rdma_options			rdma_options = {
-	.enable_mem_pool		= XIO_OPTNAME_DEF_ENABLE_MEM_POOL,
-	.disable_dma_latency		= XIO_OPTNAME_DEF_DISABLE_DMA_LATENCY,
-};
 
 /*---------------------------------------------------------------------------*/
 /* forward declaration							     */
@@ -86,224 +71,103 @@ static struct xio_transport_base *xio_rdma_open(
 		struct xio_context *ctx,
 		void  *observer,
 		notification_handler_t notif_cb);
+
 static void xio_rdma_close(struct xio_transport_base *transport);
 
-
-/*---------------------------------------------------------------------------*/
-/* xio_async_ev_handler							     */
-/*---------------------------------------------------------------------------*/
-static void xio_async_ev_handler(int fd, int events, void *user_context)
+static void xio_cq_event_callback(struct ib_event *cause, void *context)
 {
-	char			*dev_name = NULL;
-	struct ibv_async_event	async_event;
-	struct xio_device	*dev = (struct xio_device *)user_context;
-
-	dev_name = dev->verbs->device->name;
-
-	while (1) {
-		if (ibv_get_async_event(dev->verbs, &async_event)) {
-			if (errno == EAGAIN)
-				return;
-
-			xio_set_error(errno);
-			ERROR_LOG("ibv_get_async_event failed. (errno=%d %m)\n",
-				  errno);
-			return;
-		}
-		ERROR_LOG("ibv_get_async_event: dev:%s evt: %s\n", dev_name,
-			  ibv_event_type_str(async_event.event_type));
-
-		ibv_ack_async_event(&async_event);
-	}
-
-	return;
-}
-
-/*---------------------------------------------------------------------------*/
-/* device thread callback						     */
-/*---------------------------------------------------------------------------*/
-static void *device_thread_cb(void *data)
-{
-	cpu_set_t		cpuset;
-	pthread_t		thread;
-
-	/* set affinity to thread */
-	thread = pthread_self();
-
-	CPU_ZERO(&cpuset);
-	CPU_SET(0, &cpuset);
-
-	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
-
-	/* the default xio supplied main loop */
-	xio_ev_loop_run(dev_tdata.async_loop);
-
-	/* normal exit phase */
-	TRACE_LOG("devices thread exit signaled\n");
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&dev_tdata.async_loop);
-
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_device_thread_init						     */
-/*---------------------------------------------------------------------------*/
-static void xio_device_thread_init()
-{
-	/* open default event loop */
-	dev_tdata.async_loop = xio_ev_loop_init();
-
-	pthread_create(&dev_tdata.dev_thread, NULL, device_thread_cb, NULL);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_device_thread_stop						     */
-/*---------------------------------------------------------------------------*/
-static void xio_device_thread_stop()
-{
-	xio_ev_loop_stop(dev_tdata.async_loop);
-
-	pthread_join(dev_tdata.dev_thread, NULL);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_device_thread_add_device						     */
-/*---------------------------------------------------------------------------*/
-int xio_device_thread_add_device(struct xio_device *dev)
-{
-	int retval;
-
-	fcntl(dev->verbs->async_fd, F_SETFL,
-	      fcntl(dev->verbs->async_fd, F_GETFL, 0) | O_NONBLOCK);
-
-	/* add to epoll */
-	retval = xio_ev_loop_add(
-			dev_tdata.async_loop,
-			dev->verbs->async_fd,
-			XIO_POLLIN,
-			xio_async_ev_handler,
-			dev);
-	if (retval != 0) {
-		xio_set_error(errno);
-		ERROR_LOG("ev_loop_add failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_device_thread_remove_device					     */
-/*---------------------------------------------------------------------------*/
-int xio_device_thread_remove_device(struct xio_device *dev)
-{
-	return xio_ev_loop_del(
-			dev_tdata.async_loop,
-			dev->verbs->async_fd);
+	ERR_LOG("got cq event %d ctx(%p)\n", cause->event, context);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_cq_create							     */
 /*---------------------------------------------------------------------------*/
 static struct xio_cq *xio_cq_init(struct xio_device *dev,
-				      struct xio_context *ctx)
+				  struct xio_context *ctx)
 {
-	struct xio_cq		*tcq;
-	int			retval;
-	int			comp_vec = 0;
+	struct xio_cq	*tcq;
+	int		comp_vec = 0;
+	int		num_cores = num_online_cpus();
+	u32		alloc_sz;
+	int		retval;
 
-	list_for_each_entry(tcq, &dev->cq_list, cq_list_entry) {
-		if (tcq->ctx == ctx)
+	/* If two session were created with the same context and
+	 * the address resovled on the same davice than the smae
+	 * CQ is used
+	 */
+	read_lock_bh(&dev->cq_lock);
+ 	list_for_each_entry(tcq, &dev->cq_list, cq_list) {
+		if (tcq->ctx == ctx) {
+			atomic_inc(&tcq->refcnt);
+			read_unlock_bh(&dev->cq_lock);
 			return tcq;
+		}
 	}
-	tcq = calloc(1, sizeof(struct xio_cq));
-	if (tcq == NULL) {
-		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
-		goto cleanup;
-	}
-	tcq->ctx = ctx;
+	read_unlock_bh(&dev->cq_lock);
 
-	tcq->wc_array_len = MAX_CQE_PER_QP;
-	/* allocate device wc array */
-	tcq->wc_array = calloc(tcq->wc_array_len, sizeof(struct ibv_wc));
-	if (tcq->wc_array == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("ev_loop_add failed. (errno=%d %m)\n", errno);
+	if (ctx->cpuid < 0 || ctx->cpuid >= num_cores)
+		cpu = smp_processor_id();
+	else
+		cpu = ctx->cpuid;
+
+	cpu = cpu % dev->cqs_used;
+
+	tcq = kzalloc(sizeof(struct xio_cq), GFP_KERNEL);
+	if (!tcq) {
+		ERROR_LOG("xio_cq_init kzalloc failed\n");
+		goto cleanup0;
+	}
+
+	alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
+	tcq->max_cqe  = dev->device_attr.max_cqe;
+	tcq->cq_depth	= tcq->alloc_sz;
+	tcq->cqe_avail	= tcq->alloc_sz;
+	atomic_set(&tcq->refcnt, 1);
+
+	tcq->dev	= dev;
+	tcq->max_cqe	= dev->device_attr.max_cqe;
+	tcq->alloc_sz	= alloc_sz;
+	tcq->cq_depth	= alloc_sz;
+	tcq->cqe_avail	= alloc_sz;
+
+	/* xio_rdma_poll doesn't support separate tx & rx poll
+	 * so we use only one cq fro RX and TX
+	 */
+
+	tcq->cq = ib_create_cq(dev->ib_dev,
+			       xio_cq_data_callback,
+			       xio_cq_event_callback,
+			       (void *)tcq,
+			       alloc_sz, cpu);
+	if (IS_ERR(tcq->cq)) {
+		ERROR_LOG("ib_create_cq err(%d)\n", ERR_PTR(tcq->cq));
 		goto cleanup1;
 	}
 
-	tcq->alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
-	tcq->max_cqe  = dev->device_attr.max_cqe;
-
-	/* set com_vector to cpu */
-	comp_vec = ctx->cpuid % dev->verbs->num_comp_vectors;
-
-	tcq->channel = ibv_create_comp_channel(dev->verbs);
-	if (tcq->channel == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("ibv_create_comp_channel failed. (errno=%d %m)\n",
-			  errno);
+	/* we don't expect missed events (if supported) so it is an error */
+	if (ib_req_notify_cq(tcq->cq,
+			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
+		ERROR_LOG("ib_req_notify_cq\n");
 		goto cleanup2;
 	}
-	fcntl(tcq->channel->fd, F_SETFL,
-	      fcntl(tcq->channel->fd, F_GETFL, 0) | O_NONBLOCK);
-
-
-	/* add to epoll */
-	retval = ctx->loop_ops.ev_loop_add_cb(
-			ctx->ev_loop,
-			tcq->channel->fd,
-			XIO_POLLIN,
-			xio_data_ev_handler,
-			tcq);
-
-
-	tcq->cq = ibv_create_cq(dev->verbs, tcq->alloc_sz, tcq,
-				tcq->channel, comp_vec);
-	TRACE_LOG("comp_vec:%d\n", comp_vec);
-	if (tcq->cq == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("ibv_create_cq failed. (errno=%d %m)\n", errno);
-		goto cleanup3;
-	}
-
-	retval = ibv_req_notify_cq(tcq->cq, 0);
-	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("ibv_req_notify_cq failed. (errno=%d %m)\n",
-			  errno);
-		goto cleanup4;
-	}
-
-	/* set cq depth params */
-	tcq->dev	= dev;
-	tcq->cq_depth	= tcq->alloc_sz;
-	tcq->cqe_avail	= tcq->alloc_sz;
-	atomic_set(&tcq->refcnt, 0);
 
 	INIT_LIST_HEAD(&tcq->trans_list);
 
-	list_add(&tcq->cq_list_entry, &dev->cq_list);
+	write_lock_bh(&dev->cq_lock);
+	list_add(&tcq->cq_list, dev->cq_list);
+	write_unlock_bh(&dev->cq_lock);
+
+	/* set the tcq rdma_hndl to be a context observer */
+	xio_context_add_observer(ctx, tcq, xio_on_context_event);
 
 	return tcq;
 
-cleanup3:
-	retval = ibv_destroy_cq(tcq->cq);
-	if (retval)
-		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
-cleanup4:
-	retval = ibv_destroy_comp_channel(tcq->channel);
-	if (retval)
-		ERROR_LOG("ibv_destroy_comp_channel failed. (errno=%d %m)\n",
-			  errno);
 cleanup2:
-	free(tcq->wc_array);
+	ib_destroy_cq(tcq->rxq);
 cleanup1:
-	free(tcq);
-cleanup:
+	kfree(tcq);
+cleanup0:
+	ERROR_LOG("xio_cq_init failed\n");
 	return NULL;
 }
 
@@ -312,81 +176,119 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static void xio_cq_release(struct xio_cq *tcq)
 {
-	int		retval;
+	int retval;
 
-	list_del(&tcq->cq_list_entry);
-
-	if (tcq->cq_events_that_need_ack != 0) {
-				ibv_ack_cq_events(
-				   tcq->cq,
-				   tcq->cq_events_that_need_ack);
-				   tcq->cq_events_that_need_ack = 0;
-	}
-	tcq->ctx->loop_ops.ev_loop_del_cb(
-			tcq->ctx->ev_loop,
-			tcq->channel->fd);
+	write_lock_bh(&dev->cq_lock);
+	list_del_init(&tcq->cq_list_entry);
+	write_unlock_bh(&dev->cq_lock);
 
 	/*the event loop may be release by the time this fuction is called */
-	retval = ibv_destroy_cq(tcq->cq);
+	retval = ib_destroy_cq(tcq->cq);
 	if (retval)
-		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
+		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", retval);
 
 
-	retval = ibv_destroy_comp_channel(tcq->channel);
-	if (retval)
-		ERROR_LOG("ibv_destroy_comp_channel failed. (errno=%d %m)\n",
-			  errno);
+	kfree(tcq->wc_array);
+	kfree(tcq);
+}
 
-	free(tcq->wc_array);
-	free(tcq);
+/*---------------------------------------------------------------------------*/
+/* xio_dev_event_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_dev_event_handler(struct ib_event_handler *handler,
+				struct ib_event *event)
+{
+	ERR_LOG("async event %d on device %s port %d\n", event->event,
+		event->device->name, event->element.port_num);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_device_init							     */
 /*---------------------------------------------------------------------------*/
-static struct xio_device *xio_device_init(struct ibv_context *ib_ctx)
+static struct xio_device *xio_device_init(struct ib_device *ib_dev, int port)
 {
 	struct xio_device	*dev;
 	int			retval;
 
-	dev = calloc(1, sizeof(*dev));
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (dev == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
-		return NULL;
-	}
-	dev->verbs	= ib_ctx;
-
-	dev->pd = ibv_alloc_pd(dev->verbs);
-	if (dev->pd == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("ibv_alloc_pd failed. (errno=%d %m)\n", errno);
-		goto cleanup;
+		goto cleanup0;
 	}
 
-	retval = ibv_query_device(dev->verbs, &dev->device_attr);
+	retval = ib_query_device(ib_dev, &dev->device_attr);
 	if (retval < 0) {
 		ERROR_LOG("ibv_query_device failed. (errno=%d %m)\n", errno);
 		goto cleanup1;
 	}
 
-	retval = xio_device_thread_add_device(dev);
-	if (retval) {
-		ERROR_LOG(
-		"xio_device_thread_add_device failed. (errno=%d %m)\n",
-		errno);
+#if 0
+	/* Assign function handles  - based on FMR support */
+	if (ib_dev->alloc_fmr && ib_dev->dealloc_fmr &&
+	    ib_dev->map_phys_fmr && ib_dev->unmap_fmr) {
+		INFO_LOG("FMR supported, using FMR for registration\n");
+		dev->alloc_rdma_reg_res = xio_create_fmr_pool;
+		dev->free_rdma_reg_res = xio_free_fmr_pool;
+		dev->reg_rdma_mem = xio_reg_rdma_mem_fmr;
+		dev->unreg_rdma_mem = xio_unreg_mem_fmr;
+	} else if (dev->dev_attr.device_cap_flags &
+		   IB_DEVICE_MEM_MGT_EXTENSIONS) {
+		INFO_LOG("FRWR supported, using FRWR for registration\n");
+		dev->alloc_rdma_reg_res = xio_create_frwr_pool;
+		dev->free_rdma_reg_res = xio_free_frwr_pool;
+		dev->reg_rdma_mem = xio_reg_rdma_mem_frwr;
+		dev->unreg_rdma_mem = xio_unreg_mem_frwr;
+	} else {
+		ERROR_LOG("IB device does not support FMRs nor FRWRs, can't register memory\n");
+		goto cleanup1;
+	}
+#endif
+
+	dev->ib_dev = ib_dev;
+	dev->port_num = port;
+
+	dev->pd = ib_alloc_pd(ib_dev);
+	if (dev->pd == NULL) {
+		xio_set_error(errno);
+		ERROR_LOG("ibv_alloc_pd failed. (errno=%d %m)\n", errno);
 		goto cleanup1;
 	}
 
+	dev->mr = ib_get_dma_mr(dev->pd,
+				IB_ACCESS_LOCAL_WRITE |
+				IB_ACCESS_REMOTE_WRITE |
+				IB_ACCESS_REMOTE_READ);
+	if (IS_ERR(dev->mr)) {
+		xio_set_error(errno);
+		ERROR_LOG("ib_get_dma_mr failed. (errno=%d %m)\n", errno);
+		goto cleanup2;
+	}
+
+
+	rwlock_init(&dev->cq_lock);
 	INIT_LIST_HEAD(&dev->cq_list);
-	pthread_rwlock_init(&dev->cq_lock, NULL);
+	num_cores = num_online_cpus();
+	num_cores = roundup_pow_of_two(num_cores);
+	dev->cqs_used = min(num_cores, dev->device_attr.num_comp_vectors);
+
 	TRACE_LOG("rdma device: [new] %p\n", dev);
+
+	INIT_IB_EVENT_HANDLER(&dev->event_handler, dev->ib_dev,
+			      xio_dev_event_handler);
+
+	if (ib_register_event_handler(&dev->event_handler))
+		goto cleanup3;
 
 	return dev;
 
-cleanup1:
+cleanup3:
+	ib_dereg_mr(dev->mr);
+cleanup2:
 	ibv_dealloc_pd(dev->pd);
-cleanup:
+cleanup1:
+	kfree(dev);
+cleanup0:
 	ERROR_LOG("rdma device: [new] failed\n");
 	return NULL;
 }
@@ -401,82 +303,19 @@ static void xio_device_release(struct xio_device *dev)
 
 	TRACE_LOG("rdma device: [close] dev:%p\n", dev);
 
-	retval = xio_device_thread_remove_device(dev);
-	if (retval) {
-		ERROR_LOG(
-			"xio_device_thread_add_device failed. (errno=%d %m)\n",
-			errno);
-	}
+	(void)ib_unregister_event_handler(&device->event_handler);
 
-	/* acknowledge all accumulated successful
-	 * ibv_get_cq_event() calls
-	 */
 	list_for_each_entry_safe(tcq, next, &dev->cq_list, cq_list_entry) {
 		xio_cq_release(tcq);
 	}
-	pthread_rwlock_destroy(&dev->cq_lock);
 
+	if (xio_dev->fmr_pool)
+		ib_destroy_fmr_pool(xio_dev->fmr_pool);
 
-	retval = ibv_dealloc_pd(dev->pd);
-	if (retval)
-		ERROR_LOG("ibv_dealloc_pd failed. (errno=%d %s)\n",
-			  retval, strerror(retval));
+	ib_dereg_mr(dev->mr);
+	ib_dealloc_pd(dev->pd);
 
-	list_del(&dev->dev_list_entry);
-	free(dev);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_device_list_init							     */
-/*---------------------------------------------------------------------------*/
-static int xio_device_list_init()
-{
-	struct ibv_context **ctx_list;
-	struct xio_device *dev;
-	int num_devices = 0, i;
-	int retval = 0;
-
-	INIT_LIST_HEAD(&dev_list);
-
-	ctx_list = rdma_get_devices(&num_devices);
-	if (!ctx_list) {
-		xio_set_error(errno);
-		ERROR_LOG("Failed to get IB devices list");
-		return -1;
-	}
-
-	if (!*ctx_list) {
-		xio_set_error(ENODEV);
-		ERROR_LOG("No IB devices found\n");
-		retval = -1;
-		goto exit;
-	}
-	for (i = 0; i < num_devices; ++i) {
-		dev = xio_device_init(ctx_list[i]);
-		if (!dev) {
-			ERROR_LOG("Couldn't allocate device %s\n",
-				  ibv_get_device_name(ctx_list[i]->device));
-			retval = -1;
-			goto exit;
-		}
-		list_add(&dev->dev_list_entry, &dev_list);
-	}
-exit:
-	rdma_free_devices(ctx_list);
-
-	return retval;
-}
-/*---------------------------------------------------------------------------*/
-/* xio_device_list_release						     */
-/*---------------------------------------------------------------------------*/
-static void xio_device_list_release()
-{
-	struct xio_device	*dev, *next;
-
-	/* free devices */
-	list_for_each_entry_safe(dev, next, &dev_list, dev_list_entry) {
-		xio_device_release(dev);
-	}
+	kfree(dev);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -484,17 +323,9 @@ static void xio_device_list_release()
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_mempool_array_init()
 {
-	int cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
-
-	/* free devices */
-	mempool_array_len = 0;
-	mempool_array = calloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
-	if (mempool_array == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
-	mempool_array_len = cpus_nr;
+	/* kernel mempool is numa based */
+	mempool_array = &mempool;
+	mempool_array_len = 1;
 
 	return 0;
 }
@@ -504,94 +335,50 @@ static int xio_rdma_mempool_array_init()
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_mempool_array_release()
 {
-	int i;
+	/* kernel mempool is numa based */
 
-	for (i = 0; i < mempool_array_len; i++) {
-		if (mempool_array[i]) {
-			xio_rdma_mempool_destroy(mempool_array[i]);
-			mempool_array[i] = NULL;
-		}
-	}
-	free(mempool_array);
+	mempool_array = NULL;
+	if (mempool)
+		xio_rdma_mempool_destroy(mempool);
+	mempool = NULL;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mempool_array_get						     */
 /*---------------------------------------------------------------------------*/
 static struct xio_rdma_mempool *xio_rdma_mempool_array_get(
-		struct xio_context *ctx)
+						struct xio_context *ctx)
 {
-	if (ctx->nodeid > mempool_array_len) {
-		ERROR_LOG("xio_rdma_mempool_create failed. array overflow\n");
+	/* kernel mempool is numa based */
+	if (mempool)
+		return mempool;
+
+	mempool = xio_rdma_mempool_create();
+	if (mempool) {
+		ERROR_LOG("xio_rdma_mempool_create failed\m");
 		return NULL;
 	}
-	if (mempool_array[ctx->nodeid])
-		return mempool_array[ctx->nodeid];
-
-	mempool_array[ctx->nodeid] = xio_rdma_mempool_create();
-	if (!mempool_array[ctx->nodeid]) {
-		ERROR_LOG("xio_rdma_mempool_create failed " \
-				"(errno=%d %m)\n", errno);
-		return NULL;
-	}
-	return mempool_array[ctx->nodeid];
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_cm_channel_release						     */
-/*---------------------------------------------------------------------------*/
-static void xio_cm_channel_release(struct xio_cm_channel *channel)
-{
-	list_del(&channel->channels_list_entry);
-	channel->ctx->loop_ops.ev_loop_del_cb(
-			channel->ctx->ev_loop,
-			channel->cm_channel->fd);
-	rdma_destroy_event_channel(channel->cm_channel);
-	xio_context_remove_observer(channel->ctx, channel);
-	free(channel);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_cm_list_release							     */
-/*---------------------------------------------------------------------------*/
-static void xio_cm_list_release()
-{
-	struct xio_cm_channel	*channel, *next;
-
-	list_for_each_entry_safe(channel, next, &cm_list, channels_list_entry) {
-		list_del(&channel->channels_list_entry);
-		rdma_destroy_event_channel(channel->cm_channel);
-		xio_context_remove_observer(channel->ctx, channel);
-		free(channel);
-	}
+	return mempool;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_context_close							     */
 /*---------------------------------------------------------------------------*/
-static void xio_on_context_close(struct xio_cm_channel	*channel,
-				 struct xio_context	*ctx)
+static void xio_on_context_close(void *observer,
+				 struct xio_context *ctx)
 {
-	struct xio_device	*dev;
-	struct xio_cq		*tcq, *next;
+	struct xio_cq *tcq = (struct xio_cq *) observer;
 
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		pthread_rwlock_wrlock(&dev->cq_lock);
-		list_for_each_entry_safe(tcq, next, &dev->cq_list,
-					 cq_list_entry) {
-			if (ctx == tcq->ctx)
-				xio_cq_release(tcq);
-		}
-		pthread_rwlock_unlock(&dev->cq_lock);
-	}
-	xio_cm_channel_release(channel);
+	xio_context_remove_observer(ctx, observer);
+
+	xio_cq_release(tcq);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_context_event							     */
 /*---------------------------------------------------------------------------*/
-static int xio_on_context_event(void *observer,
-			    void *sender, int event, void *event_data)
+static int xio_on_context_event(void *observer, void *sender,
+				int event, void *event_data)
 {
 	if (event == XIO_CONTEXT_EVENT_CLOSE) {
 		TRACE_LOG("context: [close] ctx:%p\n", sender);
@@ -611,8 +398,8 @@ static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else if (tcq->cq_depth + tcq->alloc_sz < tcq->max_cqe) {
-		int retval = ibv_resize_cq(tcq->cq,
-					   (tcq->cq_depth + tcq->alloc_sz));
+		int retval = ib_resize_cq(tcq->cq,
+					  tcq->cq_depth + tcq->alloc_sz);
 		if (retval != 0) {
 			ERROR_LOG("ibv_resize_cq failed. %m\n");
 			return -1;
@@ -642,26 +429,25 @@ static int xio_cq_free_slots(struct xio_cq *tcq, int cqe_num)
 	return 0;
 }
 
+static void xio_qp_event_handler(struct ib_event *cause, void *context)
+{
+	ERR_LOG("got qp event %d\n",cause->event);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_setup_qp                                                              */
 /*---------------------------------------------------------------------------*/
 static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_device		*dev;
-	struct ibv_qp_init_attr		qp_attr;
+	struct ib_qp_init_attr		qp_attr;
 	int				dev_found = 0;
 	int				retval = 0;
 	struct	xio_cq			*tcq;
 
-	/* find device */
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		if (dev->verbs == rdma_hndl->cm_id->verbs) {
-			dev_found = 1;
-			break;
-		}
-	}
-	if (!dev_found) {
-		xio_set_error(ENODEV);
+	/* Shold be set by now */
+	dev = rdma_hndl->dev;
+	if (!dev) {
 		ERROR_LOG("failed to find device\n");
 		return -1;
 	}
@@ -671,6 +457,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 		ERROR_LOG("cq initialization failed\n");
 		return -1;
 	}
+
 	retval = xio_cq_alloc_slots(tcq, MAX_CQE_PER_QP);
 	if (retval != 0) {
 		ERROR_LOG("cq full capacity reached\n");
@@ -679,6 +466,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 
 	memset(&qp_attr, 0, sizeof(qp_attr));
 
+	qp_attr.event_handler		= xio_qp_event_handler;
 	qp_attr.qp_context		= rdma_hndl;
 	qp_attr.qp_type			= IBV_QPT_RC;
 	qp_attr.send_cq			= tcq->cq;
@@ -699,11 +487,12 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 		ERROR_LOG("rdma_create_qp failed. (errno=%d %m)\n", errno);
 		return -1;
 	}
+	rdma_hndl->dev		= dev;
 	rdma_hndl->tcq		= tcq;
 	rdma_hndl->qp		= rdma_hndl->cm_id->qp;
 	rdma_hndl->sqe_avail	= MAX_SEND_WR;
 
-	list_add(&rdma_hndl->trans_list_entry, &tcq->trans_list);
+	list_add(&rdma_hndl->trans_list, &tcq->trans_list);
 
 	TRACE_LOG("rdma qp: [new] handle:%p, qp:0x%x\n", rdma_hndl,
 		  rdma_hndl->qp->qp_num);
@@ -720,7 +509,7 @@ static void xio_release_qp(struct xio_rdma_transport *rdma_hndl)
 		TRACE_LOG("rdma qp: [close] handle:%p, qp:0x%x\n", rdma_hndl,
 			  rdma_hndl->qp->qp_num);
 		xio_cq_free_slots(rdma_hndl->tcq, MAX_CQE_PER_QP);
-		list_del(&rdma_hndl->trans_list_entry);
+		list_del(&rdma_hndl->trans_list);
 		rdma_destroy_qp(rdma_hndl->cm_id);
 		rdma_hndl->qp	= NULL;
 	}
@@ -732,8 +521,12 @@ static void xio_release_qp(struct xio_rdma_transport *rdma_hndl)
 static void xio_rxd_init(struct xio_work_req *rxd,
 			   struct xio_task *task,
 			   void *buf, unsigned size,
-			   struct ibv_mr *srmr)
+			   struct ib_mr *srmr)
 {
+	struct page *page,
+	unsigned int offset;
+
+	/* This address need to be dma mapped */
 	rxd->sge[0].addr	= uint64_from_ptr(buf);
 	rxd->sge[0].length	= size;
 	rxd->sge[0].lkey	= srmr->lkey;
@@ -742,6 +535,14 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 	rxd->recv_wr.sg_list	= rxd->sge;
 	rxd->recv_wr.num_sge	= 1;
 	rxd->recv_wr.next	= NULL;
+
+	sg_init_table(rxd->sgl, XIO_MAX_IOV + 1);
+
+	page = virt_to_page(buf);
+	offset = buf - page_to_virt(page);
+	sg_set_page(rxd->sgl, page, size, offset);
+	rxd->nents  = 1;
+	rxd->mapped = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -750,8 +551,12 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 static void xio_txd_init(struct xio_work_req *txd,
 			  struct xio_task *task,
 			  void *buf, unsigned size,
-			  struct ibv_mr *srmr)
+			  struct ib_mr *srmr)
 {
+	struct page *page,
+	unsigned int offset;
+
+	/* This address need to be dma mapped */
 	txd->sge[0].addr	= uint64_from_ptr(buf);
 	txd->sge[0].length	= size;
 	txd->sge[0].lkey	= srmr->lkey;
@@ -761,6 +566,14 @@ static void xio_txd_init(struct xio_work_req *txd,
 	txd->send_wr.sg_list	= txd->sge;
 	txd->send_wr.num_sge	= 1;
 	txd->send_wr.opcode	= IBV_WR_SEND;
+
+	sg_init_table(txd->sgl, XIO_MAX_IOV + 1);
+
+	page = virt_to_page(buf);
+	offset = buf - page_to_virt(page);
+	sg_set_page(txd->sgl, page, size, offset);
+	txd->nents  = 1;
+	txd->mapped = 0;
 
 	/*txd->send_wr.send_flags = IBV_SEND_SIGNALED; */
 }
@@ -777,8 +590,13 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 	rdmad->send_wr.next = NULL;
 	rdmad->send_wr.send_flags = IBV_SEND_SIGNALED;
 
+	sg_init_table(rdmad->sgl, XIO_MAX_IOV + 1);
+
+	rdmad->nents  = 1;
+	rdmad->mapped = 0;
+
 	/* to be set before posting:
-	   rdmad->iser_ib_op, rdmad->send_wr.opcode
+	   rdmad->xio_ib_op, rdmad->send_wr.opcode
 	   rdmad->sge.addr, rdmad->sge.length
 	   rdmad->send_wr.wr.rdma.(remote_addr,rkey) */
 }
@@ -786,7 +604,7 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_task_init							     */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_task_init(struct xio_task *task,
+static int xio_rdma_task_init(struct xio_task *task,
 				 struct xio_rdma_transport *rdma_hndl,
 				 void *buf,
 				 unsigned long size,
@@ -796,6 +614,7 @@ static void xio_rdma_task_init(struct xio_task *task,
 		(struct xio_rdma_task *)task->dd_data;
 
 	rdma_task->rdma_hndl = rdma_hndl;
+	rdma_task->buf = buf;
 
 	xio_rxd_init(&rdma_task->rxd, task, buf, size, srmr);
 	xio_txd_init(&rdma_task->txd, task, buf, size, srmr);
@@ -803,6 +622,8 @@ static void xio_rdma_task_init(struct xio_task *task,
 
 	/* initialize the mbuf */
 	xio_mbuf_init(&task->mbuf, buf, size, 0);
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -815,13 +636,14 @@ int xio_rdma_flush_task_list(struct xio_rdma_transport *rdma_hndl,
 
 	list_for_each_entry_safe(ptask, next_ptask, list,
 				 tasks_list_entry) {
-		TRACE_LOG("flushing task %p type 0x%x\n",
-			  ptask, ptask->tlv_type);
+		TRACE_LOG("flushing task %p type 0x%x, refcnt:%d\n",
+			  ptask, ptask->tlv_type, ptask->refcnt);
 		if (ptask->sender_task) {
-			xio_tasks_pool_put(ptask->sender_task);
+			xio_conn_put_task(rdma_hndl->base.observer,
+					  ptask->sender_task);
 			ptask->sender_task = NULL;
 		}
-		xio_tasks_pool_put(ptask);
+		xio_conn_put_task(rdma_hndl->base.observer, ptask);
 	}
 
 	return 0;
@@ -859,24 +681,13 @@ static int xio_rdma_initial_pool_alloc(
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
-	uint32_t pool_size;
 
 	rdma_pool->buf_size = CONN_SETUP_BUF_SIZE;
-	pool_size = rdma_pool->buf_size * max;
-	rdma_pool->data_pool = calloc(pool_size, sizeof(uint8_t));
+	rdma_pool->data_pool = kcalloc(max, rdma_pool->buf_size, GFP_KERNEL);
 	if (rdma_pool->data_pool == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("malloc conn_setup_data_pool sz: %"PRIu32" failed\n",
-			  pool_size);
-		return -1;
-	}
-	rdma_pool->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
-			rdma_pool->data_pool,
-			pool_size, IBV_ACCESS_LOCAL_WRITE);
-	if (!rdma_pool->data_mr) {
-		xio_set_error(errno);
-		free(rdma_pool->data_pool);
-		ERROR_LOG("ibv_reg_mr conn_setup pool failed, %m\n");
+		ERROR_LOG("kcalloc conn_setup_data_pool %dX%d failed\n",
+			  max, rdma_pool->buf_size);
 		return -1;
 	}
 
@@ -927,10 +738,20 @@ static int xio_rdma_initial_pool_free(
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
-	ibv_dereg_mr(rdma_pool->data_mr);
-	free(rdma_pool->data_pool);
+	kfree(rdma_pool->data_pool);
 
 	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_initial_pool_init_task					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_pool_unnit_task(
+		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data, struct xio_task *task)
+{
+	sg_free_table(&rdma_task->read_sge.table);
+	sg_free_table(&rdma_task->write_sge.table);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -946,14 +767,11 @@ static int xio_rdma_initial_pool_init_task(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	void *buf = rdma_pool->data_pool + (task->ltid*rdma_pool->buf_size);
 
-	xio_rdma_task_init(
-			task,
-			rdma_hndl,
-			buf,
-			rdma_pool->buf_size,
-			rdma_pool->data_mr);
-
-	return 0;
+	return xio_rdma_task_init(task,
+				  rdma_hndl,
+				  buf,
+				  rdma_pool->buf_size,
+				  rdma_hndl->dev->mr);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -973,6 +791,7 @@ static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 	.pool_alloc		= xio_rdma_initial_pool_alloc,
 	.pool_free		= xio_rdma_initial_pool_free,
 	.pool_init_item		= xio_rdma_initial_pool_init_task,
+	.pool_uninit_item	= xio_rdma_pool_uninit_task,
 	.pool_run		= xio_rdma_initial_pool_run
 };
 
@@ -1069,13 +888,11 @@ static int xio_rdma_primary_pool_init_task(
 	struct xio_rdma_task *rdma_task = (struct xio_rdma_task *)task->dd_data;
 	rdma_task->ib_op = 0x200;
 
-
-	xio_rdma_task_init(
-			task,
-			rdma_hndl,
-			buf,
-			rdma_pool->buf_size,
-			rdma_pool->data_mr);
+	return xio_rdma_task_init(task,
+				  rdma_hndl,
+				  buf,
+				  rdma_pool->buf_size,
+				  rdma_hndl->dev->mr);
 
 	return 0;
 }
@@ -1100,6 +917,7 @@ static struct xio_tasks_pool_ops   primary_tasks_pool_ops = {
 	.pool_alloc		= xio_rdma_primary_pool_alloc,
 	.pool_free		= xio_rdma_primary_pool_free,
 	.pool_init_item		= xio_rdma_primary_pool_init_task,
+	.pool_uninit_item	= xio_rdma_pool_uninit_task,
 	.pool_run		= xio_rdma_primary_pool_run,
 	.pre_put		= xio_rdma_task_put,
 };
@@ -1119,9 +937,9 @@ static void xio_rdma_close_complete(struct xio_transport_base *transport)
 	if (rdma_hndl->cm_id)
 		rdma_destroy_id(rdma_hndl->cm_id);
 
-	free(rdma_hndl->base.portal_uri);
+	kfree(rdma_hndl->base.portal_uri);
 
-	free(rdma_hndl);
+	kfree(rdma_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1141,10 +959,11 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 }
 
 /*---------------------------------------------------------------------------*/
-/* on_cm_route_resolved	                                                     */
+/* on_cm_route_resolved (client)					     */
 /*---------------------------------------------------------------------------*/
-static void on_cm_route_resolved(struct rdma_cm_event *ev,
-		struct xio_rdma_transport *rdma_hndl)
+static void on_cm_route_resolved(struct rdma_cm_id *cma_id,
+				 struct rdma_cm_event *ev,
+				 struct xio_rdma_transport *rdma_hndl)
 {
 	int				retval = 0;
 	struct rdma_conn_param		cm_params = {
@@ -1153,6 +972,19 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 		.rnr_retry_count		= 0, /* 7 - infinite retry */
 		.retry_count			= 0
 	};
+	struct xio_device *xio_dev;
+
+	/* Find the device on which the connection was established */
+	xio_devs = ib_get_client_data(cma_id->device, &xio_client);
+	if (!(xio_devs && xio_devs[cma_id->port_num])) {
+		ERROR_LOG("device(%s) port(%d) not registerd\n",
+			  ib_get_device_name(cma_id->device),
+			  cma_id->port_num);
+		xio_set_error(ENODEV);
+		goto notify_err1;
+	}
+
+	rdma_hndl->dev = xio_devs[cma_id->port_num];
 
 	retval = xio_setup_qp(rdma_hndl);
 	if (retval != 0) {
@@ -1196,14 +1028,29 @@ notify_err1:
 }
 
 /*---------------------------------------------------------------------------*/
-/* on_cm_connect_request						     */
+/* on_cm_connect_request (server)					     */
 /*---------------------------------------------------------------------------*/
-static void  on_cm_connect_request(struct rdma_cm_event *ev,
-		struct xio_rdma_transport *parent_hndl)
+static void  on_cm_connect_request(struct rdma_cm_id *cma_id,
+				   struct rdma_cm_event *ev,
+				   struct xio_rdma_transport *parent_hndl)
 {
-	struct xio_rdma_transport	*child_hndl;
+	struct xio_rdma_transport *child_hndl;
 	union xio_transport_event_data event_data;
 	int	retval = 0;
+
+	struct xio_device **xio_devs;
+
+	/* Find the device on which the connection was established */
+	xio_devs = ib_get_client_data(cma_id->device, &xio_client);
+	if (!(xio_devs && xio_devs[cma_id->port_num])) {
+		ERROR_LOG("device(%s) port(%d) not registerd\n",
+			  ib_get_device_name(cma_id->device),
+			  cma_id->port_num);
+		xio_set_error(ENODEV);
+		goto notify_err1;
+	}
+
+	rdma_hndl->dev = xio_devs[cma_id->port_num];
 
 	child_hndl = (struct xio_rdma_transport *)xio_rdma_open(
 		parent_hndl->transport,
@@ -1215,10 +1062,12 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 		goto notify_err1;
 	}
 
-	child_hndl->cm_id	= ev->id;
-	child_hndl->qp		= ev->id->qp;
+	child_hndl->dev		= xio_dev;
+	child_hndl->cm_id	= cma_id;
+	child_hndl->qp		= cma_id->qp;
 	child_hndl->tcq		= parent_hndl->tcq;
-	ev->id->context		= child_hndl;
+	/* Can we set it ? is it a new cm_id */
+	cma_id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
 		ev->param.conn.initiator_depth;
 	child_hndl->client_responder_resources =
@@ -1256,12 +1105,12 @@ notify_err1:
 }
 
 /*---------------------------------------------------------------------------*/
-/* on_cm_refused							     */
+/* on_cm_rejected							     */
 /*---------------------------------------------------------------------------*/
-static void  on_cm_refused(struct rdma_cm_event *ev,
+static void  on_cm_rejected(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
-	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REFUSED, NULL);
+	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REJECTED, NULL);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1274,7 +1123,6 @@ static void  on_cm_established(struct rdma_cm_event *ev,
 	xio_conn_set_pools_ops(rdma_hndl->base.observer,
 			       &initial_tasks_pool_ops,
 			       &primary_tasks_pool_ops);
-
 
 	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_ESTABLISHED,
 				 NULL);
@@ -1396,9 +1244,12 @@ static void on_cm_error(struct rdma_cm_event *ev,
 /*---------------------------------------------------------------------------*/
 /* xio_handle_cm_event							     */
 /*---------------------------------------------------------------------------*/
-static void xio_handle_cm_event(struct rdma_cm_event *ev,
-			  struct xio_rdma_transport *rdma_hndl)
+static int xio_handle_cm_event(struct rdma_cm_id *cma_id,
+			       struct rdma_cm_event *ev)
 {
+	struct xio_rdma_transport *rdma_hndl = cma_id->context;
+	struct ib_device *ib_dev = cma_id->device;
+
 	TRACE_LOG("cm event %s, hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
@@ -1407,16 +1258,16 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 		on_cm_addr_resolved(ev, rdma_hndl);
 		break;
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
-		on_cm_route_resolved(ev, rdma_hndl);
+		on_cm_route_resolved(cma_id, ev, rdma_hndl);
 		break;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
-		on_cm_connect_request(ev, rdma_hndl);
+		on_cm_connect_request(cma_id, ev, rdma_hndl);
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
 		on_cm_established(ev, rdma_hndl);
 		break;
 	case RDMA_CM_EVENT_REJECTED:
-		on_cm_refused(ev, rdma_hndl);
+		on_cm_rejected(ev, rdma_hndl);
 		break;
 	case RDMA_CM_EVENT_ADDR_CHANGE:
 	case RDMA_CM_EVENT_DISCONNECTED:
@@ -1451,94 +1302,6 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_ev_handler		                                     */
-/*---------------------------------------------------------------------------*/
-static void xio_connection_ev_handler(int fd, int events, void *user_context)
-{
-	struct rdma_event_channel	*p_cm_channel =
-		(struct rdma_event_channel *)(user_context);
-	struct rdma_cm_event		*ev;
-	struct rdma_cm_event		ev_copy;
-	struct xio_rdma_transport	*rdma_hndl;
-	int				retval;
-
-	/* get the event */
-	retval = rdma_get_cm_event(p_cm_channel, &ev);
-	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_get_cm_event failed. " \
-			  "(errno=%d %m)\n", errno);
-		return;
-	}
-
-	/* copy the event and ack it */
-	memcpy(&ev_copy, ev, sizeof(*ev));
-	rdma_ack_cm_event(ev);
-
-	rdma_hndl = (struct xio_rdma_transport *)ev_copy.id->context;
-
-	DEBUG_LOG("cm_event: [%s] rdma_hndl:%p\n",
-		  rdma_event_str(ev_copy.event), rdma_hndl);
-
-	xio_handle_cm_event(&ev_copy, rdma_hndl);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_cm_channel_get							     */
-/*---------------------------------------------------------------------------*/
-static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
-{
-	struct xio_cm_channel	*channel;
-	int retval;
-
-	list_for_each_entry(channel, &cm_list, channels_list_entry) {
-		if (channel->ctx == ctx)
-			return channel->cm_channel;
-	}
-
-	channel = calloc(1, sizeof(struct xio_cm_channel));
-	if (!channel) {
-		ERROR_LOG("rdma_create_event_channel failed " \
-				"(errno=%d %m)\n", errno);
-		return NULL;
-	}
-
-	channel->cm_channel = rdma_create_event_channel();
-	if (!channel->cm_channel) {
-		ERROR_LOG("rdma_create_event_channel failed " \
-				"(errno=%d %m)\n", errno);
-		return NULL;
-	}
-	/* turn the file descriptor to non blocking */
-	fcntl(channel->cm_channel->fd, F_SETFL,
-	      fcntl(channel->cm_channel->fd, F_GETFL, 0) | O_NONBLOCK);
-
-	retval = ctx->loop_ops.ev_loop_add_cb(
-			ctx->ev_loop,
-			channel->cm_channel->fd,
-			XIO_POLLIN,
-			xio_connection_ev_handler,
-			channel->cm_channel);
-	if (retval != 0) {
-		xio_set_error(errno);
-		ERROR_LOG("Adding to event loop failed (errno=%d %m)\n",
-			  errno);
-		goto cleanup;
-	}
-	channel->ctx = ctx;
-
-	xio_context_add_observer(ctx, channel, xio_on_context_event);
-
-	list_add(&channel->channels_list_entry, &cm_list);
-
-	return channel->cm_channel;
-
-cleanup:
-	rdma_destroy_event_channel(channel->cm_channel);
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_rdma_open		                                             */
 /*---------------------------------------------------------------------------*/
 static struct xio_transport_base *xio_rdma_open(
@@ -1547,24 +1310,21 @@ static struct xio_transport_base *xio_rdma_open(
 		void  *observer,
 		notification_handler_t notif_cb)
 {
-	struct xio_rdma_transport	*rdma_hndl;
-
+	struct xio_rdma_transport *rdma_hndl;
 
 	/*allocate rdma handl */
-	rdma_hndl = calloc(1, sizeof(struct xio_rdma_transport));
+	rdma_hndl = kzalloc(sizeof(struct xio_rdma_transport));
 	if (rdma_hndl == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
 		return NULL;
 	}
 
-	if (rdma_options.enable_mem_pool) {
-		rdma_hndl->rdma_mempool = xio_rdma_mempool_array_get(ctx);
-		if (rdma_hndl->rdma_mempool == NULL) {
-			xio_set_error(ENOMEM);
-			ERROR_LOG("allocating rdma mempool failed. %m\n");
-			goto cleanup;
-		}
+	rdma_hndl->rdma_mempool = xio_rdma_mempool_array_get(ctx);
+	if (rdma_hndl->rdma_mempool == NULL) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("allocating rdma mempool failed. %m\n");
+		goto cleanup;
 	}
 
 	rdma_hndl->base.portal_uri	= NULL;
@@ -1579,12 +1339,9 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->rq_depth		= MAX_RECV_WR;
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
-	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
 
-	if (!rdma_hndl->cm_channel) {
-		TRACE_LOG("rdma transport: failed to allocate cm_channel\n");
-		goto cleanup;
-	}
+	/* set the new rdma_hndl to be the observer */
+	xio_context_add_observer(ctx, rdma_hndl, xio_on_context_event);
 
 	INIT_LIST_HEAD(&rdma_hndl->in_flight_list);
 	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_in_flight_list);
@@ -1599,7 +1356,7 @@ static struct xio_transport_base *xio_rdma_open(
 	return (struct xio_transport_base *)rdma_hndl;
 
 cleanup:
-	free(rdma_hndl);
+	kfree(rdma_hndl);
 
 	return NULL;
 }
@@ -1615,7 +1372,7 @@ cleanup:
  * the connection QP may be destroyed, and its number may be recycled.
  */
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_close		                                             */
+/* xio_rdma_close							     */
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_close(struct xio_transport_base *transport)
 {
@@ -1638,7 +1395,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
 				ERROR_LOG("conn:%p rdma_disconnect failed, " \
-					  "%m\n", rdma_hndl);
+					  "%d\n", rdma_hndl, retval);
 		}  else  {
 			xio_rdma_notify_observer(rdma_hndl,
 						 XIO_TRANSPORT_CLOSED,
@@ -1694,8 +1451,8 @@ static int xio_rdma_accept(struct xio_transport_base *transport)
 	/* "accept" the connection */
 	retval = rdma_accept(rdma_hndl->cm_id, &cm_params);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_accept failed. (errno=%d %m)\n", errno);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_accept failed. (err=%d)\n", retval);
 		return -1;
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
@@ -1707,7 +1464,7 @@ static int xio_rdma_accept(struct xio_transport_base *transport)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_reject		                                             */
+/* xio_rdma_reject							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_reject(struct xio_transport_base *transport)
 {
@@ -1718,8 +1475,8 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 	/* "reject" the connection */
 	retval = rdma_reject(rdma_hndl->cm_id, NULL, 0);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_reject failed. (err=%d)\n", retval);
 		return -1;
 	}
 	TRACE_LOG("rdma transport: [reject] handle:%p\n", rdma_hndl);
@@ -1728,10 +1485,10 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_connect		                                             */
+/* xio_rdma_connect							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_connect(struct xio_transport_base *transport,
-		const char *portal_uri)
+			    const char *portal_uri)
 {
 	struct xio_rdma_transport	*rdma_hndl =
 		(struct xio_rdma_transport *)transport;
@@ -1745,7 +1502,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 		return -1;
 	}
 	/* allocate memory for portal_uri */
-	rdma_hndl->base.portal_uri = strdup(portal_uri);
+	rdma_hndl->base.portal_uri = kstrdup(portal_uri, GFP_KERNEL);
 	if (rdma_hndl->base.portal_uri == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
@@ -1754,18 +1511,20 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 	rdma_hndl->base.is_client = 1;
 
 	/* create cm id */
-	retval = rdma_create_id(rdma_hndl->cm_channel, &rdma_hndl->cm_id,
-				rdma_hndl, RDMA_PS_TCP);
-	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
+	rdma_hndl->cm_id = rdma_create_id(xio_handle_cm_event,
+					  (void *)rdma_hndl,
+					  RDMA_PS_TCP, IB_QPT_RC);
+	if (IS_ERR(rdma_hndl->cm_id)) {
+		retval = PTR_ERR(rdma_hndl->cma_id);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_create id failed. (err=%d)\n", retval);
 		goto exit2;
 	}
 	retval = rdma_resolve_addr(rdma_hndl->cm_id, NULL, &sa.sa,
-			ADDR_RESOLVE_TIMEOUT);
+				   ADDR_RESOLVE_TIMEOUT);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_resolve_addr failed. (errno=%d %m)\n", errno);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_resolve_addr failed. (err=%d)\n", retval);
 		goto exit2;
 	}
 
@@ -1775,7 +1534,7 @@ exit2:
 	rdma_destroy_id(rdma_hndl->cm_id);
 	rdma_hndl->cm_id = NULL;
 exit1:
-	free(rdma_hndl->base.portal_uri);
+	kfree(rdma_hndl->base.portal_uri);
 
 	return -1;
 }
@@ -1799,29 +1558,31 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		return -1;
 	}
 	rdma_hndl->base.is_client = 0;
-	/*is_server = 1; */
+	/* is_server = 1; */
 
 	/* create cm id */
-	retval = rdma_create_id(rdma_hndl->cm_channel, &rdma_hndl->cm_id,
-				rdma_hndl, RDMA_PS_TCP);
-	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
+	rdma_hndl->cm_id = rdma_create_id(xio_handle_cm_event,
+					  (void *)rdma_hndl,
+					  RDMA_PS_TCP, IB_QPT_RC);
+	if (IS_ERR(ib_conn->cma_id)) {
+		retval = PTR_ERR(ib_conn->cma_id);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_create id failed. (err=%d)\n", retval);
 		goto exit2;
 	}
 
 	retval = rdma_bind_addr(rdma_hndl->cm_id, &sa.sa);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n", errno);
+		ERROR_LOG("rdma_bind_addr failed. (err=%d)\n", retval);
 		goto exit2;
 	}
 
 	/* 0 == maximum backlog */
 	retval  = rdma_listen(rdma_hndl->cm_id, 0);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("rdma_listen failed. (errno=%d %m)\n", errno);
+		xio_set_error(retval);
+		ERROR_LOG("rdma_listen failed. (err=%d)\n", retval);
 		goto exit2;
 	}
 
@@ -1840,26 +1601,13 @@ exit2:
 	return -1;
 }
 
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_set_opt                                                          */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_set_opt(void *xio_obj,
-			    int optname, const void *optval, int optlen)
+static int xio_rdma_set_opt(struct xio_transport_base *transport,
+			      int optname, const void *optval, int optlen)
 {
-	switch (optname) {
-	case XIO_OPTNAME_ENABLE_MEM_POOL:
-		VALIDATE_SZ(sizeof(int));
-		rdma_options.enable_mem_pool = *((int *)optval);
-		return 0;
-		break;
-	case XIO_OPTNAME_DISABLE_DMA_LATENCY:
-		VALIDATE_SZ(sizeof(int));
-		rdma_options.disable_dma_latency = *((int *)optval);
-		return 0;
-		break;
-	default:
-		break;
-	}
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
@@ -1867,25 +1615,29 @@ static int xio_rdma_set_opt(void *xio_obj,
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_get_opt                                                          */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_get_opt(void  *xio_obj,
-			    int optname, void *optval, int *optlen)
+static int xio_rdma_get_opt(struct xio_transport_base *transport,
+			      int optname, void *optval, int *optlen)
 {
-	switch (optname) {
-	case XIO_OPTNAME_ENABLE_MEM_POOL:
-		*((int *)optval) = rdma_options.enable_mem_pool;
-		*optlen = sizeof(int);
-		return 0;
-		break;
-	case XIO_OPTNAME_DISABLE_DMA_LATENCY:
-		*((int *)optval) = rdma_options.disable_dma_latency;
-		*optlen = sizeof(int);
-		return 0;
-		break;
-	default:
-		break;
-	}
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_init						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_transport_init(struct xio_transport *transport)
+{
+	int retval;
+
+	retval = xio_device_list_init();
+	if (retval != 0) {
+		ERROR_LOG("Failed to ininitalize device list\n");
+		return -1;
+	}
+
+	xio_rdma_mempool_array_init();
+
+	return 0;
 }
 
 /*
@@ -1907,60 +1659,12 @@ static int xio_rdma_get_opt(void  *xio_obj,
 static int xio_set_cpu_latency()
 {
 	int32_t latency = 0;
-	int fd;
 
-	if (rdma_options.disable_dma_latency)
-		return 0;
-
+	/* Check Documentation/power/pm_qos_interface.txt */
 	DEBUG_LOG("setting latency to %d us\n", latency);
-	fd = open("/dev/cpu_dma_latency", O_WRONLY);
-	if (fd < 0) {
-		INFO_LOG("open /dev/cpu_dma_latency %m\n");
-		return -1;
-	}
-	if (write(fd, &latency, sizeof(latency)) != sizeof(latency)) {
-		ERROR_LOG("write to /dev/cpu_dma_latency %m\n");
-		return -1;
-	}
+	ERROR_LOG("%s - not yet implemented\n", __func__);
+
 	return -1;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_init						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_transport_init(struct xio_transport *transport)
-{
-	int		retval = 0;
-
-	spin_lock(&mngmt_lock);
-
-	if (transport_init)
-		goto cleanup;
-
-	/* set cpu latency until process is down */
-	xio_set_cpu_latency();
-
-	xio_device_thread_init();
-
-	retval = xio_device_list_init();
-	if (retval != 0) {
-		ERROR_LOG("Failed to initalize device list\n");
-		retval = -1;
-		goto cleanup;
-	}
-
-	/* storage for all memory registerations */
-	xio_mr_list_init();
-
-	xio_rdma_mempool_array_init();
-
-
-	transport_init  = 1;
-
-cleanup:
-	spin_unlock(&mngmt_lock);
-
-	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1970,15 +1674,8 @@ static void xio_rdma_transport_release(struct xio_transport *transport)
 {
 	xio_rdma_mempool_array_release();
 
-	/* free all redundent registered memory */
-	xio_mr_list_free();
-
 	/* free devices */
 	xio_device_list_release();
-
-	xio_cm_list_release();
-
-	xio_device_thread_stop();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1986,9 +1683,8 @@ static void xio_rdma_transport_release(struct xio_transport *transport)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 {
-	int		i;
-	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->in;
+	int		i;
 
 	if (vmsg->data_iovlen >= XIO_MAX_IOV)
 		return 0;
@@ -1998,18 +1694,10 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 		return 0;
 
 	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->data_iov[i].mr)
-			mr_found++;
-		if (vmsg->data_iov[i].iov_base == NULL) {
-			if (vmsg->data_iov[i].mr)
-				return 0;
-		} else {
-			if (vmsg->data_iov[i].iov_len == 0)
-				return 0;
-		}
+		if ((vmsg->data_iov[i].iov_base != NULL) &&
+		    (vmsg->data_iov[i].iov_len == 0))
+			return 0;
 	}
-	if ((mr_found != vmsg->data_iovlen) && mr_found)
-		return 0;
 
 	return 1;
 }
@@ -2019,9 +1707,8 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 {
-	int		i;
-	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->out;
+	int		i;
 
 	if (vmsg->data_iovlen >= XIO_MAX_IOV)
 		return 0;
@@ -2033,14 +1720,10 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 			return 0;
 
 	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->data_iov[i].mr)
-			mr_found++;
 		if ((vmsg->data_iov[i].iov_base == NULL) ||
 		    (vmsg->data_iov[i].iov_len == 0))
 				return 0;
 	}
-	if ((mr_found != vmsg->data_iovlen) && mr_found)
-		return 0;
 
 	return 1;
 }
@@ -2068,46 +1751,167 @@ static struct xio_transport xio_rdma_transport = {
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_transport_constructor					     */
 /*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_rdma_transport_constructor(void)
+static int __init xio_rdma_transport_constructor(void)
 {
-	int			retval;
-	struct xio_transport	*transport = &xio_rdma_transport;
+	struct xio_transport *transport = &xio_rdma_transport;
+	int retval;
 
-	/* Mellanox OFED's User Manual */
-	/*
-	setenv("MLX_QP_ALLOC_TYPE","PREFER_CONTIG", 1);
-	setenv("MLX_CQ_ALLOC_TYPE","ALL", 1);
-	setenv("MLX_MR_ALLOC_TYPE","ALL", 1);
-	*/
-	if (0) {
-		setenv("RDMAV_FORK_SAFE", "YES", 1);
-		setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
-		retval = ibv_fork_init();
-		if (retval)
-			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
-				  retval, strerror(retval));
-	}
-	g_mhz = get_cpu_mhz(0);
+	/* set cpu latency until process is down */
+	/* xio_set_cpu_latency(); */
 
 	/* register the transport */
 	xio_reg_transport(transport);
 
-	INIT_LIST_HEAD(&cm_list);
+	/* initialize the transport */
+	retval = xio_rdma_transport_init(transport);
+	if (retval != 0) {
+		ERROR_LOG("rdma transport constructor failed\n");
+		goto cleanup;
+	}
 
-	spin_lock_init(&mngmt_lock);
+	return 0;
+
+cleanup:
+	xio_unreg_transport(transport);
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_transport_destructor					     */
 /*---------------------------------------------------------------------------*/
-__attribute__((destructor)) void xio_rdma_transport_destructor(void)
+static void __exit xio_rdma_transport_destructor(void)
 {
-	struct xio_transport	*transport = &xio_rdma_transport;
+	struct xio_transport *transport = &xio_rdma_transport;
+	struct xio_device   *dev, *ndev;
+
+	/* Called after all devices were deleted */
 
 	/* release the transport */
-	if (transport_init)
-		xio_rdma_transport_release(transport);
+	xio_rdma_transport_release(transport);
 
 	xio_unreg_transport(transport);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_add_one								     */
+/*---------------------------------------------------------------------------*/
+static void xio_add_one(struct ib_device *device)
+{
+	struct xio_device **xio_devs;
+	int s, e, p;
+
+	/* IB or ROCE */
+	if (rdma_node_get_transport(device->node_type) != RDMA_TRANSPORT_IB)
+		return;
+
+	if (device->node_type == RDMA_NODE_IB_SWITCH) {
+		s = 0;
+		e = 0;
+	} else {
+		s = 1;
+		e = device->phys_port_cnt;
+	}
+
+	xio_devs = kcalloc(e + 1, sizeof(struct xio_device *), GFP_KERNEL);
+	if (xio_devs == NULL) {
+		ERROR_LOG("Couldn't allocate n(%d) pointers\n", e + 1);
+		return;
+	}
+
+	for (p = s; p <= e; p++) {
+		struct xio_device *xio_dev;
+		xio_dev = xio_device_init(device, p);
+		if (!xio_dev) {
+			ERROR_LOG("int xio device on dev(%s) port(%d) failed\n",
+				  ib_get_device_name(device), p);
+			goto cleanup;
+		}
+		xio_devs[p] = xio_dev;
+	}
+
+	ib_set_client_data(device, &xio_client, xio_devs);
+
+cleanup:
+	for (p = s; p <= e; p++) {
+		if (xio_devs[p]) {
+			xio_device_release(xio_devs[p]);
+			xio_devs[p] = NULL;
+		}
+	}
+	kfree(xio_devs);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_remove_one							     */
+/*---------------------------------------------------------------------------*/
+
+static void xio_remove_one(struct ib_device *device)
+{
+	struct xio_device **xio_devs;
+	int s, e, p;
+
+	/* IB or ROCE */
+	if (rdma_node_get_transport(dev->node_type) != RDMA_TRANSPORT_IB)
+		return;
+
+	/* xio_del_one is called before the core clients' list is deleted
+	 * so calling ib_get_client_data in xio_del_one is O.K.
+	 */
+
+	xio_devs = ib_get_client_data(device, &xio_client);
+	if (!xio_devs) {
+		ERROR_LOG("Couldn't find xio device on %s\n",
+			  ib_get_device_name(ib_dev));
+		return;
+	}
+
+	if (device->node_type == RDMA_NODE_IB_SWITCH) {
+		s = 0;
+		e = 0;
+	} else {
+		s = 1;
+		e = device->phys_port_cnt;
+	}
+
+	for (p = s; p <= e; p++) {
+		if (xio_devs[p]) {
+			xio_device_release(xio_devs[p]);
+			xio_devs[p] = NULL;
+		}
+	}
+
+	kfree(xio_devs);
+}
+
+static struct ib_client xio_client = {
+	.name	= "xio",
+	.add	= xio_add_one,
+	.remove	= xio_del_one
+};
+
+static int __init xio_init_module(void)
+{
+	xio_rdma_transport_constructor();
+
+	/* xio_add_one will be called for all existing devices
+	 * add for all new devices
+	 */
+
+	ret = ib_register_client(&xio_client);
+	if (ret) {
+		pr_err("couldn't register IB client ret%d\n", ret);
+		return ret;
+	}
+}
+
+static void __exit xio_cleanup_module(void)
+{
+	/* xio_del_one will called for all devices */
+
+	ib_unregister_client(&xio_client);
+
+	xio_rdma_transport_destructor();
+}
+
+module_init(xio_init_module);
+module_exit(xio_cleanup_module);

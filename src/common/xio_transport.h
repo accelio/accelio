@@ -95,7 +95,7 @@ struct xio_transport_base {
 	void				*observer;
 	notification_handler_t		notify_observer;
 	uint32_t			is_client;  /* client or server */
-	int32_t				refcnt;
+	atomic_t			refcnt;
 	char				*portal_uri;
 	struct sockaddr_storage		peer_addr;
 	enum   xio_proto		proto;

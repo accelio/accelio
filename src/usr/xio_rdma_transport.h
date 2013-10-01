@@ -218,7 +218,7 @@ struct xio_cq  {
 	int32_t				cq_depth;     /* current cq depth  */
 	int32_t				alloc_sz;     /* allocation factor  */
 	int32_t				cqe_avail;    /* free elements  */
-	int32_t				refcnt;       /* utilization counter */
+	atomic_t			refcnt;       /* utilization counter */
 	int32_t				pad;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
