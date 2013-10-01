@@ -35,48 +35,5 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_LOG_H
-#define XIO_LOG_H
-
-#include <linux/kernel.h>
-
-#define FATAL_LOG(fmt, ...) \
-	pr_crit("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define ERROR_LOG(fmt, ...) \
-	pr_err("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define WARN_LOG(fmt, ...) \
-	pr_warn("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define INFO_LOG(fmt, ...) \
-	pr_info("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define DEBUG_LOG(fmt, ...) \
-	pr_debug("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define TRACE_LOG(fmt, ...) \
-	pr_cont("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-/* Not yet implemented, parameter or sysfs */
-void xio_read_logging_level(void) {pr_warn("xio_read_logging_level\n");}
-
-#endif /* XIO_LOG_H */
+#include "xio_os.h"
+#include "xio_common.h"

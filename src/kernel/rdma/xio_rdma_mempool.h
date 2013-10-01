@@ -35,48 +35,79 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_LOG_H
-#define XIO_LOG_H
+#ifndef XIO_RDMA_MEMPOOL_H
+#define XIO_RDMA_MEMPOOL_H
 
-#include <linux/kernel.h>
+#include <linux/types.h>
 
-#define FATAL_LOG(fmt, ...) \
-	pr_crit("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+struct xio_rdma_mempool;
 
-#define ERROR_LOG(fmt, ...) \
-	pr_err("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+struct xio_mem_reg {
+	u32  lkey;
+	u32  rkey;
+	u64  va;
+	u64  len;
+	void *mem_h;
+	int  is_mr;
+};
 
-#define WARN_LOG(fmt, ...) \
-	pr_warn("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+struct xio_regd_buf {
+	struct xio_mem_reg	reg;		/* memory registration info  */
+	void			*virt_addr;
+	struct xio_device	*dev;		/* dev->ib_dev for dma_unmap */
+	enum dma_data_direction direction;	/* direction for dma_unmap   */
+	size_t			data_size;
+};
 
-#define INFO_LOG(fmt, ...) \
-	pr_info("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+struct xio_rdma_mp_mem {
+	void		*addr;
+	size_t		length;
+	struct xio_mr	*mr;
+	void		*cache;
+};
 
-#define DEBUG_LOG(fmt, ...) \
-	pr_debug("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+struct xio_rdma_mem_desc {
+	/* sgl for dma mapping */
+	struct scatterlist	sgl[XIO_MAX_IOV];
+	struct xio_rdma_mp_mem	mp_sge[XIO_MAX_IOV];
+	u32			num_sge;
+	unsigned int		nents;
+	unsigned int		mapped;
+	struct xio_regd_buf	reg_buf;
+};
 
-#define TRACE_LOG(fmt, ...) \
-	pr_cont("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+#define XIO_CHUNKS_SIZE_NR	4
 
-/* Not yet implemented, parameter or sysfs */
-void xio_read_logging_level(void) {pr_warn("xio_read_logging_level\n");}
+#define XIO_16K_BLOCK_SZ	(16*1024)
+#define XIO_16K_MIN_NR		128
+#define XIO_16K_MAX_NR		1024
+#define XIO_16K_ALLOC_NR	128
 
-#endif /* XIO_LOG_H */
+#define XIO_64K_BLOCK_SZ	(64*1024)
+#define XIO_64K_MIN_NR		128
+#define XIO_64K_MAX_NR		1024
+#define XIO_64K_ALLOC_NR	128
+
+#define XIO_256K_BLOCK_SZ	(256*1024)
+#define XIO_256K_MIN_NR		128
+#define XIO_256K_MAX_NR		1024
+#define XIO_256K_ALLOC_NR	128
+
+#define XIO_1M_BLOCK_SZ		(1024*1024)
+#define XIO_1M_MIN_NR		128
+#define XIO_1M_MAX_NR		1024
+#define XIO_1M_ALLOC_NR		128
+
+
+struct xio_rdma_mempool *xio_rdma_mempool_create(void);
+void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
+
+int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
+			     size_t length, struct xio_rdma_mp_mem *mp_mem);
+
+int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *mpool, xio_sge *sge,
+			  u32 num_sge, xio_rdma_mem_desc *desc);
+
+void xio_rdma_mempool_free(xio_rdma_mem_desc *desc);
+
+#endif

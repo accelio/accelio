@@ -46,7 +46,7 @@ enum xio_context_event {
 };
 
 /*---------------------------------------------------------------------------*/
-/* structs	                                                             */
+/* structs								     */
 /*---------------------------------------------------------------------------*/
 struct xio_context {
 	void				*ev_loop;
@@ -54,8 +54,8 @@ struct xio_context {
 	int				cpuid;
 	int				nodeid;
 	int				polling_timeout;
-	int				pad;
-	uint64_t                        worker;
+	unsigned int			flags;
+	uint64_t			worker;
 
 	/* list of sessions using this connection */
 	struct list_head		observers_list;

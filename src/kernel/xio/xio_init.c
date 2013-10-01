@@ -35,48 +35,34 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_LOG_H
-#define XIO_LOG_H
-
 #include <linux/kernel.h>
+#include <linux/module.h>
 
-#define FATAL_LOG(fmt, ...) \
-	pr_crit("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+#include "libxio.h"
+#include "xio_common.h"
+#include "xio_sessions_store.h"
+#include "xio_conns_store.h"
 
-#define ERROR_LOG(fmt, ...) \
-	pr_err("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
+MODULE_DESCRIPTION("XIO generic part "
+	   "v" DRV_VERSION " (" DRV_RELDATE ")");
+MODULE_LICENSE("Dual BSD/GPL");
 
-#define WARN_LOG(fmt, ...) \
-	pr_warn("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+/*---------------------------------------------------------------------------*/
+/* xio_constructor							     */
+/*---------------------------------------------------------------------------*/
 
-#define INFO_LOG(fmt, ...) \
-	pr_info("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+static int __init xio_init_module(void)
+{
+	sessions_store_construct();
+	conns_store_construct();
 
-#define DEBUG_LOG(fmt, ...) \
-	pr_debug("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+	return 0;
+}
 
-#define TRACE_LOG(fmt, ...) \
-	pr_cont("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+static void __exit xio_cleanup_module(void)
+{
+}
 
-/* Not yet implemented, parameter or sysfs */
-void xio_read_logging_level(void) {pr_warn("xio_read_logging_level\n");}
-
-#endif /* XIO_LOG_H */
+module_init(xio_init_module);
+module_exit(xio_cleanup_module);

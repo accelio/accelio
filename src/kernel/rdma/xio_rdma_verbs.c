@@ -35,48 +35,45 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_LOG_H
-#define XIO_LOG_H
+#include "xio_os.h"
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
 
-#include <linux/kernel.h>
+#include "libxio.h"
+#include "xio_common.h"
+#include "xio_context.h"
+#include "xio_task.h"
+#include "xio_transport.h"
+#include "xio_conn.h"
+#include "xio_protocol.h"
+#include "get_clock.h"
+#include "xio_mem.h"
+#include "xio_rdma_mempool.h"
+#include "xio_rdma_transport.h"
 
-#define FATAL_LOG(fmt, ...) \
-	pr_crit("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
 
-#define ERROR_LOG(fmt, ...) \
-	pr_err("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+/*---------------------------------------------------------------------------*/
+/* globals								     */
+/*---------------------------------------------------------------------------*/
 
-#define WARN_LOG(fmt, ...) \
-	pr_warn("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+extern struct list_head dev_list;
 
-#define INFO_LOG(fmt, ...) \
-	pr_info("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
+/*---------------------------------------------------------------------------*/
+/* ibv_wc_opcode_str							     */
+/*---------------------------------------------------------------------------*/
 
-#define DEBUG_LOG(fmt, ...) \
-	pr_debug("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-#define TRACE_LOG(fmt, ...) \
-	pr_cont("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
-		__FILE__, __LINE__, __func__,\
-		## __VA_ARGS__)
-
-/* Not yet implemented, parameter or sysfs */
-void xio_read_logging_level(void) {pr_warn("xio_read_logging_level\n");}
-
-#endif /* XIO_LOG_H */
+const char *xio_ib_wc_opcode_str(enum ibv_wc_opcode opcode)
+{
+	switch (opcode) {
+	case IB_WC_SEND:		return "IB_WC_SEND";
+	case IB_WC_RDMA_WRITE:		return "IB_WC_RDMA_WRITE";
+	case IB_WC_RDMA_READ:		return "IB_WC_RDMA_READ";
+	case IB_WC_COMP_SWAP:		return "IB_WC_COMP_SWAP";
+	case IB_WC_FETCH_ADD:		return "IB_WC_FETCH_ADD";
+	case IB_WC_BIND_MW:		return "IB_WC_BIND_MW";
+	/* recv-side: inbound completion */
+	case IB_WC_RECV:		return "IB_WC_RECV";
+	case IB_WC_RECV_RDMA_WITH_IMM:	return "IB_WC_RECV_RDMA_WITH_IMM";
+	default:			return "IB_WC_UNKNOWN";
+	};
+}
