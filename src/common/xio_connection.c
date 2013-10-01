@@ -146,7 +146,7 @@ int xio_connection_send(struct xio_connection *conn,
 				  msg->request->sn, conn, conn->session,
 				  conn->conn);
 			xio_set_error(EINVAL);
-			xio_conn_put_task(conn->conn, task);
+			xio_tasks_pool_put(task);
 			return -1;
 		}
 		list_move_tail(&task->tasks_list_entry, &conn->pre_send_list);
@@ -159,10 +159,7 @@ int xio_connection_send(struct xio_connection *conn,
 		hdr.receipt_result	= msg->receipt_res;
 		is_req			= 1;
 	} else {
-		if ((msg->type == XIO_MSG_TYPE_REQ) ||
-		    (msg->type == XIO_SESSION_SETUP_REQ) ||
-		    (msg->type == XIO_FIN_REQ) ||
-		    (msg->type == XIO_ONE_WAY_REQ)) {
+		if (IS_REQUEST(msg->type)) {
 			task = xio_conn_get_primary_task(conn->conn);
 			if (task == NULL) {
 				ERROR_LOG("tasks pool is empty\n");
@@ -228,7 +225,7 @@ int xio_connection_send(struct xio_connection *conn,
 
 cleanup:
 	if (is_req)
-		xio_conn_put_task(conn->conn, task);
+		xio_tasks_pool_put(task);
 	else
 		list_move(&task->tasks_list_entry, &conn->io_tasks_list);
 
@@ -252,11 +249,11 @@ int xio_connection_flush(struct xio_connection *connection)
 		list_for_each_entry_safe(ptask, pnext_task,
 					 &connection->post_io_tasks_list,
 					 tasks_list_entry) {
-			TRACE_LOG("post_io_list: task %p, refcnt:%d, " \
+			TRACE_LOG("post_io_list: task %p" \
 				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
+				  ptask,
 				  ptask->tlv_type, ptask->ltid);
-			xio_conn_put_task(connection->conn, ptask);
+			xio_tasks_pool_put(ptask);
 		}
 	}
 
@@ -265,17 +262,16 @@ int xio_connection_flush(struct xio_connection *connection)
 		list_for_each_entry_safe(ptask, pnext_task,
 					 &connection->pre_send_list,
 					 tasks_list_entry) {
-			TRACE_LOG("pre_send_list: task %p, refcnt:%d, " \
+			TRACE_LOG("pre_send_list: task %p, " \
 				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
+				  ptask,
 				  ptask->tlv_type, ptask->ltid);
 			if (ptask->sender_task) {
 				/* the tx task is returend back to pool */
-				xio_conn_put_task(ptask->sender_task->conn,
-						  ptask->sender_task);
+				xio_tasks_pool_put(ptask->sender_task);
 				ptask->sender_task = NULL;
 			}
-			xio_conn_put_task(ptask->conn, ptask);
+			xio_tasks_pool_put(ptask);
 		}
 	}
 
@@ -284,9 +280,9 @@ int xio_connection_flush(struct xio_connection *connection)
 		list_for_each_entry_safe(ptask, pnext_task,
 					 &connection->io_tasks_list,
 					 tasks_list_entry) {
-			TRACE_LOG("io_tasks_list: task %p, refcnt:%d, " \
+			TRACE_LOG("io_tasks_list: task %p, " \
 				  "type 0x%x ltid:%d\n",
-				  ptask, ptask->refcnt,
+				  ptask,
 				  ptask->tlv_type, ptask->ltid);
 		}
 	}
@@ -298,11 +294,10 @@ int xio_connection_flush(struct xio_connection *connection)
 			/* after send success release it */
 		if (task->sender_task) {
 			/* the tx task is returend back to pool */
-			xio_conn_put_task(task->sender_task->conn,
-					  task->sender_task);
+			xio_tasks_pool_put(task->sender_task);
 			task->sender_task = NULL;
 		}
-		xio_conn_put_task(task->conn, task);
+		xio_tasks_pool_put(task);
 
 		if ((msg->type == XIO_ONE_WAY_RSP) ||
 		    (msg->type == XIO_FIN_RSP))
@@ -580,12 +575,12 @@ void xio_release_response_task(struct xio_task *task)
 {
 	/* the tx task is returend back to pool */
 	if (task->sender_task) {
-		xio_conn_put_task(task->sender_task->conn, task->sender_task);
+		xio_tasks_pool_put(task->sender_task);
 		task->sender_task = NULL;
 	}
 
 	/* the rx task is returend back to pool */
-	xio_conn_put_task(task->conn, task);
+	xio_tasks_pool_put(task);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -649,7 +644,7 @@ int xio_release_msg(struct xio_msg *msg)
 	}
 
 	/* the rx task is returend back to pool */
-	xio_conn_put_task(task->conn, task);
+	xio_tasks_pool_put(task);
 
 	xio_connection_xmit_msgs(conn);
 

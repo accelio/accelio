@@ -35,9 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef XIO_API_H
+#define XIO_API_H
 
-#if defined(__KERNEL__)
-#include "xio_kernel.h"
-#else
-#include "xio_user.h"
-#endif
+#endif /*XIO_API_H */
+

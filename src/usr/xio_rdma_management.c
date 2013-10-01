@@ -815,14 +815,13 @@ int xio_rdma_flush_task_list(struct xio_rdma_transport *rdma_hndl,
 
 	list_for_each_entry_safe(ptask, next_ptask, list,
 				 tasks_list_entry) {
-		TRACE_LOG("flushing task %p type 0x%x, refcnt:%d\n",
-			  ptask, ptask->tlv_type, ptask->refcnt);
+		TRACE_LOG("flushing task %p type 0x%x\n",
+			  ptask, ptask->tlv_type);
 		if (ptask->sender_task) {
-			xio_conn_put_task(rdma_hndl->base.observer,
-					  ptask->sender_task);
+			xio_tasks_pool_put(ptask->sender_task);
 			ptask->sender_task = NULL;
 		}
-		xio_conn_put_task(rdma_hndl->base.observer, ptask);
+		xio_tasks_pool_put(ptask);
 	}
 
 	return 0;

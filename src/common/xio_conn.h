@@ -194,11 +194,6 @@ int xio_conn_get_opt(struct xio_conn *conn, int optname,
 struct xio_task *xio_conn_get_initial_task(struct xio_conn *conn);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_put_task							     */
-/*---------------------------------------------------------------------------*/
-void xio_conn_put_task(struct xio_conn *conn, struct xio_task *task);
-
-/*---------------------------------------------------------------------------*/
 /* xio_conn_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
 struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn);

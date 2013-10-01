@@ -70,28 +70,27 @@ static void xio_pre_put_task(struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_conn_put_task							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_conn_put_task(struct xio_conn *conn,
-			      struct xio_task *task)
-
+static inline void xio_conn_put_task(struct kref *kref)
 {
-	if (task->refcnt == 1) {
-		struct xio_tasks_pool *pool;
-		struct xio_tasks_pool_ops *pool_ops;
+	struct xio_task *task = container_of(kref, struct xio_task, kref);
+	struct xio_tasks_pool *pool;
+	struct xio_tasks_pool_ops *pool_ops;
 
-		assert(task->pool);
+	assert(task->pool);
 
-		pool = (struct xio_tasks_pool *)task->pool;
+	pool = (struct xio_tasks_pool *)task->pool;
 
-		assert(pool->pool_ops);
+	assert(pool->pool_ops);
 
-		pool_ops = (struct xio_tasks_pool_ops *)pool->pool_ops;
+	pool_ops = (struct xio_tasks_pool_ops *)pool->pool_ops;
 
-		if (pool_ops->pre_put)
-			pool_ops->pre_put(conn->transport_hndl, task);
+	if (pool_ops->pre_put)
+		pool_ops->pre_put(task->conn->transport_hndl, task);
 
-		xio_pre_put_task(task);
-	}
-	xio_tasks_pool_put(task);
+	xio_pre_put_task(task);
+
+	pool->nr++;
+	list_move(&task->tasks_list_entry, &pool->stack);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -117,9 +116,6 @@ inline struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn)
 
 	if (task == NULL)
 		return NULL;
-
-	/* reset the incoming msessage */
-	msg_reset(&task->imsg);
 
 	if (conn->primary_pool_ops->post_get)
 		conn->primary_pool_ops->post_get(conn->transport_hndl,
@@ -388,14 +384,14 @@ static int xio_conn_send_setup_req(struct xio_conn *conn)
 	retval = conn->transport->send(conn->transport_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup request failed\n");
-		xio_conn_put_task(conn, task);
+		xio_tasks_pool_put(task);
 		return -1;
 	}
 
 	return 0;
 
 cleanup:
-	xio_conn_put_task(conn, task);
+	xio_tasks_pool_put(task);
 	xio_set_error(XIO_E_MSG_INVALID);
 	ERROR_LOG("receiving setup request failed\n");
 	return -1;
@@ -490,9 +486,9 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 	}
 
 	/* recycle the tasks */
-	xio_conn_put_task(conn, task->sender_task);
+	xio_tasks_pool_put(task->sender_task);
 	task->sender_task = NULL;
-	xio_conn_put_task(conn, task);
+	xio_tasks_pool_put(task);
 
 	/* create the primary */
 	retval = xio_conn_primary_pool_setup(conn);
@@ -516,7 +512,7 @@ static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 					     struct xio_task *task)
 {
 	/* recycle the task */
-	xio_conn_put_task(conn, task);
+	xio_tasks_pool_put(task);
 
 	xio_conn_notify_all(conn, XIO_CONNECTION_ESTABLISHED, NULL);
 	return 0;
@@ -655,6 +651,7 @@ static int xio_conn_initial_pool_setup(struct xio_conn *conn)
 			ERROR_LOG("initial_pool_init_item failed\n");
 			goto cleanup;
 		}
+		conn->initial_tasks_pool->array[i]->release = xio_conn_put_task;
 	}
 
 	/* pool is ready for use */
@@ -752,6 +749,7 @@ static int xio_conn_primary_pool_setup(struct xio_conn *conn)
 			ERROR_LOG("primary_pool_init_item failed\n");
 			goto cleanup;
 		}
+		conn->primary_tasks_pool->array[i]->release = xio_conn_put_task;
 	}
 
 	/* pool is ready for use */

@@ -48,6 +48,7 @@ enum xio_task_state {
 	XIO_TASK_STATE_READ,
 };
 
+typedef void (*release_task_fn)(struct kref *kref);
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */
@@ -60,10 +61,13 @@ struct xio_task {
 	struct xio_msg		*omsg;		/* pointer from user */
 	struct xio_msg		imsg;		/* message to the user */
 
+	release_task_fn		release;
 
 	struct xio_mbuf		mbuf;
+	struct kref		kref;
 	uint16_t		tlv_type;
-	uint16_t		refcnt;
+	uint16_t		pad[3];
+//	uint16_t		refcnt;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
 	enum xio_task_state	state;		/* task state enum	*/
@@ -94,13 +98,7 @@ struct xio_tasks_pool {
 static inline void xio_task_addref(
 			struct xio_task *t)
 {
-	t->refcnt++;
-}
-
-static inline int xio_task_ref(
-			struct xio_task *t)
-{
-	return t->refcnt;
+	kref_get(&t->kref);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -131,10 +129,17 @@ static inline struct xio_task *xio_tasks_pool_get(
 	t = list_first_entry(&q->stack, struct xio_task,  tasks_list_entry);
 	list_del_init(&t->tasks_list_entry);
 	q->nr--;
-	assert(t->refcnt == 0);
-	t->refcnt++;
+	kref_init(&t->kref);
 	t->tlv_type = 0xbeef;  /* poison the type */
 	return t;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_put							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_tasks_pool_put(struct xio_task *task)
+{
+	kref_put(&task->kref, task->release);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -150,29 +155,6 @@ static inline int xio_tasks_pool_free_tasks(
 		ERROR_LOG("tasks inventory: %d/%d = missing:%d\n",
 			  q->nr, q->max, q->max-q->nr);
 	return q->nr;
-}
-
-
-/*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_put							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_tasks_pool_put(struct xio_task *t)
-{
-	struct xio_tasks_pool *q = t->pool;
-
-	if (0 && (!(t >= q->array[0] && t <= q->array[q->max-1])))
-		ERROR_LOG("task is not in range %p =< %p =< %p\n",
-			  q->array[0], t, q->array[q->max-1]);
-
-	if (t->refcnt  > 1)  {
-		t->refcnt--;
-	} else if (t->refcnt == 1) {
-		q->nr++;
-		t->refcnt--;
-		list_move(&t->tasks_list_entry, &q->stack);
-	} else {
-		assert(0);
-	}
 }
 
 /*---------------------------------------------------------------------------*/

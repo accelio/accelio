@@ -393,7 +393,7 @@ static int xio_rdma_rx_error_handler(struct xio_rdma_transport *rdma_hndl,
 	      struct xio_task *task)
 {
 	/* remove the task from rx list */
-	xio_conn_put_task(rdma_hndl->base.observer, task);
+	xio_tasks_pool_put(task);
 
 	return 0;
 }
@@ -405,7 +405,7 @@ static int xio_rdma_tx_error_handler(struct xio_rdma_transport *rdma_hndl,
 	      struct xio_task *task)
 {
 	/* remove the task from in-flight list */
-	xio_conn_put_task(rdma_hndl->base.observer, task);
+	xio_tasks_pool_put(task);
 
 	return 0;
 }
@@ -417,7 +417,7 @@ static int xio_rdma_rd_error_handler(struct xio_rdma_transport *rdma_hndl,
 	      struct xio_task *task)
 {
 	/* remove the task from rdma rd in-flight list */
-	xio_conn_put_task(rdma_hndl->base.observer, task);
+	xio_tasks_pool_put(task);
 
 	return 0;
 }
@@ -460,9 +460,9 @@ static void xio_handle_task_error(struct xio_task *task)
 		xio_rdma_wr_error_handler(rdma_hndl, task);
 		break;
 	default:
-		ERROR_LOG("unknown opcode: task:%p, type:0x%x, refcnt:%d, " \
+		ERROR_LOG("unknown opcode: task:%p, type:0x%x, " \
 			  "magic:0x%"PRIx64", ib_op:0x%x\n",
-			  task, task->tlv_type, task->refcnt,
+			  task, task->tlv_type,
 			  task->magic, rdma_task->ib_op);
 		break;
 	}
@@ -632,14 +632,14 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 			rdma_hndl->max_sn++;
 			rdma_hndl->reqs_in_flight_nr--;
 			xio_rdma_on_req_send_comp(rdma_hndl, ptask);
-			xio_conn_put_task(rdma_hndl->base.observer, ptask);
+			xio_tasks_pool_put(ptask);
 		} else if (IS_RESPONSE(ptask->tlv_type)) {
 			rdma_hndl->max_sn++;
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_rdma_on_rsp_send_comp(rdma_hndl, ptask);
 		} else if (IS_NOP(ptask->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr--;
-			xio_conn_put_task(rdma_hndl->base.observer, ptask);
+			xio_tasks_pool_put(ptask);
 		} else {
 			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
 				  "magic:0x%"PRIx64"\n",
@@ -2707,7 +2707,7 @@ static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 			  rdma_hndl->exp_sn, nop.sn);
 
 	/* the rx task is returend back to pool */
-	xio_conn_put_task(rdma_hndl->base.observer, task);
+	xio_tasks_pool_put(task);
 
 	return 0;
 }

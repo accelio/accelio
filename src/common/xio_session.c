@@ -1026,11 +1026,10 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	if (action == XIO_ACTION_ACCEPT) {
 		if (session->portals_array == NULL)  {
 			/* the tx task is returend back to pool */
-			xio_conn_put_task(task->sender_task->conn,
-					  task->sender_task);
+			xio_tasks_pool_put(task->sender_task);
 			task->sender_task = NULL;
 
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 			DEBUG_LOG("task recycled\n");
 
 			kfree(rsp->user_context);
@@ -1066,10 +1065,9 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			return 0;
 		} else { /* reconnect to peer other session */
 			/* the tx task is returend back to pool */
-			xio_conn_put_task(task->sender_task->conn,
-					  task->sender_task);
+			xio_tasks_pool_put(task->sender_task);
 			task->sender_task = NULL;
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
 				  session);
@@ -1088,10 +1086,9 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		}
 	} else if (action == XIO_ACTION_REDIRECT) {
 			/* the tx task is returend back to pool */
-			xio_conn_put_task(task->sender_task->conn,
-					  task->sender_task);
+			xio_tasks_pool_put(task->sender_task);
 			task->sender_task = NULL;
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 
 			TRACE_LOG("session state is now REDIRECT. session:%p\n",
 				  session);
@@ -1110,11 +1107,10 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			return 0;
 	} else if (action == XIO_ACTION_REJECT) {
 			/* the tx task is returend back to pool */
-			xio_conn_put_task(task->sender_task->conn,
-					  task->sender_task);
+			xio_tasks_pool_put(task->sender_task);
 			task->sender_task = NULL;
 
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 			DEBUG_LOG("task recycled\n");
 
 			kfree(rsp->user_context);
@@ -1149,7 +1145,7 @@ static int xio_on_setup_rsp_send_comp(
 		struct xio_task *task)
 {
 	/* recycle the task */
-	xio_conn_put_task(task->conn, task);
+	xio_tasks_pool_put(task);
 
 	/* time to set new callback */
 	DEBUG_LOG("task recycled\n");
@@ -1244,7 +1240,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 			xio_connection_send_read_receipt(connection, msg);
 		} else {
 			/* free the ref added in this function */
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 		}
 	}
 
@@ -1309,7 +1305,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
 					XIO_MSG_RSP_FLAG_FIRST) {
 				/* recycle the receipt */
-				xio_conn_put_task(task->conn, task);
+				xio_tasks_pool_put(task);
 			}
 		}
 		if (hdr.flags & XIO_MSG_RSP_FLAG_LAST) {
@@ -1353,7 +1349,7 @@ static int xio_on_rsp_send_comp(
 					connection->cb_user_context);
 		}
 		/* recycle the task */
-		xio_conn_put_task(task->conn, task);
+		xio_tasks_pool_put(task);
 	}
 
 	/* now try to send */
@@ -1371,7 +1367,7 @@ static int xio_on_ow_req_send_comp(
 {
 	/* recycle the task */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT))
-		xio_conn_put_task(task->conn, task);
+		xio_tasks_pool_put(task);
 
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
@@ -1730,7 +1726,7 @@ static int xio_on_new_message(struct xio_session *session,
 				ERROR_LOG("failed to find connection :%p. " \
 						"dropping message:%d\n", conn,
 						event_data->msg.op);
-				xio_conn_put_task(task->conn, task);
+				xio_tasks_pool_put(task);
 				return -1;
 			}
 		}
@@ -1788,7 +1784,7 @@ static int xio_on_send_completion(struct xio_session *session,
 			ERROR_LOG("failed to find connection :%p. " \
 				  "dropping message:%d\n", conn,
 				  event_data->msg.op);
-			xio_conn_put_task(task->conn, task);
+			xio_tasks_pool_put(task);
 			return -1;
 		}
 	}

@@ -71,6 +71,8 @@
 #include <linux/list.h>
 #include <linux/mman.h>
 #include <linux/printk.h>
+#include <linux/atomic.h>
+#include <linux/kref.h>
 #include <linux/usr.h>
 
 #endif /* XIO_OS_H */
