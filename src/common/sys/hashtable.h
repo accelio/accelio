@@ -18,7 +18,7 @@ typedef void key_cp_func_t(void *keydst, const void *keysrc);
 
 #define HASHTABLE_LOOKUP_FROM_LIST(head, list, key, var, field, _tfield) do {\
 	int _hifound = 0;						\
-	hlist_for_each_entry(var, list, field._tfield) {		\
+	list_for_each_entry(var, list, field._tfield) {			\
 		if (head->cmpfunc(key, &var->field.keycopy)) {		\
 			_hifound = 1;					\
 			break;						\
@@ -31,7 +31,7 @@ typedef void key_cp_func_t(void *keydst, const void *keysrc);
 #define HASHTABLE_INSERT_INTO_LIST(head, list, key, var, field, _tfield) do {\
 	head->cpfunc(&(var->field.keycopy), key);			\
 	head->count++;							\
-	hlist_add_head(&(var->field._tfield), list);			\
+	list_add(&(var->field._tfield), list);				\
 } while (0)
 
 
@@ -49,13 +49,13 @@ struct name {								\
 	hash_func_t *hfunc;						\
 	key_cmp_func_t *cmpfunc;					\
 	key_cp_func_t *cpfunc;						\
-	struct hlist_head list[prime];					\
+	struct list_head list[prime];					\
 }
 
 
 #define HASHTABLE_ENTRY(type, keytype, _tfield)				\
 struct {								\
-	struct hlist_node _tfield;					\
+	struct list_head _tfield;					\
 	struct keytype keycopy;						\
 }
 
@@ -67,7 +67,7 @@ struct {								\
 	(head)->cpfunc = (key_cp_func_t *)_cpfunc;			\
 	(head)->count = 0;						\
 	for (_hil = 0; _hil < HASHTABLE_LENGTH(head); _hil++) {		\
-		INIT_HLIST_HEAD(HASHTABLE_LIST(head, _hil));		\
+		INIT_LIST_HEAD(HASHTABLE_LIST(head, _hil));		\
 	}								\
 } while (0)
 
@@ -87,7 +87,7 @@ struct {								\
 for ((head)->tmp_i = 0;							\
 		(head)->tmp_i < HASHTABLE_LENGTH(head);			\
 		(head)->tmp_i++)					\
-	hlist_for_each_entry(var, HASHTABLE_LIST(head, (head)->tmp_i),	\
+	list_for_each_entry(var, HASHTABLE_LIST(head, (head)->tmp_i),	\
 			field._tfield)
 
 
@@ -95,12 +95,12 @@ for ((head)->tmp_i = 0;							\
 for ((head)->tmp_i = 0;							\
 		(head)->tmp_i < HASHTABLE_LENGTH(head);			\
 		(head)->tmp_i++)					\
-	hlist_for_each_entry_safe(var, (head)->tmp_v,			\
+	list_for_each_entry_safe(var, (head)->tmp_v,			\
 			HASHTABLE_LIST(head, (head)->tmp_i),		\
 			   field._tfield)
 
 #define HASHTABLE_REMOVE(head, var, type, field, _tfield) do {		\
-	hlist_del(&(var)->field._tfield);				\
+	list_del_init(&(var)->field._tfield);				\
 	(head)->count--;						\
 } while (0)
 
@@ -114,12 +114,12 @@ for ((head)->tmp_i = 0;							\
 
 
 #define HASHTABLE_LOOKUP_FOREACH(h, key, var, field, _tfield)		\
-	hlist_for_each(var, HASHTABLE_LIST(h,			\
+	list_for_each(var, HASHTABLE_LIST(h,			\
 			HASHTABLE_INDEX((h), (key))), field._tfield)	\
 		if ((h)->cmpfunc(key, &(var)->field.keycopy))
 
 #define HASHTABLE_LOOKUP_FOREACH_SAFE(h, k, d, f, _tfield)		\
-	hlist_for_each_safe(d, (h)->tmp_v,				\
+	list_for_each_safe(d, (h)->tmp_v,				\
 			    HASHTABLE_LIST(h, HASHTABLE_INDEX(h, k)),	\
 					   f._tfield)			\
 		if ((h)->cmpfunc(k, &d->f.keycopy))
