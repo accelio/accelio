@@ -953,7 +953,8 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				ptr = ptr + len;
 
 				session->portals_array[i] =
-					strndup((char *)ptr, str_len);
+					kstrndup((char *)ptr, str_len,
+						 GFP_KERNEL);
 				session->portals_array[i][str_len] = 0;
 				ptr = ptr + str_len;
 			}
@@ -994,7 +995,8 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				ptr = ptr + len;
 
 				session->services_array[i] =
-					strndup((char *)ptr, str_len);
+					kstrndup((char *)ptr, str_len,
+						 GFP_KERNEL);
 				session->services_array[i][str_len] = 0;
 				ptr = ptr + str_len;
 			}
