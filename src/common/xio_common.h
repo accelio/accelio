@@ -56,10 +56,8 @@
 /*---------------------------------------------------------------------------*/
 /* debuging facilities							     */
 /*---------------------------------------------------------------------------*/
-extern int _xio_errno;
-
-#define xio_set_error(errnum) (_xio_errno = (errnum))
-#define xio_get_error()  _xio_errno
+void xio_set_error(int errnum);
+int  xio_get_error(void);
 
 #define XIO_TLV_LEN			sizeof(struct xio_tlv)
 #define XIO_SESSION_HDR_LEN		sizeof(struct xio_session_hdr)
