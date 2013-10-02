@@ -34,10 +34,6 @@ Managed as a modular Open-Source project, Accelio can be extended with new funct
 
 The project web site (accelio.org) is currently under construction
 
-Who can take advantage of it?
------------------------------
-
-Developers interested in a highly efficient, high-performance reliable messaging implementations for applications such as clustering, scale-out block/file/object storage, BigData and NoSQL applications, fast message bus, etc’
 
 What is the library’s status?
 -----------------------------
