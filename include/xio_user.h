@@ -35,9 +35,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+/**
+ * @file xio_user.h
+ * @brief interface file for accelio user space library
+ */
+
 #ifndef XIO_API_H
 #define XIO_API_H
-
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -50,39 +55,74 @@ extern "C" {
 /*---------------------------------------------------------------------------*/
 /* preprocessor directives                                                   */
 /*---------------------------------------------------------------------------*/
-#define XIO_MAX_IOV			16	/* limit message fragments */
+/**
+ * @def XIO_MAX_IOV
+ * @brief maximum size of data IO vector in message
+ */
+#define XIO_MAX_IOV			16
+
+/**
+ * @def XIO_VERSION
+ * @brief accelio current api version number
+ */
 #define XIO_VERSION			0x0100
 
 
 /*---------------------------------------------------------------------------*/
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
+/**
+ * @enum xio_session_type
+ * @brief session's type defintion
+ */
 enum xio_session_type {
-	XIO_SESSION_REQ,  /* is used by a client to send requests to and
-			       receive replies from a service. */
-	XIO_SESSION_REP  /* is used by a service to receive requests from and
-			      send replies to a client. */
+	XIO_SESSION_REQ, /**< represents the active side that initiate	     */
+			 /**< connection				     */
+	XIO_SESSION_REP  /**< represents the passive side that listen to     */
+			 /**< incoming connections			     */
 
 };
 
+/**
+ * @enum xio_proto
+ * @brief session's transport protocol as received on the server side upon
+ *	  new session request
+ */
 enum xio_proto {
-	XIO_PROTO_RDMA
+	XIO_PROTO_RDMA		/**< Infinband's RDMA protocol		     */
 };
 
+/**
+ * @enum xio_optlevel
+ * @brief configuration tuning option level
+ */
 enum xio_optlevel {
-	XIO_OPTLEVEL_ACCELIO,
-	XIO_OPTLEVEL_RDMA,
+	XIO_OPTLEVEL_ACCELIO, /**< Genenal library option level             */
+	XIO_OPTLEVEL_RDMA,    /**< RDMA tranport level			    */
+
 };
 
+/**
+ * @enum xio_optname
+ * @brief configuration tuning option name
+ */
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,		/* rdma - int */
-	XIO_OPTNAME_DISABLE_DMA_LATENCY,	/* rdma - int */
+	XIO_OPTNAME_ENABLE_MEM_POOL,	    /**< enables the internal rdma  */
+					    /**< memory pool		    */
+
+	XIO_OPTNAME_DISABLE_DMA_LATENCY,    /**< enables the dma latency    */
 };
 
-/*  A number random enough not to collide with different errno ranges.       */
-/*  The assumption is that errno is at least 32-bit type.                    */
-#define XIO_BASE_STATUS 1247689300
+/**
+ * A number random enough not to collide with different errno ranges
+ * The assumption is that errno is at least 32-bit type
+ */
+#define XIO_BASE_STATUS		1247689300
 
+/**
+ * @enum xio_status
+ * @brief accelio's extended error codes
+ */
 enum xio_status {
 	XIO_E_SUCCESS			= 0,
 	XIO_E_NOT_SUPPORTED		= XIO_BASE_STATUS,
@@ -110,216 +150,388 @@ enum xio_status {
 	XIO_E_UNSUCCESSFUL		= (XIO_BASE_STATUS + 22),
 };
 
+/**
+ * @enum xio_ev_loop_events
+ * @brief accelio's event dispatcher event types
+ */
 enum xio_ev_loop_events {
 	XIO_POLLIN			= 0x001,
 	XIO_POLLOUT			= 0x002
 };
 
+/**
+ * @enum xio_session_flags
+ * @brief session level specific flags
+ */
 enum xio_session_flags {
-	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
+	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /**<  do not queue messages */
 };
 
-enum xio_msg_flags {
-	/* request flags */
-	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1
-};
-
+/**
+ * @enum xio_session_event
+ * @brief session events
+ */
 enum xio_session_event {
-	XIO_SESSION_REJECT_EVENT,
-	XIO_SESSION_TEARDOWN_EVENT,
-	XIO_SESSION_CONNECTION_CLOSED_EVENT,
-	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT,
-	XIO_SESSION_CONNECTION_ERROR_EVENT,
-	XIO_SESSION_ERROR_EVENT,
+	XIO_SESSION_REJECT_EVENT,		  /**< session reject event   */
+	XIO_SESSION_TEARDOWN_EVENT,		  /**< session teardown event */
+	XIO_SESSION_CONNECTION_CLOSED_EVENT,	  /**< connection closed event*/
+	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT, /**< disconnection event   */
+	XIO_SESSION_CONNECTION_ERROR_EVENT,	  /**< connection error event */
+	XIO_SESSION_ERROR_EVENT,		  /**< session error event    */
 };
 
+/**
+ * @enum xio_msg_flags
+ * @brief message level specific flags
+ */
+enum xio_msg_flags {
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1,  /**< request read receipt   */
+};
+
+/**
+ * @enum xio_receipt_result
+ * @brief message receipt result as sent by the message recipient
+ */
+enum xio_receipt_result {
+	XIO_READ_RECEIPT_ACCEPT,
+	XIO_READ_RECEIPT_REJECT,
+};
+
+/** message request refered type  */
 #define XIO_REQUEST			2
+/** message response refered type */
 #define XIO_RESPONSE			4
 
+/** general message family type   */
 #define XIO_MESSAGE			(1 << 4)
+/** one sided message family type */
 #define XIO_ONE_WAY			(1 << 5)
 
+/**
+ * @enum xio_msg_type
+ * @brief supported message types
+ */
 enum xio_msg_type {
 	XIO_MSG_TYPE_REQ		= (XIO_MESSAGE | XIO_REQUEST),
 	XIO_MSG_TYPE_RSP		= (XIO_MESSAGE | XIO_RESPONSE),
 	XIO_MSG_TYPE_ONE_WAY		= (XIO_ONE_WAY | XIO_REQUEST),
 };
 
-enum xio_receipt_result {
-	XIO_READ_RECEIPT_ACCEPT,
-	XIO_READ_RECEIPT_REJECT,
-};
-
 /*---------------------------------------------------------------------------*/
 /* opaque data structures                                                    */
 /*---------------------------------------------------------------------------*/
-struct xio_context;		/* xio context			*/
-struct xio_server;		/* server handle		*/
-struct xio_session;		/* session handle		*/
-struct xio_connection;		/* connection handle		*/
-struct xio_mr;			/* registered memory handle	*/
+struct xio_context;			     /* xio context		     */
+struct xio_server;			     /* server handle                */
+struct xio_session;			     /* session handle		     */
+struct xio_connection;			     /* connection handle	     */
+struct xio_mr;				     /* registered memory handle     */
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
+/**
+ * @struct xio_session_attr
+ * @brief sesssion attributes
+ */
 struct xio_session_attr {
-	struct xio_session_ops	*ses_ops;	/* session's ops callbacks */
-	void			*user_context;  /* sent to server upon new
-						   session */
-	size_t			user_context_len;
-};
-
-struct xio_buf {
-	void			*addr;
-	size_t			length;
-	struct xio_mr		*mr;
-};
-
-struct xio_iovec {
-	void			*iov_base;
-	size_t			iov_len;
-};
-
-struct xio_iovec_ex {
-	void			*iov_base;
-	size_t			iov_len;
-	struct xio_mr		*mr;
-};
-
-struct xio_vmsg {
-	struct xio_iovec	header;		/* header's iovec */
-	size_t			data_iovlen;	/* number of items in vector  */
-	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];
-};
-
-struct xio_msg {
-	struct xio_vmsg		in;
-	struct xio_vmsg		out;
-	union {
-		uint64_t		sn;	/* unique message serial number
-						 * returned by the library
-						 */
-		struct xio_msg		*request;  /* on server side - attached
-						    * request
-						    */
-	};
-	enum xio_msg_type	type;
-	int		        more_in_batch;	/* more messages are expected */
-	int			status;
-	int			flags;
-	enum xio_receipt_result	receipt_res;
-	int			reserved;
-	void			*user_context;	/* for user usage - not sent */
-	struct xio_msg		*next;          /* internal use */
-	struct xio_msg		**prev;		/* internal use */
-};
-
-struct xio_session_event_data {
-	struct xio_connection	*conn;		/* optional connection for
-						   connection events */
-	void			*conn_user_context;
-	enum xio_session_event	event;
-	enum xio_status		reason;
-};
-
-struct xio_new_session_req {
-	char			*uri;		  /* the uri */
-	void			*user_context;	  /* private data form client */
-	uint16_t		uri_len;	  /* uri length */
-	uint16_t		user_context_len; /* private data length */
-	enum xio_proto		proto;
-	struct sockaddr_storage	src_addr;
-};
-
-struct xio_new_session_rsp {
-	void			*user_context;	/* private data form server */
-	uint16_t		user_context_len;  /* private data length */
-	uint16_t		reserved[3];
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< private user data snt to */
+						/**< server upon new session  */
+	size_t			user_context_len; /**< private data length    */
 };
 
 /**
- * event loop callback function
+ * @struct xio_buf
+ * @brief buffer structure
+ */
+struct xio_buf {
+	void			*addr;		/**< buffer's memory address */
+	size_t			length;         /**< buffer's memory length  */
+	struct xio_mr		*mr;		/**< rdma specific memory    */
+						/**< region		     */
+};
+
+/**
+ * @struct xio_iovec
+ * @brief IO vector
+ */
+struct xio_iovec {
+	void			*iov_base;	/**< base address */
+	size_t			iov_len;	/**< base length  */
+};
+
+/**
+ * @struct xio_iovec_ex
+ * @brief extended IO vector
+ */
+struct xio_iovec_ex {
+	void			*iov_base;	/**< base address */
+	size_t			iov_len;	/**< base length  */
+	struct xio_mr		*mr;		/**< rdma specific memory */
+						/**< region		  */
+};
+
+/**
+ * @struct xio_vmsg
+ * @brief message sub element type
+ */
+struct xio_vmsg {
+	struct xio_iovec	header;		/**< header's io vector	    */
+	size_t			data_iovlen;	/**< data iovecs count	    */
+	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];  /**< data io vector */
+};
+
+/**
+ * @struct xio_msg
+ * @brief  accelio's message definition
+ *
+ * An object representing a message received from or to be sent to another
+ * peer.
+ */
+struct xio_msg {
+	struct xio_vmsg		in;		/**< incoming side of message */
+	struct xio_vmsg		out;		/**< outgoing side of message */
+
+	union {
+		uint64_t		sn;	/**< unique message serial    */
+						/**< number returned by the   */
+						/**< library		      */
+
+		struct xio_msg		*request;  /**< responder - attached  */
+						   /**< the request           */
+	};
+
+	enum xio_msg_type	type;		/**< message type	      */
+	int		        more_in_batch;	/**< more messages ahead bit  */
+	int			status;		/**< message returned status  */
+	int			flags;		/**< message flags mask       */
+	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
+						/**< required                 */
+	int			reserved;	/**< reseved for padding      */
+	void			*user_context;	/**< private user data        */
+						/**< not sent to the peer     */
+	struct xio_msg		*next;          /**< internal library usage   */
+	struct xio_msg		**prev;		/**< internal library usage   */
+};
+
+/**
+ * @struct xio_session_event_data
+ * @brief  session enent callback parmaters
+ */
+struct xio_session_event_data {
+	struct xio_connection	*conn;		    /**< connection object   */
+	void			*conn_user_context; /**< user context        */
+	enum xio_session_event	event;		    /**< the specific event  */
+	enum xio_status		reason;		    /**< elaborated message  */
+						    /**< code		     */
+};
+
+/**
+ * @struct xio_new_session_req
+ * @brief  new session request message
+ */
+struct xio_new_session_req {
+	char			*uri;		  /**< the uri		     */
+	void			*user_context;	  /**< client private data   */
+	uint16_t		uri_len;	  /**< uri length            */
+	uint16_t		user_context_len; /**< private data length   */
+	enum xio_proto		proto;		  /**< source protocol type  */
+	struct sockaddr_storage	src_addr;	  /**< source address of     */
+						  /**< requester	     */
+};
+
+/**
+ * @struct xio_new_session_rsp
+ * @brief  new session response messsage
+ */
+struct xio_new_session_rsp {
+	void			*user_context;	 /**< server private data    */
+	uint16_t		user_context_len;/**< private data length    */
+	uint16_t		reserved[3];	 /**< structure alignment    */
+};
+
+/**
+ * @typedef xio_ev_handler_t
+ * @brief   event loop callback function
+ *
+ * @param[in] fd	the signaled file descriptor
+ * @param[in] events	the event signaled as defined in enum xio_ev_loop_events
+ * @param[in] data	user private data
  */
 typedef void (*xio_ev_handler_t)(int fd, int events, void *data);
 
 /**
- *  user provided function for adding or removing of file descriptors
- *  on the user's event handler (i.e. epoll, libevent etc)
+ * @struct xio_loop_ops
+ * @brief user provided hooks for using external
+ *        on the user's event handler (i.e. epoll, libevent etc)
  */
 struct xio_loop_ops {
+	/**
+	 * function hook to add event handlers on dispatcher
+	 *
+	 * @param[in] loop	the dispatcher context
+	 * @param[in] fd	the file descriptor
+	 * @param[in] events	the event signaled as defined in
+	 *			enum xio_ev_loop_events
+	 * @param[in] handler	event handler that handles the event
+	 * @param[in] data	user private data
+	 *
+	 * @returns	success (0), or a (negative) error value
+	 */
 	int (*ev_loop_add_cb)(void *loop, int fd,
 			      int events,
 			      xio_ev_handler_t handler,
 			      void *data);
+	/**
+	 * function hook to delete event handlers from dispatcher
+	 *
+	 * @param[in] loop	the dispatcher context
+	 * @param[in] fd	the file descriptor
+	 *
+	 * @returns	success (0), or a (negative) error value
+	 */
 	int (*ev_loop_del_cb)(void *loop, int fd);
 };
 
 /**
- *  user provided callback functions to handle session events
+ *  @struct xio_session_ops
+ *  @brief user provided callback functions that handles various session events
  */
 struct xio_session_ops {
-	/* generic error event notification */
+	/**
+	 * generic error event notification
+	 *
+	 *  @param[in] session		the session
+	 *  @param[in] data		session event data information
+	 *  @param[in] cb_user_context	user private data provided in session
+	 *			        open
+	 *  @returns 0
+	 */
 	int (*on_session_event)(struct xio_session *session,
 			struct xio_session_event_data *data,
 			void *cb_user_context);
 
-	/* new session notification */
+	/**
+	 * new session notification - server side only
+	 *
+	 *  @param[in] session		the session
+	 *  @param[in] req		new session request information
+	 *  @param[in] cb_user_context	user private data provided in session
+	 *			        open
+	 *  @returns 0
+	 */
 	int (*on_new_session)(struct xio_session *session,
 			struct xio_new_session_req *req,
 			void *cb_user_context);
 
-	/* session established notification */
+	/**
+	 * session established notification - client side only
+	 *
+	 *  @param[in] session		the session
+	 *  @param[in] rsp		new session resesponse information
+	 *  @param[in] cb_user_context	user private data provided in session
+	 *			        open
+	 *  @returns 0
+	 */
 	int (*on_session_established)(struct xio_session *session,
 			struct xio_new_session_rsp *rsp,
 			void *cb_user_context);
 
-	/* send completion notification */
+	/**
+	 * send completion notification - server side only
+	 *
+	 *  @param[in] session		the session
+	 *  @param[in] req		new session request information
+	 *  @param[in] cb_user_context	user private data provided in session
+	 *			        open
+	 *  @returns 0
+	 */
 	int (*on_msg_send_complete)(struct xio_session *session,
 			struct xio_msg *msg,
 			void *conn_user_context);
 
-	/* message arrived */
+	/**
+	 * message arrived notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] msg			the incoming message
+	 *  @param[in] more_in_batch		hint that more incoming messages
+	 *					are expected
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
 	int (*on_msg)(struct xio_session *session,
 			struct xio_msg *msg,
 			int more_in_batch,
 			void *conn_user_context);
 
-	/* one way message delivered */
+	/**
+	 * message delivery receipt notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] msg			the incoming message
+	 *  @param[in] more_in_batch		hint that more incoming messages
+	 *					are expected
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
 	int (*on_msg_delivered)(struct xio_session *session,
 			struct xio_msg *msg,
 			int more_in_batch,
 			void *conn_user_context);
 
-	/* message error */
+	/**
+	 * message error notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] error			the error code
+	 *  @param[in] msg			the incoming message
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
 	int (*on_msg_error)(struct xio_session *session,
 			enum xio_status error,
 			struct xio_msg  *msg,
 			void *conn_user_context);
 
-	/* notify the user to assign a data buffer for incoming read */
+	/**
+	 * notification the user to assign a data buffer for incoming read
+	 *
+	 *  @param[in] msg			the incoming message
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
-				  void *cb_user_context);
+			void *conn_user_context);
 };
 
 /*---------------------------------------------------------------------------*/
 /* Memory registration API                                                   */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_reg_mr - register memory region for RDMA operations.
+ * register memory region for RDMA operations
  *
- * @buf: Pre-allocated memory aimed to store the data
- * @len: The pre allocated memory length.
+ * @param[in]	buf	Pre-allocated memory aimed to store the data
+ * @param[in]   len	The pre allocated memory length
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns pointer to memory region opaque structure
  */
 struct xio_mr *xio_reg_mr(void *buf, size_t len);
 
 /**
- * xio_dereg_mr - unregister registered memory region
+ * unregister registered memory region
  *
- * @p_mr: Pointer to registered memory handle.
+ * @param[in,out] p_mr Pointer to registered memory region handle
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_dereg_mr(struct xio_mr **p_mr);
 
@@ -327,20 +539,20 @@ int xio_dereg_mr(struct xio_mr **p_mr);
 /* Memory allocators API						     */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_alloc - allocate and register memory region for RDMA operations.
+ * allocates and register memory region for RDMA operations
  *
- * @len: The required memory length.
+ * @param[in] len	The required memory length
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns pointer to memory buffer
  */
 struct xio_buf *xio_alloc(size_t len);
 
 /**
- * xio_free - free and unregister registered memory region
+ * free and unregister registered memory region
  *
- * @p_mr: Pointer to the alloced buffer.
+ * @param[in] buf	Pointer to the alloced buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_free(struct xio_buf **buf);
 
@@ -348,52 +560,51 @@ int xio_free(struct xio_buf **buf);
 /* XIO errors		                                                     */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_strerror - resolves system errors and XIO errors to human-readable
- * string.
+ * resolves system errors and XIO errors to human-readable
+ * string
  *
- * @errnum: The xio error code.
+ * @param[in] errnum	The xio error code
  *
+ * @returns a string that describes the error code
  */
 const char *xio_strerror(int errnum);
 
 /**
- * xio_errno - return last xio error
+ * return last xio error
  *
+ * @returns lasr xio error code
  */
 int xio_errno(void);
 
 /**
- * xio_session_event_str - return session event string
- * string.
+ * maps session event code to event string
  *
- * @event: The session event.
+ * @param[in] event	The session event
  *
+ * @returns a string that describes the event code
  */
 const char *xio_session_event_str(enum xio_session_event event);
 
 /*---------------------------------------------------------------------------*/
-/* XIO conncurrency (a.k.a context) initialization and termination	     */
+/* XIO conncurrency (the context object) initialization and termination	     */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_context - creates xio context - a context is mapped internaly to
- *		   a cpu core./
+ * creates xio context - a context object represent concurrency unit
  *
- * @loop_ops: Structure of callbacks operations for this context
- * @ev_loop: Event loop handler
- * @polling_timeout: polling timeout in microsecs - 0 ignore
+ * @param[in] loop_ops Structure of callbacks operations for this context
+ * @param[in] ev_loop  Event loop handler
+ * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
  *
- *
- * RETURNS: xio context handle, or NULL upon error.
+ * @returns xio context handle, or NULL upon error
  */
-struct xio_context *xio_ctx_open(
-				struct xio_loop_ops *loop_ops,
-				void *ev_loop,
-				int polling_timeout_us);
+struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
+				 void *ev_loop,
+				 int polling_timeout_us);
 
 /**
- * xio_context_close - close the xio context and free its resources.
+ * closes the xio context and free its resources
  *
- * @ctx: Pointer to the xio context handle.
+ * @param[in] ctx	Pointer to the xio context handle
  *
  */
 void xio_ctx_close(struct xio_context *ctx);
@@ -402,16 +613,17 @@ void xio_ctx_close(struct xio_context *ctx);
 /* XIO session API                                                           */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_session_open - open new session.
+ * open new requester session
  *
- * @type: the type of the session.
- * @attr: structure of session attributes
- * @uri: uri to connect
- * @initial_sn: initial serial number to start with
- * @flags: message related flags as defined in xio_msg_flags
- * @cb_user_context: Private data pointer to pass to each session callback
+ * @param[in] type	The type of the session
+ * @param[in] attr	Structure of session attributes
+ * @param[in] uri	uri to connect
+ * @param[in] initial_sn Initial serial number to start with
+ * @param[in] flags	Message related flags as defined in xio_msg_flags
+ * @param[in] cb_user_context Private data pointer to pass to each session
+ *			       callback
  *
- * RETURNS: xio session context, or NULL upon error.
+ * @returns xio session context, or NULL upon error
  */
 struct xio_session *xio_session_open(
 		enum xio_session_type type,
@@ -422,100 +634,102 @@ struct xio_session *xio_session_open(
 		void *cb_user_context);
 
 /**
- * xio_session_close - teardown an opened session.
+ * teardown an opened session
  *
- * @session: The xio session handle.
+ * @param[in] session		The xio session handle
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_session_close(struct xio_session *session);
 
 /**
- * xio_connect - create connection handle.
+ * creates connection handle
  *
- * @session: The xio session handle.
- * @ctx: the xio context handle.
- * @conn_idx: connection index greater then 0. if 0 - auto count.
- * @conn_user_context: Private data pointer to pass to each connection callback
+ * @param[in] session	The xio session handle
+ * @param[in] ctx	The xio context handle
+ * @param[in] conn_idx  Connection index greater then 0 if 0 - auto count
+ * @param[in] conn_user_context Private data pointer to pass to each
+ *				connection callback
  *
- * RETURNS: xio session context, or NULL upon error.
+ * @returns xio session context, or NULL upon error
  */
 struct xio_connection *xio_connect(
-				struct xio_session  *session,
-				struct xio_context  *ctx,
-				uint32_t conn_idx,
-				void *conn_user_context);
+		struct xio_session  *session,
+		struct xio_context  *ctx,
+		uint32_t conn_idx,
+		void *conn_user_context);
 
 /**
- * xio_disconnect - teardown an opened connection.
+ * teardown an opened connection
  *
- * @conn: The xio connection handle.
+ * @param[in] conn	The xio connection handle
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_disconnect(struct xio_connection *conn);
 
 /**
- * xio_send_request - send request.
+ * send request to responder
  *
- * @conn: The xio connection handle.
- * @req: request to send
+ * @param[in] conn	The xio connection handle
+ * @param[in] req	request message to send
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @return success (0), or a (negative) error value
  */
 int xio_send_request(struct xio_connection *conn,
 		     struct xio_msg *req);
 
 /**
- * xio_release_response - release message resources back to xio.
+ * release response resources back to xio
  *
- * Note: the message is allocated by the application and is not freed.
- *	 by this function.
+ * @note the message itself is allocated by the application
+ *	 and is not freed by this function
  *
- * @rsp: The released response
+ * @param[in] rsp The released response
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_release_response(struct xio_msg *rsp);
 
 /**
- * xio_send_msg - send one way message to remote peer.
+ * send one way message to remote peer
  *
- * @conn: The xio connection handle.
- * @req: request to send
+ * @param[in] conn	The xio connection handle
+ * @param[in] msg	The message to send
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_send_msg(struct xio_connection *conn,
 		 struct xio_msg *msg);
 
 /**
- * xio_release_msg - release one way message resources back to xio.
+ * release one way message resources back to xio when message is no longer
+ * needed
  *
- * Note: the message is allocated by the application and is not freed.
- *	 by this function.
+ * @note	the message is allocated by the application and is not freed
+ *		by this function
  *
- * @msg: The released message
+ * @param[in] msg	The released message
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_release_msg(struct xio_msg *msg);
 
 /*---------------------------------------------------------------------------*/
 /* XIO server API							     */
 /*---------------------------------------------------------------------------*/
-
 /**
- * xio_bind - open a server.
+ * open a server listener object
  *
- * @ctx: the xio context handle.
- * @ops: structure of server's event handlers
- * @uri: uri to connect or to bind
- * @src_port: returned listen port in host order, can be NULL if not needed
- * @flags: message related flags as defined in xio_msg_flags
- * @cb_user_context: Private data pointer to pass to each callback
+ * @param[in] ctx	The xio context handle
+ * @param[in] ops	Structure of server's event handlers
+ * @param[in] uri	Uri to connect or to bind
+ * @param[in] src_port  Returned listen port in host order, can be NULL
+ *			if not needed
+ * @param[in] flags	Message related flags as defined in enum xio_msg_flags
+ * @param[in] cb_user_context Private data pointer to pass to each callback
  *
- * RETURNS: xio server context, or NULL upon error.
+ * @returns xio server context, or NULL upon error
  */
 struct xio_server *xio_bind(struct xio_context *ctx,
 			    struct xio_session_ops *ops,
@@ -525,76 +739,80 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 			    void *cb_user_context);
 
 /**
- * xio_unbind - teardown a server.
+ * teardown a server
  *
- * @server: The xio server handle.
+ * @param[in] server	The xio server handle
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_unbind(struct xio_server *server);
 
 /**
- * xio_get_connection - return connection handle on server.
+ * return connection handle on server
  *
- * @session: The xio session handle.
- * @ctx: the xio context handle.
+ * @param[in]	session		The xio session handle
+ * @param[in]	ctx		The xio context handle
  *
- * RETURNS: xio session context, or NULL upon error.
+ * @returns	connection handle
  */
 struct xio_connection *xio_get_connection(
-				struct xio_session  *session,
-				struct xio_context  *ctx);
+		struct xio_session  *session,
+		struct xio_context  *ctx);
 
 /**
- * xio_accept - accept new session or "light redirect" it to anther thread
+ * accept new session or "light redirect" it to anther thread
  *
- * @session: The xio session handle.
- * @portals_array: String array of alternative portals to the resource
- *		in form of "rdma://host:port" "rdma://127.0.0.1:1234"
- * @portals_array_len: The string array length
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] portals_array	string array of alternative portals to the
+ *				resource in form of "rdma://host:port"
+ *				"rdma://127.0.0.1:1234"
+ * @param[in] portals_array_len The string array length
+ * @param[in] user_context	References a user-controlled data buffer
+ *			        The contents of the buffer are copied and
+ *			        transparently passed to the remote side as
+ *			        part of the communication request. May be
+ *			        NULL if user_context is not required
+ * @param[in] user_context_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_accept(struct xio_session *session,
-				const char **portals_array,
-				size_t portals_array_len,
-				void *user_context,
-				size_t user_context_len);
+	       const char **portals_array,
+	       size_t portals_array_len,
+	       void *user_context,
+	       size_t user_context_len);
 
 /**
- * xio_redirect - redirect connecting session to connect to
- *		     alternative resources
+ * redirect connecting session to connect to alternative resources
  *
- * @session: The xio session handle.
- * @portals_array: String array of alternative portals to the resource
- *		in form of "rdma://host:port" "rdma://127.0.0.1:1234"
- * @portals_array_len: The string array length
+ * @param[in] session		The xio session handle
+ * @param[in] portals_array	string array of alternative portals to the
+ *				resource in form of "rdma://host:port"
+ *				"rdma://127.0.0.1:1234"
+ * @param[in] portals_array_len The string array length
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns success (0), or a (negative) error value
  */
 int xio_redirect(struct xio_session *session,
-				  const char **portals_array,
-				  size_t portals_array_len);
+		 const char **portals_array,
+		 size_t portals_array_len);
 
 /**
- * xio_reject - reject connecting session.
+ * reject a connecting session
  *
  *
- * @session: The xio session handle.
- * @reason: reason for rejection
- * @private_status: user provided status as hint to the peer
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] reason		Reason for rejection
+ * @param[in] user_context	References a user-controlled data buffer
+ *				The contents of the buffer are copied and
+ *				transparently passed to the peer as part
+ *				of the communication request. May be NULL
+ *				if user_context is not required
+ * @param[in] user_context_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @return success (0), or a (negative) error value
  */
 int xio_reject(struct xio_session *session,
 				enum xio_status reason,
@@ -602,44 +820,50 @@ int xio_reject(struct xio_session *session,
 				size_t user_context_len);
 
 /**
- * xio_send_response - send response.
+ * send response back to requester
  *
- * @rsp: response to send
+ * @param[in] rsp	Response to send
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_send_response(struct xio_msg *rsp);
 
 /**
- * xio_set_opt - sets xio's object option
+ * set xio's configuration tuning option
  *
- * @xio_obj: Pointer to xio object or NULL.
- * @level:   The level at which the option is defined (i.e, XIO_OPTLEVEL_RDMA)
- * @optname: The option for which the value is to be set.
- *	     The optname parameter must be a socket option defined within
- *	     the specified level, or behavior is undefined.
- * @optval:  A pointer to the buffer in which the value for the requested
- *	     option is specified.
- * @optlen:  The size, in bytes, of the buffer pointed to by the optval
- *	     parameter.
- * RETURNS: success (0), or a (negative) error value.
+ * @param[in] xio_obj	Pointer to xio object or NULL
+ * @param[in] level	The level at which the option is
+ *			defined (i.e, XIO_OPTLEVEL_RDMA)
+ * @param[in] optname	The option for which the value is to be set.
+ *			The optname parameter must be a socket option
+ *			defined within the specified level, or behavior
+ *			is undefined
+ * @param[in] optval	A pointer to the buffer in which the value
+ *			for the requested option is specified
+ * @param[in] optlen	The size, in bytes, of the buffer pointed to by
+ *			the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
  */
 int xio_set_opt(void *xio_obj, int level, int optname,
 		const void *optval, int optlen);
 
 /**
- * xio_get_opt - gets xio's object option
+ * set xio's configuration tuning option
  *
- * @xio_obj: Pointer to xio object or NULL.
- * @level:   The level at which the option is defined (i.e, XIO_OPTLEVEL_RDMA)
- * @optname: The option for which the value is to be set.
- *	     The optname parameter must be a socket option defined within
- *	     the specified level, or behavior is undefined.
- * @optval:  A pointer to the buffer in which the value for the requested
- *	     option is specified.
- * @optlen:  The size, in bytes, of the buffer pointed to by the optval
- *	     parameter.
- * RETURNS: success (0), or a (negative) error value.
+ * @param[in] xio_obj	  Pointer to xio object or NULL
+ * @param[in] level	  The level at which the option is
+ *			  defined (i.e, XIO_OPTLEVEL_RDMA)
+ * @param[in] optname	  The option for which the value is to be set.
+ *			  The optname parameter must be a socket option
+ *			  defined within the specified level, or behavior
+ *			  is undefined
+ * @param[in,out] optval  A pointer to the buffer in which the value
+ *			  for the requested option is specified
+ * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
+ *			  the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
  */
 int xio_get_opt(void *xio_obj, int level, int optname,
 		void *optval, int *optlen);
@@ -649,67 +873,74 @@ int xio_get_opt(void *xio_obj, int level, int optname,
 /*									     */
 /* NoTE: xio provides default muxer implementation around epoll.	     */
 /* users are encouraged to utilize their own implementations and provides    */
-/* appropriate services to xio via the xio's context open interface.     */
+/* appropriate services to xio via the xio's context open interface	     */
 /*---------------------------------------------------------------------------*/
 /**
- * xio_ev_loop_init - initializes event loop handle.
+ * initializes event loop handle
  *
- * RETURNS: event loop handle or NULL upon error
+ * @returns event loop handle or NULL upon error
  */
 void *xio_ev_loop_init();
 
 /**
- * xio_ev_loop_run - event loop main loop.
+ * xio_ev_loop_run - event loop main loop
  *
- * @loop: pointer to event loop
+ * @param[in] loop	Pointer to the event dispatcher
+ *
+ * @returns success (0), or a (negative) error value
  */
 int xio_ev_loop_run(void *loop);
 
 /**
- * xio_ev_loop_run_timeout - event loop main loop with limited blocking duration.
+ * event loop main loop with limited blocking duration
  *
- * @loop: pointer to event loop
- * @timeout_msec: The timeout argument specifies the minimum number of
- *		  milliseconds that xio_ev_loop_run will block before exiting
+ * @param[in] loop_hndl		Pointer to event loop
+ * @param[in] timeout_msec	The timeout argument specifies the minimum
+ *				number of milliseconds that xio_ev_loop_run
+ *				will block before exiting
+ *
+ * @returns success (0), or a (negative) error value
  */
 int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
 
 /**
- * xio_ev_loop_stop - stops event loop main loop.
+ * stop a running event loop main loop
  *
- * @loop: pointer to event loop
+ * @param[in] loop		Pointer to event loop
  */
 void xio_ev_loop_stop(void *loop);
 
 /**
- * xio_ev_loop_destroy - destroy the event loop.
+ * destroy the event loop
  *
- * @loop: pointer to event loop
+ * @param[in] loop		Pointer to event loop
  */
 void xio_ev_loop_destroy(void **loop);
 
 /**
- * xio_ev_loop_add - add fd to be handled by event loop
+ * add event handlers on dispatcher
  *
- * @loop: pointer to event loop
- * @fd:	the added file descriptor
- * @events: event to poll
- * @handler: the callback to call upon fd signal
- * @data: private data to pass to the callback
+ * @param[in] loop	the dispatcher context
+ * @param[in] fd	the file descriptor
+ * @param[in] events	the event signaled as defined in
+ *			enum xio_ev_loop_events
+ * @param[in] handler	event handler that handles the event
+ * @param[in] data	user private data
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_ev_loop_add(void *loop,
-		int fd,
-		int /*enum xio_ev_loop_events*/ events,
-		xio_ev_handler_t handler, void *data);
+		    int fd, int events,
+		    xio_ev_handler_t handler,
+		    void *data);
+
 /**
- * xio_ev_loop_del - del fd to be handled by event loop
+ * delete event handlers from dispatcher
  *
- * @loop: pointer to event loop
- * @fd:	the added file descriptor
+ * @param[in] loop	the dispatcher context
+ * @param[in] fd	the file descriptor
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_ev_loop_del(void *loop, int fd);
 
