@@ -22,8 +22,8 @@ xio_server_SOURCES =  xio_server.c
 
 # the additional libraries needed to link xio_client
 #xio_client_LDADD = 	$(AM_LDFLAGS)
-xio_server_LDADD = 	$(AM_LDFLAGS)
+#xio_server_LDADD = 	$(AM_LDFLAGS)
 
-EXTRA_DIST = xio_msg.h	
+#EXTRA_DIST = xio_msg.h	
 
 ###############################################################################

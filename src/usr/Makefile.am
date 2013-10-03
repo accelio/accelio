@@ -10,17 +10,50 @@ AM_CFLAGS = -fPIC -DPIC  				\
 ###############################################################################
 
 # the library names to build (note we are building static libs only)
-#lib_LIBRARIES = libxio.a
-bin_PROGRAMS = libxio.so
+lib_LTLIBRARIES = libxio.la
 
 # where to install the headers on the system
-libxioincdir = $(includedir)/xio/
+libxio_includedir = $(includedir)/xio/
 
 # the list of header files that belong to the library (to be installed later)
-libxioinc_HEADERS = $(top_srcdir)/include/libxio.h 
+libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  \
+			 $(top_srcdir)/include/xio_user.h 
+
+
+libxio_headers = 	./get_clock.h 				\
+			./xio_log.h				\
+			./xio_mem.h				\
+			./xio_os.h				\
+			./xio_rdma_mempool.h			\
+			./xio_rdma_transport.h			\
+			../common/xio_common.h			\
+			../common/xio_connection.h		\
+			../common/xio_conn.h			\
+			../common/xio_conns_store.h		\
+			../common/xio_context.h			\
+			../common/xio_hash.h			\
+			../common/xio_mbuf.h			\
+			../common/xio_msg_list.h		\
+			../common/xio_protocol.h		\
+			../common/xio_server.h			\
+			../common/xio_session.h			\
+			../common/xio_sessions_store.h		\
+			../common/xio_task.h			\
+			../common/xio_transport.h		\
+			../common/sys/hashtable.h		\
+			./linux/atomic.h 			\
+			./linux/kernel.h			\
+			./linux/kref.h				\
+			./linux/list.h				\
+			./linux/printk.h			\
+			./linux/slab.h				\
+			./linux/usr.h				
+
+
+
 
 # the sources to add to the library and to add to the source distribution
-libxio_so_SOURCES =	$(libxioinc_HEADERS)		\
+libxio_la_SOURCES =	$(libxio_headers)		\
 			xio_init.c			\
 			get_clock.c			\
 			xio_rdma_mempool.c		\
@@ -45,11 +78,11 @@ libxio_so_SOURCES =	$(libxioinc_HEADERS)		\
 			../common/xio_connection.c
 	
 				
-libxio_so_LDFLAGS = -shared -rdynamic	 		\
+libxio_la_LDFLAGS = -shared -rdynamic	 		\
 		      -lrdmacm -libverbs -lrt -ldl
-libxio_so_LDADD = $(AM_LDFLAGS)
+libxio_la_LIBADD = $(AM_LDFLAGS)
 
-EXTRA_DIST = 		libxio.map      		\
-	     		libxio.spec.in
+#EXTRA_DIST = 		libxio.map      		\
+#	     		libxio.spec.in
 				
 ###############################################################################

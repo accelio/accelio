@@ -18,12 +18,12 @@ AM_LDFLAGS = -lraio -lxio -lrdmacm -libverbs -ldl -lrt -lpthread  \
 ###############################################################################
 
 # the program to build (the names of the final binaries)
-bin_PROGRAMS = libraio_fio.so 
+lib_LTLIBRARIES = libraio_fio.la
 
 
 # list of sources for the 'libraio_fio' shared library
-libraio_fio_so_SOURCES = libraio.c
+libraio_fio_la_SOURCES = libraio.c
 
-libraio_fio_so_LDADD = $(AM_LDFLAGS)
+libraio_fio_la_LIBADD = $(AM_LDFLAGS)
 
 ###############################################################################

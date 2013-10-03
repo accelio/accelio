@@ -4,13 +4,12 @@
 AC_INIT([libxio],[2.0],[libxio@accellio.org])
 AM_INIT_AUTOMAKE
 
-
-
 # Checks for language
 AC_LANG_C
 
 # Checks for programs
-AC_PROG_RANLIB
+LT_INIT
+AC_PROG_LIBTOOL
 
 # store current user given compiler flags to avoid default setup via AC_PROG_CC
 OLD_CFLAGS=$CFLAGS
@@ -52,10 +51,10 @@ AC_ARG_ENABLE([debug],
 AC_MSG_RESULT([$enable_debug])
 
 if test "$enable_debug" = "yes"; then
-	AC_DEFINE([DEBUG],[],[Debug Mode])
+#	AC_DEFINE([DEBUG],[],[Debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -O0 -D_GNU_SOURCE"
 else
-	AC_DEFINE([NDEBUG],[],[No-debug Mode])
+#	AC_DEFINE([NDEBUG],[],[No-debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wpadded -O3 -D_GNU_SOURCE"
 fi
 
@@ -135,7 +134,9 @@ AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
 AC_CONFIG_FILES([examples/usr/raio/Makefile])
+if test "$enable_fio_build" != "no"; then
 AC_CONFIG_FILES([examples/usr/fio/Makefile])
+fi
 AC_CONFIG_FILES([tests/usr/hello_test/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
