@@ -199,7 +199,7 @@ static void process_response(struct xio_msg *rsp)
 		first_time = 0;
 		data_len = txlen > rxlen ? txlen : rxlen;
 		data_len = data_len/1024;
-		print_counter = PRINT_COUNTER/data_len;
+		print_counter = (data_len ? PRINT_COUNTER/data_len : PRINT_COUNTER);
 	}
 
 	if (++cnt == print_counter) {
