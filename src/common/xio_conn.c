@@ -235,7 +235,7 @@ static void xio_conn_notify_any(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_notify_any		                                     */
+/* xio_conn_notify_observer		                                     */
 /*---------------------------------------------------------------------------*/
 void xio_conn_notify_observer(struct xio_conn *conn,
 		void *observer,
@@ -251,6 +251,30 @@ void xio_conn_notify_observer(struct xio_conn *conn,
 					conn, event, event_data);
 			break;
 		}
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_notify_server		                                     */
+/*---------------------------------------------------------------------------*/
+static void xio_conn_notify_server(struct xio_conn *conn,
+		int event, void *event_data)
+{
+	if (conn->server_observer) {
+		conn->server_observer->notification_handler(
+				conn->server_observer->observer,
+				conn, event, event_data);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_remove_server		                                     */
+/*---------------------------------------------------------------------------*/
+void xio_conn_remove_server(struct xio_conn *conn)
+{
+	if (conn->server_observer) {
+		/* Remove the item from the tail queue. */
+		list_del(&conn->server_observer->observers_list_entry);
 	}
 }
 
@@ -364,8 +388,6 @@ static int xio_conn_send_setup_req(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (atomic_read(&conn->refcnt) != 1)
-		return 0;
 
 	task = xio_conn_get_initial_task(conn);
 	if (task == NULL) {
@@ -408,8 +430,7 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 	struct xio_conn_setup_req req;
 	struct xio_conn_setup_rsp rsp;
 
-
-
+	TRACE_LOG("receiving setup request\n");
 	retval = xio_conn_read_setup_req(task, &req);
 	if (retval != 0)
 		goto cleanup;
@@ -468,6 +489,7 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 	struct	 xio_conn_setup_rsp rsp;
 	int	 retval;
 
+	TRACE_LOG("receiving setup respnse\n");
 	retval = xio_conn_read_setup_rsp(task, &rsp);
 	if (retval != 0)
 		goto cleanup;
@@ -496,6 +518,7 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 		ERROR_LOG("setup primary pool failed\n");
 		return -1;
 	}
+	conn->is_connected = 1;
 	xio_conn_notify_all(conn, XIO_CONNECTION_ESTABLISHED, NULL);
 
 	return 0;
@@ -514,6 +537,7 @@ static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 	/* recycle the task */
 	xio_tasks_pool_put(task);
 
+	conn->is_connected = 1;
 	xio_conn_notify_all(conn, XIO_CONNECTION_ESTABLISHED, NULL);
 	return 0;
 }
@@ -538,10 +562,19 @@ static int xio_conn_on_recv_msg(struct xio_conn *conn,
 				&conn->observers_list,
 				struct xio_observer_node,
 				observers_list_entry);
-
-			xio_conn_notify_observer(
+			conn->server_observer = observer_node;
+			xio_conn_remove_server(conn);
+			xio_conn_notify_server(
 					conn,
-					observer_node->observer,
+					XIO_CONNECTION_NEW_MESSAGE,
+					&conn_event_data);
+
+			return 0;
+		} else if (task->tlv_type == XIO_SESSION_SETUP_REQ) {
+			atomic_inc(&conn->refcnt);
+			/* always route "hello" to server */
+			xio_conn_notify_server(
+					conn,
 					XIO_CONNECTION_NEW_MESSAGE,
 					&conn_event_data);
 			return 0;
@@ -898,6 +931,7 @@ static void xio_on_connection_closed(struct xio_conn *conn,
 	xio_conn_initial_pool_free(conn);
 	xio_conn_primary_pool_free(conn);
 
+	kfree(conn->server_observer);
 	kfree(conn);
 }
 
@@ -1127,9 +1161,13 @@ struct xio_conn *xio_conn_open(
 				kfree(conn);
 				return NULL;
 			}
+			if (conn->is_connected)
+				xio_conn_notify_observer(conn, observer,
+						 XIO_CONNECTION_ESTABLISHED,
+						 NULL);
 		}
 		atomic_inc(&conn->refcnt);
-		ERROR_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
+		INFO_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
 			  atomic_read(&conn->refcnt));
 		return conn;
 	}
@@ -1295,7 +1333,7 @@ void xio_conn_close(struct xio_conn *conn)
 {
 	int was = __atomic_add_unless(&conn->refcnt, -1, 0);
 
-	/* was allready 0 */
+	/* was already 0 */
 	if (!was)
 		return;
 
@@ -1305,7 +1343,7 @@ void xio_conn_close(struct xio_conn *conn)
 			conn->transport->close(conn->transport_hndl);
 	} else {
 		/* not yet zero */
-		xio_conn_notify_all(conn, XIO_CONNECTION_CLOSED, NULL);
+	//	xio_conn_notify_all(conn, XIO_CONNECTION_CLOSED, NULL);
 	}
 }
 

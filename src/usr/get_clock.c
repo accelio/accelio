@@ -44,7 +44,7 @@
 #include <stdio.h>
 #include "get_clock.h"
 
-#ifndef DEBUG
+#ifndef GETCLOCK_DEBUG
 #define _DEBUG 0
 #else
 #define _DEBUG 1

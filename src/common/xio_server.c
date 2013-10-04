@@ -70,7 +70,7 @@ static int xio_on_new_conn(struct xio_server *server,
 
 	/* add the server as observer */
 	retval = xio_conn_add_observer(event_data->new_connection.child_conn,
-					 server, xio_on_conn_event);
+				       server, xio_on_conn_event);
 	if (retval != 0) {
 		ERROR_LOG("connection observer addition failed.\n");
 		return -1;
@@ -101,9 +101,6 @@ static int xio_on_new_message(struct xio_server *server,
 	};
 	/* read the first message  type */
 	uint16_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
-
-	/* remove the server as observer of connection */
-	xio_conn_remove_observer(conn, server);
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */

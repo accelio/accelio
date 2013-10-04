@@ -121,11 +121,11 @@ struct xio_conn {
 
 	struct xio_tasks_pool		*initial_tasks_pool;
 	struct xio_tasks_pool_ops	*initial_pool_ops;
-
+	struct xio_observer_node	*server_observer;
 	atomic_t			refcnt;
 	int				cid;
 	int				is_first_msg;
-	int				pad;
+	int				is_connected;
 
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
 

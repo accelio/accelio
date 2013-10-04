@@ -51,10 +51,10 @@ AC_ARG_ENABLE([debug],
 AC_MSG_RESULT([$enable_debug])
 
 if test "$enable_debug" = "yes"; then
-#	AC_DEFINE([DEBUG],[],[Debug Mode])
+	AC_DEFINE([DEBUG],[],[Debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -O0 -D_GNU_SOURCE"
 else
-#	AC_DEFINE([NDEBUG],[],[No-debug Mode])
+	AC_DEFINE([NDEBUG],[],[No-debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wpadded -O3 -D_GNU_SOURCE"
 fi
 
