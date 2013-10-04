@@ -78,9 +78,12 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_connection.c
 	
 				
-libxio_la_LDFLAGS = -shared -rdynamic	 		\
-		      -lrdmacm -libverbs -lrt -ldl
-libxio_la_LIBADD = $(AM_LDFLAGS)
+#libxio_la_LDFLAGS = -shared -rdynamic	 		\
+#		      -lrdmacm -libverbs -lrt -ldl
+
+libxio_la_LDFLAGS = -lrdmacm -libverbs -lrt 
+
+#libxio_la_LIBADD = $(AM_LDFLAGS)
 
 #EXTRA_DIST = 		libxio.map      		\
 #	     		libxio.spec.in
