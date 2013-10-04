@@ -1385,11 +1385,10 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 	struct xio_connection		*connection, *tmp_connection;
 	struct xio_session_event_data	event;
 
-	if (session->lead_conn && session->lead_conn->conn == conn) {
+	if (session->lead_conn && session->lead_conn->conn == conn)
 		connection = session->lead_conn;
-	} else {
+	else
 		connection = xio_session_find_conn(session, conn);
-	}
 
 	if (connection && connection->conn) {
 		connection->state = CONNECTION_STATE_DISCONNECT;
@@ -1409,22 +1408,24 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 	} else {
 		xio_conn_close(conn);
 	}
-
 	if (session->type == XIO_SESSION_REQ) {
 		/* only on client */
 		/* also send disconnect to connections that do no have conn */
 		list_for_each_entry_safe(connection, tmp_connection,
-				&session->connections_list,
-				connections_list_entry) {
+					 &session->connections_list,
+					 connections_list_entry) {
 			if (connection && !connection->conn) {
-				event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
-				event.reason = XIO_E_SUCCESS;
+				event.event =
+				     XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
+				event.reason =
+					XIO_E_SUCCESS;
 				event.conn = connection;
-				event.conn_user_context = connection->cb_user_context;
+				event.conn_user_context =
+					connection->cb_user_context;
 				if (session->ses_ops.on_session_event)
 					session->ses_ops.on_session_event(
-							session, &event,
-							session->cb_user_context);
+						session, &event,
+						session->cb_user_context);
 			}
 		}
 	}
@@ -1481,9 +1482,9 @@ static int xio_on_conn_closed(struct xio_session *session,
 			 * until messages arrived or session timeout
 			 */
 			return 0;
-
-		} else
+		} else {
 			xio_connection_close(session->lead_conn);
+		}
 		session->lead_conn = NULL;
 		TRACE_LOG("lead connection is closed\n");
 		spin_lock(&session->conn_list_lock);
@@ -1748,7 +1749,8 @@ static int xio_on_new_message(struct xio_session *session,
 			}
 		}
 	}
-
+	if (session->type == XIO_SESSION_REP)
+		session->lead_conn  = NULL;
 
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:

@@ -1162,13 +1162,14 @@ struct xio_conn *xio_conn_open(
 				return NULL;
 			}
 			if (conn->is_connected)
-				xio_conn_notify_observer(conn, observer,
-						 XIO_CONNECTION_ESTABLISHED,
-						 NULL);
+				xio_conn_notify_observer(
+						conn, observer,
+						XIO_CONNECTION_ESTABLISHED,
+						NULL);
 		}
 		atomic_inc(&conn->refcnt);
 		INFO_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
-			  atomic_read(&conn->refcnt));
+			 atomic_read(&conn->refcnt));
 		return conn;
 	}
 
@@ -1343,7 +1344,7 @@ void xio_conn_close(struct xio_conn *conn)
 			conn->transport->close(conn->transport_hndl);
 	} else {
 		/* not yet zero */
-	//	xio_conn_notify_all(conn, XIO_CONNECTION_CLOSED, NULL);
+		/* xio_conn_notify_all(conn, XIO_CONNECTION_CLOSED, NULL); */
 	}
 }
 
