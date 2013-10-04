@@ -40,12 +40,6 @@
 #include "xio_common.h"
 #include "xio_protocol.h"
 
-/*---------------------------------------------------------------------------*/
-/* debuging facilities							     */
-/*---------------------------------------------------------------------------*/
-static int _xio_errno;
-void xio_set_error(int errnum) {_xio_errno = errnum;}
-int  xio_get_error(void)  {return _xio_errno;}
 
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_proto							     */
