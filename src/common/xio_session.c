@@ -438,7 +438,7 @@ static int xio_on_setup_req_recv(struct xio_connection *connection,
 
 exit:
 	if (session->ses_ops.on_session_event) {
-		error_event.reason = xio_get_error();
+		error_event.reason = xio_errno();
 		session->ses_ops.on_session_event(
 				session, &error_event,
 				session->cb_user_context);
