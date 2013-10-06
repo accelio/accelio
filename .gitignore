@@ -10,6 +10,6 @@ configure
 autom4te.cache
 config.status
 aclocal.m4
-m4
+m4/*
 .libs
 libtool
