@@ -673,8 +673,6 @@ static int xio_send_fin_req(struct xio_connection *conn)
 	msg = xio_msg_list_first(&conn->one_way_msg_pool);
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
 
-	printf("here\n");
-
 	msg->type = XIO_FIN_REQ;
 
 	/* reset the in side of the message */

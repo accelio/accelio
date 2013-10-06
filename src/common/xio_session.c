@@ -1047,11 +1047,6 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			else
 				session->redir_conn = NULL;
 
-			/* close the connection */
-			connection->conn = NULL;
-			xio_connection_close(connection);
-			connection = tmp_connection;
-
 			/* now try to send */
 			xio_connection_set_state(connection,
 						 CONNECTION_STATE_ONLINE);
@@ -1072,8 +1067,17 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
 				  session);
 
+			/* re - initialize the redirected connection */
+			session->lead_conn = xio_connection_init(
+					session,
+					session->lead_conn->ctx,
+					session->lead_conn->conn_idx,
+					session->lead_conn->cb_user_context);
+			session->lead_conn->conn = connection->conn;
+
 			/* close the lead/redirected connection */
 			xio_conn_close(connection->conn);
+			connection->conn = NULL;
 
 			session->state = XIO_SESSION_STATE_ACCEPTED;
 			/* open new connections */
@@ -1092,7 +1096,17 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			TRACE_LOG("session state is now REDIRECT. session:%p\n",
 				  session);
+
 			session->state = XIO_SESSION_STATE_REDIRECTED;
+
+			/* re - initialize the redirected connection */
+			session->lead_conn = xio_connection_init(
+					session,
+					session->lead_conn->ctx,
+					session->lead_conn->conn_idx,
+					session->lead_conn->cb_user_context);
+			session->lead_conn->conn = connection->conn;
+			connection->conn = NULL;
 
 			/* open new connections */
 			retval = xio_session_redirect_connection(session);
@@ -2167,16 +2181,16 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		}
 
 		/* initialize the lead connection */
-		session->lead_conn = xio_connection_init(session, ctx,
-					 conn_idx, conn_user_context);
+		session->lead_conn = xio_session_alloc_conn(
+				session, ctx,
+				conn_idx,
+				conn_user_context);
 
 		session->lead_conn->conn = conn;
 		xio_conn_add_observer(conn, session, xio_on_conn_event);
 
-		/* initialize connection handle for user and save it in list */
-		connection  = xio_session_alloc_conn(session, ctx,
-				conn_idx,
-				conn_user_context);
+		connection  = session->lead_conn;
+
 		session->state = XIO_SESSION_STATE_CONNECT;
 
 	} else if (session->state == XIO_SESSION_STATE_CONNECT) {
