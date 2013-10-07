@@ -38,10 +38,48 @@
 #ifndef XIO_OS_H
 #define XIO_OS_H
 
+#include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 
+#include <linux/net.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
+#include <asm/atomic.h>
+#else
+#include <linux/atomic.h>
+#endif
+
+/* /usr/include/bits/types.h: *__STD_TYPE __U32_TYPE __socklen_t; */
+typedef u32 __socklen_t;
+/*
+/usr/include/arpa/inet.h:typedef __socklen_t socklen_t;
+/usr/include/unistd.h:typedef __socklen_t socklen_t;
+*/
+typedef __socklen_t socklen_t;
+
+#define assert(expr) BUG_ON(!(expr))
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0)
+static inline int __atomic_add_unless(atomic_t *v, int a, int u)
+{
+	int c, old;
+	c = atomic_read(v);
+	while (c != u && (old = atomic_cmpxchg(v, c, c + a)) != c)
+		c = old;
+	return c;
+}
+#endif
+
+static inline char *strerror(int errnum)
+{
+	static char buf[64];
+	sprintf(buf, "errno(%d)", errnum);
+	return buf;
+};
+
+#define PRIu64 "llu"
 
 #endif /* XIO_OS_H */

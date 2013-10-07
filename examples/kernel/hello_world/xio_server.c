@@ -37,6 +37,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/kthread.h>
 
 #include "libxio.h"
 
@@ -45,11 +46,21 @@ MODULE_DESCRIPTION("XIO hello server "
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+static char *xio_argv[] = {"xio_hello_server", 0, 0};
+
+module_param_named(ip, xio_argv[1], charp, 0);
+MODULE_PARM_DESC(ip, "IP of NIC to receice request from");
+
+module_param_named(port, xio_argv[2], charp, 0);
+MODULE_PARM_DESC(port, "Port to receice request from");
+
+static struct task_struct *xio_main_th;
+
 #define QUEUE_DEPTH		512
 
 /* server private data */
 struct hw_server_data {
-	xio_context	*ctx;
+	struct xio_context	*ctx;
 	struct xio_msg	rsp[QUEUE_DEPTH];	/* global message */
 };
 
@@ -117,7 +128,7 @@ static int on_request(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* asynchronous callbacks						     */
 /*---------------------------------------------------------------------------*/
-struct xio_server_ops  server_ops = {
+struct xio_session_ops server_ops = {
 	.on_session_event		=  on_session_event,
 	.on_new_session			=  on_new_session,
 	.on_msg_send_complete		=  NULL,
@@ -132,32 +143,38 @@ static int xio_server_main(void *data)
 {
 	char **argv = (char **) data;
 	struct xio_server	*server;	/* server portal */
-	struct hw_server_data	server_data;
+	struct hw_server_data	*server_data;
 	char			url[256];
 	struct xio_context	*ctx;
 	int			i;
 
+	server_data = kzalloc(sizeof(*server_data), GFP_KERNEL);
+	if (!server_data) {
+		printk("server_data alloc failed\n");
+		return 0;
+	}
+
 	/* create thread context for the server */
-	ctx = xio_ctx_open(XIO_LOOP_GIVEN_THREAD, NULL, current, -1);
+	ctx = xio_ctx_open(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
 	if (!ctx) {
+		kfree(server_data);
 		printk("context open filed\n");
 		return 0;
 	}
-	server_data.ctx = ctx;
+	server_data->ctx = ctx;
 
 	/* create "hello world" message */
-	memset(&server_data, 0, sizeof(server_data));
 	for (i = 0; i <QUEUE_DEPTH; i++) {
-		server_data.rsp[i].out.header.iov_base =
-			strdup("hello world header response");
-		server_data.rsp[i].out.header.iov_len =
-			strlen(server_data.rsp[i].out.header.iov_base);
+		server_data->rsp[i].out.header.iov_base =
+			kstrdup("hello world header response", GFP_KERNEL);
+		server_data->rsp[i].out.header.iov_len =
+			strlen(server_data->rsp[i].out.header.iov_base);
 	}
 
 	/* create url to connect to */
-	sprintk(url, "rdma://%s:%s", argv[1], argv[2]);
+	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	/* bind a listener server to a portal/url */
-	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
+	server = xio_bind(ctx, &server_ops, url, NULL, 0, server_data);
 	if (server) {
 		printk("listen to %s\n", url);
 		xio_ev_loop_run(ctx);
@@ -171,23 +188,15 @@ static int xio_server_main(void *data)
 
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++)
-		kfree(server_data.rsp[i].out.header.iov_base);
+		kfree(server_data->rsp[i].out.header.iov_base);
 
 	/* free the context */
 	xio_ctx_close(ctx);
 
+	kfree(server_data);
+
 	return 0;
 }
-
-static char *xio_argv[3] = {"xio_hello_server", 0, 0};
-
-module_param_named(ip, xio_argv[1], charp, 0);
-MODULE_PARM_DESC(ip, "IP of NIC to receice request from");
-
-module_param_named(port, xio_argv[2], charp, 0);
-MODULE_PARM_DESC(port, "Port to receice request from");
-
-static struct task_struct *xio_main_th;
 
 static int __init xio_hello_init_module(void)
 {

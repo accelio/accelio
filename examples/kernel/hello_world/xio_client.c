@@ -37,6 +37,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/kthread.h>
 
 #include "libxio.h"
 
@@ -45,13 +46,22 @@ MODULE_DESCRIPTION("XIO hello server "
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+static char *xio_argv[] = {"xio_hello_client", 0, 0};
+
+module_param_named(ip, xio_argv[1], charp, 0);
+MODULE_PARM_DESC(ip, "IP of NIC to send request to");
+
+module_param_named(port, xio_argv[2], charp, 0);
+MODULE_PARM_DESC(port, "Port to send request to");
+
+static struct task_struct *xio_main_th;
 
 #define QUEUE_DEPTH		512
 #define HW_PRINT_COUNTER	4000000
 
 /* private session data */
 struct hw_session_data {
-	xio_context		*ctx;
+	struct xio_context	*ctx;
 	void			*loop;
 	struct xio_connection	*conn;
 	struct xio_msg		req[QUEUE_DEPTH];
@@ -66,7 +76,7 @@ static void process_response(struct xio_msg *rsp)
 
 	if (++cnt == HW_PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
-		printk("message: [%"PRIu64"] - %s\n",
+		printk("message: [%llu] - %s\n",
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		cnt = 0;
 	}
@@ -141,11 +151,11 @@ struct xio_session_ops ses_ops = {
 static int xio_client_main(void *data)
 {
 	char **argv = (char **) data;
-{
+
 	struct xio_session	*session;
 	char			url[256];
 	struct xio_context	*ctx;
-	struct hw_session_data	session_data;
+	struct hw_session_data	*session_data;
 	int			i = 0;
 
 	/* client session attributes */
@@ -155,61 +165,60 @@ static int xio_client_main(void *data)
 		0
 	};
 
+	session_data = kzalloc(sizeof(*session_data), GFP_KERNEL);
+	if (!session_data) {
+		printk("session_data alloc failed\n");
+		return 0;
+	}
+
 	/* create thread context for the client */
-	ctx = xio_ctx_open(XIO_LOOP_GIVEN_THREAD, NULL, current, -1);
+	ctx = xio_ctx_open(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
 	if (!ctx) {
+		kfree(session_data);
 		printk("context open filed\n");
 		return 0;
 	}
 
-	session_data.ctx = ctx;
+	session_data->ctx = ctx;
 
 	/* create url to connect to */
-	sprintk(url, "rdma://%s:%s", argv[1], argv[2]);
+	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	session = xio_session_open(XIO_SESSION_REQ,
-				   &attr, url, 0, 0, &session_data);
+				   &attr, url, 0, 0, session_data);
 
 	/* connect the session  */
-	session_data.conn = xio_connect(session, ctx, 0, &session_data);
+	session_data->conn = xio_connect(session, ctx, 0, session_data);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
-		memset(&session_data.req[i], 0, sizeof(session_data.req[i]));
-		session_data.req[i].out.header.iov_base =
-			strdup("hello world header request");
-		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base);
+		memset(&session_data->req[i], 0, sizeof(session_data->req[i]));
+		session_data->req[i].out.header.iov_base =
+			kstrdup("hello world header request", GFP_KERNEL);
+		session_data->req[i].out.header.iov_len =
+			strlen(session_data->req[i].out.header.iov_base);
 	}
 	/* send first message */
 	for (i = 0; i < QUEUE_DEPTH; i++)
-		xio_send_request(session_data.conn, &session_data.req[i]);
+		xio_send_request(session_data->conn, &session_data->req[i]);
 
 	/* the default xio supplied main loop */
 	xio_ev_loop_run(ctx);
 
 	/* normal exit phase */
-	printk(stdout, "exit signaled\n");
+	printk("exit signaled\n");
 
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++)
-		kfree(session_data.req[i].out.header.iov_base);
+		kfree(session_data->req[i].out.header.iov_base);
 
 	/* free the context */
 	xio_ctx_close(ctx);
 
+	kfree(session_data);
+
 	printk("good bye\n");
 	return 0;
 }
-
-static char *xio_argv[3] = {"xio_hello_client", 0, 0};
-
-module_param_named(ip, xio_argv[1], charp, 0);
-MODULE_PARM_DESC(ip, "IP of NIC to send request to");
-
-module_param_named(port, xio_argv[2], charp, 0);
-MODULE_PARM_DESC(port, "Port to send request to");
-
-static struct task_struct *xio_main_th;
 
 static int __init xio_hello_init_module(void)
 {

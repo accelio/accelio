@@ -38,7 +38,6 @@
 #ifndef  XIO_RDMA_TRANSPORT_H
 #define  XIO_RDMA_TRANSPORT_H
 
-
 /* poll_cq defentions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
@@ -70,9 +69,12 @@
 #define HARD_CQ_MOD			64
 #define SEND_TRESHOLD			8
 
+#ifndef PAGE_SHIFT
 #define PAGE_SHIFT			12
+#endif
+#ifndef PAGE_SIZE
 #define PAGE_SIZE			(1UL << PAGE_SHIFT)
-#define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)ptr) == 0)
+#endif
 
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
@@ -166,6 +168,7 @@ struct xio_work_req {
 	struct ib_sge			sge[XIO_MAX_IOV + 1];
 	struct scatterlist		sgl[XIO_MAX_IOV + 1];
 	int				nents; /* number of mapped entries */
+	int				mapped; /* number of mapped entries */
 };
 
 struct xio_rdma_task {
@@ -200,7 +203,7 @@ struct xio_rdma_task {
 };
 
 struct xio_cq  {
-	struct xio_ev_data		ev_data;
+	struct xio_ev_data		event_data;
 	struct ib_cq			*cq;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
@@ -252,7 +255,7 @@ struct xio_fastreg {
 struct xio_device {
 	struct xio_fastreg		fastreg;
 	struct list_head		cq_list; /* list of all cq per device */
-	spinlock_t			cq_lock;
+	rwlock_t			cq_lock;
 	struct ib_device		*ib_dev;
 	struct ib_pd			*pd;
 	struct ib_mr			*mr;
@@ -263,10 +266,17 @@ struct xio_device {
 	struct ib_event_handler		event_handler;
 };
 
+struct xio_rdma_tasks_pool {
+	/* memory for non-rdma send/recv */
+	void				*data_pool;
+	int				buf_size;
+	int				pad;
+};
+
 struct xio_rdma_transport {
 	struct xio_transport_base	base;
 	struct xio_cq			*tcq;
-	struct xio_dev			*dev;
+	struct xio_device		*dev;
 	struct ib_qp			*qp;
 	struct list_head		trans_list;
 
@@ -325,7 +335,6 @@ struct xio_rdma_transport {
 							    */
 
 	struct xio_transport		*transport;
-	struct rdma_event_channel	*cm_channel;
 	struct rdma_cm_id		*cm_id;
 	struct xio_rdma_mempool		*rdma_mempool;
 
@@ -425,6 +434,26 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 
 /* xio_rdma_management.c */
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
+
+/* Should create a xio_memory.h */
+void xio_unmap_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+		    enum dma_data_direction direction);
+
+void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
+			enum dma_data_direction direction);
+
+int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
+		     enum dma_data_direction direction);
+
+int xio_map_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+		 enum dma_data_direction direction);
+
+const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode);
+const char *xio_rdma_event_str(enum rdma_cm_event_type event);
+
+int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl);
+
+void xio_cq_data_callback(struct ib_cq *cq, void *cq_context);
 
 
 #endif  /* XIO_RDMA_TRANSPORT_H */

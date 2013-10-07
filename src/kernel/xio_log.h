@@ -77,6 +77,9 @@
 		## __VA_ARGS__)
 
 /* Not yet implemented, parameter or sysfs */
-void xio_read_logging_level(void) {pr_warn("xio_read_logging_level\n");}
+static inline void xio_read_logging_level(void)
+{
+	pr_warn("xio_read_logging_level\n");
+}
 
 #endif /* XIO_LOG_H */

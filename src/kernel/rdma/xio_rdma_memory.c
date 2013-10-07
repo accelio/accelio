@@ -35,15 +35,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include <infiniband/verbs.h>
-#include <rdma/rdma_cma.h>
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
 #include <linux/scatterlist.h>
+
+#include <rdma/ib_verbs.h>
+#include <rdma/rdma_cm.h>
 
 #include "libxio.h"
 #include "xio_common.h"
@@ -52,32 +53,48 @@
 #include "xio_transport.h"
 #include "xio_conn.h"
 #include "xio_protocol.h"
-#include "get_clock.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
 
 #define ISER_KMALLOC_THRESHOLD 0x20000 /* 128K - kmalloc limit */
 
+#ifndef sg_unmark_end
+/**
+ * sg_unmark_end - Undo setting the end of the scatterlist
+ * @sg:          SG entryScatterlist
+ *
+ * Description:
+ *   Removes the termination marker from the given entry of the scatterlist.
+ *
+**/
+static inline void sg_unmark_end(struct scatterlist *sg)
+{
+#ifdef CONFIG_DEBUG_SG
+	BUG_ON(sg->sg_magic != SG_MAGIC);
+#endif
+	sg->page_link &= ~0x02;
+}
+#endif
 /*---------------------------------------------------------------------------*/
 /* xio_unmap_desc							     */
 /*---------------------------------------------------------------------------*/
 
-void xio_unmap_desc(ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+void xio_unmap_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 			enum dma_data_direction direction)
 {
 	ib_dma_unmap_sg(ib_dev, desc->sgl, desc->mapped, direction);
 	desc->mapped = 0;
 
 	/* marked in map */
-	sg_unmark_end(&desc->sgl[xd->nents]);
+	sg_unmark_end(&desc->sgl[desc->nents]);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_unmap_work_req							     */
 /*---------------------------------------------------------------------------*/
 
-void xio_unmap_work_req(ib_device *ib_dev, struct xio_work_req *xd,
+void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 			enum dma_data_direction direction)
 {
 	ib_dma_unmap_sg(ib_dev, xd->sgl, xd->mapped, direction);
@@ -90,14 +107,10 @@ void xio_unmap_work_req(ib_device *ib_dev, struct xio_work_req *xd,
 /*---------------------------------------------------------------------------*/
 /* xio_map_work_req							     */
 /*---------------------------------------------------------------------------*/
-int xio_map_work_req(ib_device *ib_dev, struct xio_work_req *xd,
+int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 		     enum dma_data_direction direction)
 {
-	struct scatterlist *sgl = xd->sgl;
-	struct page *page,
-	unsigned int len;
-	unsigned int offset;
-	int nents, i;
+	int nents;
 
 
 	/* cleared in unmap */
@@ -117,15 +130,10 @@ int xio_map_work_req(ib_device *ib_dev, struct xio_work_req *xd,
 /*---------------------------------------------------------------------------*/
 /* xio_map_desc							     */
 /*---------------------------------------------------------------------------*/
-int xio_map_desc(ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+int xio_map_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 		 enum dma_data_direction direction)
 {
-	struct scatterlist *sgl = desc->sgl;
-	struct page *page,
-	unsigned int len;
-	unsigned int offset;
-	int nents, i;
-
+	int nents;
 
 	/* cleared in unmap */
 	sg_mark_end(&desc->sgl[desc->nents]);
@@ -875,11 +883,24 @@ err_reg:
 }
 #endif
 
-#define IS_PAGE_ALIGNED(addr)	((((unsigned long)addr) & ~PAGE_MASK) == 0)
+#define IS_PAGE_ALIGNED(ptr)	(((PAGE_SIZE-1) & (intptr_t)ptr) == 0)
 
 /* drivers/block/nvme.c nvme_map_bio */
 #define XIOVEC_NOT_VIRT_MERGEABLE(vec1, vec2)   ((vec2)->bv_offset || \
                         (((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
+
+void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
+			     struct xio_rdma_mp_mem *mp)
+{
+	void *ptr = mp->addr;
+	int i;
+
+	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
+		memmove(ptr, vmsg->data_iov[i].iov_base,
+			vmsg->data_iov[i].iov_len);
+		ptr += vmsg->data_iov[i].iov_len;
+	}
+}
 
 /**
  * xio_data_buf_aligned_and_len - Tries to determine if the IOVEC is correctly
@@ -891,25 +912,25 @@ err_reg:
 
 static int xio_data_buf_aligned_and_len(struct xio_vmsg *vmsg, size_t *total_len)
 {
-	struct xio_iovec *iov, *niov;
-	u64 end_addr;
+	struct xio_iovec_ex *iov, *niov;
+	void *end_addr;
 	int i, aligned;
 
-	if (vmsg->iov_len == 0) {
+	if (vmsg->data_iovlen == 0) {
 		*total_len = 0;
 		return 0;
 	}
 
 	niov = &vmsg->data_iov[0];
-	*total_len = niov->data_len;
+	*total_len = niov->iov_len;
 	/* be optimistic */
 	aligned = 1;
 
 	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
 		iov = niov;
 		niov++;
-		*total_len += niov->data_len;
-		end_addr = iov->iov_base + iov->data_len;
+		*total_len += niov->iov_len;
+		end_addr = iov->iov_base + iov->iov_len;
 
 		/* Can iov and niov be merged ? */
 		if (end_addr == niov->iov_base)
@@ -918,13 +939,13 @@ static int xio_data_buf_aligned_and_len(struct xio_vmsg *vmsg, size_t *total_len
 		/* Not mergable */
 
 		/* Only first segment can start at unaligned address */
-		if (!IS_PAGE_ALIGNED(niov->iov_base) {
+		if (offset_in_page(niov->iov_base)) {
 			aligned = 0;
 			continue;
 		}
 
 		/* Only last segment can ent at unaligned address */
-		if (!IS_PAGE_ALIGNED(end_addr)) {
+		if (offset_in_page(end_addr)) {
 			aligned = 0;
 			continue;
 		}
@@ -935,83 +956,79 @@ static int xio_data_buf_aligned_and_len(struct xio_vmsg *vmsg, size_t *total_len
 
 int xio_vmsg_to_sge(struct xio_rdma_transport *rdma_hndl,
 		    struct xio_vmsg *vmsg,
-		    xio_rdma_desc_mem *desc,
+		    struct xio_rdma_mem_desc *desc,
 		    enum dma_data_direction direction)
 {
-	struct xio_iovec *iov, *niov;
-	struct scatterlist *sgl = &desc->sgl;
+	struct xio_iovec_ex *iov, *niov;
+	struct scatterlist *sgl = desc->sgl;
 	struct scatterlist *sg = NULL;
-	struct page *page,
-	unsigned int len;
-	unsigned int offset;
 	size_t total_len = 0;
-	u64 start_addr, end_addr;
-	int i;
+	void *start_addr, *end_addr;
+	struct xio_rdma_mp_mem *xsge;
+	int retval, i;
 
-	if (vmsg->iov_len > XIO_MAX_IOV) {
-		WARN_LOG("IOV too long %d\n", vmsg->iov_len);
+	if (vmsg->data_iovlen > XIO_MAX_IOV) {
+		WARN_LOG("IOV too long %zu\n", vmsg->data_iovlen);
 		return -EINVAL;
 	}
 
+	xsge = &desc->mp_sge[0];
 	if (!xio_data_buf_aligned_and_len(vmsg, &total_len)) {
 		/* Fall to bounce buffer */
-		struct xio_rdma_mp_mem *xsge;
 		retval = xio_rdma_mempool_alloc(rdma_hndl->rdma_mempool,
 						total_len,
-						desc);
+						xsge);
 		if (retval) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("mempool faild for %zd bytes\n", total_len);
-			goto cleanup;
+			return -ENOMEM;
 		}
-		sg = dsec->sgl;
 		desc->nents = 1;
-		xsge = &desc->mp_sge[0];
+		sg = desc->sgl;
 		sg_init_one(sg, xsge->addr, xsge->length);
 		if (direction == DMA_TO_DEVICE)
-			copy_iov_to_buffer;
+			xio_copy_vmsg_to_buffer(vmsg, xsge);
 
 		return 0;
 	}
 
 	/* sge will point to user buffers */
+	xsge = &desc->mp_sge[0];
 	xsge->cache = NULL;
 	xsge->addr  = NULL;
 
 	sg_init_table(sgl, XIO_MAX_IOV);
 	niov = &vmsg->data_iov[0];
-	start_address = niov->iov_base;
-	total_len = niov->data_len;
+	start_addr = niov->iov_base;
+	total_len = niov->iov_len;
 	sg = sgl;
 	desc->nents = 0;
 
 	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
 		iov = niov;
 		niov++;
-		end_addr = iov->iov_base + iov->data_len;
+		end_addr = iov->iov_base + iov->iov_len;
 
 		/* Can iov and niov be merged ? */
 		if (end_addr == niov->iov_base) {
-			total_len += niov->data_len;
+			total_len += niov->iov_len;
 			continue;
 		}
 
 		/* Not mergable close current sg */
-		page = virt_to_page(start_address);
-		offset = start_address - page_to_virt(page);
-		sg_set_page(sg, page, total_len, offset);
+		sg_set_page(sg, virt_to_page(start_addr),
+			    total_len, offset_in_page(start_addr));
 		desc->nents++;
 
 		/* New segmet starts here */
-		start_address = niov->iov_base;
-		total_len = niov->data_len;
+		start_addr = niov->iov_base;
+		total_len = niov->iov_len;
 		sg++;
 	}
 
 	/* close last segment (can be the first and last one) */
-	page = virt_to_page(start_address);
-	offset = start_address - page_to_virt(page);
-	sg_set_page(sg, page, total_len, offset);
+	sg_set_page(sg, virt_to_page(start_addr),
+		    total_len, offset_in_page(start_addr));
 	desc->nents++;
 
 	sg_mark_end(sg);
@@ -1019,39 +1036,34 @@ int xio_vmsg_to_sge(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 }
 
-int xio_data_buf_aligned_to_ib_sge(struct xio_vmsg *vmsg, ib_mr *mr,
-				   ib_sge *sge, int *num_sge, size_t *total_len)
+int xio_data_buf_aligned_to_ib_sge(struct xio_vmsg *vmsg, struct ib_mr *mr,
+				   struct ib_sge *sge, int *num_sge,
+				   size_t *total_len)
 {
-	struct xio_iovec *iov, *niov;
-	size_t total_len = 0;
-	u64 start_addr, end_addr;
-	u64 end_addr;
+	struct xio_iovec_ex *iov, *niov;
+	void *end_addr;
 	int i, aligned;
 
-
-	if (vmsg->iov_len > XIO_MAX_IOV) {
-		WARN_LOG("IOV too long %d\n", vmsg->iov_len);
+	if (vmsg->data_iovlen > XIO_MAX_IOV) {
+		WARN_LOG("IOV too long %zu\n", vmsg->data_iovlen);
 		return -EINVAL;
 	}
 
-	if (vmsg->iov_len == 0) {
+	if (vmsg->data_iovlen == 0) {
 		*total_len = 0;
 		return 0;
 	}
 
 	niov = &vmsg->data_iov[0];
-	*total_len = niov->data_len;
+	*total_len = niov->iov_len;
 	/* be optimistic */
 	aligned = 1;
 
 	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
-		page = virt_to_page(start_address);
-		offset = start_address - page_to_virt(page);
-		sg_set_page(sg, page, total_len, offset);
 		iov = niov;
 		niov++;
-		*total_len += niov->data_len;
-		end_addr = iov->iov_base + iov->data_len;
+		*total_len += niov->iov_len;
+		end_addr = iov->iov_base + iov->iov_len;
 
 		/* Can iov and niov be merged ? */
 		if (end_addr == niov->iov_base)
@@ -1060,13 +1072,13 @@ int xio_data_buf_aligned_to_ib_sge(struct xio_vmsg *vmsg, ib_mr *mr,
 		/* Not mergable */
 
 		/* Only first segment can start at unaligned address */
-		if (!IS_PAGE_ALIGNED(niov->iov_base) {
+		if (offset_in_page(niov->iov_base)) {
 			aligned = 0;
 			continue;
 		}
 
 		/* Only last segment can ent at unaligned address */
-		if (!IS_PAGE_ALIGNED(end_addr)) {
+		if (offset_in_page(end_addr)) {
 			aligned = 0;
 			continue;
 		}
@@ -1077,29 +1089,22 @@ int xio_data_buf_aligned_to_ib_sge(struct xio_vmsg *vmsg, ib_mr *mr,
 
 int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl)
 {
-	struct xio_iovec *iov, *niov;
-	struct page *page,
-	unsigned int len;
-	unsigned int offset;
+	struct xio_iovec_ex *iov;
 	int i;
 
-	if (vmsg->iov_len > XIO_MAX_IOV) {
-		WARN_LOG("IOV too long %d\n", vmsg->iov_len);
+	if (vmsg->data_iovlen > XIO_MAX_IOV) {
+		WARN_LOG("IOV too long %zu\n", vmsg->data_iovlen);
 		return -EINVAL;
 	}
 
-	if (vmsg->iov_len == 0) {
-		*total_len = 0;
+	if (vmsg->data_iovlen == 0)
 		return 0;
-	}
 
 	iov = &vmsg->data_iov[0];
 
-	for (i = 0; i < vmsg->data_iovlen; i++) {
-		page = virt_to_page(iov->iov_base);
-		offset = iov->iov_base - page_to_virt(page);
-		sg_set_page(sgl, page, iov->data_len, offset);
-	}
+	for (i = 0; i < vmsg->data_iovlen; i++)
+		sg_set_page(sgl, virt_to_page(iov->iov_base),
+			    iov->iov_len, offset_in_page(iov->iov_base));
 
 	return 0;
 }

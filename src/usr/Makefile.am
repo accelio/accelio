@@ -66,6 +66,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			xio_log.c			\
 			xio_mem.c			\
 			xio_task.c			\
+			xio_usr_utils.c			\
 			xio_context.c			\
 			./linux/hexdump.c		\
 			../common/xio_options.c		\

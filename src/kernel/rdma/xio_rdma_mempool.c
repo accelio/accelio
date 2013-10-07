@@ -36,18 +36,30 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/types.h>
+#include <linux/slab.h>
+#include <linux/mm.h>
+#include <linux/highmem.h>
+#include <linux/scatterlist.h>
 #include <linux/mempool.h>
+
+#include <rdma/ib_verbs.h>
+#include <rdma/rdma_cm.h>
 
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_mem.h"
+#include "xio_task.h"
 #include "xio_rdma_mempool.h"
+#include "xio_rdma_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
+#ifndef SIZE_MAX
+#define SIZE_MAX	(~(size_t)0)
+#endif
 
 static size_t sizes[] = {
 			XIO_16K_BLOCK_SZ,
@@ -58,12 +70,12 @@ static size_t sizes[] = {
 			};
 
 struct xio_chunks_list {
-	kmem_cache *kcache;
-	size_t	   block_sz;
+	struct kmem_cache *kcache;
+	size_t		   block_sz;
 };
 
 struct xio_rdma_mempool {
-	xio_chunks_list pool[ARRAY_SIZE(sizes)];
+	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
 };
 
 /*---------------------------------------------------------------------------*/
@@ -71,7 +83,6 @@ struct xio_rdma_mempool {
 /*---------------------------------------------------------------------------*/
 void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 {
-	struct xio_rdma_mempool *p;
 	struct xio_chunks_list *ch;
 	int real_ones, i;
 
@@ -89,7 +100,7 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 
 	kfree(p);
 }
-GFP_THISNODE
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mempol_create						     */
 /*---------------------------------------------------------------------------*/
@@ -107,7 +118,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 	real_ones = ARRAY_SIZE(sizes) - 1;
 	ch = p->pool;
 	for (i =  0; i < real_ones; i++) {
-		sprintf(name, "xio_rdma_cache-%dK", ch->block_sz/1024);
+		sprintf(name, "xio_rdma_cache-%zuK", ch->block_sz/1024);
 		ch->kcache = kmem_cache_create(name,
 					ch->block_sz, PAGE_SIZE,
 					SLAB_HWCACHE_ALIGN, NULL);
@@ -129,7 +140,7 @@ static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
 	int i;
 
 	for (i = 0; i <= XIO_CHUNKS_SIZE_NR; i++)
-		if (sz <= p->pool[i].chunk_sz)
+		if (sz <= p->pool[i].block_sz)
 			break;
 
 	return (i == XIO_CHUNKS_SIZE_NR) ? -1 : i;
@@ -138,11 +149,10 @@ static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mempool_alloc						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
-				  struct xio_rdma_mp_mem *mp_mem)
+int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
+			   struct xio_rdma_mp_mem *mp_mem)
 {
 	int			index;
-	void			*mem;
 
 	mp_mem->addr = NULL;
 	mp_mem->mr = NULL;
@@ -151,23 +161,24 @@ static int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 
 	index = size2index(p, length);
 	if (index == -1) {
-		errno = EINVAL;
-		return -1;
+		xio_set_error(EINVAL);
+		return -EINVAL;
 	}
 
-	mem = kmem_cache_zalloc(p->pool[index].kcache, GFP_KERNEL);
-	if (!mem) {
-		errno = ENOMEM;
-		return -1;
+	mp_mem->addr = kmem_cache_zalloc(p->pool[index].kcache, GFP_KERNEL);
+	if (!mp_mem->addr) {
+		xio_set_error(ENOMEM);
+		return -ENOMEM;
 	}
 
-	mp_mem->addr = mem;
 	mp_mem->cache = (void *) &p->pool[index];
 	mp_mem->length = p->pool[index].block_sz;
+
+	return 0;
 }
 
-int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *pool, xio_sge *sge,
-			  u32 num_sge, xio_rdma_mem_desc *desc)
+int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *pool, struct xio_sge *sge,
+			  u32 num_sge, struct xio_rdma_mem_desc *desc)
 {
 	struct xio_rdma_mp_mem *mp_sge;
 	int i;
@@ -177,7 +188,7 @@ int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *pool, xio_sge *sge,
 
 	for (i = 0; i < num_sge; i++) {
 		if (xio_rdma_mempool_alloc(pool, sge->length, mp_sge))
-			goto cleanup1;
+			goto cleanup0;
 		mp_sge++;
 	}
 
@@ -203,17 +214,15 @@ static void xio_rdma_mempool_free_mp(struct xio_rdma_mp_mem *mp_mem)
 		goto cleanup0;
 	}
 
-	if (!mp_mem->mem) {
-		ERROR_LOG("%s mp_mem(%p)->mem(0)\n", __func__, mp_mem);
+	if (!mp_mem->addr) {
+		ERROR_LOG("%s mp_mem(%p)->addr(0)\n", __func__, mp_mem);
 		goto cleanup1;
 	}
 
-	kmem_cache *kcache = (kmem_cache *) mp_mem->cache;
-
-	kmem_cache_free((kmem_cache *) mp_mem->cache, mp_mem->mem);
+	kmem_cache_free((struct kmem_cache *) mp_mem->cache, mp_mem->addr);
 
 	mp_mem->cache = NULL;
-	mp_mem->mem = NULL;
+	mp_mem->addr = NULL;
 
 	return;
 
@@ -223,12 +232,14 @@ cleanup0:
 	ERROR_LOG("%s failed\n", __func__);
 }
 
-void xio_rdma_mempool_free(xio_rdma_mem_desc *desc)
+void xio_rdma_mempool_free(struct xio_rdma_mem_desc *desc)
 {
 	int i;
 
-	for (i = 0; i < desc->num_sge; i++)
-		xio_rdma_mempool_free_mp(desc->mp_sge);
+	for (i = 0; i < desc->num_sge; i++) {
+		if (desc->mp_sge[i].cache)
+			xio_rdma_mempool_free_mp(&desc->mp_sge[i]);
+	}
 
 	desc->num_sge = 0;
 }

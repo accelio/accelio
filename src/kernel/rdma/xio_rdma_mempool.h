@@ -39,8 +39,10 @@
 #define XIO_RDMA_MEMPOOL_H
 
 #include <linux/types.h>
+#include <linux/kernel.h>
 
 struct xio_rdma_mempool;
+struct xio_sge;
 
 struct xio_mem_reg {
 	u32  lkey;
@@ -103,11 +105,11 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void);
 void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
 
 int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
-			     size_t length, struct xio_rdma_mp_mem *mp_mem);
+			   size_t length, struct xio_rdma_mp_mem *mp_mem);
 
-int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *mpool, xio_sge *sge,
-			  u32 num_sge, xio_rdma_mem_desc *desc);
+int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *mpool, struct xio_sge *sge,
+			  u32 num_sge, struct xio_rdma_mem_desc *desc);
 
-void xio_rdma_mempool_free(xio_rdma_mem_desc *desc);
+void xio_rdma_mempool_free(struct xio_rdma_mem_desc *desc);
 
 #endif

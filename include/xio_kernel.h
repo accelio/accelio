@@ -68,6 +68,16 @@ enum xio_proto {
 	XIO_PROTO_RDMA
 };
 
+enum xio_optlevel {
+	XIO_OPTLEVEL_ACCELIO,
+	XIO_OPTLEVEL_RDMA,
+};
+
+enum xio_optname {
+	XIO_OPTNAME_ENABLE_MEM_POOL,		/* rdma - int */
+	XIO_OPTNAME_DISABLE_DMA_LATENCY,	/* rdma - int */
+};
+
 /*  A number random enough not to collide with different errno ranges.       */
 /*  The assumption is that errno is at least 32-bit type.                    */
 #define XIO_BASE_STATUS 1247689300
@@ -104,8 +114,13 @@ enum xio_ev_loop_events {
 	XIO_POLLOUT			= 0x002
 };
 
+enum xio_session_flags {
+	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
+};
+
 enum xio_msg_flags {
-	XIO_MSG_DONTQUEUE		= 0x001, /*  do not queue messages */
+	/* request flags */
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1
 };
 
 enum xio_session_event {
@@ -127,6 +142,11 @@ enum xio_msg_type {
 	XIO_MSG_TYPE_REQ		= (XIO_MESSAGE | XIO_REQUEST),
 	XIO_MSG_TYPE_RSP		= (XIO_MESSAGE | XIO_RESPONSE),
 	XIO_MSG_TYPE_ONE_WAY		= (XIO_ONE_WAY | XIO_REQUEST),
+};
+
+enum xio_receipt_result {
+	XIO_READ_RECEIPT_ACCEPT,
+	XIO_READ_RECEIPT_REJECT,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -159,10 +179,16 @@ struct xio_iovec {
 	size_t			iov_len;
 };
 
+/* In user space these struct xio_iovec and this struct differ */
+struct xio_iovec_ex {
+	void			*iov_base;
+	size_t			iov_len;
+};
+
 struct xio_vmsg {
 	struct xio_iovec	header;		/* header's iovec */
 	size_t			data_iovlen;	/* number of items in vector  */
-	struct xio_iovec	data_iov[XIO_MAX_IOV];
+	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];
 };
 
 struct xio_msg {
@@ -179,6 +205,8 @@ struct xio_msg {
 	enum xio_msg_type	type;
 	int		        more_in_batch;	/* more messages are expected */
 	int			status;
+	int			flags;
+	enum xio_receipt_result	receipt_res;
 	int			reserved;
 	void			*user_context;	/* for user usage - not sent */
 	struct xio_msg		*next;          /* internal use */
@@ -188,6 +216,7 @@ struct xio_msg {
 struct xio_session_event_data {
 	struct xio_connection	*conn;		/* optional connection for
 						   connection events */
+	void			*conn_user_context;
 	enum xio_session_event	event;
 	enum xio_status		reason;
 };
@@ -551,7 +580,7 @@ int xio_release_msg(struct xio_msg *rsp);
  * RETURNS: xio server context, or NULL upon error.
  */
 struct xio_server *xio_bind(struct xio_context *ctx,
-			    struct xio_server_ops *ops,
+			    struct xio_session_ops *ops,
 			    const char *uri,
 			    uint16_t *src_port,
 			    uint32_t flags,

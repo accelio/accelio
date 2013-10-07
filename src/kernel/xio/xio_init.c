@@ -42,6 +42,8 @@
 #include "xio_common.h"
 #include "xio_sessions_store.h"
 #include "xio_conns_store.h"
+#include "xio_conn.h"
+#include "xio_context.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO generic part "
@@ -66,3 +68,48 @@ static void __exit xio_cleanup_module(void)
 
 module_init(xio_init_module);
 module_exit(xio_cleanup_module);
+
+EXPORT_SYMBOL(xio_ctx_open);
+EXPORT_SYMBOL(xio_ctx_close);
+EXPORT_SYMBOL(xio_context_add_observer);
+EXPORT_SYMBOL(xio_context_remove_observer);
+
+EXPORT_SYMBOL(xio_set_error);
+EXPORT_SYMBOL(xio_get_error);
+EXPORT_SYMBOL(xio_strerror);
+EXPORT_SYMBOL(xio_errno);
+
+EXPORT_SYMBOL(xio_reg_transport);
+EXPORT_SYMBOL(xio_unreg_transport);
+
+EXPORT_SYMBOL(xio_conn_get_initial_task);
+EXPORT_SYMBOL(xio_conn_get_primary_task);
+EXPORT_SYMBOL(xio_conn_task_lookup);
+EXPORT_SYMBOL(xio_conn_set_pools_ops);
+
+EXPORT_SYMBOL(memcpyv);
+EXPORT_SYMBOL(memclonev);
+
+EXPORT_SYMBOL(xio_ev_loop_add_event);
+EXPORT_SYMBOL(xio_ev_loop_stop);
+EXPORT_SYMBOL(xio_ev_loop_run);
+
+EXPORT_SYMBOL(xio_uri_to_ss);
+EXPORT_SYMBOL(xio_session_open);
+EXPORT_SYMBOL(xio_session_close);
+EXPORT_SYMBOL(xio_session_event_str);
+
+EXPORT_SYMBOL(xio_bind);
+EXPORT_SYMBOL(xio_accept);
+EXPORT_SYMBOL(xio_unbind);
+EXPORT_SYMBOL(xio_connect);
+EXPORT_SYMBOL(xio_disconnect);
+
+EXPORT_SYMBOL(xio_send_request);
+EXPORT_SYMBOL(xio_send_response);
+EXPORT_SYMBOL(xio_release_response);
+
+EXPORT_SYMBOL(xio_write_tlv);
+EXPORT_SYMBOL(xio_read_tlv);
+EXPORT_SYMBOL(xio_iov_length);
+EXPORT_SYMBOL(xio_iovex_length);
