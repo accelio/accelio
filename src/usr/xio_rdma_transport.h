@@ -114,7 +114,7 @@ struct xio_rdma_transport;
 /*---------------------------------------------------------------------------*/
 struct xio_rdma_options {
 	int			enable_mem_pool;
-	int			disable_dma_latency;
+	int			enable_dma_latency;
 };
 
 struct xio_sge {

@@ -110,7 +110,7 @@ enum xio_optname {
 	XIO_OPTNAME_ENABLE_MEM_POOL,	    /**< enables the internal rdma  */
 					    /**< memory pool		    */
 
-	XIO_OPTNAME_DISABLE_DMA_LATENCY,    /**< enables the dma latency    */
+	XIO_OPTNAME_ENABLE_DMA_LATENCY,    /**< enables the dma latency    */
 };
 
 /**
