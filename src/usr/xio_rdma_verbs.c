@@ -192,7 +192,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 
 
 
-	if (!list_empty(tmr->dm_list)) {
+	if (!list_empty(&tmr->dm_list)) {
 		list_del(&tmr->mr_list_entry);
 
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
