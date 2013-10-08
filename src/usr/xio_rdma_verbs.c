@@ -190,18 +190,22 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval;
 
-	list_del(&tmr->mr_list_entry);
 
-	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
-				 dm_list_entry) {
-		retval = ibv_dereg_mr(tmr_elem->mr);
-		if (retval != 0) {
-			xio_set_error(errno);
-			ERROR_LOG("ibv_dereg_mr failed, %m\n");
+
+	if (!list_empty(tmr->dm_list)) {
+		list_del(&tmr->mr_list_entry);
+
+		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
+				dm_list_entry) {
+			retval = ibv_dereg_mr(tmr_elem->mr);
+			if (retval != 0) {
+				xio_set_error(errno);
+				ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			}
+			/* Remove the item from the list. */
+			list_del(&tmr_elem->dm_list_entry);
+			free(tmr_elem);
 		}
-		/* Remove the item from the list. */
-		list_del(&tmr_elem->dm_list_entry);
-		free(tmr_elem);
 	}
 	free(tmr);
 	*p_tmr = NULL;

@@ -281,6 +281,7 @@ struct xio_rdma_transport {
 							avail */
 	int				sqe_avail;
 	int				tx_ready_tasks_num;
+	int				max_tx_ready_tasks_num;
 	uint16_t			req_sig_cnt;
 	uint16_t			rsp_sig_cnt;
 	enum xio_transport_state	state;
@@ -317,6 +318,7 @@ struct xio_rdma_transport {
 							    * to control nop
 							    * sends
 							    */
+	int				pad;
 
 	struct xio_transport		*transport;
 	struct rdma_event_channel	*cm_channel;

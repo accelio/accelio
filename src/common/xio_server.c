@@ -76,6 +76,14 @@ static int xio_on_new_conn(struct xio_server *server,
 		return -1;
 	}
 
+	retval = xio_conn_add_server_observer(
+				       event_data->new_connection.child_conn,
+				       server, xio_on_conn_event);
+	if (retval != 0) {
+		ERROR_LOG("connection observer addition failed.\n");
+		return -1;
+	}
+
 	retval = xio_conn_accept(event_data->new_connection.child_conn);
 	if (retval != 0) {
 		ERROR_LOG("failed to accept connection\n");
@@ -83,6 +91,33 @@ static int xio_on_new_conn(struct xio_server *server,
 	}
 
 	return 0;
+}
+
+/* find the old session */
+struct xio_connection *xio_server_create_accepted_conn(
+		struct xio_session *session,
+		struct xio_conn *conn)
+{
+	struct xio_connection	*connection;
+	struct xio_server	*server =  xio_conn_get_server(conn);
+
+	INFO_LOG("[new connection]: " \
+		  "session:%p, conn:%p, session_id:%d\n",
+		  session, conn, session->session_id);
+
+	connection = xio_session_alloc_conn(session, server->ctx, 0,
+			server->cb_private_data);
+	connection = xio_session_assign_conn(session, conn);
+
+	/* cancel the lead connection */
+	session->lead_conn = NULL;
+
+	xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+
+	/* copy the server attributes to the connection */
+	xio_connection_set_ops(connection, &server->ops);
+
+	return connection;
 }
 
 /* first message after new connection are going trough the server */
@@ -99,9 +134,11 @@ static int xio_on_new_message(struct xio_server *server,
 		NULL,
 		0
 	};
+
 	/* read the first message  type */
 	uint16_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
+	xio_conn_remove_observer(conn, server);
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
 		session = xio_session_init(
@@ -133,8 +170,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->lead_conn = connection;
 
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
-	} else { /* migration */
-
+	} else {
 		/* find the old session */
 		session = xio_find_session(event_data->msg.task);
 		if (session == NULL) {
@@ -144,20 +180,10 @@ static int xio_on_new_message(struct xio_server *server,
 		}
 
 		INFO_LOG("server [new connection]: server:%p, " \
-			  "seesion:%p, conn:%p, session_id:%d\n",
+			  "session:%p, conn:%p, session_id:%d\n",
 			   server, session, conn, session->session_id);
 
-		connection = xio_session_alloc_conn(session, server->ctx, 0,
-						    server->cb_private_data);
-		connection = xio_session_assign_conn(session, conn);
-
-		/* cancel the lead connection */
-		session->lead_conn = NULL;
-
-		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
-
-		/* copy the server attributes to the connection */
-		xio_connection_set_ops(connection, &server->ops);
+		connection = xio_server_create_accepted_conn(session, conn);
 	}
 
 	/* route the message to the session */
@@ -192,6 +218,7 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 
 	case XIO_CONNECTION_DISCONNECTED:
 	case XIO_CONNECTION_CLOSED:
+	case XIO_CONNECTION_ESTABLISHED:
 		break;
 
 	case XIO_CONNECTION_ERROR:
@@ -199,7 +226,7 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 			  "session:%p, conn:%p\n", observer, notifier);
 		break;
 	default:
-		ERROR_LOG("server: [notification] - unexpectd event :%d. " \
+		ERROR_LOG("server: [notification] - unexpected event :%d. " \
 			  "server:%p, conn:%p\n", event, observer, notifier);
 	};
 
@@ -258,7 +285,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	return server;
 
 cleanup1:
-	xio_conn_close(server->listener);
+	xio_conn_close(server->listener, server);
 cleanup:
 	kfree(server->uri);
 	kfree(server);
@@ -273,7 +300,7 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
-	xio_conn_close(server->listener);
+	xio_conn_close(server->listener, server);
 	kfree(server->uri);
 	kfree(server);
 

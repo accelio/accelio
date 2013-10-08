@@ -126,6 +126,8 @@ struct xio_conn {
 	int				cid;
 	int				is_first_msg;
 	int				is_connected;
+	int				is_first_setup_req;
+	int				pad;
 
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
 
@@ -136,7 +138,7 @@ struct xio_conn {
 /*---------------------------------------------------------------------------*/
 /* xio_conn_close							     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_close(struct xio_conn *conn);
+void xio_conn_close(struct xio_conn *conn, void *observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_open							     */
@@ -209,10 +211,21 @@ int xio_conn_primary_free_tasks(struct xio_conn *conn);
 struct xio_task *xio_conn_task_lookup(struct xio_conn *conn, int id);
 
 /*---------------------------------------------------------------------------*/
+/* xio_conn_add_server_observer						     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_add_server_observer(struct xio_conn *conn, void *observer,
+				 notification_handler_t notify_observer);
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_remove_server_observer					     */
+/*---------------------------------------------------------------------------*/
+void xio_conn_remove_server_observer(struct xio_conn *conn);
+
+/*---------------------------------------------------------------------------*/
 /* xio_conn_add_observer						     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_add_observer(struct xio_conn *conn, void *observer,
-			    notification_handler_t notify_observer);
+			  notification_handler_t notify_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_remove_observer						     */
@@ -255,6 +268,22 @@ static inline struct xio_transport_cls *xio_conn_get_trans_cls(
 static inline int xio_conn_get_proto(struct xio_conn *conn)
 {
 	return conn->transport_hndl->proto;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_addref							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_conn_addref(struct xio_conn *conn)
+{
+	atomic_inc(&conn->refcnt);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_get_server							     */
+/*---------------------------------------------------------------------------*/
+static inline struct xio_server *xio_conn_get_server(struct xio_conn *conn)
+{
+	return conn->server_observer->observer;
 }
 
 #endif /*XIO_CONNECTION_H */

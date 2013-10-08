@@ -161,6 +161,10 @@ void xio_session_assign_ops(
 		struct xio_session *session,
 		struct xio_session_ops *ops);
 
+struct xio_connection *xio_server_create_accepted_conn(
+		struct xio_session *session,
+		struct xio_conn *conn);
+
 /*---------------------------------------------------------------------------*/
 /* xio_session_is_valid_in_req						     */
 /*---------------------------------------------------------------------------*/

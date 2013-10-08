@@ -310,9 +310,6 @@ int xio_connection_flush(struct xio_connection *connection)
 	}
 
 
-	/* inventory */
-	xio_conn_primary_free_tasks(connection->conn);
-
 
 	return 0;
 }
