@@ -99,7 +99,7 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode)
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mr *xio_reg_mr_ex(void *addr, size_t length, int access)
+static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 {
 	struct xio_mr			*tmr;
 	struct xio_mr_elem		*tmr_elem;
@@ -131,7 +131,7 @@ static struct xio_mr *xio_reg_mr_ex(void *addr, size_t length, int access)
 	INIT_LIST_HEAD(&tmr->dm_list);
 
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		mr = ibv_reg_mr(dev->pd, addr, length, access);
+		mr = ibv_reg_mr(dev->pd, *addr, length, access);
 		if (mr == NULL) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
@@ -150,6 +150,10 @@ static struct xio_mr *xio_reg_mr_ex(void *addr, size_t length, int access)
 		tmr_elem->dev = dev;
 		tmr_elem->mr = mr;
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
+
+		if (access & IBV_ACCESS_ALLOCATE_MR)
+			access  &= ~IBV_ACCESS_ALLOCATE_MR;
+
 	}
 
 	list_add(&tmr->mr_list_entry, &mr_list);
@@ -175,7 +179,7 @@ cleanup3:
 /*---------------------------------------------------------------------------*/
 struct xio_mr *xio_reg_mr(void *addr, size_t length)
 {
-	return xio_reg_mr_ex(addr, length,
+	return xio_reg_mr_ex(&addr, length,
 			     IBV_ACCESS_LOCAL_WRITE |
 			     IBV_ACCESS_REMOTE_WRITE|
 			     IBV_ACCESS_REMOTE_READ);
@@ -227,7 +231,7 @@ struct xio_buf *xio_alloc(size_t length)
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	buf->mr = xio_reg_mr_ex(buf->addr, length,
+	buf->mr = xio_reg_mr_ex(&buf->addr, length,
 			    IBV_ACCESS_LOCAL_WRITE |
 			    IBV_ACCESS_REMOTE_WRITE|
 			    IBV_ACCESS_REMOTE_READ |
