@@ -43,6 +43,7 @@
 
 
 static HT_HEAD(, xio_conn, 257)  conns_store;
+static spinlock_t cs_lock;
 
 /*---------------------------------------------------------------------------*/
 /* xio_conns_store_add				                             */
@@ -70,15 +71,18 @@ static int conns_store_add(struct xio_conn *conn,
 int xio_conns_store_remove(int conn_id)
 {
 	struct xio_conn *c;
-	struct xio_key_int32  key = {
-		conn_id
-	};
+	struct xio_key_int32  key;
 
+	spin_lock(&cs_lock);
+	key.id = conn_id;
 	HT_LOOKUP(&conns_store, &key, c, conns_htbl);
-	if (c == NULL)
+	if (c == NULL) {
+		spin_unlock(&cs_lock);
 		return -1;
+	}
 
 	HT_REMOVE(&conns_store, c, xio_conn, conns_htbl);
+	spin_unlock(&cs_lock);
 
 	return 0;
 }
@@ -89,11 +93,12 @@ int xio_conns_store_remove(int conn_id)
 struct xio_conn *xio_conns_store_lookup(int conn_id)
 {
 	struct xio_conn *c;
-	struct xio_key_int32  key = {
-		conn_id
-	};
+	struct xio_key_int32  key;
 
+	spin_lock(&cs_lock);
+	key.id = conn_id;
 	HT_LOOKUP(&conns_store, &key, c, conns_htbl);
+	spin_unlock(&cs_lock);
 
 	return c;
 }
@@ -107,9 +112,11 @@ int xio_conns_store_add(
 {
 	static int cid;  /* = 0 global conn provider */
 
+	spin_lock(&cs_lock);
 	int retval = conns_store_add(conn, cid);
 	if (retval == 0)
 		*conn_id = cid++;
+	spin_unlock(&cs_lock);
 
 	return retval;
 }
@@ -123,14 +130,18 @@ struct xio_conn *xio_conns_store_find(
 {
 	struct xio_conn *conn;
 
+	spin_lock(&cs_lock);
 	HT_FOREACH(conn, &conns_store, conns_htbl) {
 		if (conn->transport_hndl->portal_uri) {
 			if (
 		(strcmp(conn->transport_hndl->portal_uri, portal_uri) == 0) &&
-		(conn->transport_hndl->ctx == ctx))
+		(conn->transport_hndl->ctx == ctx)) {
+				spin_unlock(&cs_lock);
 				return conn;
+			}
 		}
 	}
+	spin_unlock(&cs_lock);
 	return  NULL;
 }
 
@@ -140,6 +151,7 @@ struct xio_conn *xio_conns_store_find(
 void conns_store_construct(void)
 {
 	HT_INIT(&conns_store, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
+	spin_lock_init(&cs_lock);
 }
 
 /*

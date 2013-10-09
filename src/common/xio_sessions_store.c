@@ -44,6 +44,7 @@
 #include "xio_sessions_store.h"
 
 static HT_HEAD(, xio_session, 257)  sessions_store;
+static spinlock_t ss_lock;
 
 /*---------------------------------------------------------------------------*/
 /* sessions_store_add							     */
@@ -55,7 +56,6 @@ static int sessions_store_add(struct xio_session *session,
 	struct xio_key_int32  key = {
 		session_id
 	};
-
 	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
 	if (s != NULL)
 		return -1;
@@ -71,15 +71,18 @@ static int sessions_store_add(struct xio_session *session,
 int xio_sessions_store_remove(uint32_t session_id)
 {
 	struct xio_session *s;
-	struct xio_key_int32  key = {
-		session_id
-	};
+	struct xio_key_int32  key;
 
+	spin_lock(&ss_lock);
+	key.id = session_id;
 	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	if (s == NULL)
+	if (s == NULL) {
+		spin_unlock(&ss_lock);
 		return -1;
+	}
 
 	HT_REMOVE(&sessions_store, s, xio_session, sessions_htbl);
+	spin_unlock(&ss_lock);
 
 	return 0;
 }
@@ -90,10 +93,12 @@ int xio_sessions_store_remove(uint32_t session_id)
 struct xio_session *xio_sessions_store_lookup(uint32_t session_id)
 {
 	struct xio_session *s;
-	struct xio_key_int32  key = {
-		session_id
-	};
+	struct xio_key_int32  key;
+
+	spin_lock(&ss_lock);
+	key.id = session_id;
 	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
+	spin_unlock(&ss_lock);
 
 	return s;
 }
@@ -106,9 +111,12 @@ int xio_sessions_store_add(struct xio_session *session,
 {
 	static uint32_t sid;  /* = 0 global session provider */
 
+
+	spin_lock(&ss_lock);
 	int retval = sessions_store_add(session, sid);
 	if (retval == 0)
 		*session_id = sid++;
+	spin_unlock(&ss_lock);
 
 	return retval;
 }
@@ -119,6 +127,7 @@ int xio_sessions_store_add(struct xio_session *session,
 void sessions_store_construct(void)
 {
 	HT_INIT(&sessions_store, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
+	spin_lock_init(&ss_lock);
 }
 
 /*
