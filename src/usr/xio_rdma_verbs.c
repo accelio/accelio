@@ -151,9 +151,10 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		tmr_elem->mr = mr;
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
 
-		if (access & IBV_ACCESS_ALLOCATE_MR)
+		if (access & IBV_ACCESS_ALLOCATE_MR) {
 			access  &= ~IBV_ACCESS_ALLOCATE_MR;
-
+			*addr = mr->addr;
+		}
 	}
 
 	list_add(&tmr->mr_list_entry, &mr_list);
@@ -179,6 +180,11 @@ cleanup3:
 /*---------------------------------------------------------------------------*/
 struct xio_mr *xio_reg_mr(void *addr, size_t length)
 {
+	if (addr == NULL) {
+		xio_set_error(EINVAL);
+		return NULL;
+	}
+
 	return xio_reg_mr_ex(&addr, length,
 			     IBV_ACCESS_LOCAL_WRITE |
 			     IBV_ACCESS_REMOTE_WRITE|
