@@ -115,6 +115,8 @@ struct xio_rdma_transport;
 struct xio_rdma_options {
 	int			enable_mem_pool;
 	int			enable_dma_latency;
+	int			rdma_buf_threshold;
+	int			rdma_buf_attr_rdonly;
 };
 
 struct xio_sge {
@@ -318,7 +320,7 @@ struct xio_rdma_transport {
 							    * to control nop
 							    * sends
 							    */
-	int				pad;
+	int				max_send_buf_sz;
 
 	struct xio_transport		*transport;
 	struct rdma_event_channel	*cm_channel;

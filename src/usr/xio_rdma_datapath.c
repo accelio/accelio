@@ -1465,15 +1465,15 @@ static int xio_rdma_prep_req_out_data(
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_req_hdr);
 
-	if (SEND_BUF_SZ	 < (xio_hdr_len + ulp_out_hdr_len)) {
+	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
 		ERROR_LOG("header size %zd exceeds the max header allowed %d\n",
-			  ulp_out_imm_len, SEND_BUF_SZ);
+			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz);
 		return -1;
 	}
 
 	/* the data is outgoing via SEND */
 	if ((ulp_out_hdr_len + ulp_out_imm_len +
-	    OMX_MAX_HDR_SZ) < SEND_BUF_SZ) {
+	    OMX_MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
@@ -1595,7 +1595,7 @@ static int xio_rdma_prep_req_in_data(
 	data_len  = xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen);
 	hdr_len  = vmsg->header.iov_len;
 
-	if (data_len + hdr_len + OMX_MAX_HDR_SZ < SEND_BUF_SZ) {
+	if (data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 	} else  {
@@ -1806,14 +1806,14 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
 
-	if (SEND_BUF_SZ	 < (xio_hdr_len + ulp_hdr_len)) {
+	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
 		ERROR_LOG("header size %zd exceeds the max header allowed %d\n",
-			  ulp_imm_len, SEND_BUF_SZ);
+			  ulp_imm_len, rdma_hndl->max_send_buf_sz);
 		goto cleanup;
 	}
 	/* the data is outgoing via SEND */
 	if ((xio_hdr_len + ulp_hdr_len + data_alignment +
-	    ulp_imm_len) < SEND_BUF_SZ) {
+	    ulp_imm_len) < rdma_hndl->max_send_buf_sz) {
 		if (data_alignment && ulp_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
@@ -2461,7 +2461,7 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	if (rdma_hndl->base.is_client) {
 		struct xio_rdma_setup_msg  req;
-		req.buffer_sz		= SEND_BUF_SZ;
+		req.buffer_sz		= rdma_hndl->max_send_buf_sz;
 		req.sq_depth		= rdma_hndl->sq_depth;
 		req.rq_depth		= rdma_hndl->rq_depth;
 		req.credits		= 0;
@@ -2525,7 +2525,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_read_setup_msg(rdma_hndl, task, &req);
 
 		/* current implementation is symatric */
-		rsp->buffer_sz	= SEND_BUF_SZ;
+		rsp->buffer_sz	= rdma_hndl->max_send_buf_sz;
 		rsp->sq_depth	= min(req.sq_depth, rdma_hndl->rq_depth);
 		rsp->rq_depth	= min(req.rq_depth, rdma_hndl->sq_depth);
 	}

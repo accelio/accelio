@@ -53,9 +53,11 @@
 
 
 /* default option values */
-#define XIO_OPTNAME_DEF_ENABLE_MEM_POOL			1
-#define XIO_OPTNAME_DEF_ENABLE_DMA_LATENCY		0
-
+#define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
+#define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
+#define XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD		SEND_BUF_SZ
+#define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		1024
+#define XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD		65536
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -74,8 +76,10 @@ double g_mhz;
 
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
-	.enable_mem_pool		= XIO_OPTNAME_DEF_ENABLE_MEM_POOL,
-	.enable_dma_latency		= XIO_OPTNAME_DEF_ENABLE_DMA_LATENCY,
+	.enable_mem_pool		= XIO_OPTVAL_DEF_ENABLE_MEM_POOL,
+	.enable_dma_latency		= XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY,
+	.rdma_buf_threshold		= XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD,
+	.rdma_buf_attr_rdonly		= 0,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -837,7 +841,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 	 * also note that client holds the sent and recv tasks
 	 * simultanousely */
 
-	rdma_hndl->num_tasks = 8*(rdma_hndl->sq_depth +
+	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
@@ -1582,6 +1586,9 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
+	rdma_hndl->max_send_buf_sz	= rdma_options.rdma_buf_threshold;
+	/* from now on don't allow changes */
+	rdma_options.rdma_buf_attr_rdonly = 1;
 
 	if (!rdma_hndl->cm_channel) {
 		TRACE_LOG("rdma transport: failed to allocate cm_channel\n");
@@ -1859,6 +1866,23 @@ static int xio_rdma_set_opt(void *xio_obj,
 		rdma_options.enable_dma_latency = *((int *)optval);
 		return 0;
 		break;
+	case XIO_OPTNAME_RDMA_BUF_THRESHOLD:
+		VALIDATE_SZ(sizeof(int));
+
+		/* changing the parameter is not allowed */
+		if (rdma_options.rdma_buf_attr_rdonly) {
+			xio_set_error(EPERM);
+			return -1;
+		}
+		if (*(int *)optval < 0 ||
+		    *(int *)optval > XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		rdma_options.rdma_buf_threshold = *((int *)optval) +
+					XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -1883,6 +1907,12 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
+	case XIO_OPTNAME_RDMA_BUF_THRESHOLD:
+		*((int *)optval) =
+			rdma_options.rdma_buf_threshold -
+				XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		*optlen = sizeof(int);
+		return 0;
 	default:
 		break;
 	}

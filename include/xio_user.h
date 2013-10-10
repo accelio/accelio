@@ -111,6 +111,8 @@ enum xio_optname {
 					    /**< memory pool		    */
 
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,    /**< enables the dma latency    */
+
+	XIO_OPTNAME_RDMA_BUF_THRESHOLD,    /**< set/get rdma buffer threshold */
 };
 
 /**
