@@ -257,13 +257,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 /*---------------------------------------------------------------------------*/
 size_t xio_write_tlv(uint16_t type, uint64_t len, uint8_t *buffer)
 {
-	static  uint32_t  magic;
 	struct xio_tlv *tlv = (struct xio_tlv *)buffer;
 
-	if (magic == 0)
-		magic = htonl(XIO_MAGIC);
-
-	tlv->magic	= magic;
+	tlv->magic	= htonl(XIO_MAGIC);
 	tlv->type	= htons(type);
 	tlv->len	= htonll(len);
 
@@ -277,13 +273,9 @@ size_t xio_read_tlv(uint16_t *type, uint64_t *len, void **value,
 		      uint8_t *buffer)
 {
 	struct xio_tlv *tlv;
-	static uint32_t  magic;
-
-	if (magic == 0)
-		magic = ntohl(XIO_MAGIC);
 
 	tlv = (struct xio_tlv *)buffer;
-	if (tlv->magic != magic)
+	if (tlv->magic != ntohl(XIO_MAGIC))
 		return -1;
 
 	*type	= ntohs(tlv->type);

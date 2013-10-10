@@ -53,7 +53,6 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	void			*buf;
 	void			*data;
 	struct xio_tasks_pool	*q;
-	int			pagesize = sysconf(_SC_PAGESIZE);
 	size_t			elems_alloc_sz;
 
 
@@ -65,15 +64,11 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	/* pool data */
 	elems_alloc_sz = max*(sizeof(struct xio_task) + task_dd_data_sz);
 
-	pool_alloc_sz = roundup(pool_alloc_sz, pagesize);
-
-	buf = memalign(pagesize, pool_alloc_sz);
+	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
-	memset(buf, 0, pool_alloc_sz);
-
 	/* pool */
 	q = buf;
 	q->dd_data = buf + sizeof(struct xio_tasks_pool);
@@ -84,14 +79,11 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	q->array = buf;
 	buf = buf + max*sizeof(struct xio_task *);
 
-	elems_alloc_sz = roundup(elems_alloc_sz, pagesize);
-
-	data = memalign(pagesize, elems_alloc_sz);
+	data = calloc(elems_alloc_sz, sizeof(uint8_t));
 	if (data == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
-	memset(data, 0, elems_alloc_sz);
 
 	INIT_LIST_HEAD(&q->stack);
 
