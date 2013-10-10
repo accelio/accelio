@@ -183,7 +183,11 @@ static int xio_on_new_message(struct xio_server *server,
 			  "session:%p, conn:%p, session_id:%d\n",
 			   server, session, conn, session->session_id);
 
-		connection = xio_server_create_accepted_conn(session, conn);
+		session->lead_conn = NULL;
+		connection = xio_session_find_conn(session, conn);
+		if (connection == NULL)
+			connection = xio_server_create_accepted_conn(session,
+								     conn);
 	}
 
 	/* route the message to the session */

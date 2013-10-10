@@ -147,6 +147,10 @@ int xio_session_disconnect(
 struct xio_session *xio_find_session(
 		struct xio_task *task);
 
+struct xio_connection *xio_session_find_conn(
+		struct xio_session *session,
+		struct xio_conn *conn);
+
 struct xio_connection *xio_session_alloc_conn(
 		struct xio_session *session,
 		struct xio_context *ctx,
