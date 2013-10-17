@@ -42,6 +42,7 @@
 #include <linux/mm.h>
 #include <linux/highmem.h>
 #include <linux/scatterlist.h>
+#include <linux/version.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
@@ -59,7 +60,7 @@
 
 #define ISER_KMALLOC_THRESHOLD 0x20000 /* 128K - kmalloc limit */
 
-#ifndef sg_unmark_end
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
 /**
  * sg_unmark_end - Undo setting the end of the scatterlist
  * @sg:          SG entryScatterlist
@@ -83,11 +84,14 @@ static inline void sg_unmark_end(struct scatterlist *sg)
 void xio_unmap_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 			enum dma_data_direction direction)
 {
+	if (!desc->nents)
+		return;
+
 	ib_dma_unmap_sg(ib_dev, desc->sgl, desc->mapped, direction);
 	desc->mapped = 0;
 
 	/* marked in map */
-	sg_unmark_end(&desc->sgl[desc->nents]);
+	sg_unmark_end(&desc->sgl[desc->nents - 1]);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -97,11 +101,14 @@ void xio_unmap_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 			enum dma_data_direction direction)
 {
+	if (!xd->nents)
+		return;
+
 	ib_dma_unmap_sg(ib_dev, xd->sgl, xd->mapped, direction);
 	xd->mapped = 0;
 
 	/* marked in map */
-	sg_unmark_end(&xd->sgl[xd->nents]);
+	sg_unmark_end(&xd->sgl[xd->nents - 1]);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -111,16 +118,22 @@ int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 		     enum dma_data_direction direction)
 {
 	int nents;
+	int i;
 
+	if (!xd->nents)
+		return -1;
 
 	/* cleared in unmap */
-	sg_mark_end(&xd->sgl[xd->nents]);
-	nents = ib_dma_map_sg(ib_dev, xd->sgl, xd->nents,
-			      direction);
+	sg_mark_end(&xd->sgl[xd->nents - 1]);
+	nents = ib_dma_map_sg(ib_dev, xd->sgl, xd->nents, direction);
 	if (!nents) {
-		sg_unmark_end(&xd->sgl[xd->nents]);
+		sg_unmark_end(&xd->sgl[xd->nents - 1]);
 		xd->mapped = 0;
 		return -1;
+	}
+	for (i = 0; i < nents; i++) {
+		xd->sge[i].addr   = ib_sg_dma_address(ib_dev, &xd->sgl[i]);
+		xd->sge[i].length = ib_sg_dma_len(ib_dev, &xd->sgl[i]);
 	}
 	xd->mapped = nents;
 
@@ -135,12 +148,14 @@ int xio_map_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 {
 	int nents;
 
+	if (!desc->nents)
+		return -1;
+
 	/* cleared in unmap */
-	sg_mark_end(&desc->sgl[desc->nents]);
-	nents = ib_dma_map_sg(ib_dev, desc->sgl, desc->nents,
-			      direction);
+	sg_mark_end(&desc->sgl[desc->nents - 1]);
+	nents = ib_dma_map_sg(ib_dev, desc->sgl, desc->nents, direction);
 	if (!nents) {
-		sg_unmark_end(&desc->sgl[desc->nents]);
+		sg_unmark_end(&desc->sgl[desc->nents - 1]);
 		desc->mapped = 0;
 		return -1;
 	}

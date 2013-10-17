@@ -41,38 +41,33 @@
 #include <linux/kernel.h>
 
 #define FATAL_LOG(fmt, ...) \
-	pr_crit("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_crit("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 
 #define ERROR_LOG(fmt, ...) \
-	pr_err("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_err("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 
 #define WARN_LOG(fmt, ...) \
-	pr_warn("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_warn("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 
 #define INFO_LOG(fmt, ...) \
-	pr_info("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_info("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 
 #define DEBUG_LOG(fmt, ...) \
-	pr_debug("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_debug("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 
+/* pr_devel() should produce zero code unless DEBUG is defined */
 #define TRACE_LOG(fmt, ...) \
-	pr_cont("[%lu] %s %d %s" pr_fmt(fmt), \
-		jiffies, \
+	pr_devel("%s %d %s " pr_fmt(fmt), \
 		__FILE__, __LINE__, __func__,\
 		## __VA_ARGS__)
 

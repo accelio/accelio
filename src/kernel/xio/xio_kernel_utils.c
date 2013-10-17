@@ -42,6 +42,7 @@
 
 #include <linux/kernel.h>
 #include <linux/topology.h>
+#include <linux/inet.h>
 
 #ifndef IN6ADDR_ANY_INIT
 #define IN6ADDR_ANY_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
@@ -179,13 +180,13 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			/* what about scope and flow */
 			s6->sin6_family = AF_INET6;
 			/* s6->sin6_addr	= IN6ADDR_ANY_INIT; */
-			memset(0, (void*) &s6->sin6_addr, sizeof(s6->sin6_addr));
+			memset((void*) &s6->sin6_addr, 0, sizeof(s6->sin6_addr));
 			s6->sin6_port	= port_be16;
 		} else {
 			struct sockaddr_in *s4 = (struct sockaddr_in *) ss;
 			s4->sin_family		= AF_INET;
 			s4->sin_addr.s_addr	= INADDR_ANY;
-			s4->sin_port		= port;
+			s4->sin_port		= port_be16;
 		}
 	} else {
 		if (priv_parse_ip_addr(host, len, port_be16, ss) < 0) {

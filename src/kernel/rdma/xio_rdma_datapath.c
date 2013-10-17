@@ -234,9 +234,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 	/* if "ready to send queue" is not empty */
 	while (rdma_hndl->tx_ready_tasks_num) {
-		task = list_first_entry(
-				&rdma_hndl->tx_ready_list,
-				struct xio_task,  tasks_list_entry);
+		task = list_first_entry(&rdma_hndl->tx_ready_list,
+					struct xio_task,  tasks_list_entry);
 
 		rdma_task = task->dd_data;
 		if (rdma_task->ib_op == XIO_IB_RDMA_WRITE) {
@@ -256,6 +255,14 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 		xio_rdma_write_sn(task, rdma_hndl->sn, rdma_hndl->ack_sn,
 				  rdma_hndl->credits);
+
+		/* Map the send */
+		if (xio_map_work_req(rdma_hndl->dev->ib_dev, &rdma_task->txd,
+				     DMA_TO_DEVICE)) {
+			ERROR_LOG("DMA map to device failed\n");
+			return -1;
+		}
+
 		rdma_hndl->sn++;
 		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
 		rdma_hndl->credits = 0;
@@ -500,7 +507,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			   "ib_op:%x\n",
 			   rdma_hndl, rdma_task, task,
 			   wc->wr_id,
-			   xio_ib_wc_opcode_str(wc->status),
+			   xio_ib_wc_status_str(wc->status),
 			   wc->vendor_err,
 			   rdma_task->ib_op);
 	} else  {
@@ -510,7 +517,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			  "ib_op:0x%x\n",
 			  rdma_hndl, rdma_task, task,
 			  wc->wr_id,
-			  xio_ib_wc_opcode_str(wc->status),
+			  xio_ib_wc_status_str(wc->status),
 			  wc->vendor_err,
 			  rdma_task->ib_op);
 
@@ -569,9 +576,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->sim_peer_credits--;
 
 	/* unmap dma */
-	xio_unmap_work_req(rdma_hndl->dev->ib_dev, rxd,
-			   DMA_FROM_DEVICE);
-
+	xio_unmap_work_req(rdma_hndl->dev->ib_dev, rxd, DMA_FROM_DEVICE);
 
 	/* rearm the receive queue  */
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
@@ -751,8 +756,8 @@ static inline void xio_handle_wc(struct ib_wc *wc, int has_more)
 	struct xio_rdma_task		*rdma_task = task->dd_data;
 	struct xio_rdma_transport	*rdma_hndl = rdma_task->rdma_hndl;
 
-	TRACE_LOG("received opcode :%s [%x]\n",
-		  xio_ib_wc_opcode_str(wc->opcode), wc->opcode);
+	TRACE_LOG("received opcode :%s byte_len [%u]\n",
+		  xio_ib_wc_opcode_str(wc->opcode), wc->byte_len);
 
 	switch (wc->opcode) {
 	case IB_WC_RECV:
@@ -2360,6 +2365,13 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		xio_task_addref(task);
 	} else {
 		rdma_hndl->rsps_in_flight_nr++;
+	}
+
+	/* Map the send */
+	if (xio_map_work_req(rdma_hndl->dev->ib_dev, &rdma_task->txd,
+			     DMA_TO_DEVICE)) {
+		ERROR_LOG("DMA map to device failed\n");
+		return -1;
 	}
 
 	list_add_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);

@@ -35,15 +35,18 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include "xio_os.h"
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_task.h"
 
+#include <linux/mm.h>
+
 #define XIO_TASK_MAGIC   0x58494f5f5441534b
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_init						     */
+/* xio_tasks_pool_init							     */
 /*---------------------------------------------------------------------------*/
 struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 					   int task_dd_data_sz,
@@ -63,11 +66,14 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	/* pool data */
 	elems_alloc_sz = max*(sizeof(struct xio_task) + task_dd_data_sz);
 
-	buf = kzalloc(pool_alloc_sz, GFP_KERNEL);
+	pool_alloc_sz = PAGE_ALIGN(pool_alloc_sz);
+
+	buf = vmalloc(pool_alloc_sz);
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
+	memset(buf, 0, pool_alloc_sz);
 
 	/* pool */
 	q = buf;
@@ -79,11 +85,14 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	q->array = buf;
 	buf = buf + max*sizeof(struct xio_task *);
 
-	data = kzalloc(elems_alloc_sz, GFP_KERNEL);
+	elems_alloc_sz = PAGE_ALIGN(elems_alloc_sz);
+
+	data = vmalloc(elems_alloc_sz);
 	if (data == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
+	memset(data, 0, elems_alloc_sz);
 
 	INIT_LIST_HEAD(&q->stack);
 
@@ -110,6 +119,6 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 /*---------------------------------------------------------------------------*/
 void xio_tasks_pool_free(struct xio_tasks_pool *q)
 {
-	kfree(q->array[0]);
-	kfree(q);
+	vfree(q->array[0]);
+	vfree(q);
 }

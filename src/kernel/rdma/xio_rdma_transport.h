@@ -268,7 +268,7 @@ struct xio_device {
 
 struct xio_rdma_tasks_pool {
 	/* memory for non-rdma send/recv */
-	void				*data_pool;
+	struct kmem_cache		*data_pool;
 	int				buf_size;
 	int				pad;
 };
@@ -342,7 +342,7 @@ struct xio_rdma_transport {
 	size_t				membuf_sz;
 
 	struct xio_rdma_setup_msg	setup_rsp;
-	u8				setup_rsp_pad[2];
+	u16				handler_nesting;
 };
 
 /*
@@ -387,6 +387,8 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 void xio_mr_list_init(void);
 int xio_mr_list_free(void);
 const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode);
+const char *xio_ib_wc_status_str(enum ib_wc_status status);
+const char *xio_rdma_event_str(enum rdma_cm_event_type event);
 
 
 /* xio_rdma_datapath.c */
@@ -447,9 +449,6 @@ int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 
 int xio_map_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
 		 enum dma_data_direction direction);
-
-const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode);
-const char *xio_rdma_event_str(enum rdma_cm_event_type event);
 
 int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl);
 

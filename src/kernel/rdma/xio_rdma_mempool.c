@@ -94,6 +94,7 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 	for (i =  0; i < real_ones; i++) {
 		if (!ch->kcache)
 			break;
+		INFO_LOG("kcache(%p) freed\n", ch->kcache);
 		kmem_cache_destroy(ch->kcache);
 		ch->kcache = NULL;
 	}
@@ -112,23 +113,36 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 	char name[256];
 
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
-	if (!p)
-		return NULL;
+	if (!p) {
+		INFO_LOG("%s kzalloc failed\n", __func__);
+		goto cleanup0;
+	}
 
 	real_ones = ARRAY_SIZE(sizes) - 1;
 	ch = p->pool;
 	for (i =  0; i < real_ones; i++) {
+		ch->block_sz = sizes[i];
 		sprintf(name, "xio_rdma_cache-%zuK", ch->block_sz/1024);
 		ch->kcache = kmem_cache_create(name,
-					ch->block_sz, PAGE_SIZE,
-					SLAB_HWCACHE_ALIGN, NULL);
-		if (!ch->kcache)
+					       ch->block_sz, PAGE_SIZE,
+					       SLAB_HWCACHE_ALIGN, NULL);
+		if (!ch->kcache) {
+			ERROR_LOG("kcache(%s) creation failed\n", name);
 			goto cleanup;
+		}
+		INFO_LOG("kcache(%s) created(%p)\n", name, ch->kcache);
+		ch++;
 	}
 
+	INFO_LOG("mempool created(%p)\n", p);
+	return p;
+ 
 cleanup:
-
 	xio_rdma_mempool_destroy(p);
+
+cleanup0:
+	ERROR_LOG("%s failed\n", __func__);
+
 	return NULL;
 }
 
@@ -152,7 +166,7 @@ static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
 int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 			   struct xio_rdma_mp_mem *mp_mem)
 {
-	int			index;
+	int index;
 
 	mp_mem->addr = NULL;
 	mp_mem->mr = NULL;

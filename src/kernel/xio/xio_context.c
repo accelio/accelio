@@ -37,6 +37,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/llist.h>
 #include <linux/wait.h>
@@ -138,7 +139,7 @@ struct xio_context *xio_ctx_open(unsigned int flags,
 	struct xio_context *ctx;
 	int cpu;
 
-	if (cpu_hint >= num_online_cpus()) {
+	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("cpu_hint(%d) >= num_online_cpus(%d)\n",
 			  cpu_hint, num_online_cpus());
@@ -154,7 +155,8 @@ struct xio_context *xio_ctx_open(unsigned int flags,
 
 	xio_read_logging_level();
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
+	put_cpu();
 	if (cpu == -1)
 		goto cleanup0;
 
@@ -166,8 +168,10 @@ struct xio_context *xio_ctx_open(unsigned int flags,
 		goto cleanup0;
 	}
 
-	if (cpu_hint < 0)
-		cpu_hint = smp_processor_id();
+	if (cpu_hint < 0) {
+		cpu_hint = get_cpu();
+		put_cpu();
+	}
 
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;

@@ -75,7 +75,6 @@ EXPORT_SYMBOL(xio_context_add_observer);
 EXPORT_SYMBOL(xio_context_remove_observer);
 
 EXPORT_SYMBOL(xio_set_error);
-EXPORT_SYMBOL(xio_get_error);
 EXPORT_SYMBOL(xio_strerror);
 EXPORT_SYMBOL(xio_errno);
 

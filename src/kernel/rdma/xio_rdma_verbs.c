@@ -5,11 +5,11 @@
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2); available from the file COPYING in the main
  * directory of this source tree); or the Mellanox Technologies® BSD license
- * below:
+ * below);
  *
  *      - Redistribution and use in source and binary forms); with or without
  *        modification); are permitted provided that the following conditions
- *        are met:
+ *        are met);
  *
  *      - Redistributions of source code must retain the above copyright
  *        notice); this list of conditions and the following disclaimer.
@@ -58,6 +58,40 @@
 extern struct list_head dev_list;
 
 #define XX(a) case (a): return #a
+
+/*---------------------------------------------------------------------------*/
+/* ibv_wc_opcode_str							     */
+/*---------------------------------------------------------------------------*/
+
+const char *xio_ib_wc_status_str(enum ib_wc_status status)
+{
+	switch (status) {
+	XX(IB_WC_SUCCESS);
+	XX(IB_WC_LOC_LEN_ERR);
+	XX(IB_WC_LOC_QP_OP_ERR);
+	XX(IB_WC_LOC_EEC_OP_ERR);
+	XX(IB_WC_LOC_PROT_ERR);
+	XX(IB_WC_WR_FLUSH_ERR);
+	XX(IB_WC_MW_BIND_ERR);
+	XX(IB_WC_BAD_RESP_ERR);
+	XX(IB_WC_LOC_ACCESS_ERR);
+	XX(IB_WC_REM_INV_REQ_ERR);
+	XX(IB_WC_REM_ACCESS_ERR);
+	XX(IB_WC_REM_OP_ERR);
+	XX(IB_WC_RETRY_EXC_ERR);
+	XX(IB_WC_RNR_RETRY_EXC_ERR);
+	XX(IB_WC_LOC_RDD_VIOL_ERR);
+	XX(IB_WC_REM_INV_RD_REQ_ERR);
+	XX(IB_WC_REM_ABORT_ERR);
+	XX(IB_WC_INV_EECN_ERR);
+	XX(IB_WC_INV_EEC_STATE_ERR);
+	XX(IB_WC_FATAL_ERR);
+	XX(IB_WC_RESP_TIMEOUT_ERR);
+	XX(IB_WC_GENERAL_ERR);
+	default: return "IB_WC_STATUS_UNKNOWN";
+	}
+};
+
 /*---------------------------------------------------------------------------*/
 /* ibv_wc_opcode_str							     */
 /*---------------------------------------------------------------------------*/
@@ -65,17 +99,17 @@ extern struct list_head dev_list;
 const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode)
 {
 	switch (opcode) {
-	case IB_WC_SEND:		return "IB_WC_SEND";
-	case IB_WC_RDMA_WRITE:		return "IB_WC_RDMA_WRITE";
-	case IB_WC_RDMA_READ:		return "IB_WC_RDMA_READ";
-	case IB_WC_COMP_SWAP:		return "IB_WC_COMP_SWAP";
-	case IB_WC_FETCH_ADD:		return "IB_WC_FETCH_ADD";
-	case IB_WC_BIND_MW:		return "IB_WC_BIND_MW";
-	/* recv-side: inbound completion */
-	case IB_WC_RECV:		return "IB_WC_RECV";
-	case IB_WC_RECV_RDMA_WITH_IMM:	return "IB_WC_RECV_RDMA_WITH_IMM";
-	default:			return "IB_WC_UNKNOWN";
-	};
+	XX(IB_WC_SEND);
+	XX(IB_WC_RDMA_WRITE);
+	XX(IB_WC_RDMA_READ);
+	XX(IB_WC_COMP_SWAP);
+	XX(IB_WC_FETCH_ADD);
+	XX(IB_WC_BIND_MW);
+	/* recv-side); inbound completion */
+	XX(IB_WC_RECV);
+	XX(IB_WC_RECV_RDMA_WITH_IMM);
+	default: return "IB_WC_OPCODE_UNKNOWN";
+	}
 }
 
 const char *xio_rdma_event_str(enum rdma_cm_event_type event)
@@ -97,6 +131,6 @@ const char *xio_rdma_event_str(enum rdma_cm_event_type event)
 	XX(RDMA_CM_EVENT_MULTICAST_ERROR);
 	XX(RDMA_CM_EVENT_ADDR_CHANGE);
 	XX(RDMA_CM_EVENT_TIMEWAIT_EXIT);
-	default:	return "RDMA_CM_UNKNOWN";
+	default: return "RDMA_CM_UNKNOWN";
 	}
 }
