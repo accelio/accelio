@@ -29,6 +29,7 @@ AC_LANG([C])
 # Checks for header files.
 AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
 		 [mypj_found_verbs_headers=yes; break;])
+AC_CHECK_HEADERS([numa.h])
 
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the infiniband header files])])
@@ -36,6 +37,8 @@ AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
+
+AC_CHECK_LIB(numa, numa_available)
 
 ##########################################################################
 # debug compilation support

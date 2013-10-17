@@ -26,6 +26,7 @@ libxio_headers = 	./get_clock.h 				\
 			./xio_os.h				\
 			./xio_rdma_mempool.h			\
 			./xio_rdma_transport.h			\
+			./xio_rdma_utils.h			\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
 			../common/xio_conn.h			\
@@ -57,6 +58,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			xio_init.c			\
 			get_clock.c			\
 			xio_rdma_mempool.c		\
+			xio_rdma_utils.c		\
 			xio_rdma_verbs.c		\
 			xio_rdma_management.c		\
 			xio_rdma_datapath.c		\
@@ -81,7 +83,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lrdmacm -libverbs -lrt 
+libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt 
 
 #libxio_la_LIBADD = $(AM_LDFLAGS)
 

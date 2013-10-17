@@ -5,6 +5,14 @@ libxio (a.k.a lib accelio) is a lightweight messaging library layered on top
 of rdma. the library provides asynchronous messaging designed for zero
 copy messaging and lock free scalability. 
 
+Prerequistes packages
+----------------------
+RedHat
+	yum groupinstall "Infiniband Support"
+	yum install infiniband-diags
+	yum install librdmacm-devel libibverbs-devel numactl numactl-devel libaio-devel
+
+
 Building and installation
 --------------------------
 
