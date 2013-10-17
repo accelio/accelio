@@ -138,9 +138,10 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 
 			if ((access & IBV_ACCESS_ALLOCATE_MR) &&
 			    !(dev->device_attr.device_cap_flags &
-				    IBV_DEVICE_MR_ALLOCATE)) {
-		                 ERROR_LOG("allocations are ot available on %s",
-			                    dev->verbs->device->name);
+			    IBV_DEVICE_MR_ALLOCATE)) {
+				INFO_LOG(
+				     "allocations are not supported on %s\n",
+				     dev->verbs->device->name);
 			}
 			goto cleanup2;
 		}
@@ -206,7 +207,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		list_del(&tmr->mr_list_entry);
 
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
-				dm_list_entry) {
+					 dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
 			if (retval != 0) {
 				xio_set_error(errno);

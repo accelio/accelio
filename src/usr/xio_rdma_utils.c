@@ -35,28 +35,85 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include "xio_os.h"
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
+
 #include "libxio.h"
 #include "xio_common.h"
-#include "xio_sessions_store.h"
-#include "xio_conns_store.h"
-
-int page_size;
-
+#include "xio_rdma_mempool.h"
+#include "xio_task.h"
+#include "xio_rdma_transport.h"
+#include "xio_rdma_utils.h"
 
 /*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
+/* xio_validate_rdma_op							     */
 /*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_constructor(void)
+int xio_validate_rdma_op(
+			struct xio_sge *lsg_list, size_t lsize,
+			struct xio_sge *rsg_list, size_t rsize,
+			int op_size)
 {
-	page_size = sysconf(_SC_PAGESIZE);
-	sessions_store_construct();
-	conns_store_construct();
+	int		l	= 0,
+			r	= 0;
+	uint64_t	laddr	= lsg_list[0].addr;
+	uint64_t	raddr	= rsg_list[0].addr;
+	uint32_t	llen	= lsg_list[0].length;
+	uint32_t	rlen	= rsg_list[0].length;
+	uint32_t	tot_len = 0;
+
+	if (lsize < 1 || rsize < 1) {
+		ERROR_LOG("iovec size < 1 lsize:%d, rsize:%d\n", lsize, rsize);
+		return -1;
+	}
+
+	while (1) {
+		if (rlen < llen) {
+			r++;
+			tot_len	+= rlen;
+			if (r == rsize)
+				break;
+			llen	-= rlen;
+			laddr	+= rlen;
+			raddr	= rsg_list[r].addr;
+			rlen	= rsg_list[r].length;
+		} else if (llen < rlen) {
+			/* check page alignment when source buff spans more
+			 * then one destination buffer */
+			if (!IS_PAGE_ALIGNED(
+				    lsg_list[l].addr + lsg_list[l].length))
+				return -1;
+			l++;
+			tot_len	+= llen;
+			if (l == lsize)
+				break;
+			rlen	-= llen;
+			raddr	+= llen;
+			laddr	= lsg_list[l].addr;
+			llen	= lsg_list[l].length;
+
+			if (!IS_PAGE_ALIGNED(lsg_list[l].addr))
+				return -1;
+		} else {
+			l++;
+			r++;
+			tot_len	+= llen;
+			if ((l == lsize) || (r == rsize))
+				break;
+
+			laddr	= lsg_list[l].addr;
+			llen	= lsg_list[l].length;
+			raddr	= rsg_list[r].addr;
+			rlen	= rsg_list[r].length;
+		}
+	}
+
+	/* not enough buffers to complete */
+	if (tot_len < op_size) {
+		ERROR_LOG("iovec exausted\n");
+		return -1;
+	}
+
+	return 0;
 }
 
-/*
-__attribute__((destructor)) void xio_constructor(void)
-{
-}
-*/

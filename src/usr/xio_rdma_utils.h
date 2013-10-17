@@ -35,28 +35,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef XIO_RDMA_UTILS_H
+#define XIO_RDMA_UTILS_H
 
-#include "xio_os.h"
-#include "libxio.h"
-#include "xio_common.h"
-#include "xio_sessions_store.h"
-#include "xio_conns_store.h"
+int xio_validate_rdma_op(
+			struct xio_sge *lsge, size_t lsize,
+			struct xio_sge *rsge, size_t rsize,
+			int op_size);
 
-int page_size;
+#endif /*XIO_RDMA_UTILS_H */
 
-
-/*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
-/*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_constructor(void)
-{
-	page_size = sysconf(_SC_PAGESIZE);
-	sessions_store_construct();
-	conns_store_construct();
-}
-
-/*
-__attribute__((destructor)) void xio_constructor(void)
-{
-}
-*/

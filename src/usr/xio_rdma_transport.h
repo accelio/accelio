@@ -38,6 +38,7 @@
 #ifndef  XIO_RDMA_TRANSPORT_H
 #define  XIO_RDMA_TRANSPORT_H
 
+extern int page_size;
 
 /* poll_cq defentions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -70,9 +71,9 @@
 #define HARD_CQ_MOD			64
 #define SEND_TRESHOLD			8
 
-#define PAGE_SHIFT			12
-#define PAGE_SIZE			(1UL << PAGE_SHIFT)
-#define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)ptr) == 0)
+#define PAGE_SIZE			page_size
+/* see if a pointer is page aligned. */
+#define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)(ptr)) == 0)
 
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
@@ -120,13 +121,14 @@ struct xio_rdma_options {
 };
 
 struct xio_sge {
-	uint64_t		addr;
-	uint32_t		length;
-	uint32_t		stag;
+	uint64_t		addr;		/* virtual address */
+	uint32_t		length;		/* length	   */
+	uint32_t		stag;		/* rkey		   */
+
 };
 
 struct __attribute__((__packed__)) xio_req_hdr {
-	uint16_t		req_hdr_len;	 /* req header length	*/
+	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		ack_sn;		/* ack serial number	*/
 	uint16_t		credits;	/* peer send credits	*/
@@ -136,17 +138,13 @@ struct __attribute__((__packed__)) xio_req_hdr {
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
-	uint32_t		remain_data_len; /* remaining data length */
-	uint64_t		read_va;	/* read virtual address */
-	uint32_t		read_stag;	/* read rkey		*/
-	uint32_t		read_len;	/* read length		*/
-	uint64_t		write_va;	/* write virtual address */
-	uint32_t		write_stag;	/* write rkey		*/
-	uint32_t		write_len;	/* write length		*/
+	uint32_t		remain_data_len;/* remaining data length */
+	uint32_t		read_num_sge;
+	uint32_t		write_num_sge;
 };
 
 struct __attribute__((__packed__)) xio_rsp_hdr {
-	uint16_t		rsp_hdr_len;	 /* rsp header length	*/
+	uint16_t		rsp_hdr_len;	/* rsp header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		ack_sn;		/* ack serial number	*/
 	uint16_t		credits;	/* peer send credits	*/
@@ -156,11 +154,10 @@ struct __attribute__((__packed__)) xio_rsp_hdr {
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
-	uint32_t		remain_data_len; /* remaining data length */
+	uint32_t		remain_data_len;/* remaining data length */
 	uint32_t		status;		/* status		*/
-	uint64_t		read_va;	/* read virtual address */
-	uint32_t		read_stag;	/* read rkey		*/
-	uint32_t		read_len;	/* read length		*/
+	uint32_t		read_num_sge;
+	uint32_t		write_num_sge;
 };
 
 struct __attribute__((__packed__)) xio_rdma_setup_msg {
@@ -192,6 +189,8 @@ struct xio_rdma_task {
 	enum xio_ib_op_code		ib_op;
 	uint16_t			more_in_batch;
 	uint16_t			sn;
+	uint16_t			phantom_idx;
+	uint16_t			pad[3];
 
 	struct xio_work_req		txd;
 	struct xio_work_req		rxd;
@@ -202,6 +201,7 @@ struct xio_rdma_task {
 	struct xio_rdma_mp_mem		read_sge[XIO_MAX_IOV];
 	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
 
+	/* represent the requester request */
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
 	struct xio_sge			req_read_sge[XIO_MAX_IOV];

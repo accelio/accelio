@@ -263,24 +263,28 @@ int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 	int			index;
 	struct xio_mem_slot	*slot;
 	struct xio_mem_block	*block;
-	int			ret;
+	int			ret = 0;
 
 	index = size2index(p, length);
+retry:
 	if (index == -1) {
 		errno = EINVAL;
-		return -1;
+		ret = -1;
+		goto cleanup;
 	}
 	slot = &p->slot[index];
-
 	pthread_spin_lock(&slot->lock);
 
 	if (list_empty(&slot->free_blocks_list)) {
-		printf("resizing slot size:%zd\n", slot->mb_size);
 		ret = xio_rdma_mem_slot_resize(slot);
 		if (ret == -1) {
+			if (++index == XIO_MEM_SLOTS_NR)
+				index  = -1;
 			pthread_spin_unlock(&slot->lock);
-			return -1;
+			ret = 0;
+			goto retry;
 		}
+		printf("resizing slot size:%zd\n", slot->mb_size);
 	}
 	block = list_first_entry(
 				&slot->free_blocks_list,
@@ -295,7 +299,8 @@ int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 	list_move(&block->mem_block_entry, &slot->used_blocks_list);
 
 	pthread_spin_unlock(&slot->lock);
-	return 0;
+cleanup:
+	return ret;
 }
 
 /*---------------------------------------------------------------------------*/
