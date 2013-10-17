@@ -99,8 +99,10 @@ for ((head)->tmp_i = 0;							\
 			HASHTABLE_LIST(head, (head)->tmp_i),		\
 			   field._tfield)
 
-#define HASHTABLE_REMOVE(head, var, type, field, _tfield)		\
-	hlist_del(&(var)->field._tfield);
+#define HASHTABLE_REMOVE(head, var, type, field, _tfield) do {		\
+	hlist_del(&(var)->field._tfield);				\
+	(head)->count--;						\
+} while (0)
 
 
 

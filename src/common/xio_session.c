@@ -144,9 +144,9 @@ struct xio_connection *xio_session_assign_conn(
 		     (connection->conn == conn))) {
 			connection->conn = conn;
 			/* remove old observer if exist */
+			spin_unlock(&session->conn_list_lock);
 			xio_conn_remove_observer(conn, session);
 			xio_conn_add_observer(conn, session, xio_on_conn_event);
-			spin_unlock(&session->conn_list_lock);
 			return connection;
 		}
 	}

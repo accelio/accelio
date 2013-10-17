@@ -12,7 +12,7 @@ LT_INIT
 AC_PROG_LIBTOOL
 
 # store current user given compiler flags to avoid default setup via AC_PROG_CC
-OLD_CFLAGS=$CFLAGS
+#OLD_CFLAGS=$CFLAGS
 
 # check for C compiler and the library compiler
 AC_PROG_CC([gcc])

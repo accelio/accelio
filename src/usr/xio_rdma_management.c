@@ -1355,12 +1355,12 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->rx_list);
 	}
 
-
 	if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
 		xio_rdma_notify_observer(rdma_hndl,
 					 XIO_TRANSPORT_DISCONNECTED, NULL);
-		rdma_hndl->state = XIO_STATE_CLOSED;
-	} else if (rdma_hndl->state == XIO_STATE_CLOSED) {
+	}
+
+	if (rdma_hndl->state == XIO_STATE_CLOSED) {
 		xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_CLOSED,
 					 NULL);
 		xio_rdma_close_complete(
@@ -1648,12 +1648,14 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			if (retval)
 				ERROR_LOG("conn:%p rdma_disconnect failed, " \
 					  "%m\n", rdma_hndl);
-		}  else  {
+		}  else if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
+			rdma_hndl->state = XIO_STATE_CLOSED;
+		} else {
 			xio_rdma_notify_observer(rdma_hndl,
-						 XIO_TRANSPORT_CLOSED,
-						 NULL);
+					XIO_TRANSPORT_CLOSED,
+					NULL);
 			xio_rdma_close_complete(
-				(struct xio_transport_base *)rdma_hndl);
+					(struct xio_transport_base *)rdma_hndl);
 		}
 	}
 }

@@ -1238,7 +1238,7 @@ struct xio_conn *xio_conn_open(
 		kfree(conn);
 		return NULL;
 	}
-	conn->transport		= transport;
+	conn->transport	= transport;
 	atomic_set(&conn->refcnt, 1);
 
 	xio_conns_store_add(conn, &conn->cid);
@@ -1301,6 +1301,8 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 		return -1;
 	}
 	if (atomic_read(&conn->refcnt) == 1) {
+		/* do not hold the listener connection in storage */
+		xio_conns_store_remove(conn->cid);
 		retval = conn->transport->listen(conn->transport_hndl,
 						 portal_uri, src_port);
 		if (retval != 0) {
