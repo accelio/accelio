@@ -193,6 +193,8 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				return -1;
 			strcpy(port, (p1 + 1));
 		} else {
+			if (*p2 != '/')
+				return -1;
 			p1 = p2;
 			while (*p1 != ':') {
 				p1--;
@@ -200,7 +202,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 					return  -1;
 			}
 
-			len = (p2-1) - (p1 + 1);
+			len = p2 - (p1 + 1);
 
 			strncpy(port, p1 + 1, len);
 			port[len] = 0;
