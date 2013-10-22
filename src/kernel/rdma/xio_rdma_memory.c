@@ -651,8 +651,7 @@ void xio_free_frwr_pool(struct xio_dev *dev)
 void xio_unreg_mem_fmr(struct xio_task *xio_task,
 			enum dma_data_direction cmd_dir)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_mem_reg *reg = &xio_task->rdma_regd[cmd_dir].reg;
 	int ret;
 
@@ -671,8 +670,7 @@ void xio_unreg_mem_fmr(struct xio_task *xio_task,
 void xio_unreg_mem_frwr(struct xio_task *xio_task,
 			 enum dma_data_direction cmd_dir)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_mem_reg *reg = &xio_task->rdma_regd[cmd_dir].reg;
 	struct xio_dev *dev = xio_task->xio_conn->ib_conn;
 	struct fast_reg_descriptor *desc = reg->mem_h;
@@ -696,8 +694,7 @@ void xio_unreg_mem_frwr(struct xio_task *xio_task,
 int xio_reg_rdma_mem_fmr(struct xio_task *xio_task,
 			  enum dma_data_direction cmd_dir)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_conn     *ib_conn = xio_task->xio_conn->ib_conn;
 	struct xio_device   *device = ib_conn->device;
 	struct ib_device     *ibdev = device->ib_device;
@@ -834,8 +831,7 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *desc,
 int xio_reg_rdma_mem_frwr(struct xio_task *xio_task,
 			  enum dma_data_direction cmd_dir)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_dev *dev = xio_task->xio_conn->ib_conn;
 	struct xio_device *device = ib_conn->device;
 	struct ib_device *ibdev = device->ib_device;

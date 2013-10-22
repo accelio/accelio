@@ -79,6 +79,9 @@
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
 
+
+#define XIO_TO_RDMA_TASK(xt, rt) \
+		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
@@ -101,13 +104,13 @@ struct xio_rdma_transport;
 
 /*---------------------------------------------------------------------------*/
 struct xio_sge {
-	u64		addr;
-	u32		length;
-	u32		stag;
+	u64		addr;		/* virtual address */
+	u32		length;		/* length	   */
+	u32		stag;		/* rkey		   */
 };
 
 struct __attribute__((__packed__)) xio_req_hdr {
-	u16		req_hdr_len;	 /* req header length	*/
+	u16		req_hdr_len;	/* req header length	*/
 	u16		sn;		/* serial number	*/
 	u16		ack_sn;		/* ack serial number	*/
 	u16		credits;	/* peer send credits	*/
@@ -117,17 +120,13 @@ struct __attribute__((__packed__)) xio_req_hdr {
 	u16		ulp_hdr_len;	/* ulp header length	*/
 	u16		ulp_pad_len;	/* pad_len length	*/
 	u64		ulp_imm_len;	/* ulp data length	*/
-	u32		remain_data_len; /* remaining data length */
-	u64		read_va;	/* read virtual address */
-	u32		read_stag;	/* read rkey		*/
-	u32		read_len;	/* read length		*/
-	u64		write_va;	/* write virtual address */
-	u32		write_stag;	/* write rkey		*/
-	u32		write_len;	/* write length		*/
+	u32		remain_data_len;/* remaining data length */
+	u32		read_num_sge;
+	u32		write_num_sge;
 };
 
 struct __attribute__((__packed__)) xio_rsp_hdr {
-	u16		rsp_hdr_len;	 /* rsp header length	*/
+	u16		rsp_hdr_len;	/* rsp header length	*/
 	u16		sn;		/* serial number	*/
 	u16		ack_sn;		/* ack serial number	*/
 	u16		credits;	/* peer send credits	*/
@@ -139,9 +138,8 @@ struct __attribute__((__packed__)) xio_rsp_hdr {
 	u64		ulp_imm_len;	/* ulp data length	*/
 	u32		remain_data_len; /* remaining data length */
 	u32		status;		/* status		*/
-	u64		read_va;	/* read virtual address */
-	u32		read_stag;	/* read rkey		*/
-	u32		read_len;	/* read length		*/
+	u32		read_num_sge;
+	u32		write_num_sge;
 };
 
 struct __attribute__((__packed__)) xio_rdma_setup_msg {
@@ -167,15 +165,17 @@ struct xio_work_req {
 	};
 	struct ib_sge			sge[XIO_MAX_IOV + 1];
 	struct scatterlist		sgl[XIO_MAX_IOV + 1];
-	int				nents; /* number of mapped entries */
+	int				nents; /* number of sgl entries */
 	int				mapped; /* number of mapped entries */
 };
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
 	enum xio_ib_op_code		ib_op;
-	u16				pad;
 	u16				more_in_batch;
+	u16				sn;
+	u16				phantom_idx;
+	u16				pad[3];
 
 	//struct xio_data_buffer sdb;
 	/* The buffer mapped with the 3 xio_work_req

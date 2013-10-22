@@ -631,8 +631,7 @@ static int xio_rdma_task_init(struct xio_task *task,
 			      unsigned long size,
 			      struct ib_mr *srmr)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	rdma_task->rdma_hndl = rdma_hndl;
 	rdma_task->buf = buf;
@@ -694,8 +693,8 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 /* xio_rdma_initial_pool_alloc						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_alloc(
-		struct xio_transport_base *transport_hndl,
-		int max, void *pool_dd_data)
+				struct xio_transport_base *transport_hndl,
+				int max, void *pool_dd_data)
 {
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
@@ -716,8 +715,7 @@ static int xio_rdma_initial_pool_alloc(
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_run						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_run(
-		struct xio_transport_base *transport_hndl)
+static int xio_rdma_initial_pool_run(struct xio_transport_base *transport_hndl)
 {
 	struct xio_task *task;
 	struct xio_rdma_transport *rdma_hndl =
@@ -757,8 +755,8 @@ static int xio_rdma_initial_pool_run(
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_free						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_free(
-		struct xio_transport_base *transport_hndl, void *pool_dd_data)
+static int xio_rdma_initial_pool_free(struct xio_transport_base *transport_hndl,
+				      void *pool_dd_data)
 {
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
@@ -874,16 +872,16 @@ static int xio_rdma_primary_pool_free(
 /* xio_rdma_primary_pool_init_task					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_init_task(
-		struct xio_transport_base *transport_hndl,
-		void *pool_dd_data, struct xio_task *task)
+				struct xio_transport_base *transport_hndl,
+				void *pool_dd_data, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	void *buf;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	struct xio_rdma_task *rdma_task = (struct xio_rdma_task *)task->dd_data;
 	rdma_task->ib_op = 0x200;
 
 	buf = kmem_cache_zalloc(rdma_pool->data_pool, GFP_KERNEL);
@@ -955,7 +953,7 @@ static void xio_rdma_close_complete(struct xio_transport_base *transport)
 static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
-	int				retval = 0;
+	int retval = 0;
 
 	retval = rdma_resolve_route(rdma_hndl->cm_id, ROUTE_RESOLVE_TIMEOUT);
 	if (retval) {
