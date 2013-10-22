@@ -2407,6 +2407,8 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 					rdma_task->read_sge[i].length;
 			task->imsg.in.data_iov[i].mr =
 					rdma_task->read_sge[i].mr;
+
+			llen += task->imsg.in.data_iov[i].iov_len;
 		}
 		task->imsg.in.data_iovlen = rdma_task->req_write_num_sge;
 		rdma_task->read_num_sge = rdma_task->req_write_num_sge;
