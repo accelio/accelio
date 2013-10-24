@@ -65,6 +65,7 @@ static void xio_pre_put_task(struct xio_task *task)
 	task->omsg			= NULL;
 	task->tlv_type			= 0xdead;
 	task->omsg_flags		= 0;
+	task->state			= XIO_TASK_STATE_INIT;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1092,6 +1093,53 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_assign_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_cancel_request(struct xio_conn *conn,
+				 union xio_transport_event_data
+				 *event_data)
+{
+	union xio_conn_event_data conn_event_data = {
+		.cancel.ulp_msg		= event_data->cancel.ulp_msg,
+		.cancel.ulp_msg_sz	= event_data->cancel.ulp_msg_sz,
+		.cancel.task		= event_data->cancel.task,
+		.cancel.result		= event_data->cancel.result,
+	};
+
+	/* route the message to any of the sessions */
+	xio_conn_notify_any(
+			conn,
+			XIO_CONNECTION_CANCEL_REQUEST,
+			&conn_event_data);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_assign_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_cancel_response(struct xio_conn *conn,
+				  union xio_transport_event_data
+				  *event_data)
+{
+	union xio_conn_event_data conn_event_data = {
+		.cancel.ulp_msg		= event_data->cancel.ulp_msg,
+		.cancel.ulp_msg_sz	= event_data->cancel.ulp_msg_sz,
+		.cancel.task		= event_data->cancel.task,
+		.cancel.result		= event_data->cancel.result,
+	};
+
+	/* route the message to any of the sessions */
+	xio_conn_notify_any(
+			conn,
+			XIO_CONNECTION_CANCEL_RESPONSE,
+			&conn_event_data);
+
+	return 0;
+}
+
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_transport_event		                                     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_transport_event(void *observer, void *sender, int event,
@@ -1120,6 +1168,16 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 		INFO_LOG("conn: [notification] - assign in buffer. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_assign_in_buf(conn, ev_data);
+		break;
+	case XIO_TRANSPORT_CANCEL_REQUEST:
+		INFO_LOG("conn: [notification] - cancel request. " \
+			 "conn:%p, transport:%p\n", observer, sender);
+		xio_on_cancel_request(conn, ev_data);
+		break;
+	case XIO_TRANSPORT_CANCEL_RESPONSE:
+		INFO_LOG("conn: [notification] - cancel respnose. " \
+			 "conn:%p, transport:%p\n", observer, sender);
+		xio_on_cancel_response(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_NEW_CONNECTION:
 		INFO_LOG("conn: [notification] - new transport. " \
@@ -1461,5 +1519,33 @@ int xio_conn_get_src_addr(struct xio_conn *conn,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_conn_cancel_req							     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_cancel_req(struct xio_conn *conn,
+			struct xio_msg *req, uint64_t stag,
+			void *ulp_msg, size_t ulp_msg_sz)
+{
+	if (conn->transport->cancel_req)
+		return conn->transport->cancel_req(conn->transport_hndl,
+						   req, stag,
+						   ulp_msg, ulp_msg_sz);
 
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
 
+/*---------------------------------------------------------------------------*/
+/* xio_conn_cancel_rsp							     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_cancel_rsp(struct xio_conn *conn,
+			struct xio_task *task, enum xio_status result,
+			void *ulp_msg, size_t ulp_msg_sz)
+{
+	if (conn->transport->cancel_req)
+		return conn->transport->cancel_rsp(conn->transport_hndl,
+						   task, result,
+						   ulp_msg, ulp_msg_sz);
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}

@@ -64,6 +64,8 @@ enum xio_conn_event {
 	XIO_CONNECTION_NEW_MESSAGE,
 	XIO_CONNECTION_SEND_COMPLETION,
 	XIO_CONNECTION_ASSIGN_IN_BUF,
+	XIO_CONNECTION_CANCEL_REQUEST,
+	XIO_CONNECTION_CANCEL_RESPONSE,
 	XIO_CONNECTION_ERROR,
 };
 
@@ -87,7 +89,13 @@ union xio_conn_event_data {
 		int		 is_assigned;
 		int		 pad;
 	} assign_in_buf;
-
+	struct {
+		void		*ulp_msg;
+		size_t		ulp_msg_sz;
+		struct xio_task	*task;
+		enum xio_status	result;
+		int		pad;
+	} cancel;
 };
 
 
@@ -177,6 +185,19 @@ int xio_conn_poll(struct xio_conn *conn, struct timespec *timeout);
 /* xio_conn_send							     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_send(struct xio_conn *conn, struct xio_task *task);
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_cancel_req							     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_cancel_req(struct xio_conn *conn,
+			struct xio_msg *req, uint64_t stag,
+			void *ulp_msg, size_t ulp_msg_sz);
+/*---------------------------------------------------------------------------*/
+/* xio_conn_cancel_rsp							     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_cancel_rsp(struct xio_conn *conn,
+			struct xio_task *task, enum xio_status result,
+			void *ulp_msg, size_t ulp_msg_sz);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_set_opt							     */

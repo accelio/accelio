@@ -199,5 +199,8 @@ static inline int xio_session_not_queueing(struct xio_session *session)
 	return session->session_flags & XIO_SESSION_FLAG_DONTQUEUE;
 }
 
+int xio_session_notify_cancel(struct xio_connection *connection,
+			      struct xio_msg *req, enum xio_status result);
+
 #endif /*XIO_SESSION_H */
 

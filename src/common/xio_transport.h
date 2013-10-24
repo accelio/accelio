@@ -57,6 +57,8 @@ enum xio_transport_event {
 	XIO_TRANSPORT_NEW_MESSAGE,
 	XIO_TRANSPORT_SEND_COMPLETION,
 	XIO_TRANSPORT_ASSIGN_IN_BUF,
+	XIO_TRANSPORT_CANCEL_REQUEST,
+	XIO_TRANSPORT_CANCEL_RESPONSE,
 	XIO_TRANSPORT_ERROR,
 };
 
@@ -83,11 +85,17 @@ union xio_transport_event_data {
 		enum xio_status	reason;
 	} error;
 	struct {
-		struct xio_task	*task;
+		struct xio_task	 *task;
 		int		 is_assigned;
 		int		 pad;
 	} assign_in_buf;
-
+	struct {
+		void		*ulp_msg;
+		size_t		ulp_msg_sz;
+		struct xio_task	*task;
+		enum xio_status	result;
+		int		pad;
+	} cancel;
 };
 
 struct xio_transport_base {
@@ -149,10 +157,21 @@ struct xio_transport {
 
 	int	(*send)(struct xio_transport_base *trans_hndl,
 			struct xio_task *task);
+
 	int	(*set_opt)(void *xio_obj,
 			   int optname, const void *optval, int optlen);
+
 	int	(*get_opt)(void *xio_obj,
 			   int optname, void *optval, int *optlen);
+
+	int	(*cancel_req)(struct xio_transport_base *trans_hndl,
+			      struct xio_msg *req, uint64_t stag,
+			      void *ulp_msg, size_t ulp_msg_len);
+
+	int	(*cancel_rsp)(struct xio_transport_base *trans_hndl,
+			      struct xio_task *task, enum xio_status result,
+			      void *ulp_msg, size_t ulp_msg_len);
+
 	struct list_head transports_list_entry;
 };
 

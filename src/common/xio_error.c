@@ -48,7 +48,7 @@ static int _xio_errno;
 /*---------------------------------------------------------------------------*/
 /* debuging facilities							     */
 /*---------------------------------------------------------------------------*/
-void xio_set_error(int errnum) {_xio_errno = errnum;}
+void xio_set_error(int errnum) { _xio_errno = errnum; }
 
 /*---------------------------------------------------------------------------*/
 /* xio_errno								     */
@@ -88,7 +88,7 @@ static const char *xio_gen_status_str(enum xio_status ev)
 	case XIO_E_SESSION_DISCONECTED:
 		return "Session disconnected";
 	case XIO_E_BIND_FAILED:
-		return  "Binf failed";
+		return  "Bind failed";
 	case XIO_E_TIMEOUT:
 		return  "Session timeout";
 	case XIO_E_IN_PORGRESS:
@@ -105,6 +105,14 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return  "Write failed";
 	case XIO_E_CLOSE_FAILED:
 		return "Close failed";
+	case XIO_E_UNSUCCESSFUL:
+		return "Operation unsuccessful";
+	case XIO_E_MSG_CANCELED:
+		return "Message canceled";
+	case XIO_E_MSG_CANCEL_FAILED:
+		return "Message cancel failed";
+	case XIO_E_MSG_NOT_FOUND:
+		return "Message not found";
 	default:
 		return "Unknown error";
 	};
@@ -118,7 +126,7 @@ const char *xio_strerror(int errnum)
 	if (errnum < XIO_BASE_STATUS)
 		return strerror(errnum);
 
-	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_UNSUCCESSFUL)
+	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_NOT_FOUND)
 		return xio_gen_status_str(errnum);
 
 	return "Unknown error";

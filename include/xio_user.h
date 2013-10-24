@@ -150,6 +150,9 @@ enum xio_status {
 	XIO_E_WRITE_FAILED		= (XIO_BASE_STATUS + 20),
 	XIO_E_CLOSE_FAILED		= (XIO_BASE_STATUS + 21),
 	XIO_E_UNSUCCESSFUL		= (XIO_BASE_STATUS + 22),
+	XIO_E_MSG_CANCELED		= (XIO_BASE_STATUS + 23),
+	XIO_E_MSG_CANCEL_FAILED		= (XIO_BASE_STATUS + 24),
+	XIO_E_MSG_NOT_FOUND		= (XIO_BASE_STATUS + 25),
 };
 
 /**
@@ -503,6 +506,36 @@ struct xio_session_ops {
 			void *conn_user_context);
 
 	/**
+	 * requester's message cancelation notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] result			the result code
+	 *  @param[in] msg			the message to cancel
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
+	int (*on_cancel)(struct xio_session *session,
+			struct xio_msg  *msg,
+			enum xio_status result,
+			void *conn_user_context);
+
+	/**
+	 * responder's message cancelation notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] req			the reuest to cancel
+	 *  @param[in] conn_user_context	user private data provided in
+	 *					connection open on which
+	 *					the message send
+	 *  @returns 0
+	 */
+	int (*on_cancel_request)(struct xio_session *session,
+				 struct xio_msg  *msg,
+				 void *conn_user_context);
+
+	/**
 	 * notification the user to assign a data buffer for incoming read
 	 *
 	 *  @param[in] msg			the incoming message
@@ -680,6 +713,26 @@ int xio_disconnect(struct xio_connection *conn);
  */
 int xio_send_request(struct xio_connection *conn,
 		     struct xio_msg *req);
+
+/**
+ * cancel an outstanding asynchronous I/O request
+ *
+ * @param[in] conn	The xio connection handle on which the message was
+ *			sent
+ * @param[in] req	request message to cancel
+ *
+ * @return success (0), or a (negative) error value
+ */
+int xio_cancel_request(struct xio_connection *conn,
+		       struct xio_msg *req);
+/**
+ * responder cancelation response
+ *
+ * @param[in] req	the outstanding request to cancel.
+ *
+ * @return success (0), or a (negative) error value
+ */
+int xio_cancel(struct xio_msg *req, enum xio_status result);
 
 /**
  * release response resources back to xio

@@ -35,10 +35,17 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef  XIO_RDMA_TRANSPORT_H
-#define  XIO_RDMA_TRANSPORT_H
+#ifndef XIO_RDMA_TRANSPORT_H
+#define XIO_RDMA_TRANSPORT_H
 
-extern int page_size;
+/*---------------------------------------------------------------------------*/
+/* externals								     */
+/*---------------------------------------------------------------------------*/
+extern int			page_size;
+extern double			g_mhz;
+extern struct xio_rdma_options	rdma_options;
+extern struct list_head		dev_list;
+
 
 /* poll_cq defentions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -78,11 +85,12 @@ extern int page_size;
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
 
-#define VALIDATE_SZ(sz)				\
+#define VALIDATE_SZ(sz)	do {			\
 		if (optlen != (sz)) {		\
 			xio_set_error(EINVAL);	\
 			return -1;		\
-		}
+		}				\
+	} while (0)
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -176,6 +184,12 @@ struct __attribute__((__packed__)) xio_nop_hdr {
 	uint8_t			flags;		/* not used		*/
 };
 
+struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
+	uint16_t		hdr_len;	 /* req header length	*/
+	uint16_t		sn;		 /* serial number	*/
+	uint32_t		result;
+};
+
 struct xio_work_req {
 	union {
 		struct ibv_send_wr	send_wr;
@@ -183,6 +197,7 @@ struct xio_work_req {
 	};
 	struct ibv_sge			sge[XIO_MAX_IOV + 1];
 };
+
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
@@ -201,7 +216,7 @@ struct xio_rdma_task {
 	struct xio_rdma_mp_mem		read_sge[XIO_MAX_IOV];
 	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
 
-	/* represent the requester request */
+	/* represents the requester request */
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
 	struct xio_sge			req_read_sge[XIO_MAX_IOV];
@@ -431,6 +446,13 @@ int xio_rdma_send(struct xio_transport_base *transport,
 int xio_rdma_poll(struct xio_transport_base *transport,
 		  struct timespec *ts_timeout);
 
+int xio_rdma_cancel_req(struct xio_transport_base *transport,
+			struct xio_msg *req, uint64_t stag,
+			void *ulp_msg, size_t ulp_msg_sz);
+
+int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
+			struct xio_task *task, enum xio_status result,
+			void *ulp_msg, size_t ulp_msg_sz);
 
 /* xio_rdma_management.c */
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);

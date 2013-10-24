@@ -46,6 +46,8 @@ enum xio_task_state {
 	XIO_TASK_STATE_INIT,
 	XIO_TASK_STATE_DELIVERED,
 	XIO_TASK_STATE_READ,
+	XIO_TASK_STATE_RESPONSE_RECV,  /* mark the sender task */
+	XIO_TASK_STATE_CANCEL_PENDING,      /* mark for rdma read task */
 };
 
 typedef void (*release_task_fn)(struct kref *kref);
@@ -67,12 +69,12 @@ struct xio_task {
 	struct kref		kref;
 	uint16_t		tlv_type;
 	uint16_t		pad[3];
-//	uint16_t		refcnt;
+	enum xio_task_state	state;		/* task state enum	*/
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
-	enum xio_task_state	state;		/* task state enum	*/
 	uint32_t		omsg_flags;
 	uint32_t		force_signal;
+	uint64_t		stag;		/* session unique tag */
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;

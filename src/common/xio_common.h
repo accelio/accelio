@@ -81,6 +81,7 @@ void xio_set_error(int errnum);
 #define XIO_CONN_SETUP		(1 << 8)
 #define XIO_SESSION_SETUP	(1 << 9)
 #define XIO_FIN			(1 << 10)
+#define XIO_CANCEL		(1 << 11)
 
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
@@ -95,6 +96,9 @@ void xio_set_error(int errnum);
 #define XIO_ONE_WAY_RSP		(XIO_ONE_WAY | XIO_RESPONSE)
 #define XIO_FIN_REQ		(XIO_FIN | XIO_REQUEST)
 #define XIO_FIN_RSP		(XIO_FIN | XIO_RESPONSE)
+#define XIO_CANCEL_REQ		(XIO_CANCEL | XIO_REQUEST)
+#define XIO_CANCEL_RSP		(XIO_CANCEL | XIO_RESPONSE)
+
 
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
@@ -105,6 +109,7 @@ void xio_set_error(int errnum);
 #define IS_CONN_SETUP(type)		((type) & XIO_CONN_SETUP)
 #define IS_ONE_WAY(type)		((type) & XIO_ONE_WAY)
 #define IS_FIN(type)			((type) & XIO_FIN)
+#define IS_CANCEL(type)			((type) & XIO_CANCEL)
 
 
 /**
@@ -151,6 +156,11 @@ struct __attribute__((__packed__)) xio_conn_setup_rsp {
 	uint16_t		version;
 };
 
+struct __attribute__((__packed__)) xio_session_cancel_hdr {
+	uint32_t		requester_session_id;
+	uint32_t		responder_session_id;
+	uint64_t		sn;
+};
 
 struct xio_msg;
 struct xio_iovec;

@@ -141,7 +141,7 @@ int xio_connection_send(struct xio_connection *conn,
 		}
 		req_task = container_of(msg->request, struct xio_task, imsg);
 		if (req_task == NULL) {
-			ERROR_LOG("response with id %"PRIu64" is unknown." \
+			ERROR_LOG("response with id %llu is unknown." \
 				  " - connection:%p, session:%p, conn:%p\n",
 				  msg->request->sn, conn, conn->session,
 				  conn->conn);
@@ -175,7 +175,7 @@ int xio_connection_send(struct xio_connection *conn,
 			task = container_of(msg->request,
 					    struct xio_task, imsg);
 			if (task == NULL) {
-				ERROR_LOG("response with id %"PRIu64""   \
+				ERROR_LOG("response with id %llu"   \
 					  "is unknown. - connection:%p," \
 					  "session:%p, conn:%p\n",
 					  msg->request->sn, conn,
@@ -200,6 +200,7 @@ int xio_connection_send(struct xio_connection *conn,
 
 	task->tlv_type		= msg->type;
 	task->session		= conn->session;
+	task->stag		= uint64_from_ptr(task->session);
 	task->conn		= conn->conn;
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
@@ -410,6 +411,7 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_task *task = container_of(msg->request,
 					     struct xio_task, imsg);
 	struct xio_connection *conn = task->connection;
+
 
 	int valid = xio_session_is_valid_out_msg(conn->session, msg);
 	if (!valid) {
@@ -761,6 +763,103 @@ int xio_ack_disconnect(struct xio_connection *conn, struct xio_task *task)
 	if (conn->state == CONNECTION_STATE_ONLINE) {
 		xio_send_fin_rsp(conn, task);
 		conn->state = CONNECTION_STATE_CLOSING;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_cancel_request							     */
+/*---------------------------------------------------------------------------*/
+int xio_cancel_request(struct xio_connection *conn,
+		       struct xio_msg *req)
+{
+	struct xio_msg *pmsg, *tmp_pmsg;
+	uint64_t	stag;
+	struct xio_session_cancel_hdr hdr;
+
+
+	/* search the tx */
+	xio_msg_list_foreach_safe(pmsg, &conn->reqs_msgq, tmp_pmsg) {
+		if (pmsg->sn == req->sn) {
+			ERROR_LOG("[%llu] - message found on reqs_msgq\n",
+				  req->sn);
+			xio_msg_list_remove(&conn->reqs_msgq, pmsg);
+			xio_session_notify_cancel(
+				conn, pmsg, XIO_E_MSG_CANCELED);
+			return 0;
+		}
+	}
+	hdr.sn			 = htonll(req->sn);
+	hdr.requester_session_id = htonl(conn->session->session_id);
+	hdr.responder_session_id = htonl(conn->session->peer_session_id);
+	stag			 = uint64_from_ptr(conn->session);
+
+	/* cancel request on tx */
+	xio_conn_cancel_req(conn->conn, req, stag, &hdr, sizeof(hdr));
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_send_cancel_response					     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_send_cancel_response(struct xio_connection *conn,
+					struct xio_msg *msg,
+					struct xio_task *task,
+					enum xio_status result)
+{
+	struct xio_session_cancel_hdr hdr;
+
+	hdr.sn			= htonll(msg->sn);
+	hdr.responder_session_id = htonl(conn->session->session_id);
+	hdr.requester_session_id = htonl(conn->session->peer_session_id);
+
+	xio_conn_cancel_rsp(conn->conn, task, result, &hdr, sizeof(hdr));
+
+	return 0;
+}
+
+struct xio_task *xio_connection_find_io_task(struct xio_connection *conn,
+					     uint64_t msg_sn)
+{
+	struct xio_task *ptask;
+
+	/* look in the tx_comp */
+	list_for_each_entry(ptask, &conn->io_tasks_list, tasks_list_entry) {
+		if (ptask->imsg.sn == msg_sn)
+			return ptask;
+	}
+
+	return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_response							     */
+/*---------------------------------------------------------------------------*/
+int xio_cancel(struct xio_msg *req, enum xio_status result)
+{
+	struct xio_task *task;
+
+	if (result != XIO_E_MSG_CANCELED && result != XIO_E_MSG_CANCEL_FAILED) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid status\n");
+		return -1;
+	}
+
+	task = container_of(req, struct xio_task, imsg);
+	if (task == NULL) {
+		xio_set_error(XIO_E_MSG_NOT_FOUND);
+		ERROR_LOG("message was not found\n");
+		return -1;
+	}
+
+	xio_connection_send_cancel_response(task->connection, &task->imsg,
+					    task, result);
+	/* release the message */
+	if (result == XIO_E_MSG_CANCELED) {
+		/* the rx task is returend back to pool */
+		xio_tasks_pool_put(task);
 	}
 
 	return 0;

@@ -1914,6 +1914,117 @@ static int xio_on_assign_in_buf(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_cancel_request						     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_cancel_request(struct xio_session *sess,
+				 struct xio_conn *conn,
+				 union xio_conn_event_data *event_data)
+{
+	struct xio_session_cancel_hdr	hdr;
+	struct xio_msg			req;
+	struct xio_session_cancel_hdr	*tmp_hdr;
+	struct xio_session		*session;
+	struct xio_connection		*connection;
+	struct xio_task			*task;
+
+
+	tmp_hdr			 = event_data->cancel.ulp_msg;
+	hdr.sn			 = ntohll(tmp_hdr->sn);
+	hdr.responder_session_id = ntohl(tmp_hdr->responder_session_id);
+
+
+	session = xio_sessions_store_lookup(hdr.responder_session_id);
+	if (session == NULL) {
+		ERROR_LOG("failed to find session\n");
+		return -1;
+	}
+	connection = xio_session_find_conn(session, conn);
+	if (connection == NULL) {
+		ERROR_LOG("failed to find session\n");
+		return -1;
+	}
+
+	/* lookup for task in io list */
+	task = xio_connection_find_io_task(connection, hdr.sn);
+	if (task) {
+		if (connection->ses_ops.on_cancel_request) {
+			connection->ses_ops.on_cancel_request(
+				connection->session,
+				&task->imsg,
+				connection->cb_user_context);
+			return 0;
+		} else {
+			WARN_LOG("cancel is not supported on responder\n");
+		}
+	}
+
+	TRACE_LOG("message to cancel not found %llu\n", hdr.sn);
+
+	req.sn	= hdr.sn;
+	xio_connection_send_cancel_response(connection, &req, NULL,
+					    XIO_E_MSG_NOT_FOUND);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_cancel_response						     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_cancel_response(struct xio_session *sess,
+				 struct xio_conn *conn,
+				 union xio_conn_event_data *event_data)
+{
+	struct xio_session_cancel_hdr	hdr;
+	struct xio_session_cancel_hdr	*tmp_hdr;
+	struct xio_session		*session;
+	struct xio_connection		*connection;
+	struct xio_msg			msg;
+	struct xio_msg			*pmsg;
+
+
+	if (event_data->cancel.task == NULL) {
+		tmp_hdr			 = event_data->cancel.ulp_msg;
+		hdr.sn			 = ntohll(tmp_hdr->sn);
+		hdr.requester_session_id = ntohl(tmp_hdr->requester_session_id);
+
+		session = xio_sessions_store_lookup(hdr.requester_session_id);
+		if (session == NULL) {
+			ERROR_LOG("failed to find session\n");
+			return -1;
+		}
+		pmsg		= &msg;		/* fake a message */
+		msg.sn		= hdr.sn;
+		msg.status	= 0;
+	} else {
+		session		= event_data->cancel.task->session;
+		pmsg		= event_data->cancel.task->omsg;
+		hdr.sn		= pmsg->sn;
+	}
+
+	connection = xio_session_find_conn(session, conn);
+	if (connection == NULL) {
+		ERROR_LOG("failed to find session\n");
+		return -1;
+	}
+
+	/* need to release the last reference since answer is not expected */
+	if (event_data->cancel.result == XIO_E_MSG_CANCELED)
+		xio_tasks_pool_put(event_data->cancel.task);
+
+	if (connection->ses_ops.on_cancel)
+		connection->ses_ops.on_cancel(
+				session,
+				pmsg,
+				event_data->cancel.result,
+				connection->cb_user_context);
+	else
+		ERROR_LOG("cancel is not supported\n");
+
+	return 0;
+}
+
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_conn_event				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_conn_event(void *observer, void *sender, int event,
@@ -1943,6 +2054,16 @@ static int xio_on_conn_event(void *observer, void *sender, int event,
 			 "session:%p, conn:%p\n", observer, sender);
 */
 		xio_on_assign_in_buf(session, conn, event_data);
+		break;
+	case XIO_CONNECTION_CANCEL_REQUEST:
+		INFO_LOG("session: [notification] - cancel request. " \
+			 "session:%p, conn:%p\n", observer, sender);
+		xio_on_cancel_request(session, conn, event_data);
+		break;
+	case XIO_CONNECTION_CANCEL_RESPONSE:
+		INFO_LOG("session: [notification] - cancel response. " \
+			 "session:%p, conn:%p\n", observer, sender);
+		xio_on_cancel_response(session, conn, event_data);
 		break;
 	case XIO_CONNECTION_ESTABLISHED:
 		INFO_LOG("session: [notification] - connection established. " \
@@ -2279,6 +2400,9 @@ void xio_session_assign_ops(struct xio_session *session,
 	memcpy(&session->ses_ops, ops, sizeof(*ops));
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_session_event_str						     */
+/*---------------------------------------------------------------------------*/
 const char *xio_session_event_str(enum xio_session_event event)
 {
 	switch (event) {
@@ -2298,10 +2422,29 @@ const char *xio_session_event_str(enum xio_session_event event)
 	return "unknown session event";
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_get_connection							     */
+/*---------------------------------------------------------------------------*/
 struct xio_connection *xio_get_connection(
 		struct xio_session *session,
 		struct xio_context *ctx)
 {
 	return  xio_session_find_conn_by_ctx(session, ctx);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_cancel						     */
+/*---------------------------------------------------------------------------*/
+int xio_session_notify_cancel(struct xio_connection *connection,
+			      struct xio_msg *req, enum xio_status result)
+{
+	/* notify the upper layer */
+	if (connection->ses_ops.on_cancel)
+		connection->ses_ops.on_cancel(
+				connection->session, req,
+				result,
+				connection->cb_user_context);
+
+	return 0;
 }
 

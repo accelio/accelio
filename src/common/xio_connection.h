@@ -107,6 +107,9 @@ int xio_connection_xmit_msgs(struct xio_connection *conn);
 void xio_connection_queue_io_task(struct xio_connection *connection,
 				    struct xio_task *task);
 
+struct xio_task *xio_connection_find_io_task(struct xio_connection *conn,
+					     uint64_t msg_sn);
+
 static inline void xio_connection_set_state(
 				struct xio_connection *conn,
 				enum xio_connection_state state)
@@ -133,6 +136,12 @@ int xio_ack_disconnect(struct xio_connection *conn,
 		       struct xio_task *task);
 
 int xio_connection_flush(struct xio_connection *conn);
+
+int xio_connection_send_cancel_response(
+		struct xio_connection *conn,
+		struct xio_msg *msg,
+		struct xio_task *task,
+		enum xio_status result);
 
 #endif /*XIO_CONNECTION_H */
 

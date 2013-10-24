@@ -1652,10 +1652,10 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			rdma_hndl->state = XIO_STATE_CLOSED;
 		} else {
 			xio_rdma_notify_observer(rdma_hndl,
-					XIO_TRANSPORT_CLOSED,
-					NULL);
+						 XIO_TRANSPORT_CLOSED,
+						 NULL);
 			xio_rdma_close_complete(
-					(struct xio_transport_base *)rdma_hndl);
+				(struct xio_transport_base *)rdma_hndl);
 		}
 	}
 }
@@ -2095,6 +2095,8 @@ static struct xio_transport xio_rdma_transport = {
 	.poll			= xio_rdma_poll,
 	.set_opt		= xio_rdma_set_opt,
 	.get_opt		= xio_rdma_get_opt,
+	.cancel_req		= xio_rdma_cancel_req,
+	.cancel_rsp		= xio_rdma_cancel_rsp,
 	.add_observer		= xio_transport_add_observer,
 	.remove_observer	= xio_transport_remove_observer,
 	.trans_cls.is_valid_in_req  = xio_rdma_is_valid_in_req,
