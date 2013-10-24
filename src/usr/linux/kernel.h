@@ -78,8 +78,8 @@ static inline void mutex_unlock(struct mutex *mtx)
 }
 
 /*
- * https://github.com/ErikDubbelboer/udp-tcp-speed-test/blob/
- *	master/udp/flooding/spinlock.h
+ * https://idea.popcount.org/2012-09-12-reinventing-spinlocks/
+ *
  */
 
 typedef volatile int spinlock_t;
@@ -91,27 +91,31 @@ static inline void spin_lock_init(spinlock_t* spinlock)
 
 static inline void spin_lock(spinlock_t* spinlock)
 {
-	while (!__sync_bool_compare_and_swap(spinlock, 0, 1)) {
-		while (*spinlock) {
-			asm volatile("pause\n": : :"memory");
+	int i;
+	while (1) {
+		for (i = 0; i < 10000; i++) {
+			if (__sync_bool_compare_and_swap(spinlock, 0, 1)) {
+				return;
+			}
 		}
+		/* yield the cpu */
+		sched_yield();
 	}
 }
 
 static inline int spin_try_lock(spinlock_t* spinlock)
 {
-	if (__sync_bool_compare_and_swap(spinlock, 0, 1)) {
-		return 1;
-	}
-
-	return 0;
+	return __sync_bool_compare_and_swap(spinlock, 0, 1) ? 1 : 0;
 }
 
-static inline int spin_locked(spinlock_t* spinlock) {
+static inline int spin_locked(spinlock_t* spinlock)
+{
+	__sync_synchronize();
 	return *spinlock;
 }
 
-static inline void spin_unlock(spinlock_t* spinlock) {
+static inline void spin_unlock(spinlock_t* spinlock)
+{
 	__sync_lock_release(spinlock);
 }
 
