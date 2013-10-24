@@ -2139,7 +2139,7 @@ static int xio_rdma_assign_in_buf(struct xio_rdma_transport *rdma_hndl,
 static int xio_prep_rdma_op(
 		struct xio_task *task,
 		struct xio_rdma_transport *rdma_hndl,
-		enum xio_ib_op_code  ib_op,
+		enum xio_ib_op_code  xio_ib_op,
 		enum ibv_wc_opcode   opcode,
 		struct xio_sge *lsg_list, size_t lsize,
 		struct xio_sge *rsg_list, size_t rsize,
@@ -2208,7 +2208,7 @@ static int xio_prep_rdma_op(
 			k				= 0;
 
 			tot_len				+= rlen;
-			tmp_rdma_task->ib_op		= ib_op;
+			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
 			/* close the task */
@@ -2258,7 +2258,7 @@ static int xio_prep_rdma_op(
 					   (signaled ? IBV_SEND_SIGNALED : 0);
 				rdmad->send_wr.wr.rdma.remote_addr = raddr;
 				rdmad->send_wr.wr.rdma.rkey	   = rkey;
-				tmp_rdma_task->ib_op		   = ib_op;
+				tmp_rdma_task->ib_op		   = xio_ib_op;
 				tmp_rdma_task->phantom_idx	   =
 								rsize - r - 1;
 				/* close the task */
@@ -2289,7 +2289,7 @@ static int xio_prep_rdma_op(
 			k				= 0;
 
 			tot_len			       += llen;
-			tmp_rdma_task->ib_op		= ib_op;
+			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
 			/* close the task */
