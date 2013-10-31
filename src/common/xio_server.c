@@ -39,6 +39,8 @@
 #include "xio_common.h"
 #include "libxio.h"
 #include "xio_protocol.h"
+#include "xio_observer.h"
+#include "xio_transport.h"
 #include "xio_task.h"
 #include "xio_context.h"
 #include "xio_session.h"
@@ -48,6 +50,7 @@
 
 struct xio_server {
 	struct xio_conn			*listener;
+	struct xio_observer		observer;
 	char				*uri;
 	struct xio_context		*ctx;
 	struct xio_session_ops		ops;
@@ -63,26 +66,17 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 /* xio_on_new_conn							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_new_conn(struct xio_server *server,
-			     struct xio_conn *conn,
-			     union xio_conn_event_data *event_data)
+			   struct xio_conn *conn,
+			   union xio_conn_event_data *event_data)
 {
 	int		retval;
 
-	/* add the server as observer */
-	retval = xio_conn_add_observer(event_data->new_connection.child_conn,
-				       server, xio_on_conn_event);
-	if (retval != 0) {
-		ERROR_LOG("connection observer addition failed.\n");
-		return -1;
-	}
+	/* set the server as observer */
+	xio_conn_reg_observer(event_data->new_connection.child_conn,
+			      &server->observer);
 
-	retval = xio_conn_add_server_observer(
-				       event_data->new_connection.child_conn,
-				       server, xio_on_conn_event);
-	if (retval != 0) {
-		ERROR_LOG("connection observer addition failed.\n");
-		return -1;
-	}
+	xio_conn_set_server_observer(event_data->new_connection.child_conn,
+				     &server->observer);
 
 	retval = xio_conn_accept(event_data->new_connection.child_conn);
 	if (retval != 0) {
@@ -138,7 +132,9 @@ static int xio_on_new_message(struct xio_server *server,
 	/* read the first message  type */
 	uint16_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
-	xio_conn_remove_observer(conn, server);
+	/* unregister server */
+	xio_conn_unreg_observer(conn, &server->observer);
+
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
 		session = xio_session_init(
@@ -164,8 +160,15 @@ static int xio_on_new_message(struct xio_server *server,
 
 		connection = xio_session_alloc_conn(session, server->ctx, 0,
 						    server->cb_private_data);
+		if (!connection) {
+			ERROR_LOG("server failed to allocate new connection\n");
+			goto cleanup;
+		}
 		connection = xio_session_assign_conn(session, conn);
-
+		if (!connection) {
+			ERROR_LOG("server failed to assign new connection\n");
+			goto cleanup1;
+		}
 		/* set this connection as the lead connection */
 		session->lead_conn = connection;
 
@@ -183,17 +186,33 @@ static int xio_on_new_message(struct xio_server *server,
 			  "session:%p, conn:%p, session_id:%d\n",
 			   server, session, conn, session->session_id);
 
+		if (!session->lead_conn || session->lead_conn->conn != conn)
+			xio_conn_reg_observer(conn, &session->observer);
+
 		session->lead_conn = NULL;
 		connection = xio_session_find_conn(session, conn);
-		if (connection == NULL)
+		if (connection == NULL) {
 			connection = xio_server_create_accepted_conn(session,
 								     conn);
+			if (!connection) {
+				ERROR_LOG("failed to create snew connection\n");
+				return -1;
+			}
+		}
 	}
 
 	/* route the message to the session */
-	xio_conn_notify_observer(conn, session, event, event_data);
+	xio_conn_notify_observer(conn, &session->observer, event, event_data);
 
 	return 0;
+
+cleanup1:
+	xio_session_free_conn(connection);
+
+cleanup:
+	xio_session_close(session);
+
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -270,11 +289,13 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	server->ctx = ctx;
 	server->cb_private_data	= cb_private_data;
 	server->uri = kstrdup(uri, GFP_KERNEL);
+
 	server->session_flags = session_flags;
 	memcpy(&server->ops, ops, sizeof(*ops));
 
-	server->listener = xio_conn_open(ctx, uri, server,
-					   xio_on_conn_event);
+	XIO_OBSERVER_INIT(&server->observer, server, xio_on_conn_event);
+
+	server->listener = xio_conn_open(ctx, uri, &server->observer);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
@@ -289,7 +310,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	return server;
 
 cleanup1:
-	xio_conn_close(server->listener, server);
+	xio_conn_close(server->listener, &server->observer);
 cleanup:
 	kfree(server->uri);
 	kfree(server);
@@ -304,7 +325,7 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
-	xio_conn_close(server->listener, server);
+	xio_conn_close(server->listener, &server->observer);
 	kfree(server->uri);
 	kfree(server);
 

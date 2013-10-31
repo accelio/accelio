@@ -40,12 +40,22 @@
 #include "xio_common.h"
 #include "xio_task.h"
 #include "xio_msg_list.h"
+#include "xio_observer.h"
 #include "xio_conn.h"
 #include "xio_connection.h"
 #include "xio_session.h"
 
 #define MSG_POOL_SZ	1024
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_connection_online						     */
+/*---------------------------------------------------------------------------*/
+static int xio_is_connection_online(struct xio_connection *conn)
+{
+	    return (conn->session->state == XIO_SESSION_STATE_ONLINE &&
+		    conn->state == CONNECTION_STATE_ONLINE);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_init_ow_msg_pool							     */
@@ -112,6 +122,8 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		xio_msg_list_init(&connection->reqs_msgq);
 		xio_msg_list_init(&connection->rsps_msgq);
 		xio_init_ow_msg_pool(connection);
+
+		kref_init(&connection->kref);
 
 		return connection;
 }
@@ -202,6 +214,7 @@ int xio_connection_send(struct xio_connection *conn,
 	task->session		= conn->session;
 	task->stag		= uint64_from_ptr(task->session);
 	task->conn		= conn->conn;
+	task->connection	= conn;
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
 
@@ -386,7 +399,7 @@ int xio_send_request(struct xio_connection *conn,
 		return -1;
 	}
 	if (xio_session_not_queueing(conn->session) &&
-	    (conn->state != CONNECTION_STATE_ONLINE)) {
+	    !xio_is_connection_online(conn)) {
 		xio_set_error(EAGAIN);
 		return -1;
 	}
@@ -397,7 +410,7 @@ int xio_send_request(struct xio_connection *conn,
 	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE)
+	if (xio_is_connection_online(conn))
 		return xio_connection_xmit(conn);
 
 	return 0;
@@ -421,7 +434,7 @@ int xio_send_response(struct xio_msg *msg)
 	}
 
 	if (xio_session_not_queueing(conn->session) &&
-	    (conn->state != CONNECTION_STATE_ONLINE)) {
+	    !xio_is_connection_online(conn)) {
 		xio_set_error(EAGAIN);
 		return -1;
 	}
@@ -437,7 +450,7 @@ int xio_send_response(struct xio_msg *msg)
 	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE)
+	if (xio_is_connection_online(conn))
 		return xio_connection_xmit(conn);
 
 	return 0;
@@ -480,7 +493,7 @@ int xio_connection_send_read_receipt(struct xio_connection *conn,
 	xio_msg_list_insert_tail(&conn->rsps_msgq, rsp);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE)
+	if (xio_is_connection_online(conn))
 		return xio_connection_xmit(conn);
 
 	return 0;
@@ -517,15 +530,10 @@ int xio_send_msg(struct xio_connection *conn,
 	msg->sn = xio_session_get_sn(conn->session);
 	msg->type = XIO_ONE_WAY_REQ;
 
-	/* reset the in side of the message */
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-
 	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE)
+	if (xio_is_connection_online(conn))
 		return xio_connection_xmit(conn);
 
 	return 0;
@@ -546,14 +554,24 @@ int xio_connection_xmit_msgs(struct xio_connection *conn)
 
 	return -1;
 }
+/*---------------------------------------------------------------------------*/
+/* xio_connection_close							     */
+/*---------------------------------------------------------------------------*/
+static void xio_connection_release(struct kref *kref)
+{
+	struct xio_connection *connection = container_of(kref,
+							 struct xio_connection,
+							 kref);
+	xio_free_ow_msg_pool(connection);
+	kfree(connection);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_close(struct xio_connection *connection)
 {
-	xio_free_ow_msg_pool(connection);
-	kfree(connection);
+	kref_put(&connection->kref, xio_connection_release);
 
 	return 0;
 }
@@ -604,11 +622,6 @@ int xio_release_response(struct xio_msg *msg)
 		xio_set_error(EINVAL);
 		return -1;
 	}
-	/* reset the in */
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-
 
 	xio_release_response_task(task);
 
@@ -674,16 +687,11 @@ static int xio_send_fin_req(struct xio_connection *conn)
 
 	msg->type = XIO_FIN_REQ;
 
-	/* reset the in side of the message */
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
 
 	/* do not xmit until connection is assigned */
-	if (conn->state == CONNECTION_STATE_ONLINE)
+	if (xio_is_connection_online(conn))
 		return xio_connection_xmit(conn);
 
 	return 0;
@@ -702,11 +710,6 @@ static int xio_send_fin_rsp(struct xio_connection *conn, struct xio_task *task)
 
 	msg->type = XIO_FIN_RSP;
 	msg->request = &task->imsg;
-
-	/* reset the in side of the message */
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
 
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);

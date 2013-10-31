@@ -58,19 +58,20 @@ struct xio_context {
 	uint64_t			worker;
 
 	/* list of sessions using this connection */
-	struct list_head		observers_list;
+	struct xio_observable		observable;
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_add_observer						     */
+/* xio_context_reg_observer						     */
 /*---------------------------------------------------------------------------*/
-int xio_context_add_observer(struct xio_context *context, void *observer,
-			    notification_handler_t notify_observer);
+int xio_context_reg_observer(struct xio_context *context,
+			     struct xio_observer *observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_remove_observer						     */
+/* xio_context_unreg_observer						     */
 /*---------------------------------------------------------------------------*/
-void xio_context_remove_observer(struct xio_context *conn, void *observer);
+void xio_context_unreg_observer(struct xio_context *conn,
+				struct xio_observer *observer);
 
 
 #endif /*XIO_CONTEXT_H */

@@ -179,20 +179,11 @@ enum xio_wc_op {
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
-typedef int (*notification_handler_t)(void *observer, void *sender, int event,
-				      void *event_data);
-
 union xio_sockaddr {
 	struct sockaddr sa;
 	struct sockaddr_in sa_in;
 	struct sockaddr_in6 sa_in6;
 	struct sockaddr_storage sa_stor;
-};
-
-struct xio_observer_node {
-	void				*observer;
-	notification_handler_t		notification_handler;
-	struct list_head		observers_list_entry;
 };
 
 /*---------------------------------------------------------------------------*/

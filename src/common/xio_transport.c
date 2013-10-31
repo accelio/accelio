@@ -37,6 +37,7 @@
  */
 #include "xio_os.h"
 #include "xio_task.h"
+#include "xio_observer.h"
 #include "xio_transport.h"
 
 /*---------------------------------------------------------------------------*/

@@ -99,24 +99,6 @@ union xio_conn_event_data {
 };
 
 
-struct xio_tasks_pool_ops {
-	void	(*pool_get_params)(struct xio_transport_base *transport_hndl,
-				int *pool_len, int *pool_dd_sz,
-				int *task_dd_size);
-	int	(*pool_alloc)(struct xio_transport_base *trans_hndl,
-				int max, void *pool_dd_data);
-	int	(*pool_free)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data);
-	int	(*pool_init_item)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data, struct xio_task *task);
-	int	(*pool_run)(struct xio_transport_base *trans_hndl);
-
-	int	(*pre_put)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
-	int	(*post_get)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
-};
-
 /**
  * Connection data type
  */
@@ -129,7 +111,10 @@ struct xio_conn {
 
 	struct xio_tasks_pool		*initial_tasks_pool;
 	struct xio_tasks_pool_ops	*initial_pool_ops;
-	struct xio_observer_node	*server_observer;
+	struct xio_observer		*server_observer;
+	struct xio_observer		trans_observer;
+	struct xio_observable		observable;
+
 	atomic_t			refcnt;
 	int				cid;
 	int				is_first_msg;
@@ -138,22 +123,19 @@ struct xio_conn {
 	int				pad;
 
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
-
-	/* list of sessions using this connection */
-	struct list_head		observers_list;
 };
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_close							     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_close(struct xio_conn *conn, void *observer);
+void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_open							     */
 /*---------------------------------------------------------------------------*/
 struct xio_conn *xio_conn_open(struct xio_context *ctx,
-		const char *portal_uri, void  *observer,
-		notification_handler_t	notification_handler);
+			       const char *portal_uri,
+			       struct xio_observer *observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_connect							     */
@@ -212,11 +194,6 @@ int xio_conn_get_opt(struct xio_conn *conn, int optname,
 		     void *optval, int *optlen);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_initial_task						     */
-/*---------------------------------------------------------------------------*/
-struct xio_task *xio_conn_get_initial_task(struct xio_conn *conn);
-
-/*---------------------------------------------------------------------------*/
 /* xio_conn_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
 struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn);
@@ -227,46 +204,41 @@ struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn);
 int xio_conn_primary_free_tasks(struct xio_conn *conn);
 
 /*---------------------------------------------------------------------------*/
-/* trmda_conn_task_lookup						     */
-/*---------------------------------------------------------------------------*/
-struct xio_task *xio_conn_task_lookup(struct xio_conn *conn, int id);
-
-/*---------------------------------------------------------------------------*/
 /* xio_conn_add_server_observer						     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_add_server_observer(struct xio_conn *conn, void *observer,
-				 notification_handler_t notify_observer);
+static inline void xio_conn_set_server_observer(struct xio_conn *conn,
+					       struct xio_observer *observer)
+{
+	conn->server_observer = observer;
+}
+/*---------------------------------------------------------------------------*/
+/* xio_conn_reg_observer						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_conn_reg_observer(struct xio_conn *conn,
+					 struct xio_observer *observer)
+{
+	xio_observable_reg_observer(&conn->observable, observer);
+}
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_remove_server_observer					     */
+/* xio_conn_unreg_observer						     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_remove_server_observer(struct xio_conn *conn);
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_add_observer						     */
-/*---------------------------------------------------------------------------*/
-int xio_conn_add_observer(struct xio_conn *conn, void *observer,
-			  notification_handler_t notify_observer);
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_remove_observer						     */
-/*---------------------------------------------------------------------------*/
-void xio_conn_remove_observer(struct xio_conn *conn, void *observer);
-
+static inline void xio_conn_unreg_observer(struct xio_conn *conn,
+					   struct xio_observer *observer)
+{
+	xio_observable_unreg_observer(&conn->observable, observer);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_notify_observer						     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_notify_observer(struct xio_conn *conn, void *observer,
-			   int event,
-			   void *event_data);
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_set_pools_ops						     */
-/*---------------------------------------------------------------------------*/
-void xio_conn_set_pools_ops(struct xio_conn *conn,
-		struct xio_tasks_pool_ops *initial_pool_ops,
-		struct xio_tasks_pool_ops *primary_pool_ops);
+static inline void xio_conn_notify_observer(struct xio_conn *conn,
+			      struct xio_observer *observer,
+			      int event, void *event_data)
+{
+	xio_observable_notify_observer(&conn->observable, observer,
+				       event, event_data);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_get_src_addr						     */
@@ -304,7 +276,7 @@ static inline void xio_conn_addref(struct xio_conn *conn)
 /*---------------------------------------------------------------------------*/
 static inline struct xio_server *xio_conn_get_server(struct xio_conn *conn)
 {
-	return conn->server_observer->observer;
+	return conn->server_observer->impl;
 }
 
 #endif /*XIO_CONNECTION_H */

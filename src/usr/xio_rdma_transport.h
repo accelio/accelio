@@ -38,6 +38,8 @@
 #ifndef XIO_RDMA_TRANSPORT_H
 #define XIO_RDMA_TRANSPORT_H
 
+#include "xio_transport.h"
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -118,6 +120,7 @@ enum xio_ib_op_code {
 #endif /* M-pages compatibility */
 
 
+struct xio_transport_base;
 struct xio_rdma_transport;
 
 /*---------------------------------------------------------------------------*/
@@ -341,6 +344,8 @@ struct xio_rdma_transport {
 	struct rdma_event_channel	*cm_channel;
 	struct rdma_cm_id		*cm_id;
 	struct xio_rdma_mempool		*rdma_mempool;
+	struct xio_tasks_pool_cls	initial_pool_cls;
+	struct xio_tasks_pool_cls	primary_pool_cls;
 
 	size_t				alloc_sz;
 	size_t				membuf_sz;
@@ -352,6 +357,7 @@ struct xio_rdma_transport {
 struct xio_cm_channel {
 	struct rdma_event_channel	*cm_channel;
 	struct xio_context		*ctx;
+	struct xio_observer		observer;
 	struct list_head		channels_list_entry;
 };
 
@@ -409,38 +415,31 @@ static inline int xio_rdma_notify_observer(
 		struct xio_rdma_transport *rdma_hndl,
 		int event, void *event_data)
 {
-	int retval = 0;
+	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
+					    event, event_data);
 
-	if (rdma_hndl->base.notify_observer)
-		retval = rdma_hndl->base.notify_observer(
-				rdma_hndl->base.observer, rdma_hndl,
-				event, event_data);
-
-	return retval;
+	return 0;
 }
 
 static inline int xio_rdma_notify_observer_error(
 				struct xio_rdma_transport *rdma_hndl,
 				int reason)
 {
-	int retval = 0;
 	union xio_transport_event_data ev_data = {
 		.error.reason = reason
 	};
 
-	if (rdma_hndl->base.notify_observer)
-		retval = rdma_hndl->base.notify_observer(
-				rdma_hndl->base.observer, rdma_hndl,
-				XIO_TRANSPORT_ERROR, &ev_data);
-	return retval;
+	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
+					    XIO_TRANSPORT_ERROR,
+					    &ev_data);
+	return 0;
 }
 
 void xio_data_ev_handler(int fd, int events, void *user_context);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
 		  struct xio_task *task, int num_recv_bufs);
 int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl);
-int xio_rdma_task_put(struct xio_transport_base *trans_hndl,
-		      struct xio_task *task);
+
 int xio_rdma_send(struct xio_transport_base *transport,
 		  struct xio_task *task);
 int xio_rdma_poll(struct xio_transport_base *transport,
@@ -456,6 +455,19 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 
 /* xio_rdma_management.c */
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
+
+struct xio_task *xio_rdma_primary_task_alloc(
+				struct xio_rdma_transport *rdma_hndl);
+
+struct xio_task *xio_rdma_primary_task_lookup(
+					struct xio_rdma_transport *rdma_hndl,
+					int tid);
+
+void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
+			struct xio_task *task);
+
+
+
 
 
 #endif  /* XIO_RDMA_TRANSPORT_H */

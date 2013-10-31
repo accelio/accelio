@@ -40,7 +40,6 @@
 
 #include "libxio.h"
 #include "xio_mbuf.h"
-#include "xio_transport.h"
 
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,

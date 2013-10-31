@@ -87,6 +87,7 @@ struct xio_session {
 	struct xio_session_ops		ses_ops;
 	struct xio_transport_cls	*trans_cls;
 	struct xio_msg			*setup_req;
+	struct xio_observer		observer;
 
 	enum xio_session_type		type;
 	enum xio_session_state		state;
@@ -155,6 +156,9 @@ struct xio_connection *xio_session_alloc_conn(
 		struct xio_context *ctx,
 		uint32_t conn_idx,
 		void *conn_user_context);
+
+int xio_session_free_conn(
+		struct xio_connection *connection);
 
 struct xio_connection  *xio_session_assign_conn(
 		struct xio_session *session,

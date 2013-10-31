@@ -35,105 +35,83 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include "libxio.h"
-#include "xio_common.h"
-#include "xio_hash.h"
-#include "xio_observer.h"
-#include "xio_transport.h"
-#include "xio_task.h"
-#include "xio_session.h"
-#include "xio_sessions_store.h"
+#ifndef XIO_OBSERVER_H
+#define XIO_OBSERVER_H
 
-static HT_HEAD(, xio_session, 257)  sessions_store;
-static spinlock_t ss_lock;
 
 /*---------------------------------------------------------------------------*/
-/* sessions_store_add							     */
+/* typedefs								     */
 /*---------------------------------------------------------------------------*/
-static int sessions_store_add(struct xio_session *session,
-			      uint32_t session_id)
-{
-	struct xio_session *s;
-	struct xio_key_int32  key = {
-		session_id
-	};
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	if (s != NULL)
-		return -1;
+typedef int (*notify_fn_t)(void *observer_impl,
+			   void *observable_impl,
+			   int event, void *event_data);
 
-	HT_INSERT(&sessions_store, &key, session, sessions_htbl);
-
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_remove				                     */
+/* xio_observer								     */
 /*---------------------------------------------------------------------------*/
-int xio_sessions_store_remove(uint32_t session_id)
-{
-	struct xio_session *s;
-	struct xio_key_int32  key;
+struct xio_observer {
+	void			*impl;
+	notify_fn_t		notify;
+};
 
-	spin_lock(&ss_lock);
-	key.id = session_id;
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	if (s == NULL) {
-		spin_unlock(&ss_lock);
-		return -1;
-	}
-
-	HT_REMOVE(&sessions_store, s, xio_session, sessions_htbl);
-	spin_unlock(&ss_lock);
-
-	return 0;
-}
+#define XIO_OBSERVER_INIT(name, obj, notify_fn) \
+	{ (name)->impl = obj; (name)->notify = notify_fn; }
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_lookup						     */
+/* xio_observer_node							     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_sessions_store_lookup(uint32_t session_id)
-{
-	struct xio_session *s;
-	struct xio_key_int32  key;
-
-	spin_lock(&ss_lock);
-	key.id = session_id;
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	spin_unlock(&ss_lock);
-
-	return s;
-}
+struct xio_observer_node {
+	struct xio_observer	*observer;
+	struct list_head	observers_list_node;
+};
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_add			                             */
+/* xio_observerable							     */
 /*---------------------------------------------------------------------------*/
-int xio_sessions_store_add(struct xio_session *session,
-		uint32_t *session_id)
-{
-	static uint32_t sid;  /* = 0 global session provider */
+struct xio_observable {
+	void			*impl;
+	struct list_head	observers_list;
+};
+#define XIO_OBSERVABLE_INIT(name, obj) \
+	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); }
 
-
-	spin_lock(&ss_lock);
-	int retval = sessions_store_add(session, sid);
-	if (retval == 0)
-		*session_id = sid++;
-	spin_unlock(&ss_lock);
-
-	return retval;
-}
 
 /*---------------------------------------------------------------------------*/
-/* sessions_store_construct				                     */
+/* xio_observable_reg_observer						     */
 /*---------------------------------------------------------------------------*/
-void sessions_store_construct(void)
-{
-	HT_INIT(&sessions_store, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
-	spin_lock_init(&ss_lock);
-}
+void xio_observable_reg_observer(struct xio_observable *observable,
+				 struct xio_observer *observer);
 
-/*
-void sessions_store_destruct(void)
-{
-}
-*/
+/*---------------------------------------------------------------------------*/
+/* xio_observable_unreg_observer					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_unreg_observer(struct xio_observable *observable,
+				   struct xio_observer *observer);
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_notify_observer					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_notify_observer(struct xio_observable *observable,
+				    struct xio_observer *observer,
+				    int event, void *event_data);
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_notify_all_observers					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_notify_all_observers(struct xio_observable *observable,
+					 int event, void *event_data);
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_notify_any_observer					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_notify_any_observer(struct xio_observable *observable,
+					int event, void *event_data);
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_unreg_all_observers					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_unreg_all_observers(struct xio_observable *observable);
+
+
+#endif /* XIO_OBSERVER_H */

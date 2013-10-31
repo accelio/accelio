@@ -90,13 +90,15 @@ static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
 
 	INIT_LIST_HEAD(&slot->free_blocks_list);
 	INIT_LIST_HEAD(&slot->used_blocks_list);
-	list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
-				 mem_region_entry) {
-		list_del(&r->mem_region_entry);
+	if (slot->curr_mb_nr) {
+		list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
+					 mem_region_entry) {
+			list_del(&r->mem_region_entry);
 
-		xio_dereg_mr(&r->omr);
-		free_huge_pages(r->buf);
-		free(r);
+			xio_dereg_mr(&r->omr);
+			free_huge_pages(r->buf);
+			free(r);
+		}
 	}
 
 	pthread_spin_destroy(&slot->lock);
@@ -117,16 +119,10 @@ static int xio_rdma_mem_slot_resize(struct xio_mem_slot *slot)
 	size_t				data_alloc_sz;
 	int				i;
 
-	if (slot->curr_mb_nr == 0) {
-		nr_blocks = min(slot->init_mb_nr, slot->max_mb_nr);
-		if (nr_blocks <= 0)
-			return -1;
-	} else {
-		nr_blocks =  slot->max_mb_nr - slot->curr_mb_nr;
-		if (nr_blocks <= 0)
-			return -1;
-		nr_blocks = min(nr_blocks, slot->alloc_mb_nr);
-	}
+	nr_blocks =  slot->max_mb_nr - slot->curr_mb_nr;
+	if (nr_blocks <= 0)
+		return -1;
+	nr_blocks = min(nr_blocks, slot->alloc_mb_nr);
 
 	region_alloc_sz = sizeof(*region) +
 		nr_blocks*sizeof(struct xio_mem_block);
@@ -229,9 +225,11 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		INIT_LIST_HEAD(&p->slot[i].mem_regions_list);
 		INIT_LIST_HEAD(&p->slot[i].free_blocks_list);
 		INIT_LIST_HEAD(&p->slot[i].used_blocks_list);
-		ret = xio_rdma_mem_slot_resize(&p->slot[i]);
-		if (ret == -1)
-			goto cleanup;
+		if (p->slot[i].init_mb_nr) {
+			ret = xio_rdma_mem_slot_resize(&p->slot[i]);
+			if (ret == -1)
+				goto cleanup;
+		}
 	}
 
 	return p;

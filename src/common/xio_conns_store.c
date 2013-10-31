@@ -38,6 +38,7 @@
 #include "xio_os.h"
 #include "xio_hash.h"
 #include "xio_task.h"
+#include "xio_observer.h"
 #include "xio_conn.h"
 #include "xio_conns_store.h"
 

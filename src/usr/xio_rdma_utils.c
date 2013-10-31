@@ -41,6 +41,7 @@
 
 #include "libxio.h"
 #include "xio_common.h"
+#include "xio_observer.h"
 #include "xio_rdma_mempool.h"
 #include "xio_task.h"
 #include "xio_rdma_transport.h"

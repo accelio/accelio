@@ -41,10 +41,10 @@
 
 #include "libxio.h"
 #include "xio_common.h"
+#include "xio_observer.h"
 #include "xio_context.h"
 #include "xio_task.h"
 #include "xio_transport.h"
-#include "xio_conn.h"
 #include "xio_protocol.h"
 #include "get_clock.h"
 #include "xio_mem.h"
@@ -381,7 +381,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 	num_to_post = rdma_hndl->actual_rq_depth - rdma_hndl->rqe_avail;
 	for (i = 0; i < num_to_post; i++) {
 		/* get ready to receive message */
-		task = xio_conn_get_primary_task(rdma_hndl->base.observer);
+		task = xio_rdma_primary_task_alloc(rdma_hndl);
 		if (task == 0) {
 			ERROR_LOG("primary task pool is empty\n");
 			return -1;
@@ -1347,43 +1347,6 @@ cleanup:
 	return -1;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_task_put							     */
-/*---------------------------------------------------------------------------*/
-int xio_rdma_task_put(
-		struct xio_transport_base *trans_hndl,
-		struct xio_task *task)
-{
-	struct xio_rdma_task	*rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
-	int	i;
-
-	/* recycle RDMA  buffers back to pool */
-
-	/* put buffers back to pool */
-	for (i = 0; i < rdma_task->read_num_sge; i++) {
-		if (rdma_task->read_sge[i].cache) {
-			xio_rdma_mempool_free(&rdma_task->read_sge[i]);
-			rdma_task->read_sge[i].cache = NULL;
-		}
-	}
-	rdma_task->read_num_sge = 0;
-
-	for (i = 0; i < rdma_task->write_num_sge; i++) {
-		if (rdma_task->write_sge[i].cache) {
-			xio_rdma_mempool_free(&rdma_task->write_sge[i]);
-			rdma_task->write_sge[i].cache = NULL;
-		}
-	}
-	rdma_task->write_num_sge = 0;
-
-	rdma_task->txd.send_wr.num_sge = 1;
-	rdma_task->ib_op = XIO_IB_NULL;
-	rdma_task->phantom_idx = 0;
-	rdma_task->sn = 0;
-
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_prep_req_out_data						     */
@@ -1905,7 +1868,6 @@ static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_on_recv_rsp							     */
 /*---------------------------------------------------------------------------*/
@@ -1914,7 +1876,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 {
 	int			retval = 0;
 	union xio_transport_event_data event_data;
-	struct xio_conn		*conn = rdma_hndl->base.observer;
 	struct xio_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
@@ -1946,7 +1907,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* find the sender task */
 	task->sender_task =
-		xio_conn_task_lookup(conn, rsp_hdr.tid);
+		xio_rdma_primary_task_lookup(rdma_hndl,
+					     rsp_hdr.tid);
 
 	rdma_sender_task = task->sender_task->dd_data;
 
@@ -2179,7 +2141,7 @@ static int xio_prep_rdma_op(
 		tmp_task = task;
 	} else {
 		/* take new task */
-		tmp_task = xio_conn_get_primary_task(rdma_hndl->base.observer);
+		tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
 		if (!tmp_task) {
 			ERROR_LOG("primary task pool is empty\n");
 			return -1;
@@ -2219,8 +2181,8 @@ static int xio_prep_rdma_op(
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
-				tmp_task = xio_conn_get_primary_task(
-						rdma_hndl->base.observer);
+				tmp_task =
+					xio_rdma_primary_task_alloc(rdma_hndl);
 				if (!tmp_task) {
 					ERROR_LOG(
 					      "primary task pool is empty\n");
@@ -2301,8 +2263,8 @@ static int xio_prep_rdma_op(
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
-				tmp_task = xio_conn_get_primary_task(
-						     rdma_hndl->base.observer);
+				tmp_task = xio_rdma_primary_task_alloc(
+								   rdma_hndl);
 				if (!tmp_task) {
 					ERROR_LOG(
 					       "primary task pool is empty\n");
@@ -2820,7 +2782,6 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *sender_task = list_first_entry(
 				&rdma_hndl->in_flight_list,
 				struct xio_task,  tasks_list_entry);
-
 		/* remove the task from in_flight_list */
 		rdma_hndl->reqs_in_flight_nr--;
 		task->sender_task = sender_task;
@@ -2931,7 +2892,7 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 
 	TRACE_LOG("SEND_NOP\n");
 
-	task = xio_conn_get_primary_task(rdma_hndl->base.observer);
+	task = xio_rdma_primary_task_alloc(rdma_hndl);
 	if (!task) {
 		ERROR_LOG("primary task pool is empty\n");
 		return -1;
@@ -3039,7 +3000,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	void			*buff;
 	struct xio_msg		omsg;
 
-	task = xio_conn_get_primary_task(rdma_hndl->base.observer);
+	task = xio_rdma_primary_task_alloc(rdma_hndl);
 	if (!task) {
 		ERROR_LOG("primary task pool is empty\n");
 		return -1;

@@ -63,9 +63,9 @@ struct xio_connection {
 
 	int				conn_idx;
 	int				state;
-	uint32_t			pad;
 	int32_t				send_req_toggle;
 
+	struct kref			kref;
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
 	struct xio_msg_list		one_way_msg_pool;

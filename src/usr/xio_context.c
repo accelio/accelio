@@ -37,31 +37,17 @@
  */
 #include "xio_os.h"
 #include "libxio.h"
+#include "xio_observer.h"
 #include "xio_common.h"
 #include "xio_context.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_add_observer						     */
 /*---------------------------------------------------------------------------*/
-int xio_context_add_observer(struct xio_context *ctx, void *observer,
-				   notification_handler_t notify_observer)
+int xio_context_reg_observer(struct xio_context *ctx,
+			     struct xio_observer *observer)
 {
-	struct xio_observer_node *observer_node, *tmp_observer_node;
-
-	list_for_each_entry_safe(observer_node, tmp_observer_node,
-				 &ctx->observers_list, observers_list_entry) {
-		if (observer == observer_node->observer)
-			return 0;
-	}
-
-	observer_node = calloc(1, sizeof(struct xio_observer_node));
-	if (observer_node == NULL) {
-		xio_set_error(ENOMEM);
-		return -1;
-	}
-	observer_node->observer			= observer;
-	observer_node->notification_handler	= notify_observer;
-	list_add(&observer_node->observers_list_entry, &ctx->observers_list);
+	xio_observable_reg_observer(&ctx->observable, observer);
 
 	return 0;
 }
@@ -69,49 +55,10 @@ int xio_context_add_observer(struct xio_context *ctx, void *observer,
 /*---------------------------------------------------------------------------*/
 /* xio_context_remove_observer		                                     */
 /*---------------------------------------------------------------------------*/
-void xio_context_remove_observer(struct xio_context *ctx, void *observer)
+void xio_context_unreg_observer(struct xio_context *ctx,
+				struct xio_observer *observer)
 {
-	struct xio_observer_node *observer_node, *tmp_observer_node;
-
-	list_for_each_entry_safe(observer_node, tmp_observer_node,
-				 &ctx->observers_list, observers_list_entry) {
-		if (observer_node->observer == observer) {
-			/* Remove the item from the tail queue. */
-			list_del(&observer_node->observers_list_entry);
-			free(observer_node);
-			break;
-		}
-	}
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_context_free_observers_list					     */
-/*---------------------------------------------------------------------------*/
-static void xio_context_free_observers_list(struct xio_context *ctx)
-{
-	struct xio_observer_node *observer_node, *tmp_observer_node;
-
-	list_for_each_entry_safe(observer_node, tmp_observer_node,
-				 &ctx->observers_list, observers_list_entry) {
-		/* Remove the item from the list. */
-		list_del(&observer_node->observers_list_entry);
-		free(observer_node);
-	}
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_context_notify_all						     */
-/*---------------------------------------------------------------------------*/
-void xio_context_notify_all(struct xio_context *ctx, int event,
-				       void *event_data)
-{
-	struct xio_observer_node *observer_node, *tmp_observer_node;
-
-	list_for_each_entry_safe(observer_node, tmp_observer_node,
-				 &ctx->observers_list, observers_list_entry) {
-		observer_node->notification_handler(observer_node->observer,
-						    ctx, event, event_data);
-	}
+	xio_observable_unreg_observer(&ctx->observable, observer);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -154,7 +101,7 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 
 	ctx->worker = (uint64_t) pthread_self();
 
-	INIT_LIST_HEAD(&ctx->observers_list);
+	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 
 	return ctx;
 }
@@ -164,8 +111,9 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 /*---------------------------------------------------------------------------*/
 void xio_ctx_close(struct xio_context *ctx)
 {
-	xio_context_notify_all(ctx, XIO_CONTEXT_EVENT_CLOSE, NULL);
-	xio_context_free_observers_list(ctx);
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+	xio_observable_unreg_all_observers(&ctx->observable);
 
 	free(ctx);
 	ctx = NULL;

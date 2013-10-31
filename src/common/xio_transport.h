@@ -43,7 +43,9 @@
 /*---------------------------------------------------------------------------*/
 struct xio_task;
 struct xio_task_pool;
-
+struct xio_observer;
+struct xio_observable;
+struct xio_tasks_pool_ops;
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -100,8 +102,7 @@ union xio_transport_event_data {
 
 struct xio_transport_base {
 	struct xio_context		*ctx;
-	void				*observer;
-	notification_handler_t		notify_observer;
+	struct xio_observable		observable;
 	uint32_t			is_client;  /* client or server */
 	atomic_t			refcnt;
 	char				*portal_uri;
@@ -113,6 +114,32 @@ struct xio_transport_base {
 struct xio_transport_cls {
 	int	(*is_valid_in_req)(struct xio_msg *msg);
 	int	(*is_valid_out_msg)(struct xio_msg *msg);
+};
+
+struct xio_tasks_pool_ops {
+	void	(*pool_get_params)(struct xio_transport_base *transport_hndl,
+				int *pool_len, int *pool_dd_sz,
+				int *task_dd_size);
+	int	(*pool_alloc)(struct xio_transport_base *trans_hndl,
+				int max, void *pool_dd_data);
+	int	(*pool_free)(struct xio_transport_base *trans_hndl,
+				void *pool_dd_data);
+	int	(*pool_init_item)(struct xio_transport_base *trans_hndl,
+				void *pool_dd_data, struct xio_task *task);
+	int	(*pool_run)(struct xio_transport_base *trans_hndl);
+
+	int	(*pre_put)(struct xio_transport_base *trans_hndl,
+			struct xio_task *task);
+	int	(*post_get)(struct xio_transport_base *trans_hndl,
+			struct xio_task *task);
+};
+
+struct xio_tasks_pool_cls {
+	void		*pool;
+	struct xio_task * (*task_alloc)(void *pool);
+	void		  (*task_free)(struct xio_task *task);
+
+	struct xio_task	* (*task_lookup)(void *pool, int task_id);
 };
 
 struct xio_transport {
@@ -129,16 +156,24 @@ struct xio_transport {
 	void	(*release)(struct xio_transport *self);
 
 	/* observers */
-	void	(*add_observer)(struct xio_transport_base *trans_hndl,
-				void *observer);
-	void	(*remove_observer)(struct xio_transport_base *trans_hndl,
-				   void *observer);
+	void	(*reg_observer)(struct xio_transport_base *trans_hndl,
+				struct xio_observer *observer);
+	void	(*unreg_observer)(struct xio_transport_base *trans_hndl,
+				   struct xio_observer *observer);
+
+	/* task pools managment */
+	void	(*get_pools_setup_ops)(struct xio_transport_base *trans_hndl,
+				struct xio_tasks_pool_ops **initial_pool_ops,
+				struct xio_tasks_pool_ops **primary_pool_ops);
+
+	void	(*set_pools_cls)(struct xio_transport_base *trans_hndl,
+				struct xio_tasks_pool_cls *initial_pool_cls,
+				struct xio_tasks_pool_cls *primary_pool_cls);
 
 	/* connection */
 	struct xio_transport_base *(*open)(struct xio_transport *self,
 				struct xio_context *ctx,
-				void  *observer,
-				notification_handler_t notification_handler);
+				struct xio_observer *observer);
 
 	int	(*connect)(struct xio_transport_base *trans_hndl,
 			   const char *portal_uri);
@@ -175,23 +210,24 @@ struct xio_transport {
 	struct list_head transports_list_entry;
 };
 
-
 /*---------------------------------------------------------------------------*/
-/* xio_transport_add_observer	                                             */
+/* xio_transport_reg_observer	                                             */
 /*---------------------------------------------------------------------------*/
-static inline void xio_transport_add_observer(
-		struct xio_transport_base *trans_hndl, void *observer)
+static inline void xio_transport_reg_observer(
+		struct xio_transport_base *trans_hndl,
+		struct xio_observer *observer)
 {
-	trans_hndl->observer = observer;
+	xio_observable_reg_observer(&trans_hndl->observable, observer);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_transport_remove_observer	                                     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_transport_remove_observer(
-		struct xio_transport_base *trans_hndl, void *observer)
+static inline void xio_transport_unreg_observer(
+		struct xio_transport_base *trans_hndl,
+		struct xio_observer *observer)
 {
-	trans_hndl->observer = NULL;
+	xio_observable_unreg_observer(&trans_hndl->observable, observer);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -208,8 +244,6 @@ void xio_unreg_transport(struct xio_transport *transport);
 /* xio_get_transport							     */
 /*---------------------------------------------------------------------------*/
 struct xio_transport *xio_get_transport(const char *name);
-
-
 
 
 #endif /*XIO_TRANSPORT_H */
