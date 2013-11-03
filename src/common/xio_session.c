@@ -739,7 +739,7 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	session->redir_conn = session->lead_conn;
 	xio_connection_set_conn(session->redir_conn, conn);
 
-	ERROR_LOG("connection redirected to %s\n", service);
+	TRACE_LOG("connection redirected to %s\n", service);
 	retval = xio_conn_connect(conn, service);
 	if (retval != 0) {
 		ERROR_LOG("connection connect failed\n");
@@ -1171,7 +1171,7 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		}
 		break;
 	case XIO_ACTION_REDIRECT:
-		ERROR_LOG("session state is now REDIRECT. session:%p\n",
+		TRACE_LOG("session state is now REDIRECT. session:%p\n",
 			  session);
 
 		session->state = XIO_SESSION_STATE_REDIRECTED;
