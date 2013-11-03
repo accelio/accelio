@@ -971,8 +971,9 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 		if (unlikely(conn->is_first_msg)) {
 			/* route the message to first observer (the server) */
 			conn->is_first_msg = 0;
-			xio_observable_notify_any_observer(
-					&conn->observable,
+
+			xio_conn_notify_server(
+					conn,
 					XIO_CONNECTION_ASSIGN_IN_BUF,
 					&conn_event_data);
 
