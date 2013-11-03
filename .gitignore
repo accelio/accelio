@@ -13,3 +13,17 @@ aclocal.m4
 m4/*
 .libs
 libtool
+config.guess
+config.sub
+xio_mt_client
+xio_mt_server
+raio_client
+raio_server
+xio_client
+xio_server
+xio_bidi_client
+xio_bidi_server
+xio_lat_client
+xio_lat_server
+xio_oneway_client
+xio_oneway_server
