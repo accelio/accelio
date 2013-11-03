@@ -66,6 +66,12 @@ static int xio_init_ow_msg_pool(struct xio_connection *conn)
 
 	conn->msg_array = kcalloc(MSG_POOL_SZ, sizeof(struct xio_msg),
 				  GFP_KERNEL);
+	if (!conn->msg_array) {
+		ERROR_LOG("failed to allocate ow message pool\n");
+		xio_set_error(ENOMEM);
+		return -1;
+	}
+
 	xio_msg_list_init(&conn->one_way_msg_pool);
 	for (i = 0; i < MSG_POOL_SZ; i++)
 		xio_msg_list_insert_head(&conn->one_way_msg_pool,
