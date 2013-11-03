@@ -64,6 +64,9 @@ static void process_response(struct xio_msg *rsp)
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		cnt = 0;
 	}
+	rsp->in.header.iov_base	  = NULL;
+	rsp->in.header.iov_len	  = 0;
+	rsp->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/

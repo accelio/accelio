@@ -128,6 +128,9 @@ static void process_response(struct hw_thread_data  *tdata,
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		tdata->cnt = 0;
 	}
+	rsp->in.header.iov_base	  = NULL;
+	rsp->in.header.iov_len	  = 0;
+	rsp->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/

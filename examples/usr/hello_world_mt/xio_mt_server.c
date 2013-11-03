@@ -103,7 +103,9 @@ static void process_request(struct hw_thread_data *tdata,
 				(req->sn + 1), (char *)req->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-
+	req->in.header.iov_base	  = NULL;
+	req->in.header.iov_len	  = 0;
+	req->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/

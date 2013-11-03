@@ -62,6 +62,9 @@ static void process_request(struct xio_msg *req)
 				(req->sn + 1), (char *)req->in.header.iov_base);
 		cnt = 0;
 	}
+	req->in.header.iov_base	  = NULL;
+	req->in.header.iov_len	  = 0;
+	req->in.data_iovlen	  = 0;
 
 }
 
