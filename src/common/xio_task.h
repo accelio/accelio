@@ -56,28 +56,28 @@ typedef void (*release_task_fn)(struct kref *kref);
 /*---------------------------------------------------------------------------*/
 struct xio_task {
 	struct list_head	tasks_list_entry;
-	void			*pool;
-	struct xio_task		*sender_task;  /* client only on receiver */
 	void			*dd_data;
+	struct xio_mbuf		mbuf;
+	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
-	struct xio_msg		imsg;		/* message to the user */
 
+	void			*pool;
 	release_task_fn		release;
 
-	struct xio_mbuf		mbuf;
-	struct kref		kref;
-	uint16_t		tlv_type;
-	uint16_t		pad[3];
 	enum xio_task_state	state;		/* task state enum	*/
+	struct kref		kref;
+	uint64_t		magic;
+	uint64_t		stag;		/* session unique tag */
+	uint16_t		tlv_type;
+	uint16_t		force_signal;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
 	uint32_t		omsg_flags;
-	uint32_t		force_signal;
-	uint64_t		stag;		/* session unique tag */
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;
-	uint64_t		magic;
+	struct xio_msg		imsg;		/* message to the user */
+
 };
 
 struct xio_tasks_pool {

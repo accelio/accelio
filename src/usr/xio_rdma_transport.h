@@ -210,18 +210,19 @@ struct xio_rdma_task {
 	uint16_t			phantom_idx;
 	uint16_t			pad[3];
 
+	uint32_t			read_num_sge;
+	uint32_t			write_num_sge;
+	uint32_t			req_write_num_sge;
+	uint32_t			req_read_num_sge;
+
 	struct xio_work_req		txd;
 	struct xio_work_req		rxd;
 	struct xio_work_req		rdmad;
 
-	uint32_t			read_num_sge;
-	uint32_t			write_num_sge;
 	struct xio_rdma_mp_mem		read_sge[XIO_MAX_IOV];
 	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
 
 	/* represents the requester request */
-	uint32_t			req_write_num_sge;
-	uint32_t			req_read_num_sge;
 	struct xio_sge			req_read_sge[XIO_MAX_IOV];
 	struct xio_sge			req_write_sge[XIO_MAX_IOV];
 };
