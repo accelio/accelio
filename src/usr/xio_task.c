@@ -82,6 +82,7 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	data = calloc(elems_alloc_sz, sizeof(uint8_t));
 	if (data == NULL) {
 		xio_set_error(ENOMEM);
+		free(q);
 		return NULL;
 	}
 
