@@ -1367,11 +1367,13 @@ static void  on_cm_established(struct rdma_cm_event *ev,
 static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
+	int retval;
+
 	TRACE_LOG("on_cm_disconnected\n");
 	if (rdma_hndl->state == XIO_STATE_CONNECTED)  {
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		DEBUG_LOG("on_cm_disconnected: state is now disconnected\n");
-		int retval = rdma_disconnect(rdma_hndl->cm_id);
+		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
 			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);

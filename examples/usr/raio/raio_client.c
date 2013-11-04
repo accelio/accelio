@@ -252,9 +252,11 @@ int main(int argc, char *argv[])
 	int			npending;
 	int			nqueued;
 	int			loop;
+	int			fd;
 	cycles_t		start_time = 0;
 	cycles_t		end_time = 0;
 	double			mhz;
+	double			usec, size, rate, pps;
 #ifdef WRITE_FILE
 	int			fdw;
 #endif
@@ -288,7 +290,7 @@ int main(int argc, char *argv[])
 #endif
 
 	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
-	int fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
+	fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
 		file_path, flags);
 	if (fd == -1) {
 		fprintf(stderr, "raio_open failed - file:%s:%d/%s " \
@@ -425,12 +427,11 @@ int main(int argc, char *argv[])
 	}
 	printf("\nreading completed\n");
 
-	double usec =
-		(end_time - start_time)/mhz;
+	usec = (end_time - start_time)/mhz;
 
-	double size = 1.0*stbuf.st_size/ONE_MB;
-	double rate = (1.0*size*ONE_MB)/usec;
-	double pps = (1.0*tot_num*ONE_MB)/usec;
+	size = 1.0*stbuf.st_size/ONE_MB;
+	rate = (1.0*size*ONE_MB)/usec;
+	pps = (1.0*tot_num*ONE_MB)/usec;
 	printf("done [%d/%d] time: %.2f msecs, size: %.2f MB, " \
 			"rate: %.2f MBps, pps: %.0f, block size: %d B\n",
 			tot_completed, tot_num, usec/1000,

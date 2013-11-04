@@ -80,12 +80,15 @@ void *malloc_huge_pages(size_t size)
 /*---------------------------------------------------------------------------*/
 void free_huge_pages(void *ptr)
 {
+	void	*real_ptr;
+	size_t	real_size;
+
 	if (ptr == NULL)
 		return;
 	/* Jump back to the page with metadata */
-	void *real_ptr = (char *)ptr - HUGE_PAGE_SZ;
+	real_ptr = (char *)ptr - HUGE_PAGE_SZ;
 	/* Read the original allocation size */
-	size_t real_size = *((size_t *)real_ptr);
+	real_size = *((size_t *)real_ptr);
 
 	if (real_size != 0)
 		/* The memory was allocated via mmap()
