@@ -60,6 +60,9 @@ struct xio_task {
 	struct xio_mbuf		mbuf;
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
+	struct xio_session	*session;
+	struct xio_conn		*conn;
+	struct xio_connection	*connection;
 
 	void			*pool;
 	release_task_fn		release;
@@ -73,9 +76,6 @@ struct xio_task {
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
 	uint32_t		omsg_flags;
-	struct xio_session	*session;
-	struct xio_conn		*conn;
-	struct xio_connection	*connection;
 	struct xio_msg		imsg;		/* message to the user */
 
 };
