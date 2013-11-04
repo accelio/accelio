@@ -245,6 +245,13 @@ void xio_unreg_transport(struct xio_transport *transport);
 /*---------------------------------------------------------------------------*/
 struct xio_transport *xio_get_transport(const char *name);
 
+int xio_rdma_cancel_req(struct xio_transport_base *transport,
+			struct xio_msg *req, uint64_t stag,
+			void *ulp_msg, size_t ulp_msg_sz);
+
+int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
+			struct xio_task *task, enum xio_status result,
+			void *ulp_msg, size_t ulp_msg_sz);
 
 #endif /*XIO_TRANSPORT_H */
 

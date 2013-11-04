@@ -107,6 +107,9 @@ enum xio_status {
 	XIO_E_WRITE_FAILED		= (XIO_BASE_STATUS + 20),
 	XIO_E_CLOSE_FAILED		= (XIO_BASE_STATUS + 21),
 	XIO_E_UNSUCCESSFUL		= (XIO_BASE_STATUS + 22),
+	XIO_E_MSG_CANCELED		= (XIO_BASE_STATUS + 23),
+	XIO_E_MSG_CANCEL_FAILED		= (XIO_BASE_STATUS + 24),
+	XIO_E_MSG_NOT_FOUND		= (XIO_BASE_STATUS + 25),
 };
 
 enum xio_ev_loop_events {
@@ -303,6 +306,17 @@ struct xio_session_ops {
 			enum xio_status error,
 			struct xio_msg  *msg,
 			void *conn_user_context);
+
+	/* requester's message cancelation notification */
+	int (*on_cancel)(struct xio_session *session,
+			struct xio_msg  *msg,
+			enum xio_status result,
+			void *conn_user_context);
+
+	/* responder's message cancelation notification */
+	int (*on_cancel_request)(struct xio_session *session,
+				 struct xio_msg  *msg,
+				 void *conn_user_context);
 
 	/* notify the user to assign a data buffer for incoming read */
 	int (*assign_data_in_buf)(struct xio_msg *msg,

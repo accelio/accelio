@@ -1093,7 +1093,7 @@ static int xio_read_setup_rsp(struct xio_connection *connection,
 static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				 struct xio_task *task)
 {
-	uint16_t			action;
+	uint16_t			action = 0;
 	struct xio_session		*session = connection->session;
 	struct xio_new_session_rsp	*rsp = &session->new_ses_rsp;
 	struct xio_connection		*tmp_connection;
@@ -1211,7 +1211,7 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 		return xio_on_connection_rejected(session, connection);
 		break;
-	};
+	}
 
 	return -1;
 }

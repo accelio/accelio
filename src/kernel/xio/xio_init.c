@@ -39,6 +39,7 @@
 #include <linux/module.h>
 
 #include "libxio.h"
+#include "xio_observer.h"
 #include "xio_common.h"
 #include "xio_sessions_store.h"
 #include "xio_conns_store.h"
@@ -71,8 +72,16 @@ module_exit(xio_cleanup_module);
 
 EXPORT_SYMBOL(xio_ctx_open);
 EXPORT_SYMBOL(xio_ctx_close);
-EXPORT_SYMBOL(xio_context_add_observer);
-EXPORT_SYMBOL(xio_context_remove_observer);
+
+EXPORT_SYMBOL(xio_context_reg_observer);
+EXPORT_SYMBOL(xio_context_unreg_observer);
+
+EXPORT_SYMBOL(xio_observable_reg_observer);
+EXPORT_SYMBOL(xio_observable_unreg_observer);
+EXPORT_SYMBOL(xio_observable_notify_observer);
+EXPORT_SYMBOL(xio_observable_notify_all_observers);
+EXPORT_SYMBOL(xio_observable_notify_any_observer);
+EXPORT_SYMBOL(xio_observable_unreg_all_observers);
 
 EXPORT_SYMBOL(xio_set_error);
 EXPORT_SYMBOL(xio_strerror);
@@ -80,11 +89,6 @@ EXPORT_SYMBOL(xio_errno);
 
 EXPORT_SYMBOL(xio_reg_transport);
 EXPORT_SYMBOL(xio_unreg_transport);
-
-EXPORT_SYMBOL(xio_conn_get_initial_task);
-EXPORT_SYMBOL(xio_conn_get_primary_task);
-EXPORT_SYMBOL(xio_conn_task_lookup);
-EXPORT_SYMBOL(xio_conn_set_pools_ops);
 
 EXPORT_SYMBOL(memcpyv);
 EXPORT_SYMBOL(memclonev);

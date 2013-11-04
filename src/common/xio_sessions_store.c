@@ -112,10 +112,10 @@ int xio_sessions_store_add(struct xio_session *session,
 		uint32_t *session_id)
 {
 	static uint32_t sid;  /* = 0 global session provider */
-
+	int retval;
 
 	spin_lock(&ss_lock);
-	int retval = sessions_store_add(session, sid);
+	retval = sessions_store_add(session, sid);
 	if (retval == 0)
 		*session_id = sid++;
 	spin_unlock(&ss_lock);

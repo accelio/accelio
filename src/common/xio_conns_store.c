@@ -107,14 +107,14 @@ struct xio_conn *xio_conns_store_lookup(int conn_id)
 /*---------------------------------------------------------------------------*/
 /* xio_conns_store_add				                             */
 /*---------------------------------------------------------------------------*/
-int xio_conns_store_add(
-		struct xio_conn *conn,
-		int *conn_id)
+int xio_conns_store_add(struct xio_conn *conn,
+			int *conn_id)
 {
 	static int cid;  /* = 0 global conn provider */
+	int retval;
 
 	spin_lock(&cs_lock);
-	int retval = conns_store_add(conn, cid);
+	retval = conns_store_add(conn, cid);
 	if (retval == 0)
 		*conn_id = cid++;
 	spin_unlock(&cs_lock);
