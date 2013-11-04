@@ -935,7 +935,7 @@ int xio_get_opt(void *xio_obj, int level, int optname,
  *
  * @returns event loop handle or NULL upon error
  */
-void *xio_ev_loop_init();
+void *xio_ev_loop_init(void);
 
 /**
  * xio_ev_loop_run - event loop main loop
