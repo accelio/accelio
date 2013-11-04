@@ -434,10 +434,10 @@ static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_on_recv_msg							     */
+/* xio_conn_on_recv_req							     */
 /*---------------------------------------------------------------------------*/
-static int xio_conn_on_recv_msg(struct xio_conn *conn,
-				  struct xio_task *task)
+static int xio_conn_on_recv_req(struct xio_conn *conn,
+				struct xio_task *task)
 {
 	union xio_conn_event_data conn_event_data = {
 		.msg.task	= task,
@@ -471,7 +471,30 @@ static int xio_conn_on_recv_msg(struct xio_conn *conn,
 			return 0;
 		}
 	}
-	if (task->sender_task) {
+
+	/* route the message to any of the sessions */
+	xio_observable_notify_any_observer(
+			&conn->observable,
+			XIO_CONNECTION_NEW_MESSAGE,
+			&conn_event_data);
+
+	return 0;
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_on_recv_rsp							     */
+/*---------------------------------------------------------------------------*/
+static int xio_conn_on_recv_rsp(struct xio_conn *conn,
+				struct xio_task *task)
+{
+	union xio_conn_event_data conn_event_data = {
+		.msg.task	= task,
+		.msg.op		= XIO_WC_OP_RECV
+	};
+	task->conn = conn;
+
+	if (likely(task->sender_task)) {
 		/* route the response to the sender session */
 		xio_observable_notify_observer(
 				&conn->observable,
@@ -902,15 +925,21 @@ static int xio_on_new_message(struct xio_conn *conn,
 	int	retval = -1;
 	struct xio_task	*task = event_data->msg.task;
 
+	switch (task->tlv_type) {
+	case XIO_CONN_SETUP_RSP:
+		retval = xio_conn_on_recv_setup_rsp(conn, task);
+		break;
+	case XIO_CONN_SETUP_REQ:
+		retval = xio_conn_on_recv_setup_req(conn, task);
+		break;
 
-	if (unlikely(IS_CONN_SETUP(task->tlv_type))) {
-		if (task->tlv_type == XIO_CONN_SETUP_RSP)
-			retval = xio_conn_on_recv_setup_rsp(conn, task);
+	default:
+		if (IS_REQUEST(task->tlv_type))
+			retval = xio_conn_on_recv_req(conn, task);
 		else
-			retval = xio_conn_on_recv_setup_req(conn, task);
-	} else {
-		retval = xio_conn_on_recv_msg(conn, task);
-	}
+			retval = xio_conn_on_recv_rsp(conn, task);
+		break;
+	};
 
 	if (retval != 0) {
 		ERROR_LOG("failed to handle message. " \
