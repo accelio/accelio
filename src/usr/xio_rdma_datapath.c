@@ -764,8 +764,10 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
 	struct xio_rdma_task		*rdma_task = task->dd_data;
 	struct xio_rdma_transport	*rdma_hndl = rdma_task->rdma_hndl;
 
+	/*
 	TRACE_LOG("received opcode :%s [%x]\n",
 		  ibv_wc_opcode_str(wc->opcode), wc->opcode);
+	*/
 
 	switch (wc->opcode) {
 	case IBV_WC_RECV:
