@@ -1215,53 +1215,40 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 }
 
+
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_write_header						     */
+/* xio_rdma_prep_req_header						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_write_header(
-		struct xio_rdma_transport *rdma_hndl,
-		struct xio_task	*task, uint16_t ulp_hdr_len,
-		uint16_t ulp_pad_len, uint64_t ulp_imm_len,
-		uint32_t status)
+static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
+				    struct xio_task	*task,
+				    uint16_t ulp_hdr_len,
+				    uint16_t ulp_pad_len,
+				    uint64_t ulp_imm_len,
+				    uint32_t status)
 {
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_req_hdr	req_hdr;
-	struct xio_rsp_hdr	rsp_hdr;
-	struct xio_rdma_task	*rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+
+	if (!IS_REQUEST(task->tlv_type)) {
+		ERROR_LOG("unknown message type\n");
+		return -1;
+	}
 
 	/* write the headers */
-	if (IS_REQUEST(task->tlv_type)) {
-		/* fill request header */
-		req_hdr.req_hdr_len	= sizeof(req_hdr);
-		req_hdr.tid		= task->ltid;
-		req_hdr.opcode		= rdma_task->ib_op;
-		req_hdr.flags		= 0;
-		req_hdr.ulp_hdr_len	= ulp_hdr_len;
-		req_hdr.ulp_pad_len	= ulp_pad_len;
-		req_hdr.ulp_imm_len	= ulp_imm_len;
-		req_hdr.read_num_sge	= rdma_task->read_num_sge;
-		req_hdr.write_num_sge	= rdma_task->write_num_sge;
 
-		if (xio_rdma_write_req_header(rdma_hndl, task, &req_hdr) != 0)
-			goto cleanup;
+	/* fill request header */
+	req_hdr.req_hdr_len	= sizeof(req_hdr);
+	req_hdr.tid		= task->ltid;
+	req_hdr.opcode		= rdma_task->ib_op;
+	req_hdr.flags		= 0;
+	req_hdr.ulp_hdr_len	= ulp_hdr_len;
+	req_hdr.ulp_pad_len	= ulp_pad_len;
+	req_hdr.ulp_imm_len	= ulp_imm_len;
+	req_hdr.read_num_sge	= rdma_task->read_num_sge;
+	req_hdr.write_num_sge	= rdma_task->write_num_sge;
 
-	} else if (IS_RESPONSE(task->tlv_type)) {
-		/* fill response header */
-		rsp_hdr.rsp_hdr_len	= sizeof(rsp_hdr);
-		rsp_hdr.tid		= task->rtid;
-		rsp_hdr.opcode		= rdma_task->ib_op;
-		rsp_hdr.flags		= 0;
-		rsp_hdr.ulp_hdr_len	= ulp_hdr_len;
-		rsp_hdr.ulp_pad_len	= ulp_pad_len;
-		rsp_hdr.ulp_imm_len	= ulp_imm_len;
-		rsp_hdr.status		= status;
-		req_hdr.read_num_sge	= 0;
-		req_hdr.write_num_sge	= 0;
-		if (xio_rdma_write_rsp_header(rdma_hndl, task, &rsp_hdr) != 0)
-			goto cleanup;
-	} else {
-		ERROR_LOG("unknown message type\n");
-	}
+	if (xio_rdma_write_req_header(rdma_hndl, task, &req_hdr) != 0)
+		goto cleanup;
 
 	/* write the payload header */
 	if (ulp_hdr_len) {
@@ -1280,9 +1267,61 @@ static int xio_rdma_write_header(
 
 cleanup:
 	xio_set_error(XIO_E_MSG_SIZE);
-	ERROR_LOG("xio_rdma_send_msg failed\n");
+	ERROR_LOG("xio_rdma_write_req_header failed\n");
 	return -1;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_prep_rsp_header						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
+				    struct xio_task *task,
+				    uint16_t ulp_hdr_len,
+				    uint16_t ulp_pad_len,
+				    uint64_t ulp_imm_len,
+				    uint32_t status)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_rsp_hdr	rsp_hdr;
+
+	if (!IS_RESPONSE(task->tlv_type)) {
+		ERROR_LOG("unknown message type\n");
+		return -1;
+	}
+
+	/* fill response header */
+	rsp_hdr.rsp_hdr_len	= sizeof(rsp_hdr);
+	rsp_hdr.tid		= task->rtid;
+	rsp_hdr.opcode		= rdma_task->ib_op;
+	rsp_hdr.flags		= 0;
+	rsp_hdr.ulp_hdr_len	= ulp_hdr_len;
+	rsp_hdr.ulp_pad_len	= ulp_pad_len;
+	rsp_hdr.ulp_imm_len	= ulp_imm_len;
+	rsp_hdr.status		= status;
+	if (xio_rdma_write_rsp_header(rdma_hndl, task, &rsp_hdr) != 0)
+		goto cleanup;
+
+	/* write the payload header */
+	if (ulp_hdr_len) {
+		if (xio_mbuf_write_array(
+		    &task->mbuf,
+		    task->omsg->out.header.iov_base,
+		    task->omsg->out.header.iov_len) != 0)
+			goto cleanup;
+	}
+
+	/* write the pad between header and data */
+	if (ulp_pad_len)
+		xio_mbuf_inc(&task->mbuf, ulp_pad_len);
+
+	return 0;
+
+cleanup:
+	xio_set_error(XIO_E_MSG_SIZE);
+	ERROR_LOG("xio_rdma_write_rsp_header failed\n");
+	return -1;
+}
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_send_data						     */
@@ -1392,7 +1431,7 @@ static int xio_rdma_prep_req_out_data(
 		rdma_task->write_num_sge = 0;
 
 		/* write xio header to the buffer */
-		retval = xio_rdma_write_header(
+		retval = xio_rdma_prep_req_header(
 				rdma_hndl, task,
 				ulp_out_hdr_len, ulp_pad_len, ulp_out_imm_len,
 				XIO_E_SUCCESS);
@@ -1458,7 +1497,7 @@ static int xio_rdma_prep_req_out_data(
 		rdma_task->write_num_sge = vmsg->data_iovlen;
 
 		/* write xio header to the buffer */
-		retval = xio_rdma_write_header(
+		retval = xio_rdma_prep_req_header(
 				rdma_hndl, task,
 				ulp_out_hdr_len, 0, 0, XIO_E_SUCCESS);
 
@@ -1723,7 +1762,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		}
 		rdma_task->ib_op = XIO_IB_SEND;
 		/* write xio header to the buffer */
-		retval = xio_rdma_write_header(
+		retval = xio_rdma_prep_rsp_header(
 				rdma_hndl, task,
 				ulp_hdr_len, ulp_pad_len, ulp_imm_len,
 				XIO_E_SUCCESS);
@@ -1751,7 +1790,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 			/* and the header is sent via SEND */
 			/* write xio header to the buffer */
-			retval = xio_rdma_write_header(
+			retval = xio_rdma_prep_rsp_header(
 					rdma_hndl, task,
 					ulp_hdr_len, 0, ulp_imm_len,
 					XIO_E_SUCCESS);
@@ -1760,7 +1799,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 				  "to missing, response buffer\n");
 
 			/* the client did not provide buffer for response */
-			retval = xio_rdma_write_header(
+			retval = xio_rdma_prep_rsp_header(
 					rdma_hndl, task,
 					ulp_hdr_len, 0, 0,
 					XIO_E_PARTIAL_MSG);
@@ -3036,7 +3075,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	task->omsg = &omsg;
 
 	/* write xio header to the buffer */
-	retval = xio_rdma_write_header(
+	retval = xio_rdma_prep_req_header(
 			rdma_hndl, task,
 			ulp_hdr_len, 0, 0,
 			XIO_E_SUCCESS);

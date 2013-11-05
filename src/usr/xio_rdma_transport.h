@@ -94,6 +94,10 @@ extern struct list_head		dev_list;
 		}				\
 	} while (0)
 
+
+#define XIO_TO_RDMA_TASK(xt, rt) \
+		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
+
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
