@@ -1,7 +1,7 @@
 # this is example-file: configure.ac
 
 # initial information about the project
-AC_INIT([libxio],[2.0],[libxio@accellio.org])
+AC_INIT([libxio],[1.0],[libxio@accelio.org])
 AM_INIT_AUTOMAKE
 
 # Checks for language
@@ -55,7 +55,7 @@ AC_MSG_RESULT([$enable_debug])
 
 if test "$enable_debug" = "yes"; then
 	AC_DEFINE([DEBUG],[],[Debug Mode])
-	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wdeclaration-after-statement -O0 -D_GNU_SOURCE"
+	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wdeclaration-after-statement -fno-omit-frame-pointer -O0 -D_GNU_SOURCE"
 else
 	AC_DEFINE([NDEBUG],[],[No-debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wpadded -Wdeclaration-after-statement -O3 -D_GNU_SOURCE"
