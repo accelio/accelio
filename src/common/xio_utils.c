@@ -159,7 +159,7 @@ size_t xio_read_tlv(uint16_t *type, uint64_t *len, void **value,
 	struct xio_tlv *tlv;
 
 	tlv = (struct xio_tlv *)buffer;
-	if (tlv->magic != ntohl(XIO_MAGIC))
+	if (unlikely(tlv->magic != htonl(XIO_MAGIC)))
 		return -1;
 
 	*type	= ntohs(tlv->type);

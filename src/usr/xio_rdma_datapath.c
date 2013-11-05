@@ -1654,10 +1654,10 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	/* set the length */
-	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
 
 	/* validate header */
-	if (XIO_TLV_LEN + payload != rdma_task->txd.sge[0].length) {
+	if (XIO_TLV_LEN + payload != sge_len) {
 		ERROR_LOG("header validation failed\n");
 		return -1;
 	}
@@ -1666,8 +1666,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	/* check for inline */
 	rdma_task->txd.send_wr.send_flags = 0;
 
-	sge_len = 0;
-	for (i = 0; i < rdma_task->txd.send_wr.num_sge; i++)
+	for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
 		sge_len += rdma_task->txd.sge[i].length;
 
 	if (sge_len < MAX_INLINE_DATA)
@@ -1815,7 +1814,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		goto cleanup;
 
 	/* set the length */
-	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != rdma_task->txd.sge[0].length) {
@@ -1831,8 +1830,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* check for inline */
 	if (rdma_task->ib_op == XIO_IB_SEND) {
-		sge_len = 0;
-		for (i = 0; i < rdma_task->txd.send_wr.num_sge; i++)
+		for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
 			sge_len += rdma_task->txd.sge[i].length;
 
 		if (sge_len < MAX_INLINE_DATA)
