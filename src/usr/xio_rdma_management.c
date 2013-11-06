@@ -796,8 +796,7 @@ static void xio_rdma_task_init(struct xio_task *task,
 				 unsigned long size,
 				 struct ibv_mr *srmr)
 {
-	struct xio_rdma_task *rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	rdma_task->rdma_hndl = rdma_hndl;
 
@@ -1119,7 +1118,7 @@ static int xio_rdma_primary_pool_init_task(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	void *buf = rdma_pool->data_pool + (task->ltid*rdma_pool->buf_size);
 
-	struct xio_rdma_task *rdma_task = (struct xio_rdma_task *)task->dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 	rdma_task->ib_op = 0x200;
 
 
@@ -1140,9 +1139,8 @@ static int xio_rdma_task_pre_put(
 		struct xio_transport_base *trans_hndl,
 		struct xio_task *task)
 {
-	struct xio_rdma_task	*rdma_task =
-		(struct xio_rdma_task *)task->dd_data;
 	int	i;
+	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	/* recycle RDMA  buffers back to pool */
 
