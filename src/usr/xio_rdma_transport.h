@@ -95,8 +95,9 @@ extern struct list_head		dev_list;
 	} while (0)
 
 
-#define XIO_TO_RDMA_TASK(xt, rt) \
-		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
+#define XIO_TO_RDMA_TASK(xt, rt)			\
+		struct xio_rdma_task *(rt) =		\
+			(struct xio_rdma_task *)(xt)->dd_data
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -214,11 +215,11 @@ struct xio_rdma_task {
 	uint32_t			write_num_sge;
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
+	uint32_t			phantom_idx;
 	enum xio_ib_op_code		ib_op;
 	uint16_t			sn;
 	uint16_t			more_in_batch;
-	uint16_t			phantom_idx;
-	uint16_t			pad[3];
+	uint16_t			pad[2];
 
 
 	/* The buffer mapped with the 3 xio_work_req
@@ -480,9 +481,4 @@ struct xio_task *xio_rdma_primary_task_lookup(
 void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
 			struct xio_task *task);
 
-
-
-
-
 #endif  /* XIO_RDMA_TRANSPORT_H */
-

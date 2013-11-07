@@ -134,8 +134,7 @@ void xio_set_error(int errnum);
 /*---------------------------------------------------------------------------*/
 struct __attribute__((__packed__)) xio_tlv {
 	uint32_t		magic;
-	uint16_t		type;
-	uint16_t		pad;
+	uint32_t		type;
 	uint64_t		len;
 };
 
@@ -207,16 +206,16 @@ char		*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
-size_t		xio_write_tlv(uint16_t type, uint64_t len, uint8_t *buffer);
+size_t		xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer);
 
-size_t		xio_read_tlv(uint16_t *type, uint64_t *len, void **value,
-			       uint8_t *buffer);
+size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
+			     uint8_t *buffer);
 
-size_t		memcpyv(const struct xio_iovec *dst, int dparts, int doff,
-			const struct xio_iovec *src, int sparts, int soff);
+size_t		memcpyv(struct xio_iovec *dst, int dsize,
+			struct xio_iovec *src, int ssize);
 
-size_t		memclonev(struct xio_iovec *dst, int *dparts,
-			  const struct xio_iovec *src, int sparts);
+size_t		memclonev(struct xio_iovec *dst, int dsize,
+			  struct xio_iovec *src, int ssize);
 
 size_t		xio_iov_length(const struct xio_iovec *iov,
 			       unsigned long nr_segs);

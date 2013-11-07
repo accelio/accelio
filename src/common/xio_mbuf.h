@@ -47,8 +47,8 @@ struct xio_mbuf {
 	struct {
 		void		*tail;
 		void		*head;
-		uint16_t	type;
-		uint8_t		pad[6];
+		uint32_t	type;
+		uint32_t	pad;
 		uint64_t	len;
 
 		void		*val;
@@ -231,7 +231,7 @@ static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint16_t type,
 /*---------------------------------------------------------------------------*/
 /* xio_read_tlv							     */
 /*---------------------------------------------------------------------------*/
-static inline uint16_t xio_read_tlv_type(struct xio_mbuf *mbuf)
+static inline uint32_t xio_read_tlv_type(struct xio_mbuf *mbuf)
 {
 	struct xio_tlv *tlv;
 	static uint32_t  magic;
@@ -243,7 +243,7 @@ static inline uint16_t xio_read_tlv_type(struct xio_mbuf *mbuf)
 	if (tlv->magic != magic)
 		return -1;
 
-	return  ntohs(tlv->type);
+	return  ntohl(tlv->type);
 }
 
 /*---------------------------------------------------------------------------*/
