@@ -135,11 +135,13 @@ void xio_set_error(int errnum);
 struct __attribute__((__packed__)) xio_tlv {
 	uint32_t		magic;
 	uint16_t		type;
+	uint16_t		pad;
 	uint64_t		len;
 };
 
 struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
+	uint32_t		pad;
 	uint64_t		serial_num;
 	uint32_t		flags;
 	uint32_t		receipt_result;
@@ -147,6 +149,7 @@ struct __attribute__((__packed__)) xio_session_hdr {
 
 struct __attribute__((__packed__)) xio_conn_setup_req {
 	uint16_t		version;
+	uint16_t		pad;
 };
 
 
@@ -154,6 +157,7 @@ struct __attribute__((__packed__)) xio_conn_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;
+	uint16_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_session_cancel_hdr {

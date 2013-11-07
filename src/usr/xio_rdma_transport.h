@@ -179,6 +179,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint16_t		credits;	/* peer send credits	*/
 	uint16_t		sq_depth;
 	uint16_t		rq_depth;
+	uint16_t		pad;
 	uint64_t		buffer_sz;
 };
 
@@ -189,6 +190,7 @@ struct __attribute__((__packed__)) xio_nop_hdr {
 	uint16_t		credits;	/* peer send credits	*/
 	uint8_t			opcode;		/* opcode for peers	*/
 	uint8_t			flags;		/* not used		*/
+	uint16_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
@@ -208,25 +210,31 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
-	enum xio_ib_op_code		ib_op;
-	uint16_t			more_in_batch;
-	uint16_t			sn;
-	uint16_t			phantom_idx;
-	uint16_t			pad[3];
-
 	uint32_t			read_num_sge;
 	uint32_t			write_num_sge;
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
+	enum xio_ib_op_code		ib_op;
+	uint16_t			sn;
+	uint16_t			more_in_batch;
+	uint16_t			phantom_idx;
+	uint16_t			pad[3];
 
+
+	/* The buffer mapped with the 3 xio_work_req
+	 * used to transfer the headers
+	 */
 	struct xio_work_req		txd;
 	struct xio_work_req		rxd;
 	struct xio_work_req		rdmad;
 
+	/* User (from vmsg) or pool buffer used for */
 	struct xio_rdma_mp_mem		read_sge[XIO_MAX_IOV];
 	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
 
-	/* represents the requester request */
+	/* What this side got from the peer for RDMA R/W
+	 * Currently limitd to 1
+	 */
 	struct xio_sge			req_read_sge[XIO_MAX_IOV];
 	struct xio_sge			req_write_sge[XIO_MAX_IOV];
 };
@@ -287,6 +295,8 @@ struct xio_rdma_transport {
 	struct xio_transport_base	base;
 	struct xio_cq			*tcq;
 	struct ibv_qp			*qp;
+	struct xio_rdma_mempool		*rdma_mempool;
+
 	struct list_head		trans_list_entry;
 
 	/*  tasks queues */
@@ -313,8 +323,6 @@ struct xio_rdma_transport {
 	int				num_tasks;
 	int				kick_rdma_rd;
 
-	int				client_initiator_depth;
-	int				client_responder_resources;
 	int				more_in_batch;
 	int				rdma_in_flight;
 	int				reqs_in_flight_nr;
@@ -343,20 +351,21 @@ struct xio_rdma_transport {
 							    * to control nop
 							    * sends
 							    */
-	int				max_send_buf_sz;
+	uint16_t			client_initiator_depth;
+	uint16_t			client_responder_resources;
 
-	struct xio_transport		*transport;
-	struct rdma_event_channel	*cm_channel;
-	struct rdma_cm_id		*cm_id;
-	struct xio_rdma_mempool		*rdma_mempool;
-	struct xio_tasks_pool_cls	initial_pool_cls;
-	struct xio_tasks_pool_cls	primary_pool_cls;
+	size_t				max_send_buf_sz;
 
 	size_t				alloc_sz;
 	size_t				membuf_sz;
 
+	struct xio_transport		*transport;
+	struct rdma_event_channel	*cm_channel;
+	struct rdma_cm_id		*cm_id;
+	struct xio_tasks_pool_cls	initial_pool_cls;
+	struct xio_tasks_pool_cls	primary_pool_cls;
+
 	struct xio_rdma_setup_msg	setup_rsp;
-	uint8_t				setup_rsp_pad[2];
 };
 
 struct xio_cm_channel {

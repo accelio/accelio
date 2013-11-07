@@ -149,6 +149,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	u16		credits;	/* peer send credits	*/
 	u16		sq_depth;
 	u16		rq_depth;
+	u16		pad;
 	u64		buffer_sz;
 };
 
@@ -159,6 +160,7 @@ struct __attribute__((__packed__)) xio_nop_hdr {
 	u16		credits;	/* peer send credits	*/
 	u8		opcode;		/* opcode for peers	*/
 	u8		flags;		/* not used		*/
+	u16		pad;
 };
 
 struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
