@@ -156,7 +156,8 @@ static inline void xio_connection_set_conn(struct xio_connection *connection,
 		xio_conn_unreg_observer(conn,
 					&connection->session->observer);
 		xio_conn_reg_observer(conn,
-				      &connection->session->observer);
+				      &connection->session->observer,
+				      connection->session->session_id);
 	}
 
 	connection->conn = conn;
@@ -229,9 +230,10 @@ struct xio_connection *xio_session_find_conn_by_ctx(
 /*---------------------------------------------------------------------------*/
 struct xio_session *xio_find_session(struct xio_task *task)
 {
-	struct xio_session_hdr *tmp_hdr;
-	uint32_t		dest_session_id;
+	struct xio_session_hdr	*tmp_hdr;
+	struct xio_observer	*observer;
 	struct xio_session	*session;
+	uint32_t		dest_session_id;
 
 	xio_mbuf_push(&task->mbuf);
 
@@ -241,7 +243,18 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	xio_mbuf_pop(&task->mbuf);
 
 	dest_session_id = ntohl(tmp_hdr->dest_session_id);
+
+	observer = xio_conn_observer_lookup(task->conn, dest_session_id);
+	if (observer != NULL)
+		return observer->impl;
+
+	/* fall back to store - this is should only happen when new connection
+	 * message arrive to a portal on the server - just for the first
+	 * message
+	 */
 	session = xio_sessions_store_lookup(dest_session_id);
+	if (session == NULL)
+		ERROR_LOG("failed to find session\n");
 
 	return session;
 }
@@ -692,7 +705,8 @@ static int xio_session_accept_connection(struct xio_session *session)
 				portal = session->portals_array[pid];
 			}
 			conn = xio_conn_open(connection->ctx, portal,
-					     &session->observer);
+					     &session->observer,
+					     session->session_id);
 
 			if (conn == NULL) {
 				ERROR_LOG("failed to open connection to %s\n",
@@ -728,7 +742,7 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	if (session->last_opened_service == session->services_array_len)
 		session->last_opened_service = 0;
 
-	conn = xio_conn_open(session->lead_conn->ctx, service, NULL);
+	conn = xio_conn_open(session->lead_conn->ctx, service, NULL, 0);
 	if (conn == NULL) {
 		ERROR_LOG("failed to open connection to %s\n",
 			  service);
@@ -1994,18 +2008,21 @@ static int xio_on_cancel_request(struct xio_session *sess,
 	struct xio_session		*session;
 	struct xio_connection		*connection;
 	struct xio_task			*task;
+	struct xio_observer		*observer;
 
 
 	tmp_hdr			 = event_data->cancel.ulp_msg;
 	hdr.sn			 = ntohll(tmp_hdr->sn);
 	hdr.responder_session_id = ntohl(tmp_hdr->responder_session_id);
 
-
-	session = xio_sessions_store_lookup(hdr.responder_session_id);
-	if (session == NULL) {
+	observer = xio_conn_observer_lookup(conn, hdr.responder_session_id);
+	if (observer == NULL) {
 		ERROR_LOG("failed to find session\n");
 		return -1;
 	}
+
+	session = observer->impl;
+
 	connection = xio_session_find_conn(session, conn);
 	if (connection == NULL) {
 		ERROR_LOG("failed to find session\n");
@@ -2039,11 +2056,12 @@ static int xio_on_cancel_request(struct xio_session *sess,
 /* xio_on_cancel_response						     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_cancel_response(struct xio_session *sess,
-				 struct xio_conn *conn,
-				 union xio_conn_event_data *event_data)
+				  struct xio_conn *conn,
+				  union xio_conn_event_data *event_data)
 {
 	struct xio_session_cancel_hdr	hdr;
 	struct xio_session_cancel_hdr	*tmp_hdr;
+	struct xio_observer		*observer;
 	struct xio_session		*session;
 	struct xio_connection		*connection;
 	struct xio_msg			msg;
@@ -2055,11 +2073,14 @@ static int xio_on_cancel_response(struct xio_session *sess,
 		hdr.sn			 = ntohll(tmp_hdr->sn);
 		hdr.requester_session_id = ntohl(tmp_hdr->requester_session_id);
 
-		session = xio_sessions_store_lookup(hdr.requester_session_id);
-		if (session == NULL) {
+		observer = xio_conn_observer_lookup(conn,
+						    hdr.requester_session_id);
+		if (observer == NULL) {
 			ERROR_LOG("failed to find session\n");
 			return -1;
 		}
+		session = observer->impl;
+
 		pmsg		= &msg;		/* fake a message */
 		msg.sn		= hdr.sn;
 		msg.status	= 0;
@@ -2385,7 +2406,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 				  session->uri);
 			goto cleanup;
 		}
-		conn = xio_conn_open(ctx, portal, &session->observer);
+		conn = xio_conn_open(ctx, portal, &session->observer,
+						  session->session_id);
 		if (conn == NULL) {
 			ERROR_LOG("failed to create connection\n");
 			goto cleanup;
@@ -2429,7 +2451,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		connection  = xio_session_alloc_conn(session, ctx,
 						     conn_idx,
 						     conn_user_context);
-		conn = xio_conn_open(ctx, portal, &session->observer);
+		conn = xio_conn_open(ctx, portal, &session->observer,
+				     session->session_id);
 		if (conn == NULL) {
 			ERROR_LOG("failed to open connection\n");
 			goto cleanup;
