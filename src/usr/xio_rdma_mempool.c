@@ -45,11 +45,15 @@
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
+typedef volatile int combind_t;
+
 struct xio_mem_block {
 	struct xio_mem_slot		*parent_slot;
 	struct xio_mr			*omr;
 	void				*buf;
-	struct list_head		mem_block_entry;
+	struct xio_mem_block		*next;
+	combind_t			refcnt_claim;
+	int				r_c_pad;
 };
 
 struct xio_mem_region {
@@ -60,9 +64,7 @@ struct xio_mem_region {
 
 struct xio_mem_slot {
 	struct list_head		mem_regions_list;
-
-	struct list_head		free_blocks_list;
-	struct list_head		used_blocks_list;
+	struct xio_mem_block		*free_blocks_list;
 
 	size_t				mb_size;	/*memory block size */
 	pthread_spinlock_t		lock;
@@ -80,16 +82,98 @@ struct xio_rdma_mempool {
 	struct xio_mem_slot		slot[XIO_MEM_SLOTS_NR + 1];
 };
 
+/* Lock free algorithm based on: Maged M. Michael & Michael L. Scott's
+ * Correction of a Memory Managment Method for Lock-Free Data Structures
+ * of John D. Valois's Lock-Free Data Structures. Ph.D. dissertation
+ */
+static int decrement_and_test_and_set(combind_t *ptr)
+{
+	int old, new;
+
+	do {
+		old = *ptr;
+		new = old - 2;
+		if (new == 0)
+			new = 1; /* claimed be MP */
+	} while (!__sync_bool_compare_and_swap(ptr, old, new));
+
+	return (old - new) & 1;
+}
+
+static void clear_lowest_bit(combind_t *ptr)
+{
+	int old, new;
+
+	do {
+		old = *ptr;
+		new = old - 1;
+	} while (!__sync_bool_compare_and_swap(ptr, old, new));
+}
+
+static void reclaim(struct xio_mem_slot *slot, struct xio_mem_block *p)
+{
+	struct xio_mem_block *q;
+
+	do {
+		q = slot->free_blocks_list;
+		p->next = q;
+	} while (!__sync_bool_compare_and_swap(&slot->free_blocks_list, q, p));
+}
+
+static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
+{
+	if (!p)
+		return;
+
+	if (decrement_and_test_and_set(&p->refcnt_claim) == 0)
+		return;
+
+	reclaim(slot, p);
+}
+
+struct xio_mem_block* safe_read(struct xio_mem_slot *slot)
+{
+	struct xio_mem_block *q;
+
+	while (1) {
+		q = slot->free_blocks_list;
+		if (q == NULL)
+			return NULL;
+		__sync_fetch_and_add(&q->refcnt_claim, 2);
+		/* make sure q is still the head */
+		if (__sync_bool_compare_and_swap(&slot->free_blocks_list, q, q))
+			return q;
+		else
+			release(slot, q);
+	}
+}
+
+static struct xio_mem_block* new_block(struct xio_mem_slot *slot)
+{
+	struct xio_mem_block *p;
+
+	while (1) {
+		p = safe_read(slot);
+		if (p == NULL)
+			return NULL;
+		if (__sync_bool_compare_and_swap(&slot->free_blocks_list,
+						 p, p->next)) {
+			clear_lowest_bit(&p->refcnt_claim);
+			return p;
+		} else {
+			release(slot, p);
+		}
+	}
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mem_slot_free						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
 {
-	struct xio_mem_region		*r, *tmp_r;
+	struct xio_mem_region *r, *tmp_r;
 
-
-	INIT_LIST_HEAD(&slot->free_blocks_list);
-	INIT_LIST_HEAD(&slot->used_blocks_list);
+	slot->free_blocks_list = NULL;
 	if (slot->curr_mb_nr) {
 		list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
 					 mem_region_entry) {
@@ -109,11 +193,15 @@ static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mem_slot_resize						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_mem_slot_resize(struct xio_mem_slot *slot)
+static struct xio_mem_block* xio_rdma_mem_slot_resize(struct xio_mem_slot *slot,
+						      int alloc)
 {
 	char				*buf;
 	struct xio_mem_region		*region;
 	struct xio_mem_block		*block;
+	struct xio_mem_block		*pblock;
+	struct xio_mem_block		*qblock;
+	struct xio_mem_block		dummy;
 	int				nr_blocks;
 	size_t				region_alloc_sz;
 	size_t				data_alloc_sz;
@@ -121,14 +209,14 @@ static int xio_rdma_mem_slot_resize(struct xio_mem_slot *slot)
 
 	nr_blocks =  slot->max_mb_nr - slot->curr_mb_nr;
 	if (nr_blocks <= 0)
-		return -1;
+		return NULL;
 	nr_blocks = min(nr_blocks, slot->alloc_mb_nr);
 
 	region_alloc_sz = sizeof(*region) +
 		nr_blocks*sizeof(struct xio_mem_block);
 	buf = calloc(region_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
-		return -1;
+		return NULL;
 
 	/* region */
 	region = (void *)buf;
@@ -142,28 +230,50 @@ static int xio_rdma_mem_slot_resize(struct xio_mem_slot *slot)
 	region->buf = malloc_huge_pages(data_alloc_sz);
 	if (region->buf == NULL) {
 		free(buf);
-		return -1;
+		return NULL;
 	}
 
 	region->omr = xio_reg_mr(region->buf, data_alloc_sz);
 	if (region->omr == NULL) {
 		free_huge_pages(region->buf);
 		free(buf);
-		return -1;
+		return NULL;
 	}
 
+	qblock = &dummy;
+	pblock = block;
 	for (i = 0; i < nr_blocks; i++) {
-		block->parent_slot = slot;
-		block->omr	= region->omr;
-		block->buf	= (char *)(region->buf) + i*slot->mb_size;
-		list_add(&block->mem_block_entry, &slot->free_blocks_list);
-		block++;
+		pblock->parent_slot = slot;
+		pblock->omr	= region->omr;
+		pblock->buf	= (char *)(region->buf) + i*slot->mb_size;
+		pblock->refcnt_claim = 1; /* free - calimed be MP */
+		qblock->next = pblock;
+		qblock = pblock;
+		pblock++;
 	}
-	list_add(&region->mem_region_entry, &slot->mem_regions_list);
+
+	/* first block given to allocator */
+	if (alloc) {
+		pblock = block + 1;
+		block->next = NULL;
+		/* ref count 1, not claimed by MP */
+		block->refcnt_claim = 2;
+	} else {
+		pblock = block;
+	}
+
+	/* Concatenate [pblock -- qblock] to free list
+	 * qblock points to the last allocate block
+	 */
+
+	do {
+		qblock->next = slot->free_blocks_list;
+	} while (!__sync_bool_compare_and_swap(&slot->free_blocks_list,
+					       qblock->next, pblock));
 
 	slot->curr_mb_nr += nr_blocks;
 
-	return 0;
+	return block;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -223,11 +333,9 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		if (ret != 0)
 			goto cleanup;
 		INIT_LIST_HEAD(&p->slot[i].mem_regions_list);
-		INIT_LIST_HEAD(&p->slot[i].free_blocks_list);
-		INIT_LIST_HEAD(&p->slot[i].used_blocks_list);
+		p->slot[i].free_blocks_list = NULL;
 		if (p->slot[i].init_mb_nr) {
-			ret = xio_rdma_mem_slot_resize(&p->slot[i]);
-			if (ret == -1)
+			if (xio_rdma_mem_slot_resize(&p->slot[i], 0) == NULL)
 				goto cleanup;
 		}
 	}
@@ -271,32 +379,33 @@ retry:
 		goto cleanup;
 	}
 	slot = &p->slot[index];
-	pthread_spin_lock(&slot->lock);
 
-	if (list_empty(&slot->free_blocks_list)) {
-		ret = xio_rdma_mem_slot_resize(slot);
-		if (ret == -1) {
-			if (++index == XIO_MEM_SLOTS_NR)
-				index  = -1;
-			pthread_spin_unlock(&slot->lock);
-			ret = 0;
-			goto retry;
+	block = new_block(slot);
+	if (!block) {
+		pthread_spin_lock(&slot->lock);
+		/* we may been blocked on the spinlock while other
+		 * thread resized the pool
+		 */
+		block = new_block(slot);
+		if (!block) {
+			block = xio_rdma_mem_slot_resize(slot, 1);
+			if (block == NULL) {
+				if (++index == XIO_MEM_SLOTS_NR)
+					index  = -1;
+				pthread_spin_unlock(&slot->lock);
+				ret = 0;
+				goto retry;
+			}
+			printf("resizing slot size:%zd\n", slot->mb_size);
 		}
-		printf("resizing slot size:%zd\n", slot->mb_size);
+		pthread_spin_unlock(&slot->lock);
 	}
-	block = list_first_entry(
-				&slot->free_blocks_list,
-				struct xio_mem_block,  mem_block_entry);
-
 
 	mp_mem->addr	= block->buf;
 	mp_mem->mr	= block->omr;
 	mp_mem->cache	= block;
 	mp_mem->length	= length;
 
-	list_move(&block->mem_block_entry, &slot->used_blocks_list);
-
-	pthread_spin_unlock(&slot->lock);
 cleanup:
 	return ret;
 }
@@ -313,9 +422,6 @@ void xio_rdma_mempool_free(struct xio_rdma_mp_mem *mp_mem)
 
 	block = mp_mem->cache;
 
-	pthread_spin_lock(&block->parent_slot->lock);
-	list_move(&block->mem_block_entry,
-		  &block->parent_slot->free_blocks_list);
-	pthread_spin_unlock(&block->parent_slot->lock);
+	release(block->parent_slot, block);
 }
 
