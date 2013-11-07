@@ -15,10 +15,11 @@ AC_PROG_LIBTOOL
 #OLD_CFLAGS=$CFLAGS
 
 # check for C compiler and the library compiler
-AC_PROG_CC([gcc])
+AC_PROG_CC
+#AC_PROG_CC([gcc])
 
 # reset compiler flags to initial flags
-CFLAGS=$OLD_CFLAGS
+#CFLAGS=$OLD_CFLAGS
 
 # automake initialisation (mandatory) and check for minimal automake API version 1.9
 AM_INIT_AUTOMAKE([1.9])
@@ -41,6 +42,23 @@ AC_TYPE_SIZE_T
 AC_CHECK_LIB(numa, numa_available)
 
 ##########################################################################
+# perf support
+##########################################################################
+# usage: ./configure --enable-perf=yes
+#
+AC_MSG_CHECKING([whether to build with debug information])
+AC_ARG_ENABLE([perf],
+	      [AS_HELP_STRING([--enable-perf],
+			      [enable perf profiling])],
+			       [enable_perf="$enableval"],
+			       [enable_perf=no])
+AC_MSG_RESULT([$enable_perf])
+
+if test "$enable_perf" = "yes"; then
+	AM_CFLAGS="$AM_CFLAGS -fno-omit-frame-pointer"
+fi
+
+##########################################################################
 # debug compilation support
 ##########################################################################
 # usage: ./configure --enable-debug=yes
@@ -60,6 +78,8 @@ else
 	AC_DEFINE([NDEBUG],[],[No-debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wpadded -Wdeclaration-after-statement -O3 -D_GNU_SOURCE"
 fi
+
+
 
 ##########################################################################
 # raio compilation support
@@ -117,6 +137,7 @@ if test "$enable_fio_build" != "no"; then
 fi
 fi
 	subdirs2="$subdirs2 tests/usr/hello_test";
+	subdirs2="$subdirs2 tests/usr/hello_test_mt";
 	subdirs2="$subdirs2 tests/usr/hello_test_bidi";
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
@@ -141,6 +162,7 @@ if test "$enable_fio_build" != "no"; then
 AC_CONFIG_FILES([examples/usr/fio/Makefile])
 fi
 AC_CONFIG_FILES([tests/usr/hello_test/Makefile])
+AC_CONFIG_FILES([tests/usr/hello_test_mt/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
