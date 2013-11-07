@@ -1646,7 +1646,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	/* set the length */
-	sge_len = rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = rdma_task->txd.sge[0].length;
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != sge_len) {
@@ -1805,7 +1806,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		goto cleanup;
 
 	/* set the length */
-	sge_len = rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = rdma_task->txd.sge[0].length;
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != rdma_task->txd.sge[0].length) {
@@ -1909,7 +1911,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	struct xio_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
-	size_t			datalen;
 	void			*ulp_hdr;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	XIO_TO_RDMA_TASK(task, rdma_sender_task);
@@ -1980,11 +1981,12 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		omsg->in.header.iov_len = hdr_len;
 	} else {
 		/* no copy - just pointers */
-		memclonev(&omsg->in.header, NULL, &imsg->in.header, 1);
+		memclonev(&omsg->in.header, 1, &imsg->in.header, 1);
 	}
 
 	switch (rsp_hdr.opcode) {
 	case XIO_IB_SEND:
+
 		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
 			imsg->in.data_iov[0].iov_base	= ulp_hdr +
@@ -2014,31 +2016,29 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				}
 				if (omsg->in.data_iov[0].iov_base)  {
 					/* user porvided buffer so do copy */
-					datalen = memcpyv(
+					omsg->in.data_iovlen = memcpyv(
 					  (struct xio_iovec *)omsg->in.data_iov,
-					  omsg->in.data_iovlen, 0,
+					  omsg->in.data_iovlen,
 					  (struct xio_iovec *)imsg->in.data_iov,
-					  imsg->in.data_iovlen, 0);
-
-					omsg->in.data_iovlen =
-						imsg->in.data_iovlen;
+					  imsg->in.data_iovlen);
 				} else {
 					/* use provided only length - set user
 					 * pointers */
-					memclonev(
-					  (struct xio_iovec *)omsg->in.data_iov,
-					  (int *)&omsg->in.data_iovlen,
-					  (struct xio_iovec *)imsg->in.data_iov,
-					  imsg->in.data_iovlen);
+					omsg->in.data_iovlen =  memclonev(
+					(struct xio_iovec *)omsg->in.data_iov,
+					omsg->in.data_iovlen,
+					(struct xio_iovec *)imsg->in.data_iov,
+					imsg->in.data_iovlen);
 				}
 			} else {
 				omsg->in.data_iovlen = imsg->in.data_iovlen;
 			}
 		} else {
-			memclonev((struct xio_iovec *)omsg->in.data_iov,
-				  (int *)&omsg->in.data_iovlen,
-				  (struct xio_iovec *)imsg->in.data_iov,
-				  imsg->in.data_iovlen);
+			omsg->in.data_iovlen =
+				memclonev((struct xio_iovec *)omsg->in.data_iov,
+					  omsg->in.data_iovlen,
+					  (struct xio_iovec *)imsg->in.data_iov,
+					  imsg->in.data_iovlen);
 		}
 		break;
 	case XIO_IB_RDMA_WRITE:
@@ -2058,12 +2058,11 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			/* deep copy */
 
 			if (omsg->in.data_iov[0].iov_base)  {
-				datalen = memcpyv(
+				omsg->in.data_iovlen = memcpyv(
 					(struct xio_iovec *)omsg->in.data_iov,
-					omsg->in.data_iovlen, 0,
+					omsg->in.data_iovlen,
 					(struct xio_iovec *)imsg->in.data_iov,
-					imsg->in.data_iovlen, 0);
-				omsg->in.data_iovlen = imsg->in.data_iovlen;
+					imsg->in.data_iovlen);
 
 				/* put buffers back to pool */
 				for (i = 0; i < rdma_sender_task->read_num_sge;
@@ -2076,10 +2075,11 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			} else {
 				/* use provided only length - set user
 				 * pointers */
-				memclonev((struct xio_iovec *)omsg->in.data_iov,
-					  (int *)&omsg->in.data_iovlen,
-					  (struct xio_iovec *)imsg->in.data_iov,
-					  imsg->in.data_iovlen);
+				omsg->in.data_iovlen = memclonev(
+					(struct xio_iovec *)omsg->in.data_iov,
+					omsg->in.data_iovlen,
+					(struct xio_iovec *)imsg->in.data_iov,
+					imsg->in.data_iovlen);
 			}
 		}
 		break;

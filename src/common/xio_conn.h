@@ -122,6 +122,8 @@ struct xio_conn {
 	int				is_first_setup_req;
 	int				pad;
 
+	struct list_head		observers_htbl;
+
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
 };
 
@@ -135,7 +137,8 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer);
 /*---------------------------------------------------------------------------*/
 struct xio_conn *xio_conn_open(struct xio_context *ctx,
 			       const char *portal_uri,
-			       struct xio_observer *observer);
+			       struct xio_observer *observer,
+			       uint32_t oid);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_connect							     */
@@ -214,20 +217,21 @@ static inline void xio_conn_set_server_observer(struct xio_conn *conn,
 /*---------------------------------------------------------------------------*/
 /* xio_conn_reg_observer						     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_reg_observer(struct xio_conn *conn,
-					 struct xio_observer *observer)
-{
-	xio_observable_reg_observer(&conn->observable, observer);
-}
+void xio_conn_reg_observer(struct xio_conn *conn,
+			   struct xio_observer *observer,
+			   uint32_t oid);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_unreg_observer						     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_unreg_observer(struct xio_conn *conn,
-					   struct xio_observer *observer)
-{
-	xio_observable_unreg_observer(&conn->observable, observer);
-}
+void xio_conn_unreg_observer(struct xio_conn *conn,
+			     struct xio_observer *observer);
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_observer_lookup						     */
+/*---------------------------------------------------------------------------*/
+struct xio_observer *xio_conn_observer_lookup(struct xio_conn *conn,
+					      uint32_t id);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_notify_observer						     */

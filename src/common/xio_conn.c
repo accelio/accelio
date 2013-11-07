@@ -48,12 +48,138 @@
 #include "xio_conn.h"
 #include "xio_session.h"
 
+
+/*---------------------------------------------------------------------------*/
+/* private structs							     */
+/*---------------------------------------------------------------------------*/
+struct xio_observers_htbl_node {
+	struct xio_observer	*observer;
+	uint32_t		id;
+	uint32_t		pad;
+	struct list_head	observers_htbl_node;
+
+};
+
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
 static int xio_conn_primary_pool_setup(struct xio_conn *conn);
 static int xio_on_transport_event(void *observer, void *sender, int event,
 				  void *event_data);
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_init_observers_htbl						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_conn_init_observers_htbl(struct xio_conn *conn)
+{
+	INIT_LIST_HEAD(&conn->observers_htbl);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_free_observers_htbl						     */
+/*---------------------------------------------------------------------------*/
+static void xio_conn_free_observers_htbl(struct xio_conn *conn)
+{
+	struct xio_observers_htbl_node	*node, *next_node;
+
+	list_for_each_entry_safe(node, next_node,
+				 &conn->observers_htbl,
+				 observers_htbl_node) {
+		list_del(&node->observers_htbl_node);
+		kfree(node);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_hash_observer						     */
+/*---------------------------------------------------------------------------*/
+static int xio_conn_hash_observer(struct xio_conn *conn,
+				  struct xio_observer *observer,
+				  uint32_t id)
+{
+	struct xio_observers_htbl_node	*node;
+
+	node = kcalloc(1, sizeof(*node), GFP_KERNEL);
+	if (!node) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("kcalloc failed. %m\n");
+		return -1;
+	}
+	node->observer	= observer;
+	node->id	= id;
+
+	list_add_tail(&node->observers_htbl_node,
+		      &conn->observers_htbl);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_unhash_observer						     */
+/*---------------------------------------------------------------------------*/
+static int xio_conn_unhash_observer(struct xio_conn *conn,
+				    struct xio_observer *observer)
+{
+	struct xio_observers_htbl_node	*node, *next_node;
+
+	list_for_each_entry_safe(node, next_node,
+				 &conn->observers_htbl,
+				 observers_htbl_node) {
+		if (node->observer == observer) {
+			list_del(&node->observers_htbl_node);
+			kfree(node);
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_observer_lookup						     */
+/*---------------------------------------------------------------------------*/
+struct xio_observer *xio_conn_observer_lookup(struct xio_conn *conn,
+					      uint32_t id)
+{
+	struct xio_observers_htbl_node	*node;
+	static struct xio_observers_htbl_node *last_node /*= NULL */;
+
+	if (last_node && last_node->id == id)
+		return last_node->observer;
+
+	list_for_each_entry(node,
+			    &conn->observers_htbl,
+			    observers_htbl_node) {
+		if (node->id == id) {
+			last_node = node;
+			return node->observer;
+		}
+	}
+
+	return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_reg_observer						     */
+/*---------------------------------------------------------------------------*/
+void xio_conn_reg_observer(struct xio_conn *conn,
+			   struct xio_observer *observer,
+			   uint32_t oid)
+{
+	xio_observable_reg_observer(&conn->observable, observer);
+	xio_conn_hash_observer(conn, observer, oid);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_unreg_observer						     */
+/*---------------------------------------------------------------------------*/
+void xio_conn_unreg_observer(struct xio_conn *conn,
+			     struct xio_observer *observer)
+{
+	xio_conn_unhash_observer(conn, observer);
+	xio_observable_unreg_observer(&conn->observable, observer);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_pre_put_task							     */
@@ -440,8 +566,9 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 				struct xio_task *task)
 {
 	union xio_conn_event_data conn_event_data = {
-		.msg.task	= task,
-		.msg.op		= XIO_WC_OP_RECV
+		.msg		= { .task	= task,
+				    .op		= XIO_WC_OP_RECV
+				  }
 	};
 	task->conn = conn;
 
@@ -472,11 +599,12 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 		}
 	}
 
-	/* route the message to any of the sessions */
+	/* route the message to any of observer */
 	xio_observable_notify_any_observer(
 			&conn->observable,
 			XIO_CONNECTION_NEW_MESSAGE,
 			&conn_event_data);
+
 
 	return 0;
 }
@@ -502,11 +630,11 @@ static int xio_conn_on_recv_rsp(struct xio_conn *conn,
 				XIO_CONNECTION_NEW_MESSAGE,
 				&conn_event_data);
 	} else {
-		/* route the message to any of the sessions */
+		/* route the message to any of observer */
 		xio_observable_notify_any_observer(
-				&conn->observable,
-				XIO_CONNECTION_NEW_MESSAGE,
-				&conn_event_data);
+			&conn->observable,
+			XIO_CONNECTION_NEW_MESSAGE,
+			&conn_event_data);
 	}
 
 	return 0;
@@ -780,6 +908,9 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 
 	XIO_OBSERVABLE_INIT(&conn->observable, conn);
 
+	xio_conn_init_observers_htbl(conn);
+
+
 	/* add the conection to temporary list */
 	conn->transport_hndl	= transport_hndl;
 	conn->transport		= parent_conn->transport;
@@ -840,17 +971,21 @@ static void xio_on_new_connection(struct xio_conn *conn,
 		goto exit;
 	}
 
-	/* notify of new child to session */
+	/* notify of new child to server */
 	conn_event_data.new_connection.child_conn = child_conn;
 
-	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_NEW_CONNECTION,
-					    &conn_event_data);
+	xio_conn_notify_server(
+			conn,
+			XIO_CONNECTION_NEW_CONNECTION,
+			&conn_event_data);
+
 	return;
 exit:
-	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_ERROR,
-					    &conn_event_data);
+	xio_conn_notify_server(
+			conn,
+			XIO_CONNECTION_ERROR,
+			&conn_event_data);
+
 	xio_conn_reject(child_conn);
 	xio_conn_close(child_conn, NULL);
 }
@@ -872,6 +1007,7 @@ static void xio_on_connection_closed(struct xio_conn *conn,
 						&conn->trans_observer);
 	}
 
+	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
 
 	xio_conns_store_remove(conn->cid);
@@ -990,8 +1126,7 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 {
 	int				retval = 0;
 	struct xio_task			*task = event_data->msg.task;
-
-	union xio_conn_event_data conn_event_data = {
+	union xio_conn_event_data	conn_event_data = {
 		.assign_in_buf.task		= task,
 	};
 	task->conn = conn;
@@ -1012,7 +1147,7 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 			return 0;
 		}
 	}
-	/* route the message to any of the sessions */
+
 	xio_observable_notify_any_observer(
 			&conn->observable,
 			XIO_CONNECTION_ASSIGN_IN_BUF,
@@ -1021,12 +1156,11 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 	event_data->assign_in_buf.is_assigned =
 		conn_event_data.assign_in_buf.is_assigned;
 
-
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_assign_in_buf							     */
+/* xio_on_cancel_request						     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_cancel_request(struct xio_conn *conn,
 				 union xio_transport_event_data
@@ -1156,7 +1290,9 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 /*---------------------------------------------------------------------------*/
 struct xio_conn *xio_conn_open(
 		struct xio_context *ctx,
-		const char *portal_uri, struct xio_observer  *observer)
+		const char *portal_uri,
+		struct xio_observer  *observer,
+		uint32_t oid)
 {
 	struct xio_transport		*transport;
 	struct xio_conn			*conn;
@@ -1173,6 +1309,8 @@ struct xio_conn *xio_conn_open(
 		if (observer) {
 			xio_observable_reg_observer(&conn->observable,
 						    observer);
+			xio_conn_hash_observer(conn, observer, oid);
+
 			if (conn->is_connected &&
 			    conn->transport_hndl->is_client)
 				xio_conn_notify_observer(
@@ -1220,8 +1358,12 @@ struct xio_conn *xio_conn_open(
 
 	XIO_OBSERVABLE_INIT(&conn->observable, conn);
 
-	if (observer)
+	xio_conn_init_observers_htbl(conn);
+
+	if (observer) {
 		xio_observable_reg_observer(&conn->observable, observer);
+		xio_conn_hash_observer(conn, observer, oid);
+	}
 
 	conn->transport_hndl = transport->open(transport, ctx,
 					       &conn->trans_observer);
@@ -1367,6 +1509,7 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 					conn, observer,
 					XIO_CONNECTION_CLOSED, NULL);
 
+			xio_conn_unhash_observer(conn, observer);
 			xio_conn_unreg_observer(conn, observer);
 		}
 	}
@@ -1477,3 +1620,5 @@ int xio_conn_cancel_rsp(struct xio_conn *conn,
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
+
+

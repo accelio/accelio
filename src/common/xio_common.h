@@ -134,12 +134,13 @@ void xio_set_error(int errnum);
 /*---------------------------------------------------------------------------*/
 struct __attribute__((__packed__)) xio_tlv {
 	uint32_t		magic;
-	uint16_t		type;
+	uint32_t		type;
 	uint64_t		len;
 };
 
 struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
+	uint32_t		pad;
 	uint64_t		serial_num;
 	uint32_t		flags;
 	uint32_t		receipt_result;
@@ -147,6 +148,7 @@ struct __attribute__((__packed__)) xio_session_hdr {
 
 struct __attribute__((__packed__)) xio_conn_setup_req {
 	uint16_t		version;
+	uint16_t		pad;
 };
 
 
@@ -154,6 +156,7 @@ struct __attribute__((__packed__)) xio_conn_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;
+	uint16_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_session_cancel_hdr {
@@ -203,16 +206,16 @@ char		*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
-size_t		xio_write_tlv(uint16_t type, uint64_t len, uint8_t *buffer);
+size_t		xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer);
 
-size_t		xio_read_tlv(uint16_t *type, uint64_t *len, void **value,
-			       uint8_t *buffer);
+size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
+			     uint8_t *buffer);
 
-size_t		memcpyv(const struct xio_iovec *dst, int dparts, int doff,
-			const struct xio_iovec *src, int sparts, int soff);
+size_t		memcpyv(struct xio_iovec *dst, int dsize,
+			struct xio_iovec *src, int ssize);
 
-size_t		memclonev(struct xio_iovec *dst, int *dparts,
-			  const struct xio_iovec *src, int sparts);
+size_t		memclonev(struct xio_iovec *dst, int dsize,
+			  struct xio_iovec *src, int ssize);
 
 size_t		xio_iov_length(const struct xio_iovec *iov,
 			       unsigned long nr_segs);

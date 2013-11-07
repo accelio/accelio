@@ -72,9 +72,6 @@ static int xio_on_new_conn(struct xio_server *server,
 	int		retval;
 
 	/* set the server as observer */
-	xio_conn_reg_observer(event_data->new_connection.child_conn,
-			      &server->observer);
-
 	xio_conn_set_server_observer(event_data->new_connection.child_conn,
 				     &server->observer);
 
@@ -130,10 +127,7 @@ static int xio_on_new_message(struct xio_server *server,
 	};
 
 	/* read the first message  type */
-	uint16_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
-
-	/* unregister server */
-	xio_conn_unreg_observer(conn, &server->observer);
+	uint32_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
@@ -187,7 +181,9 @@ static int xio_on_new_message(struct xio_server *server,
 			   server, session, conn, session->session_id);
 
 		if (!session->lead_conn || session->lead_conn->conn != conn)
-			xio_conn_reg_observer(conn, &session->observer);
+			xio_conn_reg_observer(conn,
+					      &session->observer,
+					      session->session_id);
 
 		session->lead_conn = NULL;
 		connection = xio_session_find_conn(session, conn);
@@ -295,11 +291,14 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 
 	XIO_OBSERVER_INIT(&server->observer, server, xio_on_conn_event);
 
-	server->listener = xio_conn_open(ctx, uri, &server->observer);
+	server->listener = xio_conn_open(ctx, uri, NULL, 0);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
+
+	xio_conn_set_server_observer(server->listener,
+				     &server->observer);
 
 	retval = xio_conn_listen(server->listener, uri, src_port);
 	if (retval != 0) {
@@ -310,7 +309,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	return server;
 
 cleanup1:
-	xio_conn_close(server->listener, &server->observer);
+	xio_conn_close(server->listener, NULL);
 cleanup:
 	kfree(server->uri);
 	kfree(server);
@@ -325,7 +324,7 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
-	xio_conn_close(server->listener, &server->observer);
+	xio_conn_close(server->listener, NULL);
 	kfree(server->uri);
 	kfree(server);
 
