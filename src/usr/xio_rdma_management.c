@@ -1969,6 +1969,8 @@ static int xio_rdma_set_opt(void *xio_obj,
 		}
 		rdma_options.rdma_buf_threshold = *((int *)optval) +
 					XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		rdma_options.rdma_buf_threshold =
+			ALIGN(rdma_options.rdma_buf_threshold, 1024);
 		return 0;
 		break;
 	default:
