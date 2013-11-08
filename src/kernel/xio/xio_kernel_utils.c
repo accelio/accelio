@@ -48,6 +48,22 @@
 #define IN6ADDR_ANY_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
 #endif
 
+/*---------------------------------------------------------------------------*/
+/* defines	                                                             */
+/*---------------------------------------------------------------------------*/
+static int _xio_errno;
+
+/*---------------------------------------------------------------------------*/
+/* debuging facilities							     */
+/*---------------------------------------------------------------------------*/
+void xio_set_error(int errnum) { _xio_errno = errnum; }
+
+/*---------------------------------------------------------------------------*/
+/* xio_errno								     */
+/*---------------------------------------------------------------------------*/
+int xio_errno(void) { return _xio_errno; }
+
+
 static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 			      struct sockaddr_storage *ss)
 {
@@ -206,3 +222,5 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 {
 	return cpu_to_node(cpu_id);
 }
+
+

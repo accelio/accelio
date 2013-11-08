@@ -39,6 +39,7 @@
 #include "xio_os.h"
 #include "libxio.h"
 #include "xio_common.h"
+#include "xio_tls.h"
 #include "xio_sessions_store.h"
 #include "xio_conns_store.h"
 
@@ -51,6 +52,7 @@ int page_size;
 __attribute__((constructor)) void xio_constructor(void)
 {
 	page_size = sysconf(_SC_PAGESIZE);
+	xio_thread_data_construct();
 	sessions_store_construct();
 	conns_store_construct();
 }

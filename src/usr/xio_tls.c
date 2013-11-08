@@ -37,84 +37,69 @@
  */
 #include "xio_os.h"
 #include "libxio.h"
-#include "xio_common.h"
+#include "xio_tls.h"
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_gen_status_str					                     */
+/* struct	                                                             */
 /*---------------------------------------------------------------------------*/
-static const char *xio_gen_status_str(enum xio_status ev)
+struct xio_thread_data {
+	int  _xio_errno;
+};
+
+/*---------------------------------------------------------------------------*/
+/* globals	                                                             */
+/*---------------------------------------------------------------------------*/
+static pthread_key_t thread_data_key;
+
+static inline struct xio_thread_data *xio_thread_data_get(void);
+
+/*---------------------------------------------------------------------------*/
+/* xio_thread_data_init	                                                     */
+/*---------------------------------------------------------------------------*/
+static struct xio_thread_data *xio_thread_data_init(void)
 {
-	switch (ev) {
-	case XIO_E_NOT_SUPPORTED:
-		return "Not supported";
-	case XIO_E_NO_BUFS:
-		return "No buffer space available";
-	case XIO_E_CONNECT_ERROR:
-		return "Connect error";
-	case XIO_E_ROUTE_ERROR:
-		return "Route error";
-	case XIO_E_ADDR_ERROR:
-		return "Address error";
-	case XIO_E_UNREACHABLE:
-		return "No route to host";
-	case XIO_E_PARTIAL_MSG:
-		return "Partial message";
-	case XIO_E_MSG_SIZE:
-		return "Message too long";
-	case XIO_E_MSG_INVALID:
-		return "Message is invalid";
-	case XIO_E_MSG_UNKNOWN:
-		return "Message unknown";
-	case XIO_E_SESSION_REFUSED:
-		return "Session refused";
-	case XIO_E_SESSION_ABORTED:
-		return "Session aborted";
-	case XIO_E_SESSION_DISCONECTED:
-		return "Session disconnected";
-	case XIO_E_BIND_FAILED:
-		return  "Bind failed";
-	case XIO_E_TIMEOUT:
-		return  "Session timeout";
-	case XIO_E_IN_PORGRESS:
-		return  "Operation now in progress";
-	case XIO_E_INVALID_VERSION:
-		return  "Invalid version";
-	case XIO_E_NOT_SESSION:
-		return  "Not a session";
-	case XIO_E_OPEN_FAILED:
-		return  "Open failed";
-	case XIO_E_READ_FAILED:
-		return  "Read failed";
-	case XIO_E_WRITE_FAILED:
-		return  "Write failed";
-	case XIO_E_CLOSE_FAILED:
-		return "Close failed";
-	case XIO_E_UNSUCCESSFUL:
-		return "Operation unsuccessful";
-	case XIO_E_MSG_CANCELED:
-		return "Message canceled";
-	case XIO_E_MSG_CANCEL_FAILED:
-		return "Message cancel failed";
-	case XIO_E_MSG_NOT_FOUND:
-		return "Message not found";
-	default:
-		return "Unknown error";
-	};
+	struct xio_thread_data *td = calloc(1, sizeof(*td));
+	/* it ok for NULL */
+	pthread_setspecific(thread_data_key, td);
+
+	return td;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_strerror								     */
+/* xio_thread_data_get	                                                     */
 /*---------------------------------------------------------------------------*/
-const char *xio_strerror(int errnum)
+static inline struct xio_thread_data *xio_thread_data_get(void)
 {
-	if (errnum < XIO_BASE_STATUS)
-		return strerror(errnum);
+	struct xio_thread_data	*td = pthread_getspecific(thread_data_key);
 
-	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_NOT_FOUND)
-		return xio_gen_status_str(errnum);
-
-	return "Unknown error";
+	return td != NULL ? td : xio_thread_data_init();
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_thread_data_free	                                                     */
+/*---------------------------------------------------------------------------*/
+static void xio_thread_data_free(void *ptr)
+{
+	    free(ptr);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_thread_data_construct						     */
+/*---------------------------------------------------------------------------*/
+void xio_thread_data_construct(void)
+{
+      pthread_key_create(&thread_data_key, xio_thread_data_free);
+}
+
+/*---------------------------------------------------------------------------*/
+/* debuging facilities							     */
+/*---------------------------------------------------------------------------*/
+void xio_set_error(int errnum) { xio_thread_data_get()->_xio_errno = errnum; }
+
+/*---------------------------------------------------------------------------*/
+/* xio_errno								     */
+/*---------------------------------------------------------------------------*/
+int xio_errno(void) { return xio_thread_data_get()->_xio_errno; }
 
 

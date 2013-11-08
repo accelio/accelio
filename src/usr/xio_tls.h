@@ -35,86 +35,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include "libxio.h"
-#include "xio_common.h"
-
+#ifndef XIO_TLS_H
+#define XIO_TLS_H
 
 /*---------------------------------------------------------------------------*/
-/* xio_gen_status_str					                     */
+/* xio_thread_data_construct						     */
 /*---------------------------------------------------------------------------*/
-static const char *xio_gen_status_str(enum xio_status ev)
-{
-	switch (ev) {
-	case XIO_E_NOT_SUPPORTED:
-		return "Not supported";
-	case XIO_E_NO_BUFS:
-		return "No buffer space available";
-	case XIO_E_CONNECT_ERROR:
-		return "Connect error";
-	case XIO_E_ROUTE_ERROR:
-		return "Route error";
-	case XIO_E_ADDR_ERROR:
-		return "Address error";
-	case XIO_E_UNREACHABLE:
-		return "No route to host";
-	case XIO_E_PARTIAL_MSG:
-		return "Partial message";
-	case XIO_E_MSG_SIZE:
-		return "Message too long";
-	case XIO_E_MSG_INVALID:
-		return "Message is invalid";
-	case XIO_E_MSG_UNKNOWN:
-		return "Message unknown";
-	case XIO_E_SESSION_REFUSED:
-		return "Session refused";
-	case XIO_E_SESSION_ABORTED:
-		return "Session aborted";
-	case XIO_E_SESSION_DISCONECTED:
-		return "Session disconnected";
-	case XIO_E_BIND_FAILED:
-		return  "Bind failed";
-	case XIO_E_TIMEOUT:
-		return  "Session timeout";
-	case XIO_E_IN_PORGRESS:
-		return  "Operation now in progress";
-	case XIO_E_INVALID_VERSION:
-		return  "Invalid version";
-	case XIO_E_NOT_SESSION:
-		return  "Not a session";
-	case XIO_E_OPEN_FAILED:
-		return  "Open failed";
-	case XIO_E_READ_FAILED:
-		return  "Read failed";
-	case XIO_E_WRITE_FAILED:
-		return  "Write failed";
-	case XIO_E_CLOSE_FAILED:
-		return "Close failed";
-	case XIO_E_UNSUCCESSFUL:
-		return "Operation unsuccessful";
-	case XIO_E_MSG_CANCELED:
-		return "Message canceled";
-	case XIO_E_MSG_CANCEL_FAILED:
-		return "Message cancel failed";
-	case XIO_E_MSG_NOT_FOUND:
-		return "Message not found";
-	default:
-		return "Unknown error";
-	};
-}
+void xio_thread_data_construct(void);
 
-/*---------------------------------------------------------------------------*/
-/* xio_strerror								     */
-/*---------------------------------------------------------------------------*/
-const char *xio_strerror(int errnum)
-{
-	if (errnum < XIO_BASE_STATUS)
-		return strerror(errnum);
 
-	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_NOT_FOUND)
-		return xio_gen_status_str(errnum);
-
-	return "Unknown error";
-}
-
+#endif /* XIO_TLS_H */
 
