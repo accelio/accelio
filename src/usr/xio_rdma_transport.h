@@ -210,12 +210,12 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
+	enum xio_ib_op_code		ib_op;
+	uint32_t			phantom_idx;
 	uint32_t			read_num_sge;
 	uint32_t			write_num_sge;
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
-	uint32_t			phantom_idx;
-	enum xio_ib_op_code		ib_op;
 	uint16_t			sn;
 	uint16_t			more_in_batch;
 	uint16_t			pad[2];

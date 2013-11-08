@@ -351,21 +351,24 @@ static int xio_connection_xmit(struct xio_connection *conn)
 	while (retry_cnt < 2) {
 		msgq = msg_lists[conn->send_req_toggle];
 		conn->send_req_toggle = 1 - conn->send_req_toggle;
-		if (!xio_msg_list_empty(msgq)) {
-			msg = xio_msg_list_first(msgq);
-			xio_msg_list_remove(msgq, msg);
+		msg = xio_msg_list_first(msgq);
+		if (msg != NULL) {
 			retval = xio_connection_send(conn, msg);
 			if (retval) {
-				if (EAGAIN != xio_errno())
+				if (EAGAIN != xio_errno()) {
+					xio_msg_list_remove(msgq, msg);
 					break;
+				}
 				/* if user requested not to queue messages */
-				if (xio_session_not_queueing(conn->session))
+				if (xio_session_not_queueing(conn->session)) {
+					xio_msg_list_remove(msgq, msg);
 					break;
-				xio_msg_list_insert_head(msgq, msg);
+				}
 				retval = 0;
 				retry_cnt++;
 			} else {
 				retry_cnt = 0;
+				xio_msg_list_remove(msgq, msg);
 			}
 		} else {
 			retry_cnt++;
