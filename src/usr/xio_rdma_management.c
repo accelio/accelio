@@ -652,7 +652,8 @@ static int xio_cq_free_slots(struct xio_cq *tcq, int cqe_num)
 static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_device		*dev;
-	struct ibv_qp_init_attr		qp_attr;
+	struct ibv_qp_init_attr		qp_init_attr;
+	struct ibv_qp_attr		qp_attr;
 	int				dev_found = 0;
 	int				retval = 0;
 	struct	xio_cq			*tcq;
@@ -681,22 +682,21 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 		return -1;
 	}
 
-	memset(&qp_attr, 0, sizeof(qp_attr));
+	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
-	qp_attr.qp_context		= rdma_hndl;
-	qp_attr.qp_type			= IBV_QPT_RC;
-	qp_attr.send_cq			= tcq->cq;
-	qp_attr.recv_cq			= tcq->cq;
-	qp_attr.cap.max_send_wr		= MAX_SEND_WR;
-	qp_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
-	qp_attr.cap.max_inline_data	= MAX_INLINE_DATA;
-	qp_attr.cap.max_send_sge	= MAX_SGE;
-	qp_attr.cap.max_recv_sge	= MAX_SGE;
+	qp_init_attr.qp_context			= rdma_hndl;
+	qp_init_attr.qp_type			= IBV_QPT_RC;
+	qp_init_attr.send_cq			= tcq->cq;
+	qp_init_attr.recv_cq			= tcq->cq;
+	qp_init_attr.cap.max_send_wr		= MAX_SEND_WR;
+	qp_init_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
+	qp_init_attr.cap.max_send_sge		= MAX_SGE;
+	qp_init_attr.cap.max_recv_sge		= MAX_SGE;
 
 	/* only generate completion queue entries if requested */
-	qp_attr.sq_sig_all		= 0;
+	qp_init_attr.sq_sig_all		= 0;
 
-	retval = rdma_create_qp(rdma_hndl->cm_id, dev->pd, &qp_attr);
+	retval = rdma_create_qp(rdma_hndl->cm_id, dev->pd, &qp_init_attr);
 	if (retval) {
 		xio_set_error(errno);
 		xio_cq_free_slots(tcq, MAX_CQE_PER_QP);
@@ -707,10 +707,17 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->qp		= rdma_hndl->cm_id->qp;
 	rdma_hndl->sqe_avail	= MAX_SEND_WR;
 
+	if (ibv_query_qp(rdma_hndl->qp, &qp_attr, 0, &qp_init_attr) != 0)
+		ERROR_LOG("ibv_query_qp failed. (errno=%d %m)\n", errno);
+	rdma_hndl->max_inline_data = qp_attr.cap.max_inline_data;
+
+
 	list_add(&rdma_hndl->trans_list_entry, &tcq->trans_list);
 
-	TRACE_LOG("rdma qp: [new] handle:%p, qp:0x%x\n", rdma_hndl,
-		  rdma_hndl->qp->qp_num);
+	TRACE_LOG("rdma qp: [new] handle:%p, qp:0x%x, max inline:%d\n",
+		  rdma_hndl,
+		  rdma_hndl->qp->qp_num,
+		  rdma_hndl->max_inline_data);
 
 	return 0;
 }

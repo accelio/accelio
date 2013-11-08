@@ -1662,7 +1662,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
 		sge_len += rdma_task->txd.sge[i].length;
 
-	if (sge_len < MAX_INLINE_DATA)
+	if (sge_len < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
 	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->force_signal) {
@@ -1826,7 +1826,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
 			sge_len += rdma_task->txd.sge[i].length;
 
-		if (sge_len < MAX_INLINE_DATA)
+		if (sge_len < rdma_hndl->max_inline_data)
 			rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
 		list_move_tail(&task->tasks_list_entry,

@@ -56,7 +56,6 @@ extern struct list_head		dev_list;
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_INLINE_DATA			256
 #define MAX_SGE				(XIO_MAX_IOV + 1)
 
 #define MAX_SEND_WR			256
@@ -264,7 +263,7 @@ struct xio_cq  {
 struct xio_device {
 	struct list_head		cq_list;
 	struct list_head		dev_list_entry;    /* list of all
-							xio devices */
+							      xio devices */
 	pthread_rwlock_t		cq_lock;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
@@ -328,6 +327,8 @@ struct xio_rdma_transport {
 	int				rdma_in_flight;
 	int				reqs_in_flight_nr;
 	int				rsps_in_flight_nr;
+	int				max_inline_data;
+	int				pad;
 
 	uint16_t			credits;  /* the ack this peer sends */
 
