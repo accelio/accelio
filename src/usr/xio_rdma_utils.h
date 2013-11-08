@@ -38,6 +38,9 @@
 #ifndef XIO_RDMA_UTILS_H
 #define XIO_RDMA_UTILS_H
 
+/* full memory barrier */
+#define cpu_relax()  __sync_synchronize()
+
 int xio_validate_rdma_op(
 			struct xio_sge *lsge, size_t lsize,
 			struct xio_sge *rsge, size_t rsize,

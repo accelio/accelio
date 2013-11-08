@@ -830,8 +830,11 @@ retry:
 			if (num_delayed_arm == 0) {
 				start_time = get_cycles();
 			} else {
-				if (get_cycles() - start_time > timeout)
+				if (timeout > 0 &&
+				    (get_cycles() - start_time) > timeout)
 					break;
+				else
+					cpu_relax();
 			}
 			num_delayed_arm++;
 		} else {
