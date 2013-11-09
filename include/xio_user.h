@@ -258,8 +258,8 @@ struct xio_mr;				     /* registered memory handle     */
  */
 typedef void (*xio_log_fn)(const char *file, unsigned line,
 			   const char *function, unsigned level,
-			   const char *fmt, ...);
-//	__attribute__((__format__(printf, 5, 6)));
+			   const char *fmt, ...)
+	__attribute__((__format__(printf, 5, 6)));
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */

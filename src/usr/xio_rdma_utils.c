@@ -64,7 +64,8 @@ int xio_validate_rdma_op(
 	uint32_t	tot_len = 0;
 
 	if (lsize < 1 || rsize < 1) {
-		ERROR_LOG("iovec size < 1 lsize:%d, rsize:%d\n", lsize, rsize);
+		ERROR_LOG("iovec size < 1 lsize:%zd, rsize:%zd\n",
+			  lsize, rsize);
 		return -1;
 	}
 

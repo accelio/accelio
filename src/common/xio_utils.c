@@ -297,7 +297,7 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 			dst_len = 0;
 
 	if (dsize < 1 || ssize < 1) {
-		ERROR_LOG("iovec size < 1 dsize:%zd, ssize:%zd\n",
+		ERROR_LOG("iovec size < 1 dsize:%d, ssize:%d\n",
 			  dsize, ssize);
 		return 0;
 	}

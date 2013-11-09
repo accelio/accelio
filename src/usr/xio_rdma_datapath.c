@@ -481,7 +481,7 @@ static void xio_handle_task_error(struct xio_task *task)
 		break;
 	default:
 		ERROR_LOG("unknown opcode: task:%p, type:0x%x, " \
-			  "magic:0x%llx, ib_op:0x%x\n",
+			  "magic:0x%lx, ib_op:0x%x\n",
 			  task, task->tlv_type,
 			  task->magic, rdma_task->ib_op);
 		break;
@@ -499,7 +499,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
 		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, " \
-			  "wr_id:0x%llx, " \
+			  "wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x, " \
 			   "ib_op:%x\n",
 			   rdma_hndl, rdma_task, task,
@@ -509,7 +509,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			   rdma_task->ib_op);
 	} else  {
 		ERROR_LOG("conn:%p, rdma_task:%p, task:%p, "  \
-			  "wr_id:0x%llx, " \
+			  "wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x," \
 			  "ib_op:0x%x\n",
 			  rdma_hndl, rdma_task, task,
@@ -675,7 +675,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 			xio_tasks_pool_put(ptask);
 		} else {
 			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
-				  "magic:0x%llx\n",
+				  "magic:0x%lx\n",
 				  ptask, rdma_task->ib_op,
 				  ptask->ltid, ptask->magic);
 			continue;
@@ -721,7 +721,7 @@ static void xio_rdma_rd_comp_handler(
 
 	if (rdma_task->phantom_idx == 0) {
 		if (task->state == XIO_TASK_STATE_CANCEL_PENDING) {
-			TRACE_LOG("[%llu] - **** message is canceled\n",
+			TRACE_LOG("[%d] - **** message is canceled\n",
 				  rdma_task->sn);
 			xio_rdma_cancel_rsp(transport, task, XIO_E_MSG_CANCELED,
 					    NULL, 0);
@@ -1380,7 +1380,7 @@ static int xio_rdma_prep_req_out_data(
 	xio_hdr_len += sizeof(struct xio_req_hdr);
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
-		ERROR_LOG("header size %zd exceeds the max header allowed %d\n",
+		ERROR_LOG("header size %lu exceeds the max header allowed %lu\n",
 			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz);
 		return -1;
 	}
@@ -1712,7 +1712,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len += sizeof(rsp_hdr);
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
-		ERROR_LOG("header size %zd exceeds the max header allowed %d\n",
+		ERROR_LOG("header size %lu exceeds the max header allowed %lu\n",
 			  ulp_imm_len, rdma_hndl->max_send_buf_sz);
 		goto cleanup;
 	}
@@ -2133,7 +2133,8 @@ static int xio_prep_rdma_op(
 	*tasks_used = 0;
 
 	if (lsize < 1 || rsize < 1) {
-		ERROR_LOG("iovec size < 1 lsize:%d, rsize:%d\n", lsize, rsize);
+		ERROR_LOG("iovec size < 1 lsize:%zd, rsize:%zd\n",
+			  lsize, rsize);
 		return -1;
 	}
 	if (rsize == 1) {
@@ -3109,7 +3110,7 @@ static int xio_rdma_cancel_req_handler(struct xio_rdma_transport *rdma_hndl,
 		rdma_task = ptask->dd_data;
 		if (rdma_task->phantom_idx == 0 &&
 		    rdma_task->sn == cancel_hdr->sn) {
-			TRACE_LOG("[%llu] - message found on rdma_rd_list\n",
+			TRACE_LOG("[%u] - message found on rdma_rd_list\n",
 				  cancel_hdr->sn);
 			ptask->state = XIO_TASK_STATE_CANCEL_PENDING;
 			found = 1;
@@ -3123,7 +3124,7 @@ static int xio_rdma_cancel_req_handler(struct xio_rdma_transport *rdma_hndl,
 			rdma_task = ptask->dd_data;
 			if (rdma_task->phantom_idx == 0 &&
 			    rdma_task->sn == cancel_hdr->sn) {
-				TRACE_LOG("[%llu] - message found on " \
+				TRACE_LOG("[%u] - message found on " \
 					  "rdma_rd_in_flight_list\n",
 					  cancel_hdr->sn);
 				ptask->state = XIO_TASK_STATE_CANCEL_PENDING;
@@ -3134,7 +3135,7 @@ static int xio_rdma_cancel_req_handler(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	if (!found) {
-		TRACE_LOG("[%llu] - was not found\n", cancel_hdr->sn);
+		TRACE_LOG("[%u] - was not found\n", cancel_hdr->sn);
 		/* fill notification event */
 		event_data.cancel.ulp_msg	   =  ulp_msg;
 		event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
@@ -3189,7 +3190,7 @@ static int xio_rdma_cancel_rsp_handler(struct xio_rdma_transport *rdma_hndl,
 		}
 
 		if (!task_to_cancel)  {
-			ERROR_LOG("[%llu] - Failed to found canceled message\n",
+			ERROR_LOG("[%u] - Failed to found canceled message\n",
 				  cancel_hdr->sn);
 			/* fill notification event */
 			event_data.cancel.ulp_msg	=  ulp_msg;
@@ -3363,7 +3364,7 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 		if (ptask->omsg &&
 		    (ptask->omsg->sn == req->sn) &&
 		    (ptask->stag == stag)) {
-			TRACE_LOG("[%llu] - message found on tx_ready_list\n",
+			TRACE_LOG("[%lu] - message found on tx_ready_list\n",
 				  req->sn);
 
 			/* return decrease ref count from task */
@@ -3389,7 +3390,7 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 		    (ptask->omsg->sn == req->sn) &&
 		    (ptask->stag == stag) &&
 		    (ptask->state != XIO_TASK_STATE_RESPONSE_RECV)) {
-			TRACE_LOG("[%llu] - message found on in_flight_list\n",
+			TRACE_LOG("[%lu] - message found on in_flight_list\n",
 				  req->sn);
 
 			rdma_task	= ptask->dd_data;
@@ -3408,7 +3409,7 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 		    (ptask->omsg->sn == req->sn) &&
 		    (ptask->stag == stag) &&
 		    (ptask->state != XIO_TASK_STATE_RESPONSE_RECV)) {
-			TRACE_LOG("[%llu] - message found on tx_comp_list\n",
+			TRACE_LOG("[%lu] - message found on tx_comp_list\n",
 				  req->sn);
 			rdma_task	= ptask->dd_data;
 			cancel_hdr.sn	= rdma_task->sn;
@@ -3419,7 +3420,7 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 			return 0;
 		}
 	}
-	TRACE_LOG("[%llu] - message not found on tx path\n", req->sn);
+	TRACE_LOG("[%lu] - message not found on tx path\n", req->sn);
 
 	/* fill notification event */
 	event_data.cancel.ulp_msg	   =  ulp_msg;

@@ -878,7 +878,7 @@ static int xio_rdma_initial_pool_alloc(
 	rdma_pool->data_pool = calloc(pool_size, sizeof(uint8_t));
 	if (rdma_pool->data_pool == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("malloc conn_setup_data_pool sz: %lu failed\n",
+		ERROR_LOG("malloc conn_setup_data_pool sz: %u failed\n",
 			  pool_size);
 		return -1;
 	}

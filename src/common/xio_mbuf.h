@@ -116,7 +116,7 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%zd, datalen:%zd\n",
 		  mbuf, mbuf->buf.head, mbuf->buf.tail, mbuf->buf.buflen,
 		  mbuf->buf.datalen);
-	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%llu, val:%p\n",
+	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%lu, val:%p\n",
 		  mbuf, mbuf->tlv.head, mbuf->tlv.tail, mbuf->tlv.type,
 		  mbuf->tlv.len, mbuf->tlv.val);
 	DEBUG_LOG("curr: mbuf:%p curr:%p\n", mbuf, mbuf->curr);
