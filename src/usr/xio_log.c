@@ -39,7 +39,14 @@
 #include "libxio.h"
 #include "xio_log.h"
 
-int xio_logging_level = XIO_LOG_LEVEL_ERROR;
+
+void xio_vlog(const char *file, unsigned line, const char *function,
+		     unsigned level, const char *fmt, ...);
+
+int			xio_logging_level = XIO_LOG_LEVEL_ERROR;
+xio_log_fn		xio_vlog_fn = xio_vlog;
+
+
 
 #define LOG_TIME_FMT "%04d/%02d/%02d-%02d:%02d:%02d.%05ld"
 #define LOG_TIME_ARG(t, usec) t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, \
@@ -103,3 +110,5 @@ void xio_read_logging_level(void)
 	if (level >= XIO_LOG_LEVEL_FATAL && level <= XIO_LOG_LEVEL_TRACE)
 		xio_logging_level = level;
 }
+
+

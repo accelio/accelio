@@ -77,4 +77,19 @@ static inline void xio_read_logging_level(void)
 	pr_warn("xio_read_logging_level\n");
 }
 
+static inline int xio_set_log_level(int /*enum xio_log_level*/ level)
+{
+	return -1;
+}
+
+static inline int /*enum xio_log_level*/ xio_get_log_level(void)
+{
+	return 0;
+}
+
+static inline int xio_set_log_fn(void * /*xio_log_fn*/ fn)
+{
+	return -1;
+}
+
 #endif /* XIO_LOG_H */

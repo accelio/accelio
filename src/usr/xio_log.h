@@ -38,6 +38,9 @@
 #ifndef XIO_LOG_H
 #define XIO_LOG_H
 
+#include "libxio.h"
+
+
 /*
  * Enable compiler checks for printf-like formatting.
  *
@@ -48,27 +51,10 @@
 	__attribute__((__format__(printf, fmtarg, varg)))
 
 /*---------------------------------------------------------------------------*/
-/* loging facilities							     */
-/*---------------------------------------------------------------------------*/
-
-/*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
-
-/**
- * Logging levels.
- */
-enum xio_log_level {
-	XIO_LOG_LEVEL_FATAL,
-	XIO_LOG_LEVEL_ERROR,
-	XIO_LOG_LEVEL_WARN,
-	XIO_LOG_LEVEL_INFO,
-	XIO_LOG_LEVEL_DEBUG,
-	XIO_LOG_LEVEL_TRACE,
-	XIO_LOG_LEVEL_LAST
-};
-
-extern int xio_logging_level;
+extern int		xio_logging_level;
+extern xio_log_fn	xio_vlog_fn;
 
 extern void xio_vlog(const char *file, unsigned line, const char *function,
 		     unsigned level, const char *fmt, ...);
@@ -77,8 +63,8 @@ extern void xio_vlog(const char *file, unsigned line, const char *function,
 	do { \
 		if (unlikely(((level) < XIO_LOG_LEVEL_LAST) &&  \
 					(level) <= xio_logging_level)) { \
-			xio_vlog(__FILE__, __LINE__, __func__, (level), \
-					fmt, ## __VA_ARGS__); \
+			xio_vlog_fn(__FILE__, __LINE__, __func__, (level), \
+				    fmt, ## __VA_ARGS__); \
 		} \
 	} while (0)
 
@@ -96,5 +82,27 @@ extern void xio_vlog(const char *file, unsigned line, const char *function,
 							## __VA_ARGS__)
 
 void xio_read_logging_level(void);
+
+static inline int xio_set_log_level(enum xio_log_level level)
+{
+	xio_logging_level = level;
+
+	return 0;
+}
+
+static inline enum xio_log_level xio_get_log_level(void)
+{
+	return xio_logging_level;
+}
+
+static inline int xio_set_log_fn(xio_log_fn fn)
+{
+	if (fn == NULL)
+		xio_vlog_fn = xio_vlog;
+	else
+		xio_vlog_fn = fn;
+
+	return 0;
+}
 
 #endif /* XIO_LOG_H */

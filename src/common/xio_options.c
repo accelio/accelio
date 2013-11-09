@@ -41,6 +41,51 @@
 #include "xio_common.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
+#include "xio_log.h"
+
+/*---------------------------------------------------------------------------*/
+/* xio_set_opt								     */
+/*---------------------------------------------------------------------------*/
+static int xio_general_set_opt(void *xio_obj, int optname,
+			       const void *optval, int optlen)
+{
+	switch (optname) {
+	case XIO_OPTNAME_LOG_FN:
+		if (optlen == 0 && optval == NULL)
+			return xio_set_log_fn(NULL);
+		else if (optlen == sizeof(xio_log_fn))
+			return xio_set_log_fn((xio_log_fn)optval);
+		break;
+	case XIO_OPTNAME_LOG_LEVEL:
+		if (optlen != sizeof(enum xio_log_level))
+			return -1;
+		return xio_set_log_level(*((enum xio_log_level *)optval));
+		break;
+	default:
+		break;
+	}
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_general_get_opt                                                       */
+/*---------------------------------------------------------------------------*/
+static int xio_general_get_opt(void  *xio_obj, int optname,
+			       void *optval, int *optlen)
+{
+	switch (optname) {
+	case XIO_OPTNAME_LOG_LEVEL:
+		*((enum xio_log_level *)optval) = xio_get_log_level();
+		*optlen = sizeof(enum xio_log_level);
+		return 0;
+		break;
+	default:
+		break;
+	}
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_set_opt								     */
@@ -51,6 +96,8 @@ int xio_set_opt(void *xio_obj, int level,  int optname,
 	static struct xio_transport *rdma_transport = NULL;
 
 	switch (level) {
+	case XIO_OPTLEVEL_ACCELIO:
+		return xio_general_set_opt(xio_obj, optname, optval, optlen);
 	case XIO_OPTLEVEL_RDMA:
 		if (!rdma_transport) {
 			rdma_transport = xio_get_transport("rdma");
@@ -80,6 +127,8 @@ int xio_get_opt(void *xio_obj, int level,  int optname,
 	static struct xio_transport *rdma_transport = NULL;
 
 	switch (level) {
+	case XIO_OPTLEVEL_ACCELIO:
+		return xio_general_get_opt(xio_obj, optname, optval, optlen);
 	case XIO_OPTLEVEL_RDMA:
 		if (!rdma_transport) {
 			rdma_transport = xio_get_transport("rdma");

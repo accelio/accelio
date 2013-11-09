@@ -72,6 +72,20 @@ extern "C" {
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
 /**
+ * @enum xio_log_leve
+ * @brief logging levels
+ */
+enum xio_log_level {
+	XIO_LOG_LEVEL_FATAL,
+	XIO_LOG_LEVEL_ERROR,
+	XIO_LOG_LEVEL_WARN,
+	XIO_LOG_LEVEL_INFO,
+	XIO_LOG_LEVEL_DEBUG,
+	XIO_LOG_LEVEL_TRACE,
+	XIO_LOG_LEVEL_LAST
+};
+
+/**
  * @enum xio_session_type
  * @brief session's type defintion
  */
@@ -110,6 +124,8 @@ enum xio_optname {
 	XIO_OPTNAME_ENABLE_MEM_POOL,	    /**< enables the internal rdma  */
 					    /**< memory pool		    */
 
+	XIO_OPTNAME_LOG_FN,		   /**< set user log function	   */
+	XIO_OPTNAME_LOG_LEVEL,		   /**< set/get logging level      */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,    /**< enables the dma latency    */
 
 	XIO_OPTNAME_RDMA_BUF_THRESHOLD,    /**< set/get rdma buffer threshold */
@@ -230,6 +246,20 @@ struct xio_server;			     /* server handle                */
 struct xio_session;			     /* session handle		     */
 struct xio_connection;			     /* connection handle	     */
 struct xio_mr;				     /* registered memory handle     */
+
+/*---------------------------------------------------------------------------*/
+/* typedefs								     */
+/*---------------------------------------------------------------------------*/
+/*
+ * The library user may wish to register their own logging function.
+ * By default errors go to stderr.
+ * Use xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_FN, NULL, 0)
+ * to restore the default log fn.
+ */
+typedef void (*xio_log_fn)(const char *file, unsigned line,
+			   const char *function, unsigned level,
+			   const char *fmt, ...);
+//	__attribute__((__format__(printf, 5, 6)));
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */
