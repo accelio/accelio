@@ -495,6 +495,8 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
+	xio_init();
+
 	loop = xio_ev_loop_init();
 	if (loop == NULL) {
 		error = xio_errno();

@@ -655,6 +655,14 @@ int xio_errno(void);
  */
 const char *xio_session_event_str(enum xio_session_event event);
 
+/**
+ * initialize package
+ *
+ * Idempotent routine to initialize the package.
+ *
+ */
+void xio_init(void);
+
 /*---------------------------------------------------------------------------*/
 /* XIO conncurrency (the context object) initialization and termination	     */
 /*---------------------------------------------------------------------------*/

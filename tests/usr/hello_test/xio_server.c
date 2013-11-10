@@ -430,6 +430,8 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
+	xio_init();
+
 	loop	= xio_ev_loop_init();
 	ctx	= xio_ctx_open(NULL, loop, 0);
 

@@ -49,12 +49,22 @@ int page_size;
 /*---------------------------------------------------------------------------*/
 /* xio_constructor like module init					     */
 /*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_constructor(void)
+__attribute__((constructor)) void xio_init(void)
 {
-	page_size = sysconf(_SC_PAGESIZE);
-	xio_thread_data_construct();
-	sessions_store_construct();
-	conns_store_construct();
+	static atomic_t initialized;
+	static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+
+	if (! atomic_read(&initialized)) {
+		pthread_mutex_lock(&mtx);
+		if (!atomic_read(&initialized)) {
+			page_size = sysconf(_SC_PAGESIZE);
+			xio_thread_data_construct();
+			sessions_store_construct();
+			conns_store_construct();
+			atomic_set(&initialized, 1);
+		}
+		pthread_mutex_unlock(&mtx);
+	}
 }
 
 /*
