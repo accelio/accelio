@@ -159,7 +159,7 @@ int xio_connection_send(struct xio_connection *conn,
 		}
 		req_task = container_of(msg->request, struct xio_task, imsg);
 		if (req_task == NULL) {
-			ERROR_LOG("response with id %lu is unknown." \
+			ERROR_LOG("response with id %llu is unknown." \
 				  " - connection:%p, session:%p, conn:%p\n",
 				  msg->request->sn, conn, conn->session,
 				  conn->conn);
@@ -193,7 +193,7 @@ int xio_connection_send(struct xio_connection *conn,
 			task = container_of(msg->request,
 					    struct xio_task, imsg);
 			if (task == NULL) {
-				ERROR_LOG("response with id %lu"   \
+				ERROR_LOG("response with id %llu"   \
 					  "is unknown. - connection:%p," \
 					  "session:%p, conn:%p\n",
 					  msg->request->sn, conn,
@@ -794,7 +794,7 @@ int xio_cancel_request(struct xio_connection *conn,
 	/* search the tx */
 	xio_msg_list_foreach_safe(pmsg, &conn->reqs_msgq, tmp_pmsg) {
 		if (pmsg->sn == req->sn) {
-			ERROR_LOG("[%lu] - message found on reqs_msgq\n",
+			ERROR_LOG("[%llu] - message found on reqs_msgq\n",
 				  req->sn);
 			xio_msg_list_remove(&conn->reqs_msgq, pmsg);
 			xio_session_notify_cancel(

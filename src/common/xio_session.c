@@ -2043,7 +2043,7 @@ static int xio_on_cancel_request(struct xio_session *sess,
 		}
 	}
 
-	TRACE_LOG("message to cancel not found %lu\n", hdr.sn);
+	TRACE_LOG("message to cancel not found %llu\n", hdr.sn);
 
 	req.sn	= hdr.sn;
 	xio_connection_send_cancel_response(connection, &req, NULL,

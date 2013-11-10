@@ -42,6 +42,7 @@
 #include "xio_task.h"
 
 #include <linux/mm.h>
+#include <linux/vmalloc.h>
 
 #define XIO_TASK_MAGIC   0x58494f5f5441534b
 
