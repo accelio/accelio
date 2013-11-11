@@ -2254,7 +2254,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		} else {
 			omsg->in.data_iovlen =
 				memclonev((struct xio_iovec *)omsg->in.data_iov,
-					  omsg->in.data_iovlen,
+					  XIO_MAX_IOV,
 					  (struct xio_iovec *)imsg->in.data_iov,
 					  imsg->in.data_iovlen);
 		}
