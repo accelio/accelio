@@ -213,7 +213,7 @@ static inline uint16_t tx_window_sz(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 {
-	struct xio_task		*task = NULL;
+	struct xio_task		*task = NULL, *task1, *task2;
 	struct xio_rdma_task	*rdma_task = NULL;
 	struct xio_rdma_task	*prev_rdma_task = NULL;
 	struct xio_work_req	dummy_wr;
@@ -247,6 +247,16 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 				struct xio_task,  tasks_list_entry);
 
 		rdma_task = task->dd_data;
+
+		/* prefetch next buffer */
+		if (rdma_hndl->tx_ready_tasks_num > 2) {
+			task1 = list_first_entry(&task->tasks_list_entry,
+					struct xio_task,  tasks_list_entry);
+			xio_prefetch(task1->mbuf.buf.head);
+			task2 = list_first_entry(&task1->tasks_list_entry,
+					struct xio_task,  tasks_list_entry);
+			xio_prefetch(task2->mbuf.buf.head);
+		}
 
 		/* phantom task */
 		if (rdma_task->phantom_idx) {
@@ -304,6 +314,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			rdma_hndl->rsps_in_flight_nr++;
 		list_move_tail(&task->tasks_list_entry,
 			       &rdma_hndl->in_flight_list);
+		if (req_nr == 16)
+			break;
 	}
 	if (req_nr) {
 		first_wr = container_of(dummy_wr.send_wr.next,
@@ -565,9 +577,19 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	int			retval;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	int			must_send = 0;
+	struct xio_task		*task1, *task2;
+
 
 	rdma_hndl->rqe_avail--;
 	rdma_hndl->sim_peer_credits--;
+
+	/* prefetch next buffer */
+	task1 = list_first_entry(&task->tasks_list_entry,
+			 struct xio_task,  tasks_list_entry);
+	xio_prefetch(task1->mbuf.buf.head);
+	task2 = list_first_entry(&task1->tasks_list_entry,
+			 struct xio_task,  tasks_list_entry);
+	xio_prefetch(task2->mbuf.buf.head);
 
 	/* rearm the receive queue  */
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
@@ -833,8 +855,6 @@ retry:
 				if (timeout > 0 &&
 				    (get_cycles() - start_time) > timeout)
 					break;
-				else
-					cpu_relax();
 			}
 			num_delayed_arm++;
 		} else {
@@ -1956,7 +1976,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	switch (rsp_hdr.opcode) {
 	case XIO_IB_SEND:
-
 		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
 			imsg->in.data_iov[0].iov_base	= ulp_hdr +
@@ -2006,9 +2025,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		} else {
 			omsg->in.data_iovlen =
 				memclonev((struct xio_iovec *)omsg->in.data_iov,
-					  omsg->in.data_iovlen,
+					  XIO_MAX_IOV,
 					  (struct xio_iovec *)imsg->in.data_iov,
 					  imsg->in.data_iovlen);
+
 		}
 		break;
 	case XIO_IB_RDMA_WRITE:

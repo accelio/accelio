@@ -68,6 +68,7 @@ extern struct list_head		dev_list;
 #define DEF_DATA_ALIGNMENT		0
 #define SEND_BUF_SZ			8192
 #define OMX_MAX_HDR_SZ			512
+#define MAX_INLINE_DATA			200
 
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
@@ -97,6 +98,8 @@ extern struct list_head		dev_list;
 #define XIO_TO_RDMA_TASK(xt, rt)			\
 		struct xio_rdma_task *(rt) =		\
 			(struct xio_rdma_task *)(xt)->dd_data
+
+#define xio_prefetch(p)            __builtin_prefetch(p)
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
