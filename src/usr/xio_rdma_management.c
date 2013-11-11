@@ -691,7 +691,8 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.cap.max_send_wr		= MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
 	qp_init_attr.cap.max_send_sge		= MAX_SGE;
-	qp_init_attr.cap.max_recv_sge		= MAX_SGE;
+	qp_init_attr.cap.max_recv_sge		= 1;
+	qp_init_attr.cap.max_inline_data	= MAX_INLINE_DATA;
 
 	/* only generate completion queue entries if requested */
 	qp_init_attr.sq_sig_all		= 0;
