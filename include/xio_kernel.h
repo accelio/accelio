@@ -248,6 +248,7 @@ struct xio_msg {
 	int			status;
 	int			flags;
 	enum xio_receipt_result	receipt_res;
+	uint64_t		timestamp;	/**< submission timestamp     */
 	int			reserved;
 	void			*user_context;	/* for user usage - not sent */
 	struct xio_msg		*next;          /* internal use */

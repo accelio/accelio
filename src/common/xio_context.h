@@ -45,9 +45,27 @@ enum xio_context_event {
 	XIO_CONTEXT_EVENT_CLOSE
 };
 
+enum xio_counters {
+	XIO_STAT_TX_MSG,
+	XIO_STAT_RX_MSG,
+	XIO_STAT_TX_BYTES,
+	XIO_STAT_RX_BYTES,
+	XIO_STAT_DELAY,
+	XIO_STAT_APPDELAY,
+	/* user can register 10 more messages */
+	XIO_STAT_USER_FIRST,
+	XIO_STAT_LAST = 16
+};
+
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
+struct xio_statistics {
+	uint64_t	hertz;
+	uint64_t	counter[XIO_STAT_LAST];
+	char		*name[XIO_STAT_LAST];
+};
+
 struct xio_context {
 	void				*ev_loop;
 	struct xio_loop_ops		loop_ops;
@@ -56,9 +74,11 @@ struct xio_context {
 	int				polling_timeout;
 	unsigned int			flags;
 	uint64_t			worker;
+	struct xio_statistics		stats;
 
 	/* list of sessions using this connection */
 	struct xio_observable		observable;
+	void				*netlink_sock;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -73,6 +93,30 @@ int xio_context_reg_observer(struct xio_context *context,
 void xio_context_unreg_observer(struct xio_context *conn,
 				struct xio_observer *observer);
 
+
+int xio_add_counter(struct xio_context *ctx, char *name);
+
+int xio_del_counter(struct xio_context *ctx, int counter);
+
+static inline void xio_ctx_stat_add(struct xio_context *ctx, int counter, uint64_t val)
+{
+	ctx->stats.counter[counter] += val;
+}
+
+static inline void xio_ctx_stat_inc(struct xio_context *ctx, int counter)
+{
+	ctx->stats.counter[counter]++;
+}
+
+static inline void xio_stat_add(struct xio_statistics *stats, int counter, uint64_t val)
+{
+	stats->counter[counter] += val;
+}
+
+static inline void xio_stat_inc(struct xio_statistics *stats, int counter)
+{
+	stats->counter[counter]++;
+}
 
 #endif /*XIO_CONTEXT_H */
 

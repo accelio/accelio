@@ -44,6 +44,7 @@
 #include "xio_conn.h"
 #include "xio_connection.h"
 #include "xio_session.h"
+#include "xio_context.h"
 
 #define MSG_POOL_SZ	1024
 
@@ -389,6 +390,8 @@ int xio_send_request(struct xio_connection *conn,
 		     struct xio_msg *msg)
 {
 	int		valid;
+	struct xio_statistics *stats = &conn->ctx->stats;
+	struct xio_vmsg *vmsg = &msg->out;
 
 	if (conn->state == CONNECTION_STATE_CLOSING) {
 		xio_set_error(ESHUTDOWN);
@@ -413,6 +416,12 @@ int xio_send_request(struct xio_connection *conn,
 		return -1;
 	}
 
+	msg->timestamp = get_cycles();
+	xio_stat_inc(stats, XIO_STAT_TX_MSG);
+	xio_stat_add(stats, XIO_STAT_TX_BYTES,
+		     vmsg->header.iov_len +
+		     xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen));
+
 	msg->sn = xio_session_get_sn(conn->session);
 	msg->type = XIO_MSG_TYPE_REQ;
 
@@ -433,9 +442,16 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_task *task = container_of(msg->request,
 					     struct xio_task, imsg);
 	struct xio_connection *conn = task->connection;
+	struct xio_statistics *stats = &conn->ctx->stats;
+	struct xio_vmsg *vmsg = &msg->out;
+	int valid;
+
+	/* Server latency */
+	xio_stat_add(stats, XIO_STAT_APPDELAY,
+		     get_cycles() - task->imsg.timestamp);
 
 
-	int valid = xio_session_is_valid_out_msg(conn->session, msg);
+	valid = xio_session_is_valid_out_msg(conn->session, msg);
 	if (!valid) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid out message\n");
@@ -447,6 +463,11 @@ int xio_send_response(struct xio_msg *msg)
 		xio_set_error(EAGAIN);
 		return -1;
 	}
+
+	xio_stat_inc(stats, XIO_STAT_TX_MSG);
+	xio_stat_add(stats, XIO_STAT_TX_BYTES,
+		     vmsg->header.iov_len +
+		     xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen));
 
 	msg->flags = XIO_MSG_RSP_FLAG_LAST;
 	if ((msg->request->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) &&
@@ -519,8 +540,10 @@ int xio_connection_release_read_receipt(struct xio_connection *conn,
 /* xio_send_msg								     */
 /*---------------------------------------------------------------------------*/
 int xio_send_msg(struct xio_connection *conn,
-		struct xio_msg *msg)
+		 struct xio_msg *msg)
 {
+	struct xio_statistics *stats = &conn->ctx->stats;
+	struct xio_vmsg *vmsg = &msg->out;
 	int		valid;
 
 	valid = xio_session_is_valid_out_msg(conn->session, msg);
@@ -535,6 +558,12 @@ int xio_send_msg(struct xio_connection *conn,
 		xio_set_error(EAGAIN);
 		return -1;
 	}
+
+	msg->timestamp = get_cycles();
+	xio_stat_inc(stats, XIO_STAT_TX_MSG);
+	xio_stat_add(stats, XIO_STAT_TX_BYTES,
+		     vmsg->header.iov_len +
+		     xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen));
 
 	msg->sn = xio_session_get_sn(conn->session);
 	msg->type = XIO_ONE_WAY_REQ;
@@ -877,4 +906,3 @@ int xio_cancel(struct xio_msg *req, enum xio_status result)
 
 	return 0;
 }
-

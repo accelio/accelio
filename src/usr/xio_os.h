@@ -75,4 +75,6 @@
 #include <linux/kref.h>
 #include <linux/usr.h>
 
+#include "get_clock.h"
+
 #endif /* XIO_OS_H */

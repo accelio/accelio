@@ -1297,6 +1297,8 @@ static int xio_on_req_recv(struct xio_connection *connection,
 {
 	struct xio_session_hdr	hdr;
 	struct xio_msg		*msg = &task->imsg;
+	struct xio_statistics *stats = &connection->ctx->stats;
+	struct xio_vmsg *vmsg = &msg->in;
 
 	/* server side after accept change the state upon first message */
 	if (connection->session->state == XIO_SESSION_STATE_ACCEPTED)
@@ -1320,6 +1322,12 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	 */
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		xio_task_addref(task);
+
+	msg->timestamp = get_cycles();
+	xio_stat_inc(stats, XIO_STAT_RX_MSG);
+	xio_stat_add(stats, XIO_STAT_RX_BYTES,
+		     vmsg->header.iov_len +
+		     xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen));
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg)
@@ -1353,6 +1361,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_msg		*omsg;
 	struct xio_task		*sender_task = task->sender_task;
+	struct xio_statistics *stats = &connection->ctx->stats;
 
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)
@@ -1363,6 +1372,9 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	/* one way messages do not have sender task */
 	omsg = sender_task->omsg;
 	omsg->request = msg;
+
+	xio_stat_add(stats, XIO_STAT_DELAY, get_cycles() - omsg->timestamp);
+	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 
 	task->connection = connection;
 
@@ -1381,8 +1393,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				    omsg,
 				    task->imsg.more_in_batch,
 				    connection->cb_user_context);
-	    sender_task->omsg = NULL;
-	    xio_release_response_task(task);
+		sender_task->omsg = NULL;
+		xio_release_response_task(task);
 	} else   {
 		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
 			if (connection->ses_ops.on_msg_delivered) {
@@ -1402,6 +1414,12 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			}
 		}
 		if (hdr.flags & XIO_MSG_RSP_FLAG_LAST) {
+			struct xio_vmsg *vmsg = &msg->in;
+			xio_stat_add(stats, XIO_STAT_RX_BYTES,
+				     vmsg->header.iov_len +
+				     xio_iovex_length(vmsg->data_iov,
+						      vmsg->data_iovlen));
+
 			if (connection->ses_ops.on_msg)
 				connection->ses_ops.on_msg(
 					connection->session,
@@ -1459,8 +1477,13 @@ static int xio_on_ow_req_send_comp(
 		struct xio_task *task)
 {
 	/* recycle the task */
-	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT))
+	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
+		struct xio_statistics *stats = &connection->ctx->stats;
+		struct xio_msg *omsg = task->omsg;
+		xio_stat_add(stats, XIO_STAT_DELAY,
+			     get_cycles() - omsg->timestamp);
 		xio_tasks_pool_put(task);
+	}
 
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);

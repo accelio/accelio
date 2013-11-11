@@ -349,6 +349,7 @@ struct xio_msg {
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 						/**< required                 */
 	int			reserved;	/**< reseved for padding      */
+	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
 	struct xio_msg		*next;          /**< internal library usage   */
