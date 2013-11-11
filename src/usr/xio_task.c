@@ -39,6 +39,7 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_task.h"
+#include "xio_mem.h"
 
 #define XIO_TASK_MAGIC   0x58494f5f5441534b
 
@@ -64,27 +65,19 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	/* pool data */
 	elems_alloc_sz = max*(sizeof(struct xio_task) + task_dd_data_sz);
 
-	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
+	buf = malloc_huge_pages(pool_alloc_sz + elems_alloc_sz);
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
-	/* pool */
-	q = buf;
-	q->dd_data = buf + sizeof(struct xio_tasks_pool);
+	data = buf;
 
-	buf = buf + sizeof(struct xio_tasks_pool) + pool_dd_data_sz;
+	/* pool */
+	q = buf + elems_alloc_sz;
+	q->dd_data = q + sizeof(struct xio_tasks_pool);
 
 	/* array */
-	q->array = buf;
-	buf = buf + max*sizeof(struct xio_task *);
-
-	data = calloc(elems_alloc_sz, sizeof(uint8_t));
-	if (data == NULL) {
-		xio_set_error(ENOMEM);
-		free(q);
-		return NULL;
-	}
+	q->array = q->dd_data + pool_dd_data_sz;
 
 	INIT_LIST_HEAD(&q->stack);
 
@@ -111,6 +104,5 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 /*---------------------------------------------------------------------------*/
 void xio_tasks_pool_free(struct xio_tasks_pool *q)
 {
-	free(q->array[0]);
-	free(q);
+	free_huge_pages(q->array[0]);
 }
