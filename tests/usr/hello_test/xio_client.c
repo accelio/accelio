@@ -59,10 +59,11 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 
-#define MAX_POOL_SIZE		2048
+#define MAX_POOL_SIZE		512
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
+#define IOV_LEN			1
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -280,7 +281,7 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 1;
+	msg->in.data_iovlen = IOV_LEN;
 	msg->in.data_iov[0].iov_base = NULL;
 	msg->in.data_iov[0].iov_len  = ONE_MB;
 	msg->in.data_iov[0].mr = NULL;
@@ -540,7 +541,7 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
+		msg->in.data_iovlen = IOV_LEN;
 		msg->in.data_iov[0].iov_base = NULL;
 		msg->in.data_iov[0].iov_len  = ONE_MB;
 		msg->in.data_iov[0].mr = NULL;
@@ -565,7 +566,7 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 		i++;
-		if (i == 512)
+		if (i == 50)
 			break;
 	}
 

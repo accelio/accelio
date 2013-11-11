@@ -49,7 +49,7 @@
 #include "libxio.h"
 #include "xio_msg.h"
 
-#define MAX_POOL_SIZE		2048
+#define MAX_POOL_SIZE		512
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
