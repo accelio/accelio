@@ -137,6 +137,7 @@ if test "$enable_fio_build" != "no"; then
 fi
 fi
 	subdirs2="$subdirs2 tests/usr/hello_test";
+	subdirs2="$subdirs2 tests/usr/hello_test_mt";
 	subdirs2="$subdirs2 tests/usr/hello_test_bidi";
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
@@ -161,6 +162,7 @@ if test "$enable_fio_build" != "no"; then
 AC_CONFIG_FILES([examples/usr/fio/Makefile])
 fi
 AC_CONFIG_FILES([tests/usr/hello_test/Makefile])
+AC_CONFIG_FILES([tests/usr/hello_test_mt/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
