@@ -2219,11 +2219,11 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		if (omsg->in.data_iovlen) {
 			/* deep copy */
 			if (imsg->in.data_iovlen) {
-				size_t idata_len  = xio_iov_length(
-					(struct xio_iovec *)imsg->in.data_iov,
+				size_t idata_len  = xio_iovex_length(
+					imsg->in.data_iov,
 					imsg->in.data_iovlen);
-				size_t odata_len  = xio_iov_length(
-					(struct xio_iovec *)omsg->in.data_iov,
+				size_t odata_len  = xio_iovex_length(
+					omsg->in.data_iov,
 					omsg->in.data_iovlen);
 
 				if (idata_len > odata_len) {
