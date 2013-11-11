@@ -43,7 +43,7 @@
 #include "xio_conns_store.h"
 
 
-static HT_HEAD(, xio_conn, 257)  conns_store;
+static HT_HEAD(, xio_conn, HASHTABLE_PRIME_SMALL)  conns_store;
 static spinlock_t cs_lock;
 
 /*---------------------------------------------------------------------------*/

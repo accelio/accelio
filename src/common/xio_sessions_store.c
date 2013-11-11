@@ -45,7 +45,7 @@
 #include "xio_session.h"
 #include "xio_sessions_store.h"
 
-static HT_HEAD(, xio_session, 257)  sessions_store;
+static HT_HEAD(, xio_session, HASHTABLE_PRIME_SMALL)  sessions_store;
 static spinlock_t ss_lock;
 
 /*---------------------------------------------------------------------------*/
