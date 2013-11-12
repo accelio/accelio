@@ -91,12 +91,15 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	tev->handler	= handler;
 	tev->fd		= fd;
 
-
 	memset(&ev, 0, sizeof(ev));
-	if (events == XIO_POLLIN)
-		ev.events = EPOLLIN;
-	else if (events == XIO_POLLOUT)
-		ev.events = EPOLLOUT;
+	if (events & XIO_POLLIN)
+		ev.events |= EPOLLIN;
+	if (events & XIO_POLLOUT)
+		ev.events |= EPOLLOUT;
+	/* default is edge triggered */
+	if (events & ~XIO_POLLLT)
+		ev.events |= EPOLLET;
+
 	ev.data.ptr = tev;
 	err = epoll_ctl(loop->efd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
