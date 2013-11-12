@@ -244,11 +244,15 @@ struct xio_buf *xio_alloc(size_t length)
 			    IBV_ACCESS_ALLOCATE_MR);
 	if (!buf->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed\n");
-		return NULL;
+		goto cleanup;
 	}
 	buf->length = length;
 
 	return buf;
+
+cleanup:
+	free(buf);
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
