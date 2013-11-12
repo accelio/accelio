@@ -2,8 +2,8 @@
 
 # additional include pathes necessary to compile the C programs
 AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
-#AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -laio \
-#	     -L$(top_builddir)/src/usr/ 
+AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -laio \
+	     -L$(top_builddir)/src/usr/ 
 
 ###############################################################################
 # THE PROGRAMS TO BUILD

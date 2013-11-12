@@ -440,7 +440,6 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 					struct xio_task *task)
 {
 	int			retval = 0;
-	uint32_t		status = 0;
 	struct xio_conn_setup_req req;
 	struct xio_conn_setup_rsp rsp;
 
@@ -453,7 +452,8 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 	if (req.version != XIO_VERSION) {
 		ERROR_LOG("client invalid version.cver:0x%x, sver::0x%x\n",
 			  req.version, XIO_VERSION);
-		status = XIO_E_INVALID_VERSION;
+		xio_set_error(XIO_E_INVALID_VERSION);
+		return -1;
 	}
 
 	/* time to prepare the primary pool */

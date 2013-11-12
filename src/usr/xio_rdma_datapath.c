@@ -371,6 +371,9 @@ static void xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 		rdma_hndl->rdma_in_flight += num_reqs;
 		/* submit the chain of rdma-rd requests, start from the first */
 		err = xio_post_send(rdma_hndl, first_wr, num_reqs);
+		if (err)
+			ERROR_LOG("xio_post_send failed\n");
+
 		/* ToDo: error handling */
 	} else if (!list_empty(&rdma_hndl->rdma_rd_list)) {
 		rdma_hndl->kick_rdma_rd = 1;
@@ -2852,8 +2855,6 @@ static void xio_rdma_write_nop(struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task, struct xio_nop_hdr *nop)
 {
 	struct  xio_nop_hdr *tmp_nop;
-	uint64_t	payload;
-	uint64_t	offset;
 
 	xio_mbuf_reset(&task->mbuf);
 
@@ -2861,14 +2862,8 @@ static void xio_rdma_write_nop(struct xio_rdma_transport *rdma_hndl,
 	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
 		return;
 
-	offset = xio_mbuf_get_curr_offset(&task->mbuf);
-	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
-
 	/* set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
-
-	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
-	offset = xio_mbuf_get_curr_offset(&task->mbuf);
 
 	/* get the pointer */
 	tmp_nop = xio_mbuf_get_curr_ptr(&task->mbuf);

@@ -843,11 +843,8 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 				struct raio_event *events)
 {
 	int				i;
-	struct raio_session_data	*session_data;
 	struct raio_io_u		*io_u;
 
-
-	session_data = ctx->session_data;
 	for (i = 0; i < nr; i++) {
 		io_u = ptr_from_int64(events[i].handle);
 		if (io_u == NULL)

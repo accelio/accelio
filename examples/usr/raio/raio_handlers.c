@@ -580,7 +580,7 @@ static int raio_handle_submit(void *prv_session_data,
 	}
 
 	if (msg_sz != cmd->data_len) {
-		errno = EINVAL;
+		retval = EINVAL;
 		printf("io submit request rejected\n");
 
 		goto reject;
