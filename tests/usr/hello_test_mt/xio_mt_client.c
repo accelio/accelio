@@ -560,6 +560,7 @@ int main(int argc, char *argv[])
 	struct session_data	sess_data;
 	char			url[256];
 	int			i = 0;
+	int			max_cpus;
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -576,6 +577,7 @@ int main(int argc, char *argv[])
 	set_cpu_affinity(test_config.cpu);
 
 	memset(&sess_data, 0, sizeof(sess_data));
+	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
@@ -594,7 +596,8 @@ int main(int argc, char *argv[])
 
 	/* spawn threads to handle connection */
 	for (i = 0; i < MAX_THREADS; i++) {
-		sess_data.tdata[i].affinity		= i+1;
+		sess_data.tdata[i].affinity		=
+				((test_config.cpu + i + 1) % max_cpus);
 		sess_data.tdata[i].cid			= i+1;
 		sess_data.tdata[i].stat.first_time	= 1;
 		sess_data.tdata[i].stat.print_counter	= PRINT_COUNTER;
