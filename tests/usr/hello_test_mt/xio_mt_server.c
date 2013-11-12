@@ -104,6 +104,7 @@ struct  thread_data {
 
 /* server private data */
 struct server_data {
+	void			*loop;
 	struct thread_data	tdata[MAX_THREADS];
 };
 
@@ -329,6 +330,7 @@ static void *portal_server_cb(void *data)
 	cpu_set_t		cpuset;
 	struct xio_context	*ctx;
 	struct xio_server	*server;
+	int			retval = 0;
 
 	/* set affinity to thread */
 
@@ -358,7 +360,7 @@ static void *portal_server_cb(void *data)
 	xio_ev_loop_run(tdata->loop);
 
 	/* normal exit phase */
-	fprintf(stdout, "exit signaled\n");
+	fprintf(stdout, "thread [%d] - exit signaled\n", tdata->affinity);
 
 	/* detach the server */
 	xio_unbind(server);
@@ -366,18 +368,21 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
+	if (tdata->mr)
+		xio_dereg_mr(&tdata->mr);
+
+	if (tdata->buf)
+		free(tdata->buf);
+
 cleanup:
 	/* free the context */
 	xio_ctx_close(ctx);
 
 	/* destroy the default loop */
-	xio_ev_loop_destroy(tdata->loop);
+	xio_ev_loop_destroy(&tdata->loop);
 
-	return NULL;
+	pthread_exit(&retval);
 }
-
-
-
 
 /*---------------------------------------------------------------------------*/
 /* on_session_event							     */
@@ -395,9 +400,12 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_TEARDOWN_EVENT:
-		for (i = 0; i < MAX_THREADS; i++)
-			process_request(&server_data->tdata[i], NULL);
 		xio_session_close(session);
+		for (i = 0; i < MAX_THREADS; i++) {
+			process_request(&server_data->tdata[i], NULL);
+			xio_ev_loop_stop(server_data->tdata[i].loop);
+		}
+		xio_ev_loop_stop(server_data->loop);
 		break;
 	default:
 		break;
@@ -582,7 +590,6 @@ int main(int argc, char *argv[])
 	struct server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
-	void			*loop;
 	int			i;
 	uint16_t		port;
 	int			max_cpus;
@@ -602,10 +609,10 @@ int main(int argc, char *argv[])
 		return -1;
 
 	/* open default event loop */
-	loop	= xio_ev_loop_init();
+	server_data.loop	= xio_ev_loop_init();
 
 	/* create thread context for the client */
-	ctx	= xio_ctx_open(NULL, loop, test_config.poll_timeout);
+	ctx	= xio_ctx_open(NULL, server_data.loop, test_config.poll_timeout);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
@@ -627,7 +634,7 @@ int main(int argc, char *argv[])
 			       portal_server_cb, &server_data.tdata[i]);
 	}
 
-	xio_ev_loop_run(loop);
+	xio_ev_loop_run(server_data.loop);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -643,7 +650,7 @@ cleanup:
 	xio_ctx_close(ctx);
 
 	/* destroy the default loop */
-	xio_ev_loop_destroy(&loop);
+	xio_ev_loop_destroy(&server_data.loop);
 
 	return 0;
 }

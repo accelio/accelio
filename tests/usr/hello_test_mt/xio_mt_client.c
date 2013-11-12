@@ -52,7 +52,7 @@
 
 #define MAX_HEADER_SIZE		32
 #define MAX_DATA_SIZE		32
-#define PRINT_COUNTER		4000000
+#define PRINT_COUNTER		6000000
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
 #define XIO_DEF_HEADER_SIZE	32
@@ -297,6 +297,9 @@ static void *worker_thread(void *data)
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
+
+	if (tdata->pool)
+		msg_pool_free(tdata->pool);
 
 	/* free the context */
 	xio_ctx_close(tdata->ctx);
@@ -548,145 +551,6 @@ static void print_test_config(
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
 	printf(" =============================================\n");
 }
-
-#if 0
-/*---------------------------------------------------------------------------*/
-/* main									     */
-/*---------------------------------------------------------------------------*/
-int main(int argc, char *argv[])
-{
-	struct xio_session	*session;
-	int			error;
-	int			retval;
-	char			url[256];
-	struct xio_context	*ctx;
-	struct xio_msg		*msg;
-	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
-
-	if (parse_cmdline(&test_config, argc, argv) != 0)
-		return -1;
-
-	print_counter = PRINT_COUNTER;
-
-	print_test_config(&test_config);
-
-	set_cpu_affinity(test_config.cpu);
-
-	loop = xio_ev_loop_init();
-	if (loop == NULL) {
-		error = xio_errno();
-		fprintf(stderr, "event loop creation failed. reason " \
-			"%d - (%s)\n", error, xio_strerror(error));
-		goto exit1;
-	}
-
-	ctx = xio_ctx_open(NULL, loop, 0);
-	if (ctx == NULL) {
-		error = xio_errno();
-		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
-		goto exit2;
-	}
-
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
-
-	sprintf(url, "rdma://%s:%d", test_config.server_addr,
-		test_config.server_port);
-	session = xio_session_open(XIO_SESSION_REQ,
-				   &attr, url, 0, 0, NULL);
-	if (session == NULL) {
-		error = xio_errno();
-		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
-		goto exit3;
-	}
-	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL);
-
-	pool = msg_pool_alloc(MAX_POOL_SIZE,
-			      test_config.hdr_len, test_config.data_len,
-			      0, 0);
-
-	printf("**** starting ...\n");
-	while (1) {
-		/* create transaction */
-		msg = msg_pool_get(pool);
-		if (msg == NULL)
-			break;
-
-		/* get pointers to internal buffers */
-		msg->in.header.iov_base = NULL;
-		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
-
-
-		/* recycle the message and fill new request */
-		msg_write(msg, "hello world request header",
-			  test_config.hdr_len,
-			  "hello world request data",
-			   test_config.data_len);
-
-		/* try to send it */
-		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
-		if (xio_send_request(conn, msg) == -1) {
-			printf("**** sent %d messages\n", i);
-			if (xio_errno() != EAGAIN)
-				printf("**** [%p] Error - xio_send_request " \
-				       "failed. %s\n",
-					session,
-					xio_strerror(xio_errno()));
-			msg_pool_put(pool, msg);
-			return 0;
-		}
-		i++;
-		if (i == 512)
-			break;
-	}
-
-	/* the default xio supplied main loop */
-	retval = xio_ev_loop_run(loop);
-	if (retval != 0) {
-		error = xio_errno();
-		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
-		goto exit4;
-	}
-
-	/* normal exit phase */
-	fprintf(stdout, "exit signaled\n");
-
-
-exit4:
-	retval = xio_session_close(session);
-	if (retval != 0) {
-		error = xio_errno();
-		fprintf(stderr, "session close failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
-	}
-
-exit3:
-	xio_ctx_close(ctx);
-exit2:
-	xio_ev_loop_destroy(&loop);
-exit1:
-	msg_api_free();
-
-	fprintf(stdout, "exit complete\n");
-
-	return 0;
-}
-#endif
 
 /*---------------------------------------------------------------------------*/
 /* main									     */
