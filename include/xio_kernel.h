@@ -549,6 +549,7 @@ int xio_session_close(struct xio_session *session);
  * @session: The xio session handle.
  * @ctx: the xio context handle.
  * @conn_idx: connection index greater then 0. if 0 - auto count.
+ * @out_if: bounded outgoing interface address
  * @conn_user_context: Private data pointer to pass to each connection callback
  *
  * RETURNS: xio session context, or NULL upon error.
@@ -557,6 +558,7 @@ struct xio_connection *xio_connect(
 				struct xio_session  *session,
 				struct xio_context  *ctx,
 				uint32_t conn_idx,
+				const char *out_if,
 				void *conn_user_context);
 
 /**

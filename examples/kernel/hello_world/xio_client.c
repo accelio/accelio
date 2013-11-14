@@ -188,7 +188,7 @@ static int xio_client_main(void *data)
 				   &attr, url, 0, 0, session_data);
 
 	/* connect the session  */
-	session_data->conn = xio_connect(session, ctx, 0, session_data);
+	session_data->conn = xio_connect(session, ctx, 0, NULL, session_data);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {

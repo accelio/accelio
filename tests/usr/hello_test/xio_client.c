@@ -63,7 +63,7 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
-#define IOV_LEN			1
+#define IOV_LEN			0
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -527,7 +527,7 @@ int main(int argc, char *argv[])
 		goto exit3;
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL);
+	conn = xio_connect(session, ctx, test_config.conn_idx, 0, NULL);
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE,
 			      test_config.hdr_len, test_config.data_len,

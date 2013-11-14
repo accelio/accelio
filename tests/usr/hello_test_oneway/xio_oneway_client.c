@@ -575,7 +575,7 @@ int main(int argc, char *argv[])
 		goto exit3;
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL);
+	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
 	if (conn == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "connection creation failed. reason %d - (%s)\n",

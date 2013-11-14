@@ -43,6 +43,53 @@
 /*---------------------------------------------------------------------------*/
 /* xio_uri_to_ss							     */
 /*---------------------------------------------------------------------------*/
+int xio_host_to_ss(const char *host, struct sockaddr_storage *ss)
+{
+	int		s = 0;
+	struct addrinfo hints;
+	struct addrinfo *result;
+	socklen_t	ss_len;
+
+	/* Obtain address(es) matching host/port */
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family		= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
+	hints.ai_socktype	= SOCK_STREAM;	/* STREAM socket */
+
+	if (host == NULL || host[0] == 0) {
+		s = getaddrinfo(NULL, NULL, &hints, &result);
+	} else {
+		s = getaddrinfo(host, NULL, &hints, &result);
+	}
+	if (s != 0) {
+		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
+		return -1;
+	}
+	if (result == NULL) {
+		ERROR_LOG("unresolved address\n");
+		return -1;
+	}
+	if (result->ai_next) {
+		ERROR_LOG("more then one address is matched\n");
+		return -1;
+	}
+	switch (result->ai_family) {
+	case AF_INET:
+		ss_len = sizeof(struct sockaddr_in);
+		memcpy(ss, result->ai_addr, ss_len);
+		break;
+	case AF_INET6:
+		ss_len = sizeof(struct sockaddr_in6);
+		memcpy(ss, result->ai_addr, ss_len);
+		break;
+	}
+	freeaddrinfo(result);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_uri_to_ss							     */
+/*---------------------------------------------------------------------------*/
 int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 {
 	char		*start;

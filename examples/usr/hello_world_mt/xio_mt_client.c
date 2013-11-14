@@ -85,7 +85,7 @@ static void *hw_worker_thread(void *data)
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, tdata);
+				  tdata->cid, NULL, tdata);
 
 	/* create "hello world" message */
 	memset(&tdata->req, 0, sizeof(tdata->req));

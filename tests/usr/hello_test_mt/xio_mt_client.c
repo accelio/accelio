@@ -259,7 +259,7 @@ static void *worker_thread(void *data)
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, tdata);
+				  tdata->cid, NULL, tdata);
 
 	for (i = 0;  i < 150; i++) {
 		/* create transaction */

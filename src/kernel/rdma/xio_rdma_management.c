@@ -1568,7 +1568,7 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 /* xio_rdma_connect							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_connect(struct xio_transport_base *transport,
-			    const char *portal_uri)
+			    const char *portal_uri, const char *out_if)
 {
 	struct xio_rdma_transport	*rdma_hndl =
 		(struct xio_rdma_transport *)transport;
@@ -1638,7 +1638,7 @@ static __be16 priv_get_src_port(struct rdma_cm_id *cm_id)
 /* xio_rdma_listen							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_listen(struct xio_transport_base *transport,
-		const char *portal_uri, uint16_t *src_port)
+		const char *portal_uri, uint16_t *src_port, int backlog)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;

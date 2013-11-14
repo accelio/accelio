@@ -1396,7 +1396,8 @@ struct xio_conn *xio_conn_open(
 /* xio_conn_connect		                                             */
 /*---------------------------------------------------------------------------*/
 int xio_conn_connect(struct xio_conn *conn,
-		const char *portal_uri)
+		     const char *portal_uri,
+		     const char *out_if)
 {
 	int retval;
 
@@ -1407,7 +1408,8 @@ int xio_conn_connect(struct xio_conn *conn,
 	}
 	if (atomic_read(&conn->refcnt) == 1) {
 		retval = conn->transport->connect(conn->transport_hndl,
-						  portal_uri);
+						  portal_uri,
+						  out_if);
 		if (retval != 0) {
 			ERROR_LOG("transport connect failed\n");
 			return -1;
@@ -1421,7 +1423,7 @@ int xio_conn_connect(struct xio_conn *conn,
 /* xio_conn_listen			                                     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
-		    uint16_t *src_port)
+		    uint16_t *src_port, int backlog)
 {
 	int retval;
 
@@ -1434,7 +1436,8 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 		/* do not hold the listener connection in storage */
 		xio_conns_store_remove(conn->cid);
 		retval = conn->transport->listen(conn->transport_hndl,
-						 portal_uri, src_port);
+						 portal_uri, src_port,
+						 backlog);
 		if (retval != 0) {
 			ERROR_LOG("transport listen failed. uri:[%s]\n",
 				  portal_uri);

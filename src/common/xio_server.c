@@ -264,6 +264,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 {
 	struct xio_server	*server;
 	int			retval;
+	int			backlog = 0;
 
 	if ((ctx == NULL) || (ops == NULL) || (uri == NULL)) {
 		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
@@ -300,7 +301,8 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	xio_conn_set_server_observer(server->listener,
 				     &server->observer);
 
-	retval = xio_conn_listen(server->listener, uri, src_port);
+	retval = xio_conn_listen(server->listener,
+				 uri, src_port, backlog);
 	if (retval != 0) {
 		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;

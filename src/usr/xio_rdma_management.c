@@ -1829,7 +1829,7 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 /* xio_rdma_connect		                                             */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_connect(struct xio_transport_base *transport,
-		const char *portal_uri)
+			    const char *portal_uri, const char *out_if_addr)
 {
 	struct xio_rdma_transport	*rdma_hndl =
 		(struct xio_rdma_transport *)transport;
@@ -1859,6 +1859,23 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 		ERROR_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
 		goto exit2;
 	}
+	if (out_if_addr) {
+		union xio_sockaddr if_sa;
+
+		if (xio_host_to_ss(out_if_addr, &if_sa.sa_stor) == -1) {
+			xio_set_error(XIO_E_ADDR_ERROR);
+			ERROR_LOG("outgoing interface [%s] resolving failed\n",
+				  out_if_addr);
+			goto exit2;
+		}
+		retval = rdma_bind_addr(rdma_hndl->cm_id, &if_sa.sa);
+		if (retval) {
+			xio_set_error(errno);
+			ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n", errno);
+			goto exit2;
+		}
+	}
+
 	retval = rdma_resolve_addr(rdma_hndl->cm_id, NULL, &sa.sa,
 			ADDR_RESOLVE_TIMEOUT);
 	if (retval) {
@@ -1882,7 +1899,7 @@ exit1:
 /* xio_rdma_listen							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_listen(struct xio_transport_base *transport,
-		const char *portal_uri, uint16_t *src_port)
+		const char *portal_uri, uint16_t *src_port, int backlog)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;
@@ -1916,7 +1933,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	}
 
 	/* 0 == maximum backlog */
-	retval  = rdma_listen(rdma_hndl->cm_id, 0);
+	retval  = rdma_listen(rdma_hndl->cm_id, backlog);
 	if (retval) {
 		xio_set_error(errno);
 		ERROR_LOG("rdma_listen failed. (errno=%d %m)\n", errno);

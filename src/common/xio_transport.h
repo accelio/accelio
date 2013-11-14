@@ -176,10 +176,12 @@ struct xio_transport {
 				struct xio_observer *observer);
 
 	int	(*connect)(struct xio_transport_base *trans_hndl,
-			   const char *portal_uri);
+			   const char *portal_uri,
+			   const char *out_if);
 
 	int	(*listen)(struct xio_transport_base *trans_hndl,
-			  const char *portal_uri, uint16_t *src_port);
+			  const char *portal_uri, uint16_t *src_port,
+			  int backlog);
 
 	int	(*accept)(struct xio_transport_base *trans_hndl);
 

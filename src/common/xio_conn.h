@@ -143,13 +143,14 @@ struct xio_conn *xio_conn_open(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 /* xio_conn_connect							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_connect(struct xio_conn *conn, const char *portal_uri);
+int xio_conn_connect(struct xio_conn *conn, const char *portal_uri,
+		     const char *out_if);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_listen							     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
-		    uint16_t *src_port);
+		    uint16_t *src_port, int backlog);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_accept							     */

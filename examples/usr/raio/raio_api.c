@@ -399,6 +399,7 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	/* connect the session  */
 	session_data->conn = xio_connect(session_data->session,
 					 session_data->ctx, 0,
+					 NULL,
 					 session_data);
 	if (session_data->conn == NULL)
 		goto cleanup1;

@@ -206,6 +206,8 @@ char		*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
+int		xio_host_to_ss(const char *host, struct sockaddr_storage *ss);
+
 size_t		xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer);
 
 size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,

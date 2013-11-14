@@ -714,7 +714,7 @@ static int xio_session_accept_connection(struct xio_session *session)
 				break;
 			}
 			INFO_LOG("reconnecting to %s\n", portal);
-			retval = xio_conn_connect(conn, portal);
+			retval = xio_conn_connect(conn, portal, NULL);
 			if (retval != 0) {
 				ERROR_LOG("connection connect failed\n");
 				break;
@@ -754,7 +754,7 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	xio_connection_set_conn(session->redir_conn, conn);
 
 	TRACE_LOG("connection redirected to %s\n", service);
-	retval = xio_conn_connect(conn, service);
+	retval = xio_conn_connect(conn, service, NULL);
 	if (retval != 0) {
 		ERROR_LOG("connection connect failed\n");
 		goto cleanup;
@@ -2374,6 +2374,7 @@ struct xio_session *xio_session_open(
 struct xio_connection *xio_connect(struct xio_session  *session,
 				       struct xio_context  *ctx,
 				       uint32_t conn_idx,
+				       const char *out_if,
 				       void *conn_user_context)
 {
 	struct xio_connection  *connection = NULL, *tmp_conn;
@@ -2414,7 +2415,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		}
 		/* get transport class routines */
 		session->trans_cls = xio_conn_get_trans_cls(conn);
-		retval = xio_conn_connect(conn, portal);
+		retval = xio_conn_connect(conn, portal, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
@@ -2464,7 +2465,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			goto cleanup;
 		}
 		DEBUG_LOG("reconnecting to %s, ctx:%p\n", portal, ctx);
-		retval = xio_conn_connect(conn, portal);
+		retval = xio_conn_connect(conn, portal, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
