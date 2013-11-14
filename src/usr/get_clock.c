@@ -42,6 +42,8 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <pthread.h>
+
 #include "get_clock.h"
 
 #ifndef GETCLOCK_DEBUG
@@ -179,10 +181,59 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 	return mhz;
 }
 
+double get_core_freq(void)
+{
+	int cpu;
+
+	FILE *f;
+	char buf[256];
+	unsigned long khz = 0.0;
+	int rc;
+
+	cpu = sched_getcpu();
+	if (cpu < 0) {
+		perror("sched_getcpu");
+		return 0.0;
+	}
+
+	sprintf(buf,
+		"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq",
+		cpu);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		perror("cpufreq not supported");
+		return 0.0;
+	}
+
+	while (fgets(buf, sizeof(buf), f)) {
+		rc = sscanf(buf, "%lu", &khz);
+		if (rc != 1) {
+			fclose(f);
+			perror("Can't read cpufreq");
+			return 0;
+		}
+		fclose(f);
+		/* value in KHz */
+		return khz / 1000.0;
+	}
+
+	/* NOT FOUND */
+	fprintf(stderr, "Empty cpufreq\n");
+	fclose(f);
+
+	return 0.0;
+}
 
 double get_cpu_mhz(int no_cpu_freq_fail)
 {
-	double sample, proc, delta;
+	double freq, sample, proc, delta;
+
+	freq = get_core_freq();
+	/* even with core freq cycles are at maximum */
+	if (freq)
+		return freq;
+
 	sample = sample_get_cpu_mhz();
 	proc = proc_get_cpu_mhz(no_cpu_freq_fail);
 
