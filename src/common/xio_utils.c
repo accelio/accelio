@@ -234,19 +234,6 @@ inline size_t xio_iovex_length(const struct xio_iovec_ex *iov,
 	return nbytes;
 }
 
-/*---------------------------------------------------------------------------*/
-/* msg_reset								     */
-/*---------------------------------------------------------------------------*/
-void msg_reset(struct xio_msg *msg)
-{
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-	msg->out.header.iov_base = NULL;
-	msg->out.header.iov_len = 0;
-	msg->out.data_iovlen = 0;
-}
-
 /*
 void *xio_memcpy(void* dest, const void* src, size_t count)
 {

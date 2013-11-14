@@ -223,8 +223,6 @@ size_t		xio_iov_length(const struct xio_iovec *iov,
 size_t		xio_iovex_length(const struct xio_iovec_ex *iov,
 				 unsigned long nr_segs);
 
-void		msg_reset(struct xio_msg *msg);
-
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 #endif /*XIO_COMMON_H */
