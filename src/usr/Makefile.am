@@ -88,7 +88,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt 
+libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt -lpthread 
 
 #libxio_la_LIBADD = $(AM_LDFLAGS)
 
