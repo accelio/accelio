@@ -58,8 +58,9 @@
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
+#define MAX_OUTSTANDING_REQS	50
 
-#define MAX_POOL_SIZE		2048
+#define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
@@ -78,7 +79,6 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static void			*loop;
 static struct msg_pool		*pool;
-static uint64_t			print_counter;
 static struct xio_connection	*conn;
 
 static struct xio_test_config  test_config = {
@@ -149,24 +149,19 @@ void get_time(char *time, int len)
 }
 
 /*---------------------------------------------------------------------------*/
-/* process_message							     */
+/* process_rx_message							     */
 /*---------------------------------------------------------------------------*/
-static void process_message(struct xio_msg *msg)
+static void process_rx_message(struct xio_msg *msg)
 {
 	static uint64_t cnt = 0;
-	static int first_time = 1;
+	static int	first_time = 1;
 	static uint64_t start_time;
-	static size_t	txlen, rxlen;
+	static size_t	rxlen;
+	static uint64_t	print_counter = PRINT_COUNTER;
 
 	if (first_time) {
 		size_t	data_len = 0;
 		int	i;
-
-
-		for (i = 0; i < msg->out.data_iovlen; i++)
-			data_len += msg->out.data_iov[i].iov_len;
-
-		txlen = msg->out.header.iov_len + data_len;
 
 		data_len = 0;
 		for (i = 0; i < msg->in.data_iovlen; i++)
@@ -177,8 +172,56 @@ static void process_message(struct xio_msg *msg)
 		start_time = get_cpu_usecs();
 		first_time = 0;
 
-		data_len = txlen > rxlen ? txlen : rxlen;
-		data_len = data_len/1024;
+		data_len = rxlen/1024;
+		print_counter = data_len ?
+			PRINT_COUNTER/data_len : PRINT_COUNTER;
+	}
+	if (++cnt == print_counter) {
+		char		timeb[40];
+
+		uint64_t delta = get_cpu_usecs() - start_time;
+		uint64_t pps = (cnt*USECS_IN_SEC)/delta;
+
+		double rxbw = (1.0*pps*rxlen/ONE_MB);
+
+		printf("transactions per second: %"PRIu64", bandwidth: " \
+		       "RX: %.2f MB/s, RX: %zd B\n",
+		       pps, rxbw, rxlen);
+		get_time(timeb, 40);
+		printf("**** [%s] - message [%"PRIu64"] %s - %s\n",
+		       timeb, (msg->sn + 1),
+		       (char *)msg->in.header.iov_base,
+		       (char *)msg->in.data_iov[0].iov_base);
+		cnt = 0;
+		start_time = get_cpu_usecs();
+	}
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* process_message							     */
+/*---------------------------------------------------------------------------*/
+static void process_tx_message(struct xio_msg *msg)
+{
+	static uint64_t cnt = 0;
+	static int	first_time = 1;
+	static uint64_t start_time;
+	static size_t	txlen;
+	static uint64_t	print_counter = PRINT_COUNTER;
+
+	if (first_time) {
+		size_t	data_len = 0;
+		int	i;
+
+		for (i = 0; i < msg->out.data_iovlen; i++)
+			data_len += msg->out.data_iov[i].iov_len;
+
+		txlen = msg->out.header.iov_len + data_len;
+
+		start_time = get_cpu_usecs();
+		first_time = 0;
+
+		data_len = txlen/1024;
 		print_counter = data_len ?
 			PRINT_COUNTER/data_len : PRINT_COUNTER;
 	}
@@ -189,16 +232,15 @@ static void process_message(struct xio_msg *msg)
 		uint64_t pps = (cnt*USECS_IN_SEC)/delta;
 
 		double txbw = (1.0*pps*txlen/ONE_MB);
-		double rxbw = (1.0*pps*rxlen/ONE_MB);
 
 		printf("transactions per second: %"PRIu64", bandwidth: " \
-		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, RX: %zd B\n",
-		       pps, txbw, rxbw, txlen, rxlen);
+		       "TX %.2f MB/s,length: TX: %zd B\n",
+		       pps, txbw, txlen);
 		get_time(timeb, 40);
 		printf("**** [%s] - message [%"PRIu64"] %s - %s\n",
 		       timeb, (msg->sn + 1),
-		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)msg->out.header.iov_base,
+		       (char *)msg->out.data_iov[0].iov_base);
 		cnt = 0;
 		start_time = get_cpu_usecs();
 	}
@@ -227,10 +269,6 @@ static int on_session_event(struct xio_session *session,
 		break;
 	};
 
-	if (pool) {
-		msg_pool_free(pool);
-		pool = NULL;
-	}
 
 	return 0;
 }
@@ -254,47 +292,33 @@ static int on_message_delivered(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	/* can be safely freed */
+	struct xio_msg *new_msg;
+
+	process_tx_message(msg);
+
+	/* can be safely returned to pool */
 	msg_pool_put(pool, msg);
 
 
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* on_message								     */
-/*---------------------------------------------------------------------------*/
-static int on_message(struct xio_session *session,
-		      struct xio_msg *msg,
-		      int more_in_batch,
-		      void *cb_user_context)
-{
-	struct xio_msg *new_msg;
-
-	process_message(msg);
-
-	if (msg->status)
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-
-	/* message is no longer needed */
-	xio_release_msg(msg);
-
+	/* peek message from the pool */
 	new_msg = msg_pool_get(pool);
 	if (new_msg == NULL) {
 		printf("pool is empty\n");
 		return 0;
 	}
 
+	/* assign buffers to the message */
+	msg_write(new_msg,
+		  NULL, test_config.hdr_len,
+		  NULL, test_config.data_len);
 
-	/* recycle the message and fill new request */
-	msg_write(new_msg, "hello world request header",
-		  test_config.hdr_len,
-		  "hello world request data",
-		  test_config.data_len);
+	/*
+	 * ask for receipt since we need to put the message back
+	 * to pool
+	 */
+	 new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 
-	/* try to send it */
-	new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+	/* send it */
 	if (xio_send_msg(conn, new_msg) == -1) {
 		if (xio_errno() != EAGAIN)
 			printf("**** [%p] Error - xio_send_msg " \
@@ -304,6 +328,29 @@ static int on_message(struct xio_session *session,
 		msg_pool_put(pool, new_msg);
 		return 0;
 	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* on_server_message							     */
+/*---------------------------------------------------------------------------*/
+static int on_server_message(struct xio_session *session,
+		      struct xio_msg *msg,
+		      int more_in_batch,
+		      void *cb_user_context)
+{
+
+	/* server send message */
+
+	/* process the incoming message */
+	process_rx_message(msg);
+
+	if (msg->status)
+		printf("**** message completed with error. [%s]\n",
+		       xio_strerror(msg->status));
+
+	/* message is no longer needed */
+	xio_release_msg(msg);
 
 	return 0;
 }
@@ -328,7 +375,7 @@ int on_msg_error(struct xio_session *session,
 struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  on_session_established,
-	.on_msg				=  on_message,
+	.on_msg				=  on_server_message,
 	.on_msg_send_complete		=  NULL,
 	.on_msg_delivered		=  on_message_delivered,
 	.on_msg_error			=  on_msg_error
@@ -478,16 +525,27 @@ int main(int argc, char *argv[])
 		NULL,
 		0
 	};
-
+	/* parse the command line */
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
-	print_counter = PRINT_COUNTER;
-
+	/* print the input */
 	print_test_config(&test_config);
 
+	/* bind proccess to cpu */
 	set_cpu_affinity(test_config.cpu);
 
+	/* prepare buffers for this test */
+	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
+		return -1;
+
+	pool = msg_pool_alloc(MAX_POOL_SIZE,
+			      test_config.hdr_len, test_config.data_len,
+			      0, 0);
+	if (pool == NULL)
+		return -1;
+
+	/* initiate event loop dispatcher */
 	loop = xio_ev_loop_init();
 	if (loop == NULL) {
 		error = xio_errno();
@@ -496,6 +554,7 @@ int main(int argc, char *argv[])
 		goto exit1;
 	}
 
+	/* open xio context and assign a loop */
 	ctx = xio_ctx_open(NULL, loop, 0);
 	if (ctx == NULL) {
 		error = xio_errno();
@@ -504,9 +563,7 @@ int main(int argc, char *argv[])
 		goto exit2;
 	}
 
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
-
+	/* create a url and open session */
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
 	session = xio_session_open(XIO_SESSION_REQ,
@@ -519,26 +576,30 @@ int main(int argc, char *argv[])
 	}
 	/* connect the session  */
 	conn = xio_connect(session, ctx, test_config.conn_idx, NULL);
-
-	pool = msg_pool_alloc(MAX_POOL_SIZE,
-			      test_config.hdr_len, test_config.data_len,
-			      0, 0);
+	if (conn == NULL) {
+		error = xio_errno();
+		fprintf(stderr, "connection creation failed. reason %d - (%s)\n",
+			error, xio_strerror(error));
+		goto exit4;
+	}
 
 	printf("**** starting ...\n");
-	while (1) {
-		/* create transaction */
+	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
+		/* pick message from the pool */
 		msg = msg_pool_get(pool);
 		if (msg == NULL)
 			break;
 
-		/* recycle the message and fill new request */
-		msg_write(msg, "hello world request header",
-			  test_config.hdr_len,
-			  "hello world request data",
-			   test_config.data_len);
+		/* assign buffers to the message */
+		msg_write(msg,
+			  NULL, test_config.hdr_len,
+			  NULL, test_config.data_len);
 
-		/* try to send it */
+		/* ask for read receipt since the message needed to be
+		 * recycled to the pool */
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+
+		/* send the message */
 		if (xio_send_msg(conn, msg) == -1) {
 			printf("**** sent %d messages\n", i);
 			if (xio_errno() != EAGAIN)
@@ -549,9 +610,6 @@ int main(int argc, char *argv[])
 			msg_pool_put(pool, msg);
 			return 0;
 		}
-		i++;
-		if (i == 256)
-			break;
 	}
 
 	/* the default xio supplied main loop */
@@ -566,7 +624,6 @@ int main(int argc, char *argv[])
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
-
 exit4:
 	retval = xio_session_close(session);
 	if (retval != 0) {
@@ -580,6 +637,9 @@ exit3:
 exit2:
 	xio_ev_loop_destroy(&loop);
 exit1:
+
+	if (pool)
+		msg_pool_free(pool);
 
 	fprintf(stdout, "exit complete\n");
 
