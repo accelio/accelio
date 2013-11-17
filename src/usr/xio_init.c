@@ -67,8 +67,16 @@ __attribute__((constructor)) void xio_init(void)
 	}
 }
 
-/*
-__attribute__((destructor)) void xio_constructor(void)
+__attribute__((destructor)) void xio_shutdown(void)
 {
+	static atomic_t initialized;
+	static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+
+	if (! atomic_read(&initialized)) {
+		pthread_mutex_lock(&mtx);
+		if (!atomic_read(&initialized)) {
+		}
+		pthread_mutex_unlock(&mtx);
+	}
 }
-*/
+

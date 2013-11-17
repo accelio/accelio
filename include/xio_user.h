@@ -663,6 +663,15 @@ const char *xio_session_event_str(enum xio_session_event event);
  */
 void xio_init(void);
 
+/**
+ * shutdown package
+ *
+ * Idempotent routine to shutdown the package.
+ *
+ */
+void xio_shutdown(void);
+
+
 /*---------------------------------------------------------------------------*/
 /* XIO conncurrency (the context object) initialization and termination	     */
 /*---------------------------------------------------------------------------*/
