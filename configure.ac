@@ -30,10 +30,14 @@ AC_LANG([C])
 # Checks for header files.
 AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
 		 [mypj_found_verbs_headers=yes; break;])
-AC_CHECK_HEADERS([numa.h])
+
+AC_CHECK_HEADERS([numa.h],
+		 [mypj_found_numa_headers=yes; break;])
 
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the infiniband header files])])
+AS_IF([test "x$mypj_found_numa_headers" != "xyes"],
+      [AC_MSG_ERROR([Unable to find the numactl-devel header files])])
 
 
 # Checks for typedefs, structures, and compiler characteristics.
