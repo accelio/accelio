@@ -1218,64 +1218,64 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	switch (event) {
 	case XIO_TRANSPORT_NEW_MESSAGE:
 /*
-		INFO_LOG("conn: [notification] - new message. " \
+		TRACE_LOG("conn: [notification] - new message. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 */
 		xio_on_new_message(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_SEND_COMPLETION:
 /*
-		INFO_LOG("conn: [notification] - send completion. " \
+		TRACE_LOG("conn: [notification] - send completion. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 */
 		xio_on_send_completion(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_ASSIGN_IN_BUF:
-		INFO_LOG("conn: [notification] - assign in buffer. " \
+		DEBUG_LOG("conn: [notification] - assign in buffer. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_assign_in_buf(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_CANCEL_REQUEST:
-		INFO_LOG("conn: [notification] - cancel request. " \
+		DEBUG_LOG("conn: [notification] - cancel request. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_cancel_request(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_CANCEL_RESPONSE:
-		INFO_LOG("conn: [notification] - cancel respnose. " \
+		DEBUG_LOG("conn: [notification] - cancel respnose. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_cancel_response(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_NEW_CONNECTION:
-		INFO_LOG("conn: [notification] - new transport. " \
+		DEBUG_LOG("conn: [notification] - new transport. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_new_connection(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_ESTABLISHED:
-		INFO_LOG("conn: [notification] - transport established. " \
+		DEBUG_LOG("conn: [notification] - transport established. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_connection_established(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_DISCONNECTED:
-		INFO_LOG("conn: [notification] - transport disconnected. "  \
+		DEBUG_LOG("conn: [notification] - transport disconnected. "  \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_observable_notify_all_observers(&conn->observable,
 						    XIO_CONNECTION_DISCONNECTED,
 						    &event_data);
 		break;
 	case XIO_TRANSPORT_CLOSED:
-		INFO_LOG("conn: [notification] - transport closed. "  \
+		DEBUG_LOG("conn: [notification] - transport closed. "  \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_connection_closed(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_REFUSED:
-		INFO_LOG("conn: [notification] - transport refused. " \
+		DEBUG_LOG("conn: [notification] - transport refused. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_observable_notify_all_observers(&conn->observable,
 						    XIO_CONNECTION_REFUSED,
 						    &event_data);
 		break;
 	case XIO_TRANSPORT_ERROR:
-		INFO_LOG("conn: [notification] - transport error. " \
+		DEBUG_LOG("conn: [notification] - transport error. " \
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_transport_error(conn, ev_data);
 		break;
@@ -1439,7 +1439,7 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 						 portal_uri, src_port,
 						 backlog);
 		if (retval != 0) {
-			ERROR_LOG("transport listen failed. uri:[%s]\n",
+			DEBUG_LOG("transport listen failed. uri:[%s]\n",
 				  portal_uri);
 			return -1;
 		}

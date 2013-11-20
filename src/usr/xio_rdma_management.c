@@ -1910,7 +1910,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	/* resolve the portal_uri */
 	if (xio_uri_to_ss(portal_uri, &sa.sa_stor) == -1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
-		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
+		DEBUG_LOG("address [%s] resolving failed\n", portal_uri);
 		return -1;
 	}
 	rdma_hndl->base.is_client = 0;
@@ -1921,14 +1921,14 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 				rdma_hndl, RDMA_PS_TCP);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
 		goto exit2;
 	}
 
 	retval = rdma_bind_addr(rdma_hndl->cm_id, &sa.sa);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_bind_addr failed. (errno=%d %m)\n", errno);
 		goto exit2;
 	}
 
@@ -1936,7 +1936,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	retval  = rdma_listen(rdma_hndl->cm_id, backlog);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_listen failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_listen failed. (errno=%d %m)\n", errno);
 		goto exit2;
 	}
 
@@ -1944,7 +1944,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	if (src_port)
 		*src_port = sport;
 
-	INFO_LOG("listen on [%s] src_port:%d\n", portal_uri, sport);
+	DEBUG_LOG("listen on [%s] src_port:%d\n", portal_uri, sport);
 
 	return 0;
 
