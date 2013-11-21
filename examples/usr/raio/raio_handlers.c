@@ -62,6 +62,7 @@
 #define MAXBLOCKSIZE	(128*1024)
 #define BS_IODEPTH	128
 #define NULL_BS_DEV_SIZE (1ULL << 32)
+#define EXTRA_MSGS	100
 
 
 /*---------------------------------------------------------------------------*/
@@ -391,14 +392,14 @@ static int raio_handle_setup(void *prv_session_data,
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data));
 
-	pd->io_us_free = calloc(pd->iodepth, sizeof(struct raio_io_u));
-	pd->io_u_free_nr = pd->iodepth;
-	pd->rsp_pool = msg_pool_create(512, MAXBLOCKSIZE, pd->iodepth);
+	pd->io_u_free_nr = pd->iodepth + EXTRA_MSGS;
+	pd->io_us_free = calloc(pd->io_u_free_nr, sizeof(struct raio_io_u));
+	pd->rsp_pool = msg_pool_create(512, MAXBLOCKSIZE, pd->io_u_free_nr);
 
 	TAILQ_INIT(&pd->io_u_free_list);
 
 	/* register each io_u in the free list */
-	for (j = 0; j < pd->iodepth; j++) {
+	for (j = 0; j < pd->io_u_free_nr; j++) {
 		pd->io_us_free[j].rsp = msg_pool_get(pd->rsp_pool);
 		TAILQ_INSERT_TAIL(&pd->io_u_free_list,
 				  &pd->io_us_free[j],
@@ -462,14 +463,14 @@ static int raio_handle_destroy(void *prv_session_data,
 
 reject:
 	if (retval == -1) {
-		struct raio_answer ans = { RAIO_CMD_IO_SETUP, 0, -1, errno };
+		struct raio_answer ans = { RAIO_CMD_IO_DESTROY, 0, -1, errno };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
 			 pd->rsp_hdr))));
 	} else {
-		struct raio_answer ans = { RAIO_CMD_IO_SETUP, 0, 0, 0 };
+		struct raio_answer ans = { RAIO_CMD_IO_DESTROY, 0, 0, 0 };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
@@ -569,15 +570,15 @@ static int raio_handle_submit(void *prv_session_data,
 						 sizeof(uint32_t);
 
 	io_u = TAILQ_FIRST(&pd->io_u_free_list);
-	TAILQ_REMOVE(&pd->io_u_free_list, io_u, io_u_list);
-	msg_reset(io_u->rsp);
-	pd->io_u_free_nr--;
-
-	/* disconnect */
 	if (!io_u) {
+		printf("io_u_free_list empty\n");
 		errno = ENOSR;
 		return -1;
 	}
+
+	TAILQ_REMOVE(&pd->io_u_free_list, io_u, io_u_list);
+	msg_reset(io_u->rsp);
+	pd->io_u_free_nr--;
 
 	if (msg_sz != cmd->data_len) {
 		retval = EINVAL;

@@ -2,26 +2,26 @@
 [global]
 group_reporting
 thread
-ioengine=./libraio_fio.so
+ioengine=./.libs/libraio_fio.so
 rw=read
 bs=1K
-loops=2
+loops=1
 direct=0
 iodepth=1
 filename=/192.168.20.126/1234/dev/null
 ;filename=/192.168.20.126/1234/dev/ram2
 
 [file1]
-cpus_allowed=2
+cpus_allowed=1
 
 ;[file2]
-;cpus_allowed=3
+;cpus_allowed=2
 
 ;[file3]
-;cpus_allowed=4
+;cpus_allowed=3
 
 ;[file4]
-;cpus_allowed=5
+;cpus_allowed=4
 
 ;[file5]
-;cpus_allowed=6
+;cpus_allowed=5

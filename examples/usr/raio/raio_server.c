@@ -35,6 +35,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,12 +49,12 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
-#define MAX_THREADS		4
+#define MAX_THREADS		6
 
-#ifndef LIST_FOREACH_SAFE
-#define	LIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = LIST_FIRST((head));				\
-			(var) && ((tvar) = LIST_NEXT((var), field), 1);	\
+#ifndef SLIST_FOREACH_SAFE
+#define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
+	for ((var) = SLIST_FIRST((head));				\
+			(var) && ((tvar) = SLIST_NEXT((var), field), 1);	\
 			(var) = (tvar))
 #endif
 
@@ -86,7 +87,7 @@ struct raio_session_data {
 	struct	xio_session		*session;
 	void				*dd_data;
 	struct raio_portal_data		portal_data[MAX_THREADS];
-	LIST_ENTRY(raio_session_data)	srv_ses_list;
+	SLIST_ENTRY(raio_session_data)	srv_ses_list;
 };
 
 /* server private data */
@@ -94,7 +95,7 @@ struct raio_server_data {
 	int				last_used;
 	int				last_reaped;
 
-	LIST_HEAD(, raio_session_data)	ses_list;
+	SLIST_HEAD(, raio_session_data)	ses_list;
 
 	pthread_t			thread_id[MAX_THREADS];
 	struct raio_thread_data		tdata[MAX_THREADS];
@@ -147,7 +148,7 @@ static int on_response_comp(struct xio_session *session,
 	struct raio_session_data	*ses_data, *tmp_ses_data;
 	int				i = 0;
 
-	LIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
+	SLIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
 			  srv_ses_list, tmp_ses_data) {
 		if (ses_data->session == session) {
 			for (i = 0; i < MAX_THREADS; i++) {
@@ -177,7 +178,7 @@ static int on_request(struct xio_session *session,
 	struct raio_session_data	*ses_data, *tmp_ses_data;
 	int				i;
 
-	LIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
+	SLIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
 			  srv_ses_list, tmp_ses_data) {
 		if (ses_data->session == session) {
 			for (i = 0; i < MAX_THREADS; i++) {
@@ -236,8 +237,10 @@ static void *portal_server_cb(void *data)
 	/* bind a listener server to a portal/url */
 	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
 			  NULL, 0, tdata);
-	if (server == NULL)
+	if (server == NULL) {
+		fprintf(stderr, "failed to bind server\n");
 		goto cleanup;
+	}
 
 	/* the default xio supplied main loop */
 	xio_ev_loop_run(tdata->loop);
@@ -253,7 +256,7 @@ cleanup:
 	xio_ctx_close(ctx);
 
 	/* destroy the default loop */
-	xio_ev_loop_destroy(tdata->loop);
+	xio_ev_loop_destroy(&tdata->loop);
 
 	return NULL;
 }
@@ -269,31 +272,33 @@ static int on_session_event(struct xio_session *session,
 	struct raio_server_data	 *server_data = cb_user_context;
 	int			 i;
 
-
-	printf("session event: reason: %s\n",
+	printf("session event: session:%p, %s. reason: %s\n",
+	       session,
+	       xio_session_event_str(event_data->event),
 	       xio_strerror(event_data->reason));
 
-
-	LIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
-			  srv_ses_list, tmp_ses_data) {
-		if (ses_data->session == session) {
-			for (i = 0; i < MAX_THREADS; i++) {
-				if (ses_data->portal_data[i].tdata) {
-					raio_handler_free_portal_data(
-					    ses_data->portal_data[i].dd_data);
-					ses_data->portal_data[i].tdata = NULL;
-					server_data->last_reaped = i;
-					break;
+	if (event_data->event == XIO_SESSION_TEARDOWN_EVENT) {
+		SLIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
+				srv_ses_list, tmp_ses_data) {
+			if (ses_data->session == session) {
+				for (i = 0; i < MAX_THREADS; i++) {
+					if (ses_data->portal_data[i].tdata) {
+						raio_handler_free_portal_data(
+								ses_data->portal_data[i].dd_data);
+						ses_data->portal_data[i].tdata = NULL;
+						server_data->last_reaped = i;
+						break;
+					}
 				}
+				raio_handler_free_session_data(ses_data->dd_data);
+				SLIST_REMOVE(&server_data->ses_list,
+					     ses_data, raio_session_data, srv_ses_list);
+				free(ses_data);
+				break;
 			}
-			raio_handler_free_session_data(ses_data->dd_data);
-			LIST_REMOVE(ses_data, srv_ses_list);
-			free(ses_data);
-			break;
 		}
+		xio_session_close(session);
 	}
-
-	xio_session_close(session);
 
 	return 0;
 }
@@ -313,6 +318,8 @@ static int on_new_session(struct xio_session *session,
 	portals = portals_get(server_data, req->uri, req->user_context);
 
 
+	printf("new_session:%p\n", session);
+
 	/* alloc and  and initialize */
 	ses_data = calloc(1, sizeof(*ses_data));
 	ses_data->session = session;
@@ -325,8 +332,7 @@ static int on_new_session(struct xio_session *session,
 				i,
 				ses_data->portal_data[i].tdata->loop);
 	}
-
-	LIST_INSERT_HEAD(&server_data->ses_list, ses_data, srv_ses_list);
+	SLIST_INSERT_HEAD(&server_data->ses_list, ses_data, srv_ses_list);
 
 	/* automatic accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);
@@ -359,11 +365,16 @@ int main(int argc, char *argv[])
 	void			*loop;
 	int			i;
 	uint16_t		port = atoi(argv[2]);
+	int			curr_cpu;
+	int			max_cpus;
 
+
+	curr_cpu = sched_getcpu();
+	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 	memset(&server_data, 0, sizeof(server_data));
 	server_data.last_reaped = -1;
-	LIST_INIT(&server_data.ses_list);
+	SLIST_INIT(&server_data.ses_list);
 
 	/* open default event loop */
 	loop	= xio_ev_loop_init();
@@ -375,13 +386,16 @@ int main(int argc, char *argv[])
 	sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
-	if (server == NULL)
+	if (server == NULL) {
+		fprintf(stderr, "failed to bind server\n");
 		goto cleanup;
+	}
 
 	/* spawn portals */
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
-		server_data.tdata[i].affinity = i+1;
+		server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
+		printf("[%d] affinity:%d/%d\n",i, server_data.tdata[i].affinity, max_cpus);
 		port += 1;
 		sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
 			argv[1], port);

@@ -2,7 +2,7 @@
 
 export LD_LIBRARY_PATH=../../../src/usr/:../../../examples/usr/raio
 
-server_ip=192.168.20.126
+server_ip=192.168.21.126
 port=1234
 file=/dev/null
 #file=/dev/ram0

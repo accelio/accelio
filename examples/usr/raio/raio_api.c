@@ -35,6 +35,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -43,6 +44,7 @@
 #include <sys/queue.h>
 #include <fcntl.h>
 #include <time.h>
+#include <pthread.h>
 #include <sys/eventfd.h>
 
 
@@ -138,6 +140,24 @@ struct raio_session_data {
 /*---------------------------------------------------------------------------*/
 static LIST_HEAD(, raio_session_data) rsd_list =
 	LIST_HEAD_INITIALIZER(rsd_list);
+static pthread_spinlock_t rsd_lock;
+
+
+/*---------------------------------------------------------------------------*/
+/* rsd_module_init							     */
+/*---------------------------------------------------------------------------*/
+__attribute__((constructor)) void raio_module_init(void)
+{
+	pthread_spin_init(&rsd_lock, PTHREAD_PROCESS_PRIVATE);
+}
+
+/*---------------------------------------------------------------------------*/
+/* rsd_module_exit							     */
+/*---------------------------------------------------------------------------*/
+__attribute__((destructor)) void raio_module_exit(void)
+{
+	pthread_spin_destroy(&rsd_lock);
+}
 
 /*---------------------------------------------------------------------------*/
 /* rsd_list_add								     */
@@ -146,9 +166,11 @@ int rsd_list_add(struct raio_session_data *rsd)
 {
 	static int key = 10;
 
+	pthread_spin_lock(&rsd_lock);
 	rsd->key = key++;
 
 	LIST_INSERT_HEAD(&rsd_list, rsd, rsd_siblings);
+	pthread_spin_unlock(&rsd_lock);
 
 	return rsd->key;
 }
@@ -158,7 +180,9 @@ int rsd_list_add(struct raio_session_data *rsd)
 /*---------------------------------------------------------------------------*/
 int rsd_list_remove(struct raio_session_data *rsd)
 {
+	pthread_spin_lock(&rsd_lock);
 	LIST_REMOVE(rsd, rsd_siblings);
+	pthread_spin_unlock(&rsd_lock);
 
 	return 0;
 }
@@ -170,10 +194,14 @@ struct raio_session_data *rsd_list_find(int key)
 {
 	struct raio_session_data *rsd;
 
+	pthread_spin_lock(&rsd_lock);
 	LIST_FOREACH(rsd, &rsd_list, rsd_siblings) {
-		if (rsd->key == key)
+		if (rsd->key == key) {
+			pthread_spin_unlock(&rsd_lock);
 			return rsd;
+		}
 	}
+	pthread_spin_unlock(&rsd_lock);
 	return NULL;
 }
 
@@ -256,11 +284,9 @@ static int on_session_event(struct xio_session *session,
 {
 	struct raio_session_data  *session_data = cb_user_context;
 
-	printf("session event: %s. reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       xio_strerror(event_data->reason));
-
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 		xio_disconnect(event_data->conn);
@@ -270,6 +296,9 @@ static int on_session_event(struct xio_session *session,
 		xio_ev_loop_stop(session_data->loop);  /* exit */
 		break;
 	default:
+		printf("libraio: unexpected session event: %s. reason: %s\n",
+		       xio_session_event_str(event_data->event),
+		       xio_strerror(event_data->reason));
 		break;
 	};
 
@@ -335,7 +364,7 @@ static int on_response(struct xio_session *session,
 		xio_ev_loop_stop(session_data->loop);
 		break;
 	default:
-		printf("unknown answer %d\n", command);
+		printf("libraio: unknown answer %d\n", command);
 		break;
 	};
 	return 0;
@@ -392,7 +421,6 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	session_data->session = xio_session_open(XIO_SESSION_REQ,
 						 &attr, url,
 						 0, 0, session_data);
-
 	if (session_data->session == NULL)
 		goto cleanup;
 
@@ -430,6 +458,7 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 
 	if (retval == -1) {
 		raio_err = errno;
+		xio_disconnect(session_data->conn);
 		goto cleanup1;
 	}
 
@@ -441,9 +470,12 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 
 cleanup1:
 	if (session_data->session) {
-		xio_session_close(session_data->session);
-		if (!session_data->disconnected)
+		if (!session_data->disconnected) {
 			xio_ev_loop_run(session_data->loop);
+			xio_session_close(session_data->session);
+		}
+		else
+		     xio_session_close(session_data->session);
 		session_data->session = NULL;
 	}
 cleanup:
@@ -454,6 +486,8 @@ cleanup:
 	xio_ev_loop_destroy(&session_data->loop);
 
 	errno = raio_err;
+
+	printf("libraio: raio_open failed. %m\n");
 
 	return -1;
 }
@@ -471,6 +505,7 @@ __RAIO_PUBLIC int raio_close(int fd)
 		errno = EINVAL;
 		return -1;
 	}
+
 
 	if (session_data->disconnected) {
 		retval  = 0;
@@ -493,7 +528,7 @@ __RAIO_PUBLIC int raio_close(int fd)
 			session_data->cmd_rsp->in.header.iov_len);
 	if (retval == -1) {
 		raio_err = errno;
-		printf("raio_close failed: %m\n");
+		printf("libraio: raio_close failed: %m\n");
 	}
 
 	/* acknowlege xio that response is no longer needed */
@@ -507,7 +542,6 @@ cleanup:
 		xio_ev_loop_run(session_data->loop);
 		xio_session_close(session_data->session);
 	}
-
 	/* free the context */
 	xio_ctx_close(session_data->ctx);
 
@@ -713,6 +747,11 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 
 	for (i = 0; i < nr; i++) {
 		io_u = TAILQ_FIRST(&ctx->io_u_free_list);
+		if (!io_u) {
+			printf("libraio: io_u_free_list is empty\n");
+			return -1;
+		}
+
 		TAILQ_REMOVE(&ctx->io_u_free_list, io_u, io_u_list);
 		ctx->io_u_free_nr--;
 		msg_reset(&io_u->req);
@@ -868,12 +907,12 @@ __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 {
 	*mr = malloc(sizeof(struct raio_mr));
 	if (*mr == NULL) {
-		printf("malloc failed. %m\n");
+		printf("libraio: malloc failed. %m\n");
 		return -1;
 	}
 	(*mr)->omr = xio_reg_mr(buf, len);
 	if ((*mr)->omr == NULL) {
-		printf("failed to register mr. %m\n");
+		printf("libraio: failed to register mr. %m\n");
 		free(*mr);
 		return -1;
 	}
@@ -889,7 +928,7 @@ __RAIO_PUBLIC int raio_dereg_mr(raio_context_t ctx, raio_mr_t mr)
 	int retval = xio_dereg_mr(&mr->omr);
 
 	if (retval == -1)
-		printf("failed to deregister mr. %m\n");
+		printf("libraio: failed to deregister mr. %m\n");
 	free(mr);
 
 	return retval;
