@@ -97,7 +97,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
 	/* default is edge triggered */
-	if (events & ~XIO_POLLLT)
+	if (!(events & XIO_POLLLT))
 		ev.events |= EPOLLET;
 
 	ev.data.ptr = tev;
