@@ -202,7 +202,7 @@ double get_core_freq(void)
 
 	f = fopen(buf, "r");
 	if (!f) {
-		perror("cpufreq not supported");
+		/* perror("cpufreq not supported"); */
 		return 0.0;
 	}
 
@@ -210,7 +210,7 @@ double get_core_freq(void)
 		rc = sscanf(buf, "%lu", &khz);
 		if (rc != 1) {
 			fclose(f);
-			perror("Can't read cpufreq");
+			/* perror("Can't read cpufreq"); */
 			return 0;
 		}
 		fclose(f);
