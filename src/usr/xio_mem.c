@@ -40,6 +40,7 @@
 
 #define HUGE_PAGE_SZ			(2*1024*1024)
 
+int disable_huge_pages	= 0;
 
 /*---------------------------------------------------------------------------*/
 /* malloc_huge_pages	                                                     */
@@ -47,12 +48,27 @@
 void *malloc_huge_pages(size_t size)
 {
 	int retval;
+	size_t	real_size;
+	void	*ptr = NULL;
+
+	if (disable_huge_pages) {
+		int page_size = sysconf(_SC_PAGESIZE);
+
+		real_size = ALIGN(size, page_size);
+		retval = posix_memalign(&ptr, page_size, real_size);
+		if (retval) {
+			ERROR_LOG("posix_memalign failed sz:%zu. %s\n",
+				  real_size, strerror(retval));
+			return NULL;
+		}
+		return ptr;
+	}
 
 	/* Use 1 extra page to store allocation metadata */
 	/* (libhugetlbfs is more efficient in this regard) */
-	size_t real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
+	real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
 
-	void *ptr = mmap64(NULL, real_size, PROT_READ | PROT_WRITE,
+	ptr = mmap64(NULL, real_size, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS |
 			MAP_POPULATE | MAP_HUGETLB, -1, 0);
 	if (ptr == MAP_FAILED) {
@@ -87,6 +103,12 @@ void free_huge_pages(void *ptr)
 
 	if (ptr == NULL)
 		return;
+
+	if (disable_huge_pages)  {
+		free(ptr);
+		return;
+	}
+
 	/* Jump back to the page with metadata */
 	real_ptr = (char *)ptr - HUGE_PAGE_SZ;
 	/* Read the original allocation size */

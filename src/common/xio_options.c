@@ -39,6 +39,7 @@
 #include "xio_os.h"
 #include "libxio.h"
 #include "xio_common.h"
+#include "xio_mem.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
 #include "xio_log.h"
@@ -61,6 +62,9 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			return -1;
 		return xio_set_log_level(*((enum xio_log_level *)optval));
 		break;
+	case XIO_OPTNAME_DISABLE_HUGETBL:
+		xio_disable_huge_pages(*((int *)optval));
+		return 0;
 	default:
 		break;
 	}

@@ -121,14 +121,15 @@ enum xio_optlevel {
  * @brief configuration tuning option name
  */
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,	    /**< enables the internal rdma  */
-					    /**< memory pool		    */
+	XIO_OPTNAME_ENABLE_MEM_POOL,	   /**< enables the internal rdma     */
+					   /**< memory pool		      */
 
-	XIO_OPTNAME_LOG_FN,		   /**< set user log function	   */
-	XIO_OPTNAME_LOG_LEVEL,		   /**< set/get logging level      */
-	XIO_OPTNAME_ENABLE_DMA_LATENCY,    /**< enables the dma latency    */
+	XIO_OPTNAME_DISABLE_HUGETBL,	  /**< disable huge pages allocations */
+	XIO_OPTNAME_LOG_FN,		  /**< set user log function	      */
+	XIO_OPTNAME_LOG_LEVEL,		  /**< set/get logging level          */
+	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
 
-	XIO_OPTNAME_RDMA_BUF_THRESHOLD,    /**< set/get rdma buffer threshold */
+	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
 };
 
 /**

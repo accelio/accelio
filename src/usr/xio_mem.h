@@ -38,8 +38,17 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
+extern int disable_huge_pages;
+
 void *malloc_huge_pages(size_t size);
 void free_huge_pages(void *ptr);
 
+static inline void xio_disable_huge_pages(int disable)
+{
+	if (disable_huge_pages)
+		return;
+	disable_huge_pages = disable;
+}
 
 #endif
+
