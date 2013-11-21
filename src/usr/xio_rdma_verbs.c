@@ -228,8 +228,17 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 /*---------------------------------------------------------------------------*/
 struct xio_buf *xio_alloc(size_t length)
 {
-	struct xio_buf	*buf;
+	struct xio_buf		*buf;
+	struct xio_device	*dev;
+	size_t			real_size;
+	int			access;
+	int			alloced = 0;
+	int			retval;
 
+
+	access = IBV_ACCESS_LOCAL_WRITE |
+		 IBV_ACCESS_REMOTE_WRITE|
+		 IBV_ACCESS_REMOTE_READ;
 
 	buf = calloc(1, sizeof(*buf));
 	if (!buf) {
@@ -237,18 +246,36 @@ struct xio_buf *xio_alloc(size_t length)
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	buf->mr = xio_reg_mr_ex(&buf->addr, length,
-			    IBV_ACCESS_LOCAL_WRITE |
-			    IBV_ACCESS_REMOTE_WRITE|
-			    IBV_ACCESS_REMOTE_READ |
-			    IBV_ACCESS_ALLOCATE_MR);
+	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
+
+	if (dev && !(dev->device_attr.device_cap_flags & IBV_DEVICE_MR_ALLOCATE)) {
+		real_size = ALIGN(length, page_size);
+		retval = posix_memalign(&buf->addr,
+				        page_size,
+					real_size);
+		if (retval) {
+			ERROR_LOG("posix_memalign failed sz:%zu. %s\n",
+				  real_size, strerror(retval));
+			goto cleanup;
+		}
+		alloced = 1;
+	} else {
+		access |= IBV_ACCESS_ALLOCATE_MR;
+	}
+
+	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
 	if (!buf->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed\n");
-		goto cleanup;
+		goto cleanup1;
 	}
+	buf->mr->addr_alloced = alloced;
 	buf->length = length;
 
 	return buf;
+
+cleanup1:
+	if (alloced)
+		free(buf->addr);
 
 cleanup:
 	free(buf);
@@ -262,6 +289,9 @@ int xio_free(struct xio_buf **buf)
 {
 	struct xio_mr		*tmr = (*buf)->mr;
 	int			retval = xio_dereg_mr(&tmr);
+
+	if (tmr->addr_alloced)
+		free((*buf)->addr);
 
 	free(*buf);
 	*buf = NULL;

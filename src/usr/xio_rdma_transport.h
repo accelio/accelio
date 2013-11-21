@@ -281,6 +281,9 @@ struct xio_mr_elem {
 };
 
 struct xio_mr {
+	int				addr_alloced;	/* address was
+							   allocated by xio */
+	int				pad;
 	struct list_head		dm_list;
 	struct list_head		mr_list_entry;
 };
