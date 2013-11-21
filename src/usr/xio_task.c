@@ -73,11 +73,11 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	data = buf;
 
 	/* pool */
-	q = buf + elems_alloc_sz;
-	q->dd_data = q + sizeof(struct xio_tasks_pool);
+	q = (void *)((char *)buf + elems_alloc_sz);
+	q->dd_data = (void *)((char *)q + sizeof(struct xio_tasks_pool));
 
 	/* array */
-	q->array = q->dd_data + pool_dd_data_sz;
+	q->array = (void *)((char *)(q->dd_data) + pool_dd_data_sz);
 
 	INIT_LIST_HEAD(&q->stack);
 
