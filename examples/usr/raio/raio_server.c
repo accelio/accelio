@@ -49,7 +49,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
-#define MAX_THREADS		6
+#define MAX_THREADS		4
 
 #ifndef SLIST_FOREACH_SAFE
 #define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
@@ -272,10 +272,6 @@ static int on_session_event(struct xio_session *session,
 	struct raio_server_data	 *server_data = cb_user_context;
 	int			 i;
 
-	printf("session event: session:%p, %s. reason: %s\n",
-	       session,
-	       xio_session_event_str(event_data->event),
-	       xio_strerror(event_data->reason));
 
 	if (event_data->event == XIO_SESSION_TEARDOWN_EVENT) {
 		SLIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
@@ -298,6 +294,11 @@ static int on_session_event(struct xio_session *session,
 			}
 		}
 		xio_session_close(session);
+	} else {
+		printf("unexpected session event: session:%p, %s. reason: %s\n",
+				session,
+				xio_session_event_str(event_data->event),
+				xio_strerror(event_data->reason));
 	}
 
 	return 0;
@@ -316,9 +317,6 @@ static int on_new_session(struct xio_session *session,
 	int i;
 
 	portals = portals_get(server_data, req->uri, req->user_context);
-
-
-	printf("new_session:%p\n", session);
 
 	/* alloc and  and initialize */
 	ses_data = calloc(1, sizeof(*ses_data));
