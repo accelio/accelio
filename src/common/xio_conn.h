@@ -165,7 +165,8 @@ int xio_conn_reject(struct xio_conn *conn);
 /*---------------------------------------------------------------------------*/
 /* xio_conn_poll							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_poll(struct xio_conn *conn, struct timespec *timeout);
+int xio_conn_poll(struct xio_conn *conn,
+		  long min_nr, long nr, struct timespec *timeout);
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_send							     */

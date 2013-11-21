@@ -463,6 +463,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl);
 int xio_rdma_send(struct xio_transport_base *transport,
 		  struct xio_task *task);
 int xio_rdma_poll(struct xio_transport_base *transport,
+		  long min_nr, long nr,
 		  struct timespec *ts_timeout);
 
 int xio_rdma_cancel_req(struct xio_transport_base *transport,

@@ -855,7 +855,7 @@ retry:
 			if (num_delayed_arm == 0) {
 				start_time = get_cycles();
 			} else {
-				if (timeout > 0 &&
+				if (timeout_us > 0 &&
 				    (get_cycles() - start_time) > timeout)
 					break;
 			}
@@ -884,33 +884,31 @@ retry:
 /* xio_rdma_poll							     */
 /*---------------------------------------------------------------------------*/
 int xio_rdma_poll(struct xio_transport_base *transport,
-			 struct timespec *ts_timeout)
+		  long min_nr, long max_nr,
+		  struct timespec *ts_timeout)
 {
-	int			retval;
-	int			i;
-	struct xio_rdma_transport *rdma_hndl;
-	struct xio_cq		*tcq;
-	int			last_recv = -1;
-	int			nr = 8;
-	int			nr_comp = 0;
-	cycles_t		timeout;
-	cycles_t		start_time;
+	int				retval;
+	int				i;
+	struct xio_rdma_transport	*rdma_hndl;
+	struct xio_cq			*tcq;
+	int				last_recv = -1;
+	int				nr_comp = 0;
+	int				nr;
+	cycles_t			timeout = -1;
+	cycles_t			start_time = get_cycles();
 
-	rdma_hndl  = (struct xio_rdma_transport *)transport;
+	if (min_nr > max_nr)
+		return -1;
+
+	if (ts_timeout)
+		timeout = timespec_to_usecs(ts_timeout)*g_mhz;
+
+
+	rdma_hndl = (struct xio_rdma_transport *)transport;
 	tcq = rdma_hndl->tcq;
 
-	if (ts_timeout == NULL) {
-		xio_set_error(EINVAL);
-		return -1;
-	}
-
-	timeout = timespec_to_usecs(ts_timeout)*g_mhz;
-	if (timeout == 0)
-		return 0;
-
-	start_time = get_cycles();
-
 	while (1) {
+		nr = min(max_nr, tcq->wc_array_len);
 		retval = ibv_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
 			for (i = retval; i > 0; i--) {
@@ -928,6 +926,9 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 					xio_handle_wc_error(&tcq->wc_array[i]);
 			}
 			nr_comp += retval;
+			max_nr -= retval;
+			if (nr_comp >= min_nr || max_nr == 0)
+				break;
 			if ((get_cycles() - start_time) >= timeout)
 				break;
 		} else if (retval == 0) {

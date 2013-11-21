@@ -1540,12 +1540,14 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_conn_poll							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_poll(struct xio_conn *conn,  struct timespec *timeout)
+int xio_conn_poll(struct xio_conn *conn, long min_nr, long nr,
+		  struct timespec *timeout)
 {
 	int	retval = 0;
 
 	if (conn->transport->poll) {
-		retval = conn->transport->poll(conn->transport_hndl, timeout);
+		retval = conn->transport->poll(conn->transport_hndl,
+					       min_nr, nr, timeout);
 		if (retval < 0) {
 			ERROR_LOG("transport poll failed\n");
 			return -1;

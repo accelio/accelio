@@ -676,10 +676,11 @@ int xio_release_msg(struct xio_msg *msg)
 /* xio_poll_completions							     */
 /*---------------------------------------------------------------------------*/
 int xio_poll_completions(struct xio_connection *conn,
-				       struct timespec *timeout)
+			long min_nr, long nr,
+			 struct timespec *timeout)
 {
 	if (conn->conn)
-		return xio_conn_poll(conn->conn, timeout);
+		return xio_conn_poll(conn->conn, min_nr, nr, timeout);
 	else
 		return 0;
 }

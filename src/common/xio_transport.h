@@ -186,6 +186,7 @@ struct xio_transport {
 	int	(*accept)(struct xio_transport_base *trans_hndl);
 
 	int	(*poll)(struct xio_transport_base *trans_hndl,
+			long min_nr, long nr,
 			struct timespec *timeout);
 
 	int	(*reject)(struct xio_transport_base *trans_hndl);

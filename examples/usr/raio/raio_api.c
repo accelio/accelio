@@ -829,7 +829,9 @@ restart:
 	    (ctx->io_u_completed_nr == 0))  {
 #ifdef POLL_COMPLETIONS
 		session_data->min_nr = 0;
-		xio_poll_completions(session_data->conn, (min_nr ? min_nr : 1));
+		xio_poll_completions(session_data->conn,
+				     (min_nr ? min_nr : 1),
+				     nr , NULL);
 #else
 		session_data->min_nr  = (min_nr ? min_nr : 1);
 		xio_ev_loop_run(session_data->loop);

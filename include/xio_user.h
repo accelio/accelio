@@ -706,7 +706,7 @@ void xio_ctx_close(struct xio_context *ctx);
  * @param[in] attr	Structure of session attributes
  * @param[in] uri	uri to connect
  * @param[in] initial_sn Initial serial number to start with
- * @param[in] flags	Message related flags as defined in xio_msg_flags
+ * @param[in] flags	 Session related flags as defined in xio_session_flags
  * @param[in] cb_user_context Private data pointer to pass to each session
  *			       callback
  *
@@ -823,6 +823,27 @@ int xio_send_msg(struct xio_connection *conn,
  * @returns success (0), or a (negative) error value
  */
 int xio_release_msg(struct xio_msg *msg);
+
+
+/**
+ * attempts to read at least min_nr events and up to nr events
+ * from the completion queue assiociated with connection conn
+ *
+ *
+ * @param[in] conn	The xio connection handle
+ * @param[in] min_nr	read at least min_nr events
+ * @param[in] nr	read no more then nr events
+ * @param[in] timeout   specifies the amount of time to wait for events,
+ *			where a NULL timeout waits until at least min_nr
+ *			events have been seen.
+ *
+ * @returns On success,  xio_poll_completions() returns the number of events
+ *	    read: 0 if no events are available, or less than min_nr if the
+ *	    timeout has elapsed.  the failure return -1.
+ */
+int xio_poll_completions(struct xio_connection *conn,
+			 long min_nr, long nr,
+			 struct timespec *timeout);
 
 /*---------------------------------------------------------------------------*/
 /* XIO server API							     */

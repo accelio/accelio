@@ -259,7 +259,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	retval = ctx->loop_ops.ev_loop_add_cb(
 			ctx->ev_loop,
 			tcq->channel->fd,
-			XIO_POLLIN,
+			XIO_POLLIN|XIO_POLLLT,
 			xio_data_ev_handler,
 			tcq);
 
