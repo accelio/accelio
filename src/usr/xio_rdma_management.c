@@ -1313,7 +1313,6 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	}
 
 	child_hndl->cm_id	= ev->id;
-	child_hndl->qp		= ev->id->qp;
 	child_hndl->tcq		= parent_hndl->tcq;
 	ev->id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
@@ -1375,10 +1374,9 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 {
 	int retval;
 
-	TRACE_LOG("on_cm_disconnected\n");
+	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p\n", rdma_hndl);
 	if (rdma_hndl->state == XIO_STATE_CONNECTED)  {
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
-		DEBUG_LOG("on_cm_disconnected: state is now disconnected\n");
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
 			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
@@ -1397,7 +1395,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
-	TRACE_LOG("on_cm_timedwait_exit\n");
+	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
 
 	if (!list_empty(&rdma_hndl->in_flight_list)) {
 		TRACE_LOG("in_flight_list not empty!\n");
@@ -1446,8 +1444,7 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 	if (rdma_hndl->state == XIO_STATE_CLOSED) {
 		xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_CLOSED,
 					 NULL);
-		xio_rdma_close_complete(
-				(struct xio_transport_base *)rdma_hndl);
+		rdma_hndl->state = XIO_STATE_DESTROYED;
 	}
 }
 
@@ -1547,29 +1544,32 @@ static void xio_connection_ev_handler(int fd, int events, void *user_context)
 	struct rdma_event_channel	*p_cm_channel =
 		(struct rdma_event_channel *)(user_context);
 	struct rdma_cm_event		*ev;
-	struct rdma_cm_event		ev_copy;
 	struct xio_rdma_transport	*rdma_hndl;
 	int				retval;
 
 	/* get the event */
 	retval = rdma_get_cm_event(p_cm_channel, &ev);
 	if (retval) {
+		if (errno == EAGAIN)
+			return;
 		xio_set_error(errno);
 		ERROR_LOG("rdma_get_cm_event failed. " \
 			  "(errno=%d %m)\n", errno);
 		return;
 	}
 
-	/* copy the event and ack it */
-	memcpy(&ev_copy, ev, sizeof(*ev));
-	rdma_ack_cm_event(ev);
-
-	rdma_hndl = (struct xio_rdma_transport *)ev_copy.id->context;
+	rdma_hndl = (struct xio_rdma_transport *)ev->id->context;
 
 	DEBUG_LOG("cm_event: [%s] rdma_hndl:%p\n",
-		  rdma_event_str(ev_copy.event), rdma_hndl);
+		  rdma_event_str(ev->event), rdma_hndl);
 
-	xio_handle_cm_event(&ev_copy, rdma_hndl);
+	xio_handle_cm_event(ev, rdma_hndl);
+
+	rdma_ack_cm_event(ev);
+
+	if (rdma_hndl->state  == XIO_STATE_DESTROYED)
+		xio_rdma_close_complete(
+				(struct xio_transport_base *)rdma_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1605,7 +1605,7 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 	retval = ctx->loop_ops.ev_loop_add_cb(
 			ctx->ev_loop,
 			channel->cm_channel->fd,
-			XIO_POLLIN,
+			XIO_POLLIN | XIO_POLLLT,
 			xio_connection_ev_handler,
 			channel->cm_channel);
 	if (retval != 0) {
@@ -1690,7 +1690,7 @@ static struct xio_transport_base *xio_rdma_open(
 	INIT_LIST_HEAD(&rdma_hndl->io_list);
 	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_list);
 
-	TRACE_LOG("rdma transport: [new] handle:%p\n", rdma_hndl);
+	TRACE_LOG("xio_rdma_open: [new] handle:%p\n", rdma_hndl);
 
 	return (struct xio_transport_base *)rdma_hndl;
 
@@ -1726,7 +1726,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 
 	if (was == 1) {
 		/* now it is zero */
-		DEBUG_LOG("rdma transport: [close] handle:%p, qp:%p\n",
+		TRACE_LOG("xio_rmda_close: [close] handle:%p, qp:%p\n",
 			  rdma_hndl, rdma_hndl->qp);
 
 		if (rdma_hndl->state == XIO_STATE_CONNECTED) {
@@ -1741,8 +1741,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			xio_rdma_notify_observer(rdma_hndl,
 						 XIO_TRANSPORT_CLOSED,
 						 NULL);
-			xio_rdma_close_complete(
-				(struct xio_transport_base *)rdma_hndl);
+			rdma_hndl->state = XIO_STATE_DESTROYED;
 		}
 	}
 }
@@ -1871,7 +1870,8 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 		retval = rdma_bind_addr(rdma_hndl->cm_id, &if_sa.sa);
 		if (retval) {
 			xio_set_error(errno);
-			ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n", errno);
+			ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n",
+				  errno);
 			goto exit2;
 		}
 	}

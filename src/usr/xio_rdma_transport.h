@@ -109,6 +109,7 @@ enum xio_transport_state {
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
 	XIO_STATE_CLOSED,
+	XIO_STATE_DESTROYED,
 };
 
 enum xio_ib_op_code {
