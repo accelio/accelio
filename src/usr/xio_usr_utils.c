@@ -41,25 +41,81 @@
 #include "xio_protocol.h"
 
 /*---------------------------------------------------------------------------*/
-/* xio_uri_to_ss							     */
+/* xio_host_port_to_ss							     */
 /*---------------------------------------------------------------------------*/
-int xio_host_to_ss(const char *host, struct sockaddr_storage *ss)
+int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 {
+	char		*cp = (char *)buf;
+	char		*tp;
+	int		len;
+	char		host[NI_MAXHOST];
+	char		port[NI_MAXSERV];
 	int		s = 0;
 	struct addrinfo hints;
 	struct addrinfo *result;
 	socklen_t	ss_len;
+
+	/*
+	 * [host]:port, [host]:, [host].
+	 * [ipv6addr]:port, [ipv6addr]:, [ipv6addr].
+	 */
+	if (*cp == '[') {
+		++cp;
+		tp = strchr(cp, ']');
+		if (!tp)
+			return -1;
+		len = tp - cp;
+		strncpy(host, cp, len);
+		host[len] = 0;
+		tp++;
+		if (tp == NULL) {
+			strcpy(port, "0");
+		} else if (*tp == ':') {
+			tp++;
+			if (tp && *tp)
+				strcpy(port, tp);
+			else
+				strcpy(port, "0");
+		} else {
+			strcpy(port, "0");
+		}
+	} else {
+		/*
+		 * host:port, host:, host, :port.
+		 */
+		if (*cp == ':') {
+			strcpy(host, "0.0.0.0");
+			cp++;
+			if (cp && *cp)
+				strcpy(port, cp);
+			else
+				strcpy(port, "0");
+		} else {
+			tp = strrchr(cp, ':');
+			if (tp == NULL) {
+				strcpy(host, cp);
+				strcpy(port, "0");
+			}  else {
+				len = tp - cp;
+				strncpy(host, cp, len);
+				host[len] = 0;
+				tp++;
+				if (tp == NULL)
+					strcpy(port, "0");
+				else
+					strcpy(port, tp);
+			}
+		}
+	}
+
+	/*printf("host:%s, port:%s\n", host, port); */
 
 	/* Obtain address(es) matching host/port */
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family		= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
 	hints.ai_socktype	= SOCK_STREAM;	/* STREAM socket */
 
-	if (host == NULL || host[0] == 0) {
-		s = getaddrinfo(NULL, NULL, &hints, &result);
-	} else {
-		s = getaddrinfo(host, NULL, &hints, &result);
-	}
+	s = getaddrinfo(host, port, &hints, &result);
 	if (s != 0) {
 		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
 		return -1;

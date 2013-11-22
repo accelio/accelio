@@ -736,7 +736,11 @@ int xio_session_close(struct xio_session *session);
  * @param[in] session	The xio session handle
  * @param[in] ctx	The xio context handle
  * @param[in] conn_idx  Connection index greater then 0 if 0 - auto count
- * @param[in] out_if	bounded outgoing interface address
+ * @param[in] out_addr	bounded outgoing interface address and/or port -
+ *			NULL if not specified
+ *			in form: host:port, host:, host, :port.
+ *			[host]:port, [host]:, [host].
+ *			[ipv6addr]:port, [ipv6addr]:, [ipv6addr].
  * @param[in] conn_user_context Private data pointer to pass to each
  *				connection callback
  *
@@ -746,7 +750,7 @@ struct xio_connection *xio_connect(
 		struct xio_session  *session,
 		struct xio_context  *ctx,
 		uint32_t conn_idx,
-		const char *out_if,
+		const char *out_addr,
 		void *conn_user_context);
 
 /**

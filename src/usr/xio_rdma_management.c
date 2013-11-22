@@ -1861,7 +1861,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 	if (out_if_addr) {
 		union xio_sockaddr if_sa;
 
-		if (xio_host_to_ss(out_if_addr, &if_sa.sa_stor) == -1) {
+		if (xio_host_port_to_ss(out_if_addr, &if_sa.sa_stor) == -1) {
 			xio_set_error(XIO_E_ADDR_ERROR);
 			ERROR_LOG("outgoing interface [%s] resolving failed\n",
 				  out_if_addr);
