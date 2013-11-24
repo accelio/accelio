@@ -131,7 +131,7 @@ static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
 	reclaim(slot, p);
 }
 
-struct xio_mem_block* safe_read(struct xio_mem_slot *slot)
+static struct xio_mem_block* safe_read(struct xio_mem_slot *slot)
 {
 	struct xio_mem_block *q;
 
