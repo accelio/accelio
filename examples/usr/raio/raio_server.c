@@ -49,7 +49,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
-#define MAX_THREADS		4
+#define MAX_THREADS		6
 
 #ifndef SLIST_FOREACH_SAFE
 #define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\

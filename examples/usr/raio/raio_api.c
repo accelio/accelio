@@ -763,12 +763,25 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 				(i == (nr - 1)),
 				io_u->req.out.header.iov_base,
 				&io_u->req.out.header.iov_len);
-		io_u->req.out.data_iov[0].iov_base = ios[i]->u.c.buf;
-		io_u->req.out.data_iov[0].iov_len = ios[i]->u.c.nbytes;
-		if (ios[i]->u.c.mr)
-			io_u->req.out.data_iov[0].mr = ios[i]->u.c.mr->omr;
-		else
-			io_u->req.out.data_iov[0].mr = NULL;
+		if (ios[i]->raio_lio_opcode == RAIO_CMD_PWRITE) {
+			io_u->req.out.data_iov[0].iov_base = ios[i]->u.c.buf;
+			io_u->req.out.data_iov[0].iov_len = ios[i]->u.c.nbytes;
+			if (ios[i]->u.c.mr)
+				io_u->req.out.data_iov[0].mr = ios[i]->u.c.mr->omr;
+			else
+				io_u->req.out.data_iov[0].mr = NULL;
+			io_u->req.in.data_iovlen  = 0;
+			io_u->req.out.data_iovlen = 1;
+		} else {
+			io_u->req.in.data_iov[0].iov_base = ios[i]->u.c.buf;
+			io_u->req.in.data_iov[0].iov_len = ios[i]->u.c.nbytes;
+			if (ios[i]->u.c.mr)
+				io_u->req.in.data_iov[0].mr = ios[i]->u.c.mr->omr;
+			else
+				io_u->req.in.data_iov[0].mr = NULL;
+			io_u->req.in.data_iovlen  = 1;
+			io_u->req.out.data_iovlen = 0;
+		}
 		io_u->req.user_context = io_u;
 		io_u->iocb = ios[i];
 		io_u->ses_data = session_data;
