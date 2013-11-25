@@ -85,7 +85,10 @@ static int xio_on_new_conn(struct xio_server *server,
 }
 
 /* find the old session */
-struct xio_connection *xio_server_create_accepted_conn(
+/*---------------------------------------------------------------------------*/
+/* xio_server_create_accepted_connection				     */
+/*---------------------------------------------------------------------------*/
+struct xio_connection *xio_server_create_accepted_connection(
 		struct xio_session *session,
 		struct xio_conn *conn)
 {
