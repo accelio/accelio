@@ -452,6 +452,7 @@ static int fio_libraio_init(struct thread_data *td)
 {
 	struct io_u			*io_u;
 	struct libraio_data		*ld = malloc(sizeof(*ld));
+	unsigned int			max_bs;
 	int				ret;
 	struct				fio_file f;
 	struct libraio_engine_data	*engine_data;
@@ -485,19 +486,18 @@ static int fio_libraio_init(struct thread_data *td)
 	if (ret != 0)
 		return ret;
 
+	max_bs = max(td->o.max_bs[DDIR_READ], td->o.max_bs[DDIR_WRITE]);
 	io_u_qiter(&td->io_u_freelist, io_u, ld->engine_datas_free) {
 		io_u->engine_data = &ld->engine_datas[ld->engine_datas_free];
 
-		if (td_write(td)) {
-			engine_data = io_u->engine_data;
-			raio_reg_mr(ld->raio_ctx,
-				    io_u->xfer_buf,
-				    io_u->xfer_buflen,
-				    &engine_data->mr);
-			if (engine_data->mr == NULL) {
-				log_err("libraio: memory registration failed\n");
-				return 1;
-			}
+		engine_data = io_u->engine_data;
+		raio_reg_mr(ld->raio_ctx,
+				io_u->buf,
+				max_bs,
+				&engine_data->mr);
+		if (engine_data->mr == NULL) {
+			log_err("libraio: memory registration failed\n");
+			return 1;
 		}
 	}
 
@@ -511,11 +511,9 @@ static void fio_libraio_cleanup(struct thread_data *td)
 	struct io_u			*io_u;
 	int				i;
 
-	if (td_write(td)) {
-		io_u_qiter(&td->io_u_freelist, io_u, i) {
-			engine_data = io_u->engine_data;
-			raio_dereg_mr(ld->raio_ctx, engine_data->mr);
-		}
+	io_u_qiter(&td->io_u_freelist, io_u, i) {
+		engine_data = io_u->engine_data;
+		raio_dereg_mr(ld->raio_ctx, engine_data->mr);
 	}
 
 	if (ld->fd != -1) {
