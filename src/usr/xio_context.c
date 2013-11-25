@@ -186,6 +186,9 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 
+	if (geteuid() != 0)
+		return ctx;
+
 	fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
 	if (fd < 0) {
 		xio_set_error(errno);
