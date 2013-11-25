@@ -65,7 +65,7 @@ enum xio_session_state {
 /*---------------------------------------------------------------------------*/
 struct xio_conn_node {
 	struct xio_conn			*conn;
-	struct list_head		conns_list_entry;
+	struct list_head		connections_list_entry;
 };
 
 struct xio_portal_node {
@@ -78,7 +78,7 @@ struct xio_session {
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
 	uint32_t			session_flags;
-	uint32_t			conns_nr;
+	uint32_t			connections_nr;
 
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;
@@ -109,7 +109,7 @@ struct xio_session {
 
 	uint32_t			reject_reason;
 	struct mutex                    lock;	   /* lock open connection */
-	spinlock_t                      conn_list_lock; /* lock for conn list */
+	spinlock_t                      connections_list_lock;
 	int				pad;
 	struct xio_connection		*lead_conn;
 	struct xio_connection		*redir_conn;
@@ -147,17 +147,17 @@ int xio_session_disconnect(
 struct xio_session *xio_find_session(
 		struct xio_task *task);
 
-struct xio_connection *xio_session_find_conn(
+struct xio_connection *xio_session_find_connection(
 		struct xio_session *session,
 		struct xio_conn *conn);
 
-struct xio_connection *xio_session_alloc_conn(
+struct xio_connection *xio_session_alloc_connection(
 		struct xio_session *session,
 		struct xio_context *ctx,
 		uint32_t conn_idx,
 		void *conn_user_context);
 
-int xio_session_free_conn(
+int xio_session_free_connection(
 		struct xio_connection *connection);
 
 struct xio_connection  *xio_session_assign_conn(
@@ -168,7 +168,7 @@ void xio_session_assign_ops(
 		struct xio_session *session,
 		struct xio_session_ops *ops);
 
-struct xio_connection *xio_server_create_accepted_conn(
+struct xio_connection *xio_server_create_accepted_connection(
 		struct xio_session *session,
 		struct xio_conn *conn);
 

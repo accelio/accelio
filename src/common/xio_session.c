@@ -88,9 +88,9 @@ static int xio_on_fin_send_comp(struct xio_connection *connection,
 				  struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_alloc_conn						     */
+/* xio_session_alloc_connection						     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_session_alloc_conn(
+struct xio_connection *xio_session_alloc_connection(
 		struct xio_session *session,
 		struct xio_context *ctx,
 		uint32_t conn_idx,
@@ -109,26 +109,26 @@ struct xio_connection *xio_session_alloc_conn(
 		return NULL;
 	}
 	/* add the connection  to the session's connections list */
-	spin_lock(&session->conn_list_lock);
+	spin_lock(&session->connections_list_lock);
 	list_add(&connection->connections_list_entry,
 		 &session->connections_list);
-	session->conns_nr++;
-	spin_unlock(&session->conn_list_lock);
+	session->connections_nr++;
+	spin_unlock(&session->connections_list_lock);
 
 	return connection;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_free_conn						     */
+/* xio_session_free_connection						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_free_conn(struct xio_connection *connection)
+int xio_session_free_connection(struct xio_connection *connection)
 {
 	int retval;
 
-	spin_lock(&connection->session->conn_list_lock);
-	connection->session->conns_nr--;
+	spin_lock(&connection->session->connections_list_lock);
+	connection->session->connections_nr--;
 	list_del(&connection->connections_list_entry);
-	spin_unlock(&connection->session->conn_list_lock);
+	spin_unlock(&connection->session->connections_list_lock);
 
 	retval = xio_connection_close(connection);
 	if (retval != 0) {
@@ -172,7 +172,7 @@ struct xio_connection *xio_session_assign_conn(
 {
 	struct xio_connection		*connection;
 
-	spin_lock(&session->conn_list_lock);
+	spin_lock(&session->connections_list_lock);
 	/* find free slot */
 	list_for_each_entry(connection, &session->connections_list,
 			    connections_list_entry) {
@@ -181,19 +181,19 @@ struct xio_connection *xio_session_assign_conn(
 		     (connection->conn == conn))) {
 			xio_connection_set_conn(connection, conn);
 			/* remove old observer if exist */
-			spin_unlock(&session->conn_list_lock);
+			spin_unlock(&session->connections_list_lock);
 			return connection;
 		}
 	}
-	spin_unlock(&session->conn_list_lock);
+	spin_unlock(&session->connections_list_lock);
 
 	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_find_conn						     */
+/* xio_session_find_connection						     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_session_find_conn(
+struct xio_connection *xio_session_find_connection(
 		struct xio_session *session,
 		struct xio_conn *conn)
 {
@@ -209,9 +209,9 @@ struct xio_connection *xio_session_find_conn(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_find_conn_by_ctx						     */
+/* xio_session_find_connection_by_ctx					     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_session_find_conn_by_ctx(
+struct xio_connection *xio_session_find_connection_by_ctx(
 		struct xio_session *session,
 		struct xio_context *ctx)
 {
@@ -1504,7 +1504,7 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 	if (session->lead_conn && session->lead_conn->conn == conn)
 		connection = session->lead_conn;
 	else
-		connection = xio_session_find_conn(session, conn);
+		connection = xio_session_find_connection(session, conn);
 
 	if (connection && connection->conn) {
 		connection->state = CONNECTION_STATE_DISCONNECT;
@@ -1600,18 +1600,18 @@ static int xio_on_conn_closed(struct xio_session *session,
 			return 0;
 		}
 		TRACE_LOG("lead connection is closed\n");
-		spin_lock(&session->conn_list_lock);
-		teardown = (session->conns_nr == 0);
-		spin_unlock(&session->conn_list_lock);
+		spin_lock(&session->connections_list_lock);
+		teardown = (session->connections_nr == 0);
+		spin_unlock(&session->connections_list_lock);
 	} else if (session->redir_conn && session->redir_conn->conn == conn) {
 		xio_connection_close(session->redir_conn);
 		session->redir_conn = NULL;
 		TRACE_LOG("redirected connection is closed\n");
-		spin_lock(&session->conn_list_lock);
-		teardown = (session->conns_nr == 0);
-		spin_unlock(&session->conn_list_lock);
+		spin_lock(&session->connections_list_lock);
+		teardown = (session->connections_nr == 0);
+		spin_unlock(&session->connections_list_lock);
 	} else {
-		connection = xio_session_find_conn(session, conn);
+		connection = xio_session_find_connection(session, conn);
 		xio_connection_flush(connection);
 		if (session->type == XIO_SESSION_REQ) {
 			struct xio_session_event_data  event = {
@@ -1625,10 +1625,10 @@ static int xio_on_conn_closed(struct xio_session *session,
 						session, &event,
 						session->cb_user_context);
 		}
-		spin_lock(&session->conn_list_lock);
-		teardown = (session->conns_nr == 1);
-		spin_unlock(&session->conn_list_lock);
-		xio_session_free_conn(connection);
+		spin_lock(&session->connections_list_lock);
+		teardown = (session->connections_nr == 1);
+		spin_unlock(&session->connections_list_lock);
+		xio_session_free_connection(connection);
 	}
 	if (teardown && !session->lead_conn && !session->redir_conn) {
 			xio_session_notify_teardown(
@@ -1745,7 +1745,7 @@ static int xio_on_conn_established(struct xio_session *session,
 		{
 			int is_last = 1;
 
-			connection = xio_session_find_conn(session, conn);
+			connection = xio_session_find_connection(session, conn);
 			if (connection == NULL) {
 				ERROR_LOG("failed to find connection conn:%p\n",
 					  conn);
@@ -1794,7 +1794,7 @@ static int xio_on_conn_established(struct xio_session *session,
 		}
 		break;
 	case XIO_SESSION_STATE_ONLINE:
-		connection = xio_session_find_conn(session, conn);
+		connection = xio_session_find_connection(session, conn);
 		if (connection == NULL)  {
 			ERROR_LOG("failed to find connection\n");
 			return -1;
@@ -1827,7 +1827,7 @@ static int xio_on_conn_error(struct xio_session *session,
 	};
 	struct xio_session  *the_session = session;
 	struct xio_connection *connection =
-				xio_session_find_conn(session, conn);
+				xio_session_find_connection(session, conn);
 
 	ev_data.conn =  connection;
 	ev_data.conn_user_context =
@@ -1864,7 +1864,7 @@ static int xio_on_new_message(struct xio_session *session,
 			return -1;
 		}
 	}
-	connection = xio_session_find_conn(session, conn);
+	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		/* leading connection is refused */
 		if (session->lead_conn && session->lead_conn->conn == conn) {
@@ -1876,7 +1876,8 @@ static int xio_on_new_message(struct xio_session *session,
 		} else {
 			/* on server assign the new connection */
 			if (session->type == XIO_SESSION_REP) {
-				connection = xio_server_create_accepted_conn(
+				connection =
+					xio_server_create_accepted_connection(
 							session, conn);
 				/* new user to the connection */
 				xio_conn_addref(conn);
@@ -1996,7 +1997,7 @@ static int xio_on_assign_in_buf(struct xio_session *session,
 	if (session == NULL)
 		session = xio_find_session(task);
 
-	connection = xio_session_find_conn(session, conn);
+	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		connection = xio_session_assign_conn(session, conn);
 		if (connection == NULL) {
@@ -2046,7 +2047,7 @@ static int xio_on_cancel_request(struct xio_session *sess,
 
 	session = observer->impl;
 
-	connection = xio_session_find_conn(session, conn);
+	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		ERROR_LOG("failed to find session\n");
 		return -1;
@@ -2113,7 +2114,7 @@ static int xio_on_cancel_response(struct xio_session *sess,
 		hdr.sn		= pmsg->sn;
 	}
 
-	connection = xio_session_find_conn(session, conn);
+	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		ERROR_LOG("failed to find session\n");
 		return -1;
@@ -2256,7 +2257,7 @@ struct xio_session *xio_session_init(
 		       session->user_context_len);
 	}
 	mutex_init(&session->lock);
-	spin_lock_init(&session->conn_list_lock);
+	spin_lock_init(&session->connections_list_lock);
 
 	/* fill session data*/
 	session->type			= type;
@@ -2318,10 +2319,10 @@ int xio_session_disconnect(struct xio_session *session,
 				.conn_user_context = connection->cb_user_context
 
 			};
-			spin_lock(&session->conn_list_lock);
-			teardown = (session->conns_nr == 1);
-			spin_unlock(&session->conn_list_lock);
-			xio_session_free_conn(connection);
+			spin_lock(&session->connections_list_lock);
+			teardown = (session->connections_nr == 1);
+			spin_unlock(&session->connections_list_lock);
+			xio_session_free_connection(connection);
 			if (session->ses_ops.on_session_event)
 				session->ses_ops.on_session_event(
 						session, &event,
@@ -2413,7 +2414,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	mutex_lock(&session->lock);
 
 	/* only one connection per context allowed */
-	connection = xio_session_find_conn_by_ctx(session, ctx);
+	connection = xio_session_find_connection_by_ctx(session, ctx);
 	if (connection != NULL) {
 		ERROR_LOG("context:%p, already assigned connection:%p\n",
 			  ctx, connection);
@@ -2445,7 +2446,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		}
 
 		/* initialize the lead connection */
-		session->lead_conn = xio_session_alloc_conn(
+		session->lead_conn = xio_session_alloc_connection(
 				session, ctx,
 				conn_idx,
 				conn_user_context);
@@ -2455,7 +2456,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 
 		session->state = XIO_SESSION_STATE_CONNECT;
 	} else if (session->state == XIO_SESSION_STATE_CONNECT) {
-		connection  = xio_session_alloc_conn(session,
+		connection  = xio_session_alloc_connection(session,
 						     ctx, conn_idx,
 						     conn_user_context);
 	} else if (session->state == XIO_SESSION_STATE_ONLINE ||
@@ -2472,7 +2473,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			int pid = (conn_idx % session->portals_array_len);
 			portal = session->portals_array[pid];
 		}
-		connection  = xio_session_alloc_conn(session, ctx,
+		connection  = xio_session_alloc_connection(session, ctx,
 						     conn_idx,
 						     conn_user_context);
 		conn = xio_conn_open(ctx, portal, &session->observer,
@@ -2543,7 +2544,7 @@ struct xio_connection *xio_get_connection(
 		struct xio_session *session,
 		struct xio_context *ctx)
 {
-	return  xio_session_find_conn_by_ctx(session, ctx);
+	return  xio_session_find_connection_by_ctx(session, ctx);
 }
 
 /*---------------------------------------------------------------------------*/

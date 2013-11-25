@@ -96,7 +96,7 @@ struct xio_connection *xio_server_create_accepted_conn(
 		  "session:%p, conn:%p, session_id:%d\n",
 		  session, conn, session->session_id);
 
-	connection = xio_session_alloc_conn(session, server->ctx, 0,
+	connection = xio_session_alloc_connection(session, server->ctx, 0,
 			server->cb_private_data);
 	connection = xio_session_assign_conn(session, conn);
 
@@ -152,8 +152,9 @@ static int xio_on_new_message(struct xio_server *server,
 		/* get transport class routines */
 		session->trans_cls = xio_conn_get_trans_cls(conn);
 
-		connection = xio_session_alloc_conn(session, server->ctx, 0,
-						    server->cb_private_data);
+		connection =
+			xio_session_alloc_connection(session, server->ctx, 0,
+						     server->cb_private_data);
 		if (!connection) {
 			ERROR_LOG("server failed to allocate new connection\n");
 			goto cleanup;
@@ -186,10 +187,11 @@ static int xio_on_new_message(struct xio_server *server,
 					      session->session_id);
 
 		session->lead_conn = NULL;
-		connection = xio_session_find_conn(session, conn);
+		connection = xio_session_find_connection(session, conn);
 		if (connection == NULL) {
-			connection = xio_server_create_accepted_conn(session,
-								     conn);
+			connection =
+				xio_server_create_accepted_connection(session,
+								      conn);
 			if (!connection) {
 				ERROR_LOG("failed to create snew connection\n");
 				return -1;
@@ -203,7 +205,7 @@ static int xio_on_new_message(struct xio_server *server,
 	return 0;
 
 cleanup1:
-	xio_session_free_conn(connection);
+	xio_session_free_connection(connection);
 
 cleanup:
 	xio_session_close(session);
