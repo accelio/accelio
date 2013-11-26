@@ -2455,7 +2455,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		connection  = session->lead_conn;
 
 		session->state = XIO_SESSION_STATE_CONNECT;
-	} else if (session->state == XIO_SESSION_STATE_CONNECT) {
+	} else if ((session->state == XIO_SESSION_STATE_CONNECT) ||
+		   (session->state == XIO_SESSION_STATE_REDIRECTED)) {
 		connection  = xio_session_alloc_connection(session,
 						     ctx, conn_idx,
 						     conn_user_context);
