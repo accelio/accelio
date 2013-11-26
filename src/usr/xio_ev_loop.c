@@ -207,23 +207,33 @@ void *xio_ev_loop_init()
 
 	loop->stop_loop		= 0;
 	loop->efd		= epoll_create(4096);
-	loop->wakeup_event	= eventfd(0, EFD_NONBLOCK);
+	if (loop->efd == -1) {
+		xio_set_error(errno);
+		ERROR_LOG("epoll_create failed. %m\n");
+		goto cleanup;
+	}
 
+	loop->wakeup_event	= eventfd(0, EFD_NONBLOCK);
 	if (loop->wakeup_event == -1) {
 		xio_set_error(errno);
 		ERROR_LOG("eventfd failed. %m\n");
-		free(loop);
-		return NULL;
+		goto cleanup1;
 	}
 
 	retval = xio_ev_loop_add(loop, loop->wakeup_event, EPOLLIN,
 				   NULL, NULL);
-	if (retval != 0) {
-		free(loop);
-		return NULL;
-	}
+	if (retval != 0)
+		goto cleanup2;
 
 	return loop;
+
+cleanup2:
+	close(loop->wakeup_event);
+cleanup1:
+	close(loop->efd);
+cleanup:
+	free(loop);
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
