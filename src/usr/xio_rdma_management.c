@@ -134,7 +134,7 @@ static void *device_thread_cb(void *data)
 	thread = pthread_self();
 
 	CPU_ZERO(&cpuset);
-	CPU_SET(0, &cpuset);
+	CPU_SET(0, &cpuset); /* bind the devices thread to first core */
 
 	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 
@@ -146,6 +146,7 @@ static void *device_thread_cb(void *data)
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&dev_tdata.async_loop);
+	dev_tdata.async_loop = NULL;
 
 	return NULL;
 }
@@ -153,12 +154,27 @@ static void *device_thread_cb(void *data)
 /*---------------------------------------------------------------------------*/
 /* xio_device_thread_init						     */
 /*---------------------------------------------------------------------------*/
-static void xio_device_thread_init()
+static int xio_device_thread_init()
 {
+	int ret;
+
 	/* open default event loop */
 	dev_tdata.async_loop = xio_ev_loop_init();
+	if (!dev_tdata.async_loop) {
+		ERROR_LOG("xio_ev_loop_init failed\n");
+		return -1;
+	}
+	ret = pthread_create(&dev_tdata.dev_thread, NULL,
+			     device_thread_cb, NULL);
+	if (ret < 0) {
+		ERROR_LOG("pthread_create failed. %m\n");
+		/* destroy the default loop */
+		xio_ev_loop_destroy(&dev_tdata.async_loop);
+		dev_tdata.async_loop = NULL;
+		return -1;
+	}
 
-	pthread_create(&dev_tdata.dev_thread, NULL, device_thread_cb, NULL);
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2082,11 +2098,16 @@ static int xio_rdma_transport_init(struct xio_transport *transport)
 	/* set cpu latency until process is down */
 	xio_set_cpu_latency();
 
-	xio_device_thread_init();
+	retval = xio_device_thread_init();
+	if (retval != 0) {
+		ERROR_LOG("Failed to initialize devices thread\n");
+		retval = -1;
+		goto cleanup;
+	}
 
 	retval = xio_device_list_init();
 	if (retval != 0) {
-		ERROR_LOG("Failed to initalize device list\n");
+		ERROR_LOG("Failed to initialize device list\n");
 		retval = -1;
 		goto cleanup;
 	}
