@@ -470,7 +470,7 @@ struct xio_session_ops {
 	 * session established notification - client side only
 	 *
 	 *  @param[in] session		the session
-	 *  @param[in] rsp		new session resesponse information
+	 *  @param[in] rsp		new session's response information
 	 *  @param[in] cb_user_context	user private data provided in session
 	 *			        open
 	 *  @returns 0
@@ -480,16 +480,17 @@ struct xio_session_ops {
 			void *cb_user_context);
 
 	/**
-	 * send completion notification - server side only
+	 * send completion notification - responder only
 	 *
 	 *  @param[in] session		the session
-	 *  @param[in] req		new session request information
-	 *  @param[in] cb_user_context	user private data provided in session
-	 *			        open
+	 *  @param[in] rsp		the response that was sent from
+	 *				responder
+	 *  @param[in] cb_user_context	user private data provided in
+	 *			        xio_bind
 	 *  @returns 0
 	 */
 	int (*on_msg_send_complete)(struct xio_session *session,
-			struct xio_msg *msg,
+			struct xio_msg *rsp,
 			void *conn_user_context);
 
 	/**
