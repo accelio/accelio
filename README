@@ -7,6 +7,12 @@ copy messaging and lock free scalability.
 
 Prerequistes packages
 ----------------------
+OFED 
+	Mellanox OFED pacakage is recommended
+	look for latest OFED packages at:
+	http://www.mellanox.com/page/products_dyn?product_family=26
+
+
 RedHat
 	yum groupinstall "Infiniband Support"
 	yum install infiniband-diags
