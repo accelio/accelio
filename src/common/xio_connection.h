@@ -82,7 +82,6 @@ struct xio_connection *xio_connection_init(
 		struct xio_context *ctx, int conn_idx,
 		void *cb_user_context);
 
-int xio_connection_conn_close(struct xio_connection *connection);
 int xio_connection_close(struct xio_connection *connection);
 
 static inline void xio_connection_set(
