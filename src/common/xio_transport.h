@@ -147,10 +147,6 @@ struct xio_transport {
 
 	struct xio_transport_cls	trans_cls;
 
-	/* shared by all transports of the same type */
-	void				*transport_ctx;
-
-
 	/* transport initialization */
 	int	(*init)(struct xio_transport *self);
 	void	(*release)(struct xio_transport *self);
