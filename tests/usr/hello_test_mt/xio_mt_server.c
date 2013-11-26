@@ -105,7 +105,9 @@ struct  thread_data {
 /* server private data */
 struct server_data {
 	void			*loop;
-	struct thread_data	tdata[MAX_THREADS];
+	int			tdata_nr;
+	int			pad;
+	struct thread_data	*tdata;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -401,7 +403,7 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_close(session);
-		for (i = 0; i < MAX_THREADS; i++) {
+		for (i = 0; i < server_data->tdata_nr; i++) {
 			process_request(&server_data->tdata[i], NULL);
 			xio_ev_loop_stop(server_data->tdata[i].loop);
 		}
@@ -596,6 +598,12 @@ int main(int argc, char *argv[])
 
 
 	memset(&server_data, 0, sizeof(server_data));
+
+	server_data.tdata = calloc(MAX_THREADS, sizeof(struct thread_data));
+	if (!server_data.tdata)
+		return -1;
+	server_data.tdata_nr = MAX_THREADS;
+
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -625,7 +633,7 @@ int main(int argc, char *argv[])
 
 	/* spawn portals */
 	port = test_config.server_port;
-	for (i = 0; i < MAX_THREADS; i++) {
+	for (i = 0; i < server_data.tdata_nr; i++) {
 		server_data.tdata[i].affinity = ((test_config.cpu + i + 1)%max_cpus);
 		port++;
 		sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
@@ -651,6 +659,8 @@ cleanup:
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&server_data.loop);
+
+	free(server_data.tdata);
 
 	return 0;
 }
