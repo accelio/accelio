@@ -5,6 +5,13 @@ AM_CFLAGS = -fPIC -DPIC  				\
 	    -I$(top_srcdir)/src/usr -I$(top_srcdir)/src/common -I$(top_srcdir)/include \
 	    @AM_CFLAGS@
 
+if HAVE_LD_VERSION_SCRIPT
+    libxio_version_script = -Wl,--version-script=$(top_srcdir)/src/usr/libxio.map
+else
+    libxio_version_script =
+endif
+
+
 ###############################################################################
 # THE LIBRARIES TO BUILD
 ###############################################################################
@@ -88,7 +95,10 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt -lpthread 
+libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt -lpthread \
+		     $(libxio_version_script)
+
+libxio_la_DEPENDENCIES =  $(top_srcdir)/src/usr/libxio.map
 
 #libxio_la_LIBADD = $(AM_LDFLAGS)
 

@@ -11,15 +11,8 @@ AC_LANG_C
 LT_INIT
 AC_PROG_LIBTOOL
 
-# store current user given compiler flags to avoid default setup via AC_PROG_CC
-#OLD_CFLAGS=$CFLAGS
-
 # check for C compiler and the library compiler
 AC_PROG_CC
-#AC_PROG_CC([gcc])
-
-# reset compiler flags to initial flags
-#CFLAGS=$OLD_CFLAGS
 
 # automake initialisation (mandatory) and check for minimal automake API version 1.9
 AM_INIT_AUTOMAKE([1.9])
@@ -85,6 +78,14 @@ else
 		  -O3 -D_REENTRANT -D_GNU_SOURCE"
 fi
 
+AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
+    if test -n "`$LD --help < /dev/null 2>/dev/null | grep version-script`"; then
+        ac_cv_version_script=yes
+    else
+        ac_cv_version_script=no
+    fi)
+
+AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
 
 ##########################################################################
