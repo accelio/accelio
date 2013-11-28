@@ -826,6 +826,7 @@ static int xio_cq_event_handler(struct xio_cq *tcq, int timeout_us)
 	cycles_t			start_time;
 	int				req_notify = 0;
 	int				last_recv = -1;
+	int				budget_counter = 0;
 
 
 retry:
@@ -848,6 +849,10 @@ retry:
 					xio_handle_wc_error(
 							&tcq->wc_array[i]);
 			}
+
+			/* avoid epoll starvation */
+			if (++budget_counter == BUDGET_SIZE)
+				break;
 		} else if (retval == 0) {
 			if (timeout_us == 0)
 				break;
@@ -872,7 +877,8 @@ retry:
 			ERROR_LOG("ibv_req_notify_cq failed. (errno=%d %m)\n",
 				  errno);
 		req_notify = 1;
-		goto retry;
+		if (budget_counter != BUDGET_SIZE)
+			goto retry;
 	}
 
 	return 0;
