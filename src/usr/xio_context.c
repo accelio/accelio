@@ -154,6 +154,8 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 	int				cpu;
 	struct sockaddr_nl		nladdr;
 	int				fd;
+	socklen_t			addr_len;
+
 	xio_read_logging_level();
 
 	cpu = sched_getcpu();
@@ -186,8 +188,11 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 
-	if (geteuid() != 0)
+	/* only root can bind netlink socket */
+	if (geteuid() != 0) {
+		DEBUG_LOG("statistics monitoring disabled. not priviliged user\n");
 		return ctx;
+	}
 
 	fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
 	if (fd < 0) {
@@ -206,19 +211,37 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 	 * statistics from a thread that it doesn't have its format it will
 	 * send a UC request directly to it
 	 *
-	 * Use thread id for MT programs but don't use pthread_self
-	 * as it is 64 bits quantity and nl_pid is 32 bit quantity.
-	 * Note gettid is not supported by libc thus the syscall usasge
 	 */
-	nladdr.nl_pid = syscall(SYS_gettid);
+	nladdr.nl_pid	 = 0;
 	nladdr.nl_groups = 1;
 
-
-	if (bind(fd, (struct sockaddr*)&nladdr, sizeof(nladdr))) {
+	if (bind(fd, (struct sockaddr *)&nladdr, sizeof(nladdr))) {
 		xio_set_error(errno);
 		ERROR_LOG("bind failed. %m\n");
 		goto cleanup2;
 	}
+
+	addr_len = sizeof(nladdr);
+	if (getsockname(fd, (struct sockaddr *) &nladdr, &addr_len)) {
+		xio_set_error(errno);
+		ERROR_LOG("getsockname failed. %m\n");
+		goto cleanup2;
+	}
+
+	if (addr_len != sizeof(nladdr)) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid addr_len\n");
+		goto cleanup2;
+	}
+	if (nladdr.nl_family != AF_NETLINK) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid nl_family\n");
+		goto cleanup2;
+	}
+
+
+	DEBUG_LOG("netlink socket bind to port %u\n",
+		  nladdr.nl_pid);
 
 	ctx->loop_ops.ev_loop_add_cb(ev_loop, fd, XIO_POLLIN,
 				     xio_stats_handler, ctx);
@@ -256,6 +279,7 @@ void xio_ctx_close(struct xio_context *ctx)
 
 	if (ctx->netlink_sock) {
 		int fd = (int)(long) ctx->netlink_sock;
+		ctx->loop_ops.ev_loop_del_cb(ctx->ev_loop, fd);
 		close(fd);
 		ctx->netlink_sock = NULL;
 	}
