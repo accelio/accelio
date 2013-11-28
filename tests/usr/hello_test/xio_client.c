@@ -63,7 +63,7 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
-#define IOV_LEN			0
+#define IOV_LEN			1
 
 struct xio_test_config {
 	char			server_addr[32];
