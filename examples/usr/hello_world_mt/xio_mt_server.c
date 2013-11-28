@@ -96,7 +96,9 @@ static void process_request(struct hw_thread_data *tdata,
 			    struct xio_msg *req)
 {
 	if (++tdata->cnt == HW_PRINT_COUNTER) {
-		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
+		if (req->in.header.iov_base)
+		  ((char *)(req->in.header.iov_base))[req->in.header.iov_len]
+			  = 0;
 		printf("thread [%d] tid:%p - message: [%"PRIu64"] - %s\n",
 				tdata->affinity,
 				(void *)pthread_self(),
@@ -211,11 +213,16 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	printf("%s. reason: %s\n",
+	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
+	       session, event_data->conn,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		break;
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_close(session);
 		break;

@@ -24,6 +24,7 @@ XIO_1.0 {
 		xio_session_close;		
 		xio_connect;		
 		xio_disconnect;
+		xio_set_connection_params;	
 		xio_accept;		
 		xio_redirect;
 		xio_reject;

@@ -69,7 +69,7 @@ extern struct list_head		dev_list;
 #define SEND_BUF_SZ			8192
 #define OMX_MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
-
+#define BUDGET_SIZE			1024
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
 					   * one for reply tx

@@ -273,7 +273,9 @@ static int on_session_event(struct xio_session *session,
 	int			 i;
 
 
-	if (event_data->event == XIO_SESSION_TEARDOWN_EVENT) {
+
+	switch (event_data->event) {
+	case XIO_SESSION_TEARDOWN_EVENT:
 		SLIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
 				srv_ses_list, tmp_ses_data) {
 			if (ses_data->session == session) {
@@ -294,11 +296,16 @@ static int on_session_event(struct xio_session *session,
 			}
 		}
 		xio_session_close(session);
-	} else {
+		break;
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		break;
+	default:
 		printf("unexpected session event: session:%p, %s. reason: %s\n",
 				session,
 				xio_session_event_str(event_data->event),
 				xio_strerror(event_data->reason));
+		break;
 	}
 
 	return 0;

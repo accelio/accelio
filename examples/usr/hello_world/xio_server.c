@@ -75,11 +75,22 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	printf("session event: %s. reason: %s\n",
+	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
+	       session, event_data->conn,
 	       xio_strerror(event_data->reason));
 
-	xio_session_close(session);
+	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		break;
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		break;
+	case XIO_SESSION_TEARDOWN_EVENT:
+		xio_session_close(session);
+		break;
+	default:
+		break;
+	};
 
 	return 0;
 }
@@ -92,6 +103,8 @@ static int on_new_session(struct xio_session *session,
 			void *cb_user_context)
 {
 	/* automaticly accept the request */
+	printf("new session event. session:%p\n", session);
+
 	xio_accept(session, NULL, 0, NULL, 0);
 
 	return 0;

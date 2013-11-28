@@ -168,16 +168,21 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_prv_data)
 {
-	printf("session event: %s. reason: %s\n",
+	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
+	       session, event_data->conn,
 	       xio_strerror(event_data->reason));
 
-
-	process_request(NULL);
-	xio_session_close(session);
-	connection = NULL;
-
-	xio_ev_loop_stop(loop);
+	switch (event_data->event) {
+	case XIO_SESSION_TEARDOWN_EVENT:
+		process_request(NULL);
+		xio_session_close(session);
+		connection = NULL;
+		xio_ev_loop_stop(loop);
+		break;
+	default:
+		break;
+	};
 
 	return 0;
 }

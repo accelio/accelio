@@ -206,5 +206,8 @@ static inline int xio_session_not_queueing(struct xio_session *session)
 int xio_session_notify_cancel(struct xio_connection *connection,
 			      struct xio_msg *req, enum xio_status result);
 
+void xio_session_notify_new_connection(struct xio_session *session,
+				       struct xio_connection *connection);
+
 #endif /*XIO_SESSION_H */
 

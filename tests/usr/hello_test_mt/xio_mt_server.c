@@ -396,8 +396,9 @@ static int on_session_event(struct xio_session *session,
 	struct server_data *server_data = cb_user_context;
 	int		   i;
 
-	printf("session event: %s. reason: %s\n",
+	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
+	       session, event_data->conn,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {

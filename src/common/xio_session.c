@@ -483,6 +483,7 @@ static int xio_on_setup_req_recv(struct xio_connection *connection,
 			goto cleanup2;
 		}
 	}
+	xio_session_notify_new_connection(session, connection);
 
 	kfree(req.uri);
 	kfree(req.user_context);
@@ -1564,6 +1565,44 @@ static void xio_session_notify_teardown(struct xio_session *session, int reason)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_notify_new_connection					     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_new_connection(struct xio_session *session,
+				       struct xio_connection *connection)
+{
+	struct xio_session_event_data  event = {
+		.conn			= connection,
+		.conn_user_context	= connection->cb_user_context,
+		.event			= XIO_SESSION_NEW_CONNECTION_EVENT,
+		.reason			= XIO_E_SUCCESS,
+	};
+
+	if (session->ses_ops.on_session_event)
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_connection_closed					     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_connection_closed(struct xio_session *session,
+					  struct xio_connection *connection)
+{
+
+	struct xio_session_event_data  event = {
+		.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
+		.reason = XIO_E_SUCCESS,
+		.conn = connection,
+		.conn_user_context = connection->cb_user_context
+	};
+	if (session->ses_ops.on_session_event)
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_conn_closed							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_conn_closed(struct xio_session *session,
@@ -1590,6 +1629,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 
 	/* leading connection */
 	if (session->lead_conn && session->lead_conn->conn == conn) {
+		xio_session_notify_connection_closed(session, session->lead_conn);
 		xio_connection_close(session->lead_conn);
 		session->lead_conn = NULL;
 		if (session->type == XIO_SESSION_REP) {
@@ -1613,18 +1653,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 	} else {
 		connection = xio_session_find_connection(session, conn);
 		xio_connection_flush(connection);
-		if (session->type == XIO_SESSION_REQ) {
-			struct xio_session_event_data  event = {
-				.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
-				.reason = XIO_E_SUCCESS,
-				.conn = connection,
-				.conn_user_context = connection->cb_user_context
-			};
-			if (session->ses_ops.on_session_event)
-				session->ses_ops.on_session_event(
-						session, &event,
-						session->cb_user_context);
-		}
+		xio_session_notify_connection_closed(session, connection);
 		spin_lock(&session->connections_list_lock);
 		teardown = (session->connections_nr == 1);
 		spin_unlock(&session->connections_list_lock);
@@ -1881,6 +1910,9 @@ static int xio_on_new_message(struct xio_session *session,
 							session, conn);
 				/* new user to the connection */
 				xio_conn_addref(conn);
+
+				xio_session_notify_new_connection(session,
+								  connection);
 			} else {
 				connection =
 					xio_session_assign_conn(session, conn);
@@ -2312,21 +2344,11 @@ int xio_session_disconnect(struct xio_session *session,
 	} else {
 		if ((connection->state == CONNECTION_STATE_DISCONNECT) ||
 		    (connection->state == CONNECTION_STATE_CLOSE)) {
-			struct xio_session_event_data  event = {
-				.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
-				.reason = XIO_E_SUCCESS,
-				.conn = connection,
-				.conn_user_context = connection->cb_user_context
-
-			};
 			spin_lock(&session->connections_list_lock);
 			teardown = (session->connections_nr == 1);
 			spin_unlock(&session->connections_list_lock);
+			xio_session_notify_connection_closed(session, connection);
 			xio_session_free_connection(connection);
-			if (session->ses_ops.on_session_event)
-				session->ses_ops.on_session_event(
-						session, &event,
-						session->cb_user_context);
 		} else {
 			teardown = list_empty(&session->connections_list);
 		}
@@ -2526,6 +2548,8 @@ const char *xio_session_event_str(enum xio_session_event event)
 		return "session reject";
 	case XIO_SESSION_TEARDOWN_EVENT:
 		return "session teardown";
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		return "new connection";
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		return "connection closed";
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:

@@ -527,7 +527,7 @@ int main(int argc, char *argv[])
 		goto exit3;
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, 0, NULL);
+	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE,
 			      test_config.hdr_len, test_config.data_len,

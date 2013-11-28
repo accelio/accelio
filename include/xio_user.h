@@ -200,6 +200,7 @@ enum xio_session_flags {
 enum xio_session_event {
 	XIO_SESSION_REJECT_EVENT,		  /**< session reject event   */
 	XIO_SESSION_TEARDOWN_EVENT,		  /**< session teardown event */
+	XIO_SESSION_NEW_CONNECTION_EVENT,	  /**< new connection event   */
 	XIO_SESSION_CONNECTION_CLOSED_EVENT,	  /**< connection closed event*/
 	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT, /**< disconnection event   */
 	XIO_SESSION_CONNECTION_ERROR_EVENT,	  /**< connection error event */
@@ -279,6 +280,16 @@ struct xio_session_attr {
 	void			*user_context;  /**< private user data snt to */
 						/**< server upon new session  */
 	size_t			user_context_len; /**< private data length    */
+};
+
+/**
+ * @struct xio_connection_params
+ * @brief connection parameters structure
+ */
+struct xio_connection_params {
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< orientedcallbacks       */
 };
 
 /**
@@ -763,6 +774,17 @@ struct xio_connection *xio_connect(
  * @returns success (0), or a (negative) error value
  */
 int xio_disconnect(struct xio_connection *conn);
+
+/**
+ * set  connection parameters
+ *
+ * @param[in] conn	The xio connection handle
+ * @param[in] params	The connection paramters structure
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_set_connection_params(struct xio_connection *conn,
+			      struct xio_connection_params *params);
 
 /**
  * send request to responder

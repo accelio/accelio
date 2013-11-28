@@ -170,6 +170,7 @@ static int xio_on_new_message(struct xio_server *server,
 		/* set this connection as the lead connection */
 		session->lead_conn = connection;
 
+
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 	} else {
 		/* find the old session */
@@ -199,6 +200,7 @@ static int xio_on_new_message(struct xio_server *server,
 				ERROR_LOG("failed to create snew connection\n");
 				return -1;
 			}
+			xio_session_notify_new_connection(session, connection);
 		}
 	}
 
