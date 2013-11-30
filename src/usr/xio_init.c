@@ -45,6 +45,7 @@
 
 int page_size;
 
+void xio_rdma_transport_constructor(void);
 
 /*---------------------------------------------------------------------------*/
 /* xio_constructor like module init					     */
@@ -61,6 +62,7 @@ __attribute__((constructor)) void xio_init(void)
 			xio_thread_data_construct();
 			sessions_store_construct();
 			conns_store_construct();
+			xio_rdma_transport_constructor();
 			atomic_set(&initialized, 1);
 		}
 		pthread_mutex_unlock(&mtx);

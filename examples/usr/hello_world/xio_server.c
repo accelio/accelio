@@ -155,6 +155,13 @@ int main(int argc, char *argv[])
 	void			*loop;
 	int			i;
 
+	if (argc < 2) {
+		printf("Usage: %s <host> <port>\n", argv[0]);
+		exit(1);
+	}
+
+	/* initialize library */
+	xio_init();
 
 	/* open default event loop */
 	loop	= xio_ev_loop_init();

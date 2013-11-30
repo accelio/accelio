@@ -2264,7 +2264,7 @@ static struct xio_transport xio_rdma_transport = {
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_transport_constructor					     */
 /*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_rdma_transport_constructor(void)
+void xio_rdma_transport_constructor(void)
 {
 	int			retval;
 	struct xio_transport	*transport = &xio_rdma_transport;

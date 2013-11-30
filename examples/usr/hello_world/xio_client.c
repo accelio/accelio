@@ -149,6 +149,9 @@ int main(int argc, char *argv[])
 		0
 	};
 
+	/* initialize library */
+	xio_init();
+
 	/* open default event loop */
 	session_data.loop = xio_ev_loop_init();
 
