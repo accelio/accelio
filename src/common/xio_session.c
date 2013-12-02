@@ -1209,16 +1209,6 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		kfree(rsp->user_context);
 		rsp->user_context = NULL;
 
-		tmp_connection =
-			xio_session_assign_conn(session,
-						connection->conn);
-
-		/* close the old connection */
-		xio_conn_close(connection->conn, &session->observer);
-
-		tmp_connection->conn = NULL;
-		connection = tmp_connection;
-
 		session->state = XIO_SESSION_STATE_REJECTED;
 
 		TRACE_LOG("session state is now REJECT. session:%p\n",
@@ -1639,7 +1629,13 @@ static int xio_on_conn_closed(struct xio_session *session,
 	/* leading connection */
 	if (session->lead_conn && session->lead_conn->conn == conn) {
 		xio_session_notify_connection_closed(session, session->lead_conn);
-		xio_connection_close(session->lead_conn);
+		connection = xio_session_find_connection(session,
+							 session->lead_conn->conn);
+		if (connection)
+			xio_session_free_connection(session->lead_conn);
+		else
+			xio_connection_close(session->lead_conn);
+
 		session->lead_conn = NULL;
 		if (session->type == XIO_SESSION_REP) {
 			/* do not notify teardown if no messages arrived
