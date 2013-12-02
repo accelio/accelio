@@ -2297,7 +2297,7 @@ void xio_rdma_transport_constructor(void)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_transport_destructor					     */
 /*---------------------------------------------------------------------------*/
-__attribute__((destructor)) void xio_rdma_transport_destructor(void)
+void xio_rdma_transport_destructor(void)
 {
 	struct xio_transport	*transport = &xio_rdma_transport;
 

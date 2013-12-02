@@ -46,6 +46,7 @@
 int page_size;
 
 void xio_rdma_transport_constructor(void);
+void xio_rdma_transport_destructor(void);
 
 /*---------------------------------------------------------------------------*/
 /* xio_constructor like module init					     */
@@ -77,6 +78,7 @@ __attribute__((destructor)) void xio_shutdown(void)
 	if (! atomic_read(&initialized)) {
 		pthread_mutex_lock(&mtx);
 		if (!atomic_read(&initialized)) {
+			xio_rdma_transport_destructor();
 		}
 		pthread_mutex_unlock(&mtx);
 	}
