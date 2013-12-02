@@ -288,10 +288,12 @@ cleanup:
 int xio_free(struct xio_buf **buf)
 {
 	struct xio_mr		*tmr = (*buf)->mr;
-	int			retval = xio_dereg_mr(&tmr);
+	int			retval = 0;
 
 	if (tmr->addr_alloced)
 		free((*buf)->addr);
+
+	retval = xio_dereg_mr(&tmr);
 
 	free(*buf);
 	*buf = NULL;
