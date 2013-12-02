@@ -209,5 +209,8 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 void xio_session_notify_new_connection(struct xio_session *session,
 				       struct xio_connection *connection);
 
+int xio_session_notify_msg_error(struct xio_connection *connection,
+			         struct xio_msg *msg, enum xio_status result);
+
 #endif /*XIO_SESSION_H */
 

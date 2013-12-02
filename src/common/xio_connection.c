@@ -128,6 +128,10 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 
 		xio_msg_list_init(&connection->reqs_msgq);
 		xio_msg_list_init(&connection->rsps_msgq);
+
+		xio_msg_list_init(&connection->in_flight_reqs_msgq);
+		xio_msg_list_init(&connection->in_flight_rsps_msgq);
+
 		xio_init_ow_msg_pool(connection);
 
 		kref_init(&connection->kref);
@@ -253,13 +257,57 @@ cleanup:
 
 	return -1;
 }
+
 /*---------------------------------------------------------------------------*/
-/* xio_connection_flush							     */
+/* xio_connection_flush_msgs						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_flush(struct xio_connection *connection)
+int xio_connection_flush_msgs(struct xio_connection *connection)
 {
-	struct xio_msg		*msg;
-	struct xio_task		*task = NULL;
+	struct xio_msg		*pmsg, *tmp_pmsg, *omsg;
+
+	omsg = xio_msg_list_first(&connection->reqs_msgq);
+	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_reqs_msgq, tmp_pmsg) {
+		xio_msg_list_remove(&connection->in_flight_reqs_msgq, pmsg);
+		if (omsg)
+			xio_msg_list_insert_before(omsg, pmsg);
+		else
+			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg);
+	}
+
+	omsg = xio_msg_list_first(&connection->rsps_msgq);
+	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_rsps_msgq, tmp_pmsg) {
+		xio_msg_list_remove(&connection->in_flight_rsps_msgq, pmsg);
+		if (omsg)
+			xio_msg_list_insert_before(omsg, pmsg);
+		else
+			xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg);
+	}
+
+	return 0;
+}
+
+int xio_connection_notify_msgs_flush(struct xio_connection *conn)
+{
+	struct xio_msg		*pmsg, *tmp_pmsg;
+
+	xio_msg_list_foreach_safe(pmsg, &conn->reqs_msgq, tmp_pmsg) {
+		xio_msg_list_remove(&conn->reqs_msgq, pmsg);
+		xio_session_notify_msg_error(conn, pmsg, XIO_E_MSG_FLUSHED);
+	}
+
+	xio_msg_list_foreach_safe(pmsg, &conn->rsps_msgq, tmp_pmsg) {
+		xio_msg_list_remove(&conn->rsps_msgq, pmsg);
+		xio_session_notify_msg_error(conn, pmsg, XIO_E_MSG_FLUSHED);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_flush_tasks						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_flush_tasks(struct xio_connection *connection)
+{
 	struct xio_task		*ptask, *pnext_task;
 
 	if (!(connection->conn))
@@ -308,30 +356,6 @@ int xio_connection_flush(struct xio_connection *connection)
 		}
 	}
 
-	while (!xio_msg_list_empty(&connection->rsps_msgq)) {
-		msg = xio_msg_list_first(&connection->rsps_msgq);
-		xio_msg_list_remove(&connection->rsps_msgq, msg);
-		task = container_of(msg->request, struct xio_task, imsg);
-			/* after send success release it */
-		if (task->sender_task) {
-			/* the tx task is returend back to pool */
-			xio_tasks_pool_put(task->sender_task);
-			task->sender_task = NULL;
-		}
-		xio_tasks_pool_put(task);
-
-		if ((msg->type == XIO_ONE_WAY_RSP) ||
-		    (msg->type == XIO_FIN_RSP))
-			xio_msg_list_insert_tail(&connection->one_way_msg_pool,
-						 msg);
-	}
-	while (!xio_msg_list_empty(&connection->reqs_msgq)) {
-		msg = xio_msg_list_first(&connection->reqs_msgq);
-		xio_msg_list_remove(&connection->reqs_msgq, msg);
-	}
-
-
-
 	return 0;
 }
 
@@ -347,10 +371,15 @@ static int xio_connection_xmit(struct xio_connection *conn)
 		&conn->reqs_msgq,
 		&conn->rsps_msgq
 	};
-	struct xio_msg_list *msgq;
+	struct xio_msg_list *in_flight_msg_lists[] = {
+		&conn->in_flight_reqs_msgq,
+		&conn->in_flight_rsps_msgq
+	};
+	struct xio_msg_list *msgq, *in_flight_msgq;
 
 	while (retry_cnt < 2) {
-		msgq = msg_lists[conn->send_req_toggle];
+		msgq		= msg_lists[conn->send_req_toggle];
+		in_flight_msgq	= in_flight_msg_lists[conn->send_req_toggle];
 		conn->send_req_toggle = 1 - conn->send_req_toggle;
 		msg = xio_msg_list_first(msgq);
 		if (msg != NULL) {
@@ -370,6 +399,7 @@ static int xio_connection_xmit(struct xio_connection *conn)
 			} else {
 				retry_cnt = 0;
 				xio_msg_list_remove(msgq, msg);
+				xio_msg_list_insert_tail(in_flight_msgq, msg);
 			}
 		} else {
 			retry_cnt++;
@@ -381,6 +411,17 @@ static int xio_connection_xmit(struct xio_connection *conn)
 			  xio_strerror(xio_errno()));
 
 	return retval;
+}
+
+int xio_connection_remove_in_flight(struct xio_connection *conn,
+				    struct xio_msg *msg)
+{
+	if (IS_REQUEST(msg->type)) {
+		xio_msg_list_remove(&conn->in_flight_reqs_msgq, msg);
+	 } else {
+		 xio_msg_list_remove(&conn->in_flight_rsps_msgq, msg);
+	 }
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/

@@ -75,6 +75,9 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static void			*loop;
 static struct msg_pool		*pool;
+static uint64_t			last_sent;
+static uint64_t			last_comp;
+
 
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
@@ -173,6 +176,8 @@ static int on_session_event(struct xio_session *session,
 		event_data->conn_user_context = cb_prv_data;
 		break;
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		printf("last sent:%lu, last comp:%lu, delta:%lu\n",
+		       last_sent,  last_comp, last_sent-last_comp);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
@@ -234,6 +239,7 @@ static int on_request(struct xio_session *session,
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(pool, req);
 	}
+	last_sent = req->sn;
 
 
 	return 0;
@@ -246,6 +252,8 @@ static int on_send_response_complete(struct xio_session *session,
 			struct xio_msg *msg,
 			void *cb_prv_data)
 {
+	last_comp = msg->request->sn;
+
 	/* can be safely freed */
 	msg_pool_put(pool, msg);
 
@@ -260,7 +268,7 @@ int on_msg_error(struct xio_session *session,
 		void *cb_private_data)
 {
 	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	       session, msg->request->sn, xio_strerror(error));
 
 	msg_pool_put(pool, msg);
 

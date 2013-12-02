@@ -68,6 +68,9 @@ struct xio_connection {
 	struct kref			kref;
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
+	struct xio_msg_list		in_flight_reqs_msgq;
+	struct xio_msg_list		in_flight_rsps_msgq;
+
 	struct xio_msg_list		one_way_msg_pool;
 	struct xio_msg			*msg_array;
 
@@ -134,7 +137,14 @@ int xio_do_disconnect(struct xio_connection *conn);
 int xio_ack_disconnect(struct xio_connection *conn,
 		       struct xio_task *task);
 
-int xio_connection_flush(struct xio_connection *conn);
+int xio_connection_flush_msgs(struct xio_connection *conn);
+
+int xio_connection_flush_tasks(struct xio_connection *connection);
+
+int xio_connection_notify_msgs_flush(struct xio_connection *conn);
+
+int xio_connection_remove_in_flight(struct xio_connection *conn,
+				    struct xio_msg *msg);
 
 int xio_connection_send_cancel_response(
 		struct xio_connection *conn,

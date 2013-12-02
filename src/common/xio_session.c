@@ -1382,6 +1382,9 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	/* store the task in io queue */
 	xio_connection_queue_io_task(connection, task);
 
+	/* remove the message from in flight queue */
+	xio_connection_remove_in_flight(connection, omsg);
+
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
 		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
 			ERROR_LOG("protocol requires first flag to be set. " \
@@ -1443,6 +1446,11 @@ static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
+
+
+	/* remove the message from in flight queue */
+	xio_connection_remove_in_flight(connection, task->omsg);
+
 	/*
 	 * completion of receipt
 	 */
@@ -1519,6 +1527,7 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 				session->ses_ops.on_session_event(
 						session, &event,
 						session->cb_user_context);
+
 		} else if (session->type == XIO_SESSION_REP) {
 			xio_session_disconnect(session, connection);
 		}
@@ -1652,7 +1661,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 		spin_unlock(&session->connections_list_lock);
 	} else {
 		connection = xio_session_find_connection(session, conn);
-		xio_connection_flush(connection);
+		xio_connection_flush_tasks(connection);
 		xio_session_notify_connection_closed(session, connection);
 		spin_lock(&session->connections_list_lock);
 		teardown = (session->connections_nr == 1);
@@ -2338,6 +2347,14 @@ int xio_session_disconnect(struct xio_session *session,
 {
 	int teardown = 0;
 
+	/* prepare to disconnect */
+
+	/* flush all messages from in flight message queue to in queue */
+	xio_connection_flush_msgs(connection);
+
+	/* flush all messages back to user */
+	xio_connection_notify_msgs_flush(connection);
+
 	/* remove the connection from the session's connections list */
 	if (connection->conn) {
 		xio_conn_close(connection->conn, &session->observer);
@@ -2583,6 +2600,23 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 		connection->ses_ops.on_cancel(
 				connection->session, req,
 				result,
+				connection->cb_user_context);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_msg_error						     */
+/*---------------------------------------------------------------------------*/
+int xio_session_notify_msg_error(struct xio_connection *connection,
+			         struct xio_msg *msg, enum xio_status result)
+{
+
+	/* notify the upper layer */
+	if (connection->ses_ops.on_msg_error)
+		connection->ses_ops.on_msg_error(
+				connection->session,
+				result, msg,
 				connection->cb_user_context);
 
 	return 0;

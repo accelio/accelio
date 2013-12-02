@@ -59,7 +59,7 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 
-#define MAX_POOL_SIZE		512
+#define MAX_POOL_SIZE		50
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
@@ -81,6 +81,9 @@ static void			*loop;
 static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
+static uint64_t			last_sent;
+static uint64_t			last_recv;
+
 
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
@@ -218,6 +221,8 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
+		printf("last sent:%lu, last recv:%lu, delta:%lu\n",
+		       last_sent,  last_recv, last_sent-last_recv);
 		xio_disconnect(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
@@ -268,6 +273,8 @@ static int on_response(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
+	last_recv = msg->request->sn;
+
 	process_response(msg);
 
 	if (msg->status)
@@ -308,6 +315,7 @@ static int on_response(struct xio_session *session,
 			msg_pool_put(pool, msg);
 			return 0;
 		}
+		last_sent = msg->sn;
 	} while (0);
 
 
@@ -567,6 +575,7 @@ int main(int argc, char *argv[])
 			msg_pool_put(pool, msg);
 			return 0;
 		}
+		last_sent = msg->sn;
 		i++;
 		if (i == 50)
 			break;

@@ -98,6 +98,8 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Message cancel failed";
 	case XIO_E_MSG_NOT_FOUND:
 		return "Message not found";
+	case XIO_E_MSG_FLUSHED:
+		return "Message flushed";
 	default:
 		return "Unknown error";
 	};
@@ -111,7 +113,7 @@ const char *xio_strerror(int errnum)
 	if (errnum < XIO_BASE_STATUS)
 		return strerror(errnum);
 
-	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_NOT_FOUND)
+	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_FLUSHED)
 		return xio_gen_status_str(errnum);
 
 	return "Unknown error";
