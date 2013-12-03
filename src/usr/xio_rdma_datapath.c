@@ -134,12 +134,13 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 	struct ibv_send_wr	*bad_wr;
 	int			retval, nr_posted;
 
-
+	/*
 	TRACE_LOG("num_sge:%d, len1:%d, len2:%d, send_flags:%d\n",
 		  xio_send->send_wr.num_sge,
 		  xio_send->send_wr.sg_list[0].length,
 		  xio_send->send_wr.sg_list[1].length,
 		  xio_send->send_wr.send_flags);
+	*/
 
 	retval = ibv_post_send(rdma_hndl->qp, &xio_send->send_wr, &bad_wr);
 	if (likely(!retval)) {
@@ -511,6 +512,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_transport       *rdma_hndl = rdma_task->rdma_hndl;
+	int				retval;
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
 		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, " \
@@ -540,8 +542,14 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 
 	/* temporary  */
 	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
-		ERROR_LOG("program abort\n");
-		exit(0);
+		ERROR_LOG("connection is disconnected\n");
+		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		retval = rdma_disconnect(rdma_hndl->cm_id);
+		if (retval)
+			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+
+		//exit(0);
 	}
 }
 
@@ -2820,7 +2828,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_read_setup_msg(rdma_hndl, task, &req);
 
 		/* current implementation is symatric */
-		rsp->buffer_sz	= rdma_hndl->max_send_buf_sz;
+		rsp->buffer_sz	= min(req.buffer_sz, rdma_hndl->max_send_buf_sz);
 		rsp->sq_depth	= min(req.sq_depth, rdma_hndl->rq_depth);
 		rsp->rq_depth	= min(req.rq_depth, rdma_hndl->sq_depth);
 	}
@@ -2830,6 +2838,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->actual_rq_depth	= rdma_hndl->rq_depth + EXTRA_RQE;
 	rdma_hndl->sq_depth		= rsp->sq_depth;
 	rdma_hndl->membuf_sz		= rsp->buffer_sz;
+	rdma_hndl->max_send_buf_sz	= rsp->buffer_sz;
 
 	/* initialize send window */
 	rdma_hndl->sn = 0;
