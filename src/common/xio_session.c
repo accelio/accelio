@@ -483,6 +483,11 @@ static int xio_on_setup_req_recv(struct xio_connection *connection,
 			goto cleanup2;
 		}
 	}
+
+	connection->session->state = XIO_SESSION_STATE_ONLINE;
+	TRACE_LOG("session state changed to ONLINE. session:%p\n",
+			connection->session);
+
 	xio_session_notify_new_connection(session, connection);
 
 	kfree(req.uri);
@@ -1233,12 +1238,6 @@ static int xio_on_setup_rsp_send_comp(
 
 	/* time to set new callback */
 	DEBUG_LOG("task recycled\n");
-
-	if (connection->session->state == XIO_SESSION_STATE_CONNECT) {
-		connection->session->state = XIO_SESSION_STATE_ONLINE;
-		TRACE_LOG("session state changed to ONLINE. session:%p\n",
-			  connection->session);
-	}
 
 	return 0;
 }
