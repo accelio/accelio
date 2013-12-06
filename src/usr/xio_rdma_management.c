@@ -201,7 +201,7 @@ int xio_device_thread_add_device(struct xio_device *dev)
 	retval = xio_ev_loop_add(
 			dev_tdata.async_loop,
 			dev->verbs->async_fd,
-			XIO_POLLIN,
+			XIO_POLLIN|XIO_POLLLT,
 			xio_async_ev_handler,
 			dev);
 	if (retval != 0) {
@@ -869,7 +869,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 				  rdma_hndl->actual_rq_depth);
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
-	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
+	rdma_hndl->max_tx_ready_tasks_num = 2*rdma_hndl->sq_depth;
 
 	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
 		  rdma_hndl->alloc_sz,

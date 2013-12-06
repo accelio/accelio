@@ -782,7 +782,12 @@ static int xio_send_fin_req(struct xio_connection *conn)
 	msg = xio_msg_list_first(&conn->one_way_msg_pool);
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
 
-	msg->type = XIO_FIN_REQ;
+	msg->type		= XIO_FIN_REQ;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iovlen	= 0;
+	msg->out.data_iovlen	= 0;
+
 
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&conn->reqs_msgq, msg);
@@ -805,8 +810,13 @@ static int xio_send_fin_rsp(struct xio_connection *conn, struct xio_task *task)
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
 
 
-	msg->type = XIO_FIN_RSP;
-	msg->request = &task->imsg;
+	msg->type		= XIO_FIN_RSP;
+	msg->request		= &task->imsg;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iovlen	= 0;
+	msg->out.data_iovlen	= 0;
+
 
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&conn->rsps_msgq, msg);
@@ -993,7 +1003,11 @@ int xio_send_connection_hello_req(struct xio_connection *conn)
 	msg = xio_msg_list_first(&conn->one_way_msg_pool);
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
 
-	msg->type = XIO_CONNECTION_HELLO_REQ;
+	msg->type		= XIO_CONNECTION_HELLO_REQ;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iovlen	= 0;
+	msg->out.data_iovlen	= 0;
 
 	/* we don't want to send all queued messages yet - send directly */
 	return xio_connection_send(conn, msg);
@@ -1011,8 +1025,13 @@ int xio_send_connection_hello_rsp(struct xio_connection *conn,
 	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
 
 
-	msg->type = XIO_CONNECTION_HELLO_RSP;
-	msg->request = &task->imsg;
+	msg->type		= XIO_CONNECTION_HELLO_RSP;
+	msg->request		= &task->imsg;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iovlen	= 0;
+	msg->out.data_iovlen	= 0;
+
 
 	/* we don't want to send all queued messages yet - send directly */
 	return xio_connection_send(conn, msg);
