@@ -309,11 +309,11 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 
 	return tcq;
 
-cleanup3:
+cleanup4:
 	retval = ibv_destroy_cq(tcq->cq);
 	if (retval)
 		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
-cleanup4:
+cleanup3:
 	retval = ibv_destroy_comp_channel(tcq->channel);
 	if (retval)
 		ERROR_LOG("ibv_destroy_comp_channel failed. (errno=%d %m)\n",
@@ -341,15 +341,16 @@ static void xio_cq_release(struct xio_cq *tcq)
 				   tcq->cq_events_that_need_ack);
 				   tcq->cq_events_that_need_ack = 0;
 	}
-	tcq->ctx->loop_ops.ev_loop_del_cb(
+	retval = tcq->ctx->loop_ops.ev_loop_del_cb(
 			tcq->ctx->ev_loop,
 			tcq->channel->fd);
+	if (retval)
+		ERROR_LOG("ev_loop_del_cb failed. (errno=%d %m)\n", errno);
 
 	/*the event loop may be release by the time this fuction is called */
 	retval = ibv_destroy_cq(tcq->cq);
 	if (retval)
 		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
-
 
 	retval = ibv_destroy_comp_channel(tcq->channel);
 	if (retval)
@@ -868,7 +869,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 				  rdma_hndl->actual_rq_depth);
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
-	rdma_hndl->max_tx_ready_tasks_num = 2*rdma_hndl->sq_depth;
+	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
 
 	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
 		  rdma_hndl->alloc_sz,
@@ -2131,6 +2132,8 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_transport_release(struct xio_transport *transport)
 {
+	spin_lock(&mngmt_lock);
+
 	xio_rdma_mempool_array_release();
 
 	/* free all redundent registered memory */
@@ -2142,6 +2145,8 @@ static void xio_rdma_transport_release(struct xio_transport *transport)
 	xio_cm_list_release();
 
 	xio_device_thread_stop();
+
+	spin_unlock(&mngmt_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2306,5 +2311,7 @@ void xio_rdma_transport_destructor(void)
 		xio_rdma_transport_release(transport);
 
 	xio_unreg_transport(transport);
+
+	transport_init = 0;
 }
 

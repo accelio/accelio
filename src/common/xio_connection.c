@@ -48,6 +48,8 @@
 
 #define MSG_POOL_SZ	1024
 
+#define		IS_APPLICATION_MSG(msg) \
+		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
 
 /*---------------------------------------------------------------------------*/
 /* xio_is_connection_online						     */
@@ -263,10 +265,12 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 int xio_connection_flush_msgs(struct xio_connection *connection)
 {
-	struct xio_msg		*pmsg, *tmp_pmsg, *omsg;
+	struct xio_msg		*pmsg, *tmp_pmsg, *omsg = NULL;
 
-	omsg = xio_msg_list_first(&connection->reqs_msgq);
-	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_reqs_msgq, tmp_pmsg) {
+	if (!xio_msg_list_empty(&connection->reqs_msgq))
+		omsg = xio_msg_list_first(&connection->reqs_msgq);
+	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_reqs_msgq,
+				  tmp_pmsg) {
 		xio_msg_list_remove(&connection->in_flight_reqs_msgq, pmsg);
 		if (omsg)
 			xio_msg_list_insert_before(omsg, pmsg);
@@ -274,8 +278,13 @@ int xio_connection_flush_msgs(struct xio_connection *connection)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg);
 	}
 
-	omsg = xio_msg_list_first(&connection->rsps_msgq);
-	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_rsps_msgq, tmp_pmsg) {
+	if (!xio_msg_list_empty(&connection->rsps_msgq))
+		omsg = xio_msg_list_first(&connection->rsps_msgq);
+	else
+		omsg = NULL;
+
+	xio_msg_list_foreach_safe(pmsg, &connection->in_flight_rsps_msgq,
+				  tmp_pmsg) {
 		xio_msg_list_remove(&connection->in_flight_rsps_msgq, pmsg);
 		if (omsg)
 			xio_msg_list_insert_before(omsg, pmsg);
@@ -399,7 +408,9 @@ static int xio_connection_xmit(struct xio_connection *conn)
 			} else {
 				retry_cnt = 0;
 				xio_msg_list_remove(msgq, msg);
-				xio_msg_list_insert_tail(in_flight_msgq, msg);
+				if (IS_APPLICATION_MSG(msg))
+					xio_msg_list_insert_tail(in_flight_msgq,
+								 msg);
 			}
 		} else {
 			retry_cnt++;
@@ -413,14 +424,20 @@ static int xio_connection_xmit(struct xio_connection *conn)
 	return retval;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_connection_remove_in_flight					     */
+/*---------------------------------------------------------------------------*/
 int xio_connection_remove_in_flight(struct xio_connection *conn,
 				    struct xio_msg *msg)
 {
-	if (IS_REQUEST(msg->type)) {
+	if (!IS_APPLICATION_MSG(msg))
+		return 0;
+
+	if (IS_REQUEST(msg->type))
 		xio_msg_list_remove(&conn->in_flight_reqs_msgq, msg);
-	 } else {
-		 xio_msg_list_remove(&conn->in_flight_rsps_msgq, msg);
-	 }
+	else
+		xio_msg_list_remove(&conn->in_flight_rsps_msgq, msg);
+
 	return 0;
 }
 
@@ -808,6 +825,7 @@ int xio_connection_release_fin(struct xio_connection *conn,
 			       struct xio_msg *msg)
 {
 	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg);
+
 	return 0;
 }
 
@@ -828,7 +846,7 @@ int xio_do_disconnect(struct xio_connection *conn)
 /*---------------------------------------------------------------------------*/
 int xio_disconnect(struct xio_connection *conn)
 {
-	if (conn->state == CONNECTION_STATE_ONLINE) {
+	if (xio_is_connection_online(conn)) {
 		xio_send_fin_req(conn);
 		conn->state = CONNECTION_STATE_CLOSING;
 	} else {
@@ -965,4 +983,49 @@ int xio_set_connection_params(struct xio_connection *connection,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_send_connection_hello_req					     */
+/*---------------------------------------------------------------------------*/
+int xio_send_connection_hello_req(struct xio_connection *conn)
+{
+	struct xio_msg *msg;
+
+	msg = xio_msg_list_first(&conn->one_way_msg_pool);
+	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
+
+	msg->type = XIO_CONNECTION_HELLO_REQ;
+
+	/* we don't want to send all queued messages yet - send directly */
+	return xio_connection_send(conn, msg);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_connection_hello_rsp					     */
+/*---------------------------------------------------------------------------*/
+int xio_send_connection_hello_rsp(struct xio_connection *conn,
+				  struct xio_task *task)
+{
+	struct xio_msg	*msg;
+
+	msg = xio_msg_list_first(&conn->one_way_msg_pool);
+	xio_msg_list_remove(&conn->one_way_msg_pool, msg);
+
+
+	msg->type = XIO_CONNECTION_HELLO_RSP;
+	msg->request = &task->imsg;
+
+	/* we don't want to send all queued messages yet - send directly */
+	return xio_connection_send(conn, msg);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_release_connection_hello						     */
+/*---------------------------------------------------------------------------*/
+int xio_release_connection_hello(struct xio_connection *conn,
+				 struct xio_msg *msg)
+{
+	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg);
+
+	return 0;
+}
 

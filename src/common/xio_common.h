@@ -77,9 +77,9 @@ void xio_set_error(int errnum);
 #define XIO_NOP			1
 
 #define XIO_CREDIT		(1 << 6)
-#define XIO_ACK			(1 << 7)
-#define XIO_CONN_SETUP		(1 << 8)
-#define XIO_SESSION_SETUP	(1 << 9)
+#define XIO_CONN_SETUP		(1 << 7)
+#define XIO_SESSION_SETUP	(1 << 8)
+#define XIO_CONNECTION_HELLO	(1 << 9)
 #define XIO_FIN			(1 << 10)
 #define XIO_CANCEL		(1 << 11)
 
@@ -87,7 +87,6 @@ void xio_set_error(int errnum);
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
 #define XIO_CREDIT_NOP		(XIO_CREDIT | XIO_NOP)
-#define XIO_ACK_NOP		(XIO_ACK | XIO_NOP)
 #define XIO_CONN_SETUP_REQ	(XIO_CONN_SETUP | XIO_REQUEST)
 #define XIO_CONN_SETUP_RSP	(XIO_CONN_SETUP | XIO_RESPONSE)
 #define XIO_SESSION_SETUP_REQ	(XIO_SESSION_SETUP | XIO_REQUEST)
@@ -98,7 +97,8 @@ void xio_set_error(int errnum);
 #define XIO_FIN_RSP		(XIO_FIN | XIO_RESPONSE)
 #define XIO_CANCEL_REQ		(XIO_CANCEL | XIO_REQUEST)
 #define XIO_CANCEL_RSP		(XIO_CANCEL | XIO_RESPONSE)
-
+#define XIO_CONNECTION_HELLO_REQ (XIO_CONNECTION_HELLO | XIO_REQUEST)
+#define XIO_CONNECTION_HELLO_RSP (XIO_CONNECTION_HELLO | XIO_RESPONSE)
 
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
@@ -110,6 +110,7 @@ void xio_set_error(int errnum);
 #define IS_ONE_WAY(type)		((type) & XIO_ONE_WAY)
 #define IS_FIN(type)			((type) & XIO_FIN)
 #define IS_CANCEL(type)			((type) & XIO_CANCEL)
+#define IS_CONNECTION_HELLO(type)	((type) & XIO_CONNECTION_HELLO)
 
 
 /**
@@ -206,7 +207,8 @@ char		*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
-int		xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss);
+int		xio_host_port_to_ss(const char *buf,
+				    struct sockaddr_storage *ss);
 
 size_t		xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer);
 

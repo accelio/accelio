@@ -84,36 +84,6 @@ static int xio_on_new_conn(struct xio_server *server,
 	return 0;
 }
 
-/* find the old session */
-/*---------------------------------------------------------------------------*/
-/* xio_server_create_accepted_connection				     */
-/*---------------------------------------------------------------------------*/
-struct xio_connection *xio_server_create_accepted_connection(
-		struct xio_session *session,
-		struct xio_conn *conn)
-{
-	struct xio_connection	*connection;
-	struct xio_server	*server =  xio_conn_get_server(conn);
-
-	DEBUG_LOG("[new connection]: " \
-		  "session:%p, conn:%p, session_id:%d\n",
-		  session, conn, session->session_id);
-
-	connection = xio_session_alloc_connection(session, server->ctx, 0,
-			server->cb_private_data);
-	connection = xio_session_assign_conn(session, conn);
-
-	/* cancel the lead connection */
-	session->lead_conn = NULL;
-
-	xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
-
-	/* copy the server attributes to the connection */
-	xio_connection_set_ops(connection, &server->ops);
-
-	return connection;
-}
-
 /* first message after new connection are going trough the server */
 static int xio_on_new_message(struct xio_server *server,
 			      struct xio_conn *conn,
@@ -147,7 +117,6 @@ static int xio_on_new_message(struct xio_server *server,
 				"  allocating session failed\n");
 			return -1;
 		}
-
 		DEBUG_LOG("server [new session]: server:%p, " \
 			  "session:%p, conn:%p ,session_id:%d\n",
 			  server, session, conn, session->session_id);
@@ -156,7 +125,8 @@ static int xio_on_new_message(struct xio_server *server,
 		session->trans_cls = xio_conn_get_trans_cls(conn);
 
 		connection =
-			xio_session_alloc_connection(session, server->ctx, 0,
+			xio_session_alloc_connection(session,
+						     server->ctx, 0,
 						     server->cb_private_data);
 		if (!connection) {
 			ERROR_LOG("server failed to allocate new connection\n");
@@ -167,41 +137,38 @@ static int xio_on_new_message(struct xio_server *server,
 			ERROR_LOG("server failed to assign new connection\n");
 			goto cleanup1;
 		}
-		/* set this connection as the lead connection */
-		session->lead_conn = connection;
-
 
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
-	} else {
+	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
+		struct xio_task	*task = event_data->msg.task;
+
 		/* find the old session */
 		session = xio_find_session(event_data->msg.task);
 		if (session == NULL) {
 			ERROR_LOG("server [new connection]: failed " \
-				"  session not found\n");
+				  "session not found\n");
 			return -1;
 		}
+		task->session = session;
 
 		DEBUG_LOG("server [new connection]: server:%p, " \
 			  "session:%p, conn:%p, session_id:%d\n",
 			   server, session, conn, session->session_id);
 
-		if (!session->lead_conn || session->lead_conn->conn != conn)
-			xio_conn_reg_observer(conn,
-					      &session->observer,
-					      session->session_id);
+		connection = xio_session_alloc_connection(task->session,
+						  server->ctx, 0,
+						  server->cb_private_data);
 
-		session->lead_conn = NULL;
-		connection = xio_session_find_connection(session, conn);
-		if (connection == NULL) {
-			connection =
-				xio_server_create_accepted_connection(session,
-								      conn);
-			if (!connection) {
-				ERROR_LOG("failed to create snew connection\n");
-				return -1;
-			}
-			xio_session_notify_new_connection(session, connection);
-		}
+		connection = xio_session_assign_conn(task->session, conn);
+
+		/* copy the server attributes to the connection */
+		xio_connection_set_ops(connection, &server->ops);
+
+		task->connection = connection;
+
+		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+	} else {
+		ERROR_LOG("server unexpected message\n");
 	}
 
 	/* route the message to the session */

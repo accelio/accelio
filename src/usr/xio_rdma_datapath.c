@@ -548,8 +548,6 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 		if (retval)
 			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
-
-		//exit(0);
 	}
 }
 
@@ -992,6 +990,8 @@ void xio_data_ev_handler(int fd, int events, void *user_context)
 		ibv_ack_cq_events(tcq->cq, UINT_MAX);
 		tcq->cq_events_that_need_ack = 0;
 	}
+	if (tcq->cq == 0)
+		printf("DDDDDDDDDDDDDDDDDDDDDDDDDDDD\n");
 
 	xio_cq_event_handler(tcq, tcq->ctx->polling_timeout);
 
@@ -1418,7 +1418,7 @@ static int xio_rdma_prep_req_out_data(
 	xio_hdr_len += sizeof(struct xio_req_hdr);
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
-		ERROR_LOG("header size %lu exceeds the max header allowed %lu\n",
+		ERROR_LOG("header size %lu exceeds max header %lu\n",
 			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz);
 		return -1;
 	}
@@ -1750,7 +1750,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len += sizeof(rsp_hdr);
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
-		ERROR_LOG("header size %lu exceeds the max header allowed %lu\n",
+		ERROR_LOG("header size %lu exceeds max header %lu\n",
 			  ulp_imm_len, rdma_hndl->max_send_buf_sz);
 		goto cleanup;
 	}
@@ -2046,7 +2046,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					  XIO_MAX_IOV,
 					  (struct xio_iovec *)imsg->in.data_iov,
 					  imsg->in.data_iovlen);
-
 		}
 		break;
 	case XIO_IB_RDMA_WRITE:
@@ -2828,7 +2827,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_read_setup_msg(rdma_hndl, task, &req);
 
 		/* current implementation is symatric */
-		rsp->buffer_sz	= min(req.buffer_sz, rdma_hndl->max_send_buf_sz);
+		rsp->buffer_sz	= min(req.buffer_sz,
+				      rdma_hndl->max_send_buf_sz);
 		rsp->sq_depth	= min(req.sq_depth, rdma_hndl->rq_depth);
 		rsp->rq_depth	= min(req.rq_depth, rdma_hndl->sq_depth);
 	}

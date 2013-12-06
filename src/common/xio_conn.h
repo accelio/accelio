@@ -117,10 +117,8 @@ struct xio_conn {
 
 	atomic_t			refcnt;
 	int				cid;
-	int				is_first_msg;
 	int				is_connected;
 	int				is_first_setup_req;
-	int				pad;
 
 	struct list_head		observers_htbl;
 
@@ -144,6 +142,7 @@ struct xio_conn *xio_conn_open(struct xio_context *ctx,
 /* xio_conn_connect							     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_connect(struct xio_conn *conn, const char *portal_uri,
+		     struct xio_observer *observer,
 		     const char *out_if);
 
 /*---------------------------------------------------------------------------*/

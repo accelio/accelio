@@ -152,5 +152,14 @@ int xio_connection_send_cancel_response(
 		struct xio_task *task,
 		enum xio_status result);
 
+int xio_send_connection_hello_req(struct xio_connection *conn);
+
+int xio_send_connection_hello_rsp(struct xio_connection *conn,
+				  struct xio_task *task);
+
+int xio_release_connection_hello(struct xio_connection *conn,
+				 struct xio_msg *msg);
+
+
 #endif /*XIO_CONNECTION_H */
 

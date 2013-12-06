@@ -486,7 +486,7 @@ static int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	connection->session->state = XIO_SESSION_STATE_ONLINE;
 	TRACE_LOG("session state changed to ONLINE. session:%p\n",
-			connection->session);
+		  connection->session);
 
 	xio_session_notify_new_connection(session, connection);
 
@@ -512,6 +512,19 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_req_recv			                     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_connection_hello_req_recv(struct xio_connection *connection,
+					    struct xio_task *task)
+{
+	xio_send_connection_hello_rsp(connection, task);
+
+	xio_session_notify_new_connection(task->session, connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
 /*---------------------------------------------------------------------------*/
 static struct xio_msg *xio_session_write_accept_rsp(
@@ -522,7 +535,7 @@ static struct xio_msg *xio_session_write_accept_rsp(
 		void *user_context,
 		uint16_t user_context_len)
 {
-	struct xio_msg	*msg;
+	struct xio_msg		*msg;
 	uint8_t			*buf;
 	uint8_t			*ptr;
 	uint16_t		len, i, str_len, tot_len;
@@ -691,13 +704,14 @@ static struct xio_msg *xio_session_write_reject_rsp(
 /*---------------------------------------------------------------------------*/
 static int xio_session_accept_connection(struct xio_session *session)
 {
-	struct xio_connection	*connection;
+	struct xio_connection	*connection, *tmp_connection;
 	struct xio_conn		*conn;
-	int			retval;
+	int			retval = 0;
 	char			*portal;
 
-	list_for_each_entry(connection, &session->connections_list,
-			    connections_list_entry) {
+	list_for_each_entry_safe(connection, tmp_connection,
+				 &session->connections_list,
+				 connections_list_entry) {
 		if (connection->conn == NULL) {
 			if (connection->conn_idx == 0) {
 				portal = session->portals_array[
@@ -715,24 +729,29 @@ static int xio_session_accept_connection(struct xio_session *session)
 					     session->session_id);
 
 			if (conn == NULL) {
-				DEBUG_LOG("failed to open connection to %s\n",
+				ERROR_LOG("failed to open connection to %s\n",
 					  portal);
-				break;
-			}
-			DEBUG_LOG("reconnecting to %s\n", portal);
-			retval = xio_conn_connect(conn, portal, NULL);
-			if (retval != 0) {
-				DEBUG_LOG("connection connect failed\n");
+				retval = -1;
 				break;
 			}
 			connection = xio_session_assign_conn(session, conn);
 			if (connection == NULL) {
 				ERROR_LOG("failed to assign connection\n");
-				return -1;
+				retval = -1;
+				break;
+			}
+			DEBUG_LOG("reconnecting to %s\n", portal);
+			retval = xio_conn_connect(conn, portal,
+						  &session->observer, NULL);
+			if (retval != 0) {
+				ERROR_LOG("connection connect failed\n");
+				retval = -1;
+				break;
 			}
 		}
 	}
-	return 0;
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -760,7 +779,7 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	xio_connection_set_conn(session->redir_conn, conn);
 
 	TRACE_LOG("connection redirected to %s\n", service);
-	retval = xio_conn_connect(conn, service, NULL);
+	retval = xio_conn_connect(conn, service, &session->observer, NULL);
 	if (retval != 0) {
 		ERROR_LOG("connection connect failed\n");
 		goto cleanup;
@@ -1108,6 +1127,34 @@ static int xio_read_setup_rsp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_prep_portal							     */
+/*---------------------------------------------------------------------------*/
+static int xio_prep_portal(struct xio_connection *connection)
+{
+	struct xio_session *session = connection->session;
+	char portal[64];
+
+	/* extract portal from uri */
+	if (xio_uri_get_portal(session->uri, portal, sizeof(portal)) != 0) {
+		xio_set_error(EADDRNOTAVAIL);
+		ERROR_LOG("parsing uri failed. uri: %s\n", session->uri);
+		return -1;
+	}
+	session->portals_array = kcalloc(
+			1,
+			sizeof(char *), GFP_KERNEL);
+	if (session->portals_array == NULL) {
+		ERROR_LOG("allocation failed\n");
+		xio_set_error(ENOMEM);
+		return -1;
+	}
+	session->portals_array_len = 1;
+	session->portals_array[0] = kstrdup(portal, GFP_KERNEL);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_setup_rsp_recv			                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_setup_rsp_recv(struct xio_connection *connection,
@@ -1139,11 +1186,9 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			kfree(rsp->user_context);
 			rsp->user_context = NULL;
 
-			session->state = XIO_SESSION_STATE_ONLINE;
+			xio_prep_portal(connection);
 
-			TRACE_LOG("session state is now ONLINE. session:%p\n",
-				  session);
-
+			/* insert the lead_conn connection into list */
 			tmp_connection =
 				xio_session_assign_conn(session,
 							connection->conn);
@@ -1155,13 +1200,32 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			/* now try to send */
 			xio_connection_set_state(connection,
 						 CONNECTION_STATE_ONLINE);
-			xio_connection_xmit_msgs(connection);
 
-			/* notify the upper layer */
-			if (session->ses_ops.on_session_established)
-				session->ses_ops.on_session_established(
+			if (session->connections_nr > 1) {
+				session->state = XIO_SESSION_STATE_ACCEPTED;
+
+				/* open new connections */
+				retval = xio_session_accept_connection(session);
+				if (retval != 0) {
+					ERROR_LOG(
+						"failed to accept connection\n");
+					return -1;
+				}
+			} else {
+				session->state = XIO_SESSION_STATE_ONLINE;
+				TRACE_LOG(
+				     "session state is now ONLINE. session:%p\n",
+				     session);
+
+				/* notify the upper layer */
+				if (session->ses_ops.on_session_established)
+					session->ses_ops.on_session_established(
 						session, rsp,
 						session->cb_user_context);
+
+				xio_connection_xmit_msgs(connection);
+			}
+
 			return 0;
 		} else { /* reconnect to peer other session */
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
@@ -1239,6 +1303,9 @@ static int xio_on_setup_rsp_send_comp(
 	/* time to set new callback */
 	DEBUG_LOG("task recycled\n");
 
+	/* try to transmit now */
+	xio_connection_xmit_msgs(connection);
+
 	return 0;
 }
 
@@ -1280,6 +1347,18 @@ static int xio_on_fin_send_comp(
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_comp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_connection_hello_comp(
+		struct xio_connection *connection,
+		struct xio_task *task)
+{
+	xio_release_connection_hello(connection, task->omsg);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_req_recv				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_req_recv(struct xio_connection *connection,
@@ -1289,10 +1368,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_statistics *stats = &connection->ctx->stats;
 	struct xio_vmsg *vmsg = &msg->in;
-
-	/* server side after accept change the state upon first message */
-	if (connection->session->state == XIO_SESSION_STATE_ACCEPTED)
-		connection->session->state = XIO_SESSION_STATE_ONLINE;
 
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)
@@ -1368,16 +1443,18 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	task->connection = connection;
 
+	xio_connection_remove_in_flight(connection, omsg);
+
 	/* store the task in io queue */
 	xio_connection_queue_io_task(connection, task);
 
 	/* remove the message from in flight queue */
-	xio_connection_remove_in_flight(connection, omsg);
 
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
 		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
+
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
 		if (connection->ses_ops.on_msg_delivered)
@@ -1388,7 +1465,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				    connection->cb_user_context);
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
-	} else   {
+	} else {
 		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
 			if (connection->ses_ops.on_msg_delivered) {
 				omsg->receipt_res = hdr.receipt_result;
@@ -1435,8 +1512,6 @@ static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-
-
 	/* remove the message from in flight queue */
 	xio_connection_remove_in_flight(connection, task->omsg);
 
@@ -1587,7 +1662,6 @@ void xio_session_notify_new_connection(struct xio_session *session,
 void xio_session_notify_connection_closed(struct xio_session *session,
 					  struct xio_connection *connection)
 {
-
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
 		.reason = XIO_E_SUCCESS,
@@ -1627,22 +1701,8 @@ static int xio_on_conn_closed(struct xio_session *session,
 
 	/* leading connection */
 	if (session->lead_conn && session->lead_conn->conn == conn) {
-		xio_session_notify_connection_closed(session, session->lead_conn);
-		connection = xio_session_find_connection(session,
-							 session->lead_conn->conn);
-		if (connection)
-			xio_session_free_connection(session->lead_conn);
-		else
-			xio_connection_close(session->lead_conn);
-
+		xio_connection_close(session->lead_conn);
 		session->lead_conn = NULL;
-		if (session->type == XIO_SESSION_REP) {
-			/* do not notify teardown if no messages arrived
-			 * on multithread - leave the session unteared
-			 * until messages arrived or session timeout
-			 */
-			return 0;
-		}
 		TRACE_LOG("lead connection is closed\n");
 		spin_lock(&session->connections_list_lock);
 		teardown = (session->connections_nr == 0);
@@ -1709,9 +1769,19 @@ static int xio_on_conn_refused(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_established						     */
+/* xio_on_server_conn_established					     */
 /*---------------------------------------------------------------------------*/
-static int xio_on_conn_established(struct xio_session *session,
+static int xio_on_server_conn_established(struct xio_session *session,
+		struct xio_conn *conn,
+		union xio_conn_event_data *event_data)
+{
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_client_conn_established					     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_client_conn_established(struct xio_session *session,
 		struct xio_conn *conn,
 		union xio_conn_event_data *event_data)
 {
@@ -1780,10 +1850,14 @@ static int xio_on_conn_established(struct xio_session *session,
 
 			connection = xio_session_find_connection(session, conn);
 			if (connection == NULL) {
-				ERROR_LOG("failed to find connection conn:%p\n",
-					  conn);
+				ERROR_LOG(
+				   "failed to find connection session:%p, conn:%p\n",
+				   session, conn);
 				return -1;
 			}
+
+			/* introduce the connection to the session */
+			xio_send_connection_hello_req(connection);
 
 			/* set the new connection to online */
 			xio_connection_set_state(connection,
@@ -1874,9 +1948,6 @@ static int xio_on_conn_error(struct xio_session *session,
 	return 0;
 }
 
-
-
-
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_message							     */
 /*---------------------------------------------------------------------------*/
@@ -1884,7 +1955,7 @@ static int xio_on_new_message(struct xio_session *session,
 				  struct xio_conn *conn,
 				  union xio_conn_event_data *event_data)
 {
-	struct xio_task	*task  = event_data->msg.task;
+	struct xio_task		*task  = event_data->msg.task;
 	struct xio_connection	*connection;
 	int			retval = -1;
 	int			tlv_type;
@@ -1900,39 +1971,24 @@ static int xio_on_new_message(struct xio_session *session,
 	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		/* leading connection is refused */
-		if (session->lead_conn && session->lead_conn->conn == conn) {
+		if (session->lead_conn &&
+		    session->lead_conn->conn == conn) {
 			connection = session->lead_conn;
 		} else if (session->redir_conn &&
 			   session->redir_conn->conn == conn) {
 			/* redirected connection is refused */
 			connection = session->redir_conn;
 		} else {
-			/* on server assign the new connection */
-			if (session->type == XIO_SESSION_REP) {
-				connection =
-					xio_server_create_accepted_connection(
-							session, conn);
-				/* new user to the connection */
-				xio_conn_addref(conn);
-
-				xio_session_notify_new_connection(session,
-								  connection);
-			} else {
-				connection =
-					xio_session_assign_conn(session, conn);
-			}
-			if (connection == NULL) {
-				ERROR_LOG("failed to find connection " \
-					  "session:%p. conn:%p\n",
-					  session,
-					  conn);
-				xio_tasks_pool_put(task);
-				return -1;
-			}
+			ERROR_LOG("failed to find connection\n");
+			xio_tasks_pool_put(task);
+			return -1;
 		}
 	}
 
-	tlv_type = task->tlv_type;
+	tlv_type		= task->tlv_type;
+	task->session		= session;
+	task->connection	= connection;
+
 	switch (tlv_type) {
 	case XIO_MSG_REQ:
 	case XIO_ONE_WAY_REQ:
@@ -1953,6 +2009,12 @@ static int xio_on_new_message(struct xio_session *session,
 		break;
 	case XIO_SESSION_SETUP_RSP:
 		retval = xio_on_setup_rsp_recv(connection, task);
+		break;
+	case XIO_CONNECTION_HELLO_REQ:
+		retval = xio_on_connection_hello_req_recv(connection, task);
+		break;
+	case XIO_CONNECTION_HELLO_RSP:
+		retval = 0;
 		break;
 	default:
 		retval = -1;
@@ -1978,6 +2040,7 @@ static int xio_on_send_completion(struct xio_session *session,
 	int			retval = -1;
 
 	connection = task->connection;
+	/*
 	if (connection == NULL) {
 		connection = xio_session_assign_conn(session, conn);
 		if (connection == NULL) {
@@ -1989,6 +2052,7 @@ static int xio_on_send_completion(struct xio_session *session,
 			return -1;
 		}
 	}
+	*/
 
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
@@ -2009,6 +2073,9 @@ static int xio_on_send_completion(struct xio_session *session,
 	case XIO_SESSION_SETUP_RSP:
 		retval = xio_on_setup_rsp_send_comp(connection, task);
 		break;
+	case XIO_CONNECTION_HELLO_REQ:
+	case XIO_CONNECTION_HELLO_RSP:
+		retval = xio_on_connection_hello_comp(connection, task);
 	default:
 		break;
 	}
@@ -2217,7 +2284,12 @@ static int xio_on_conn_event(void *observer, void *sender, int event,
 	case XIO_CONNECTION_ESTABLISHED:
 		DEBUG_LOG("session: [notification] - connection established. " \
 			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_established(session, conn, event_data);
+		if (session->type == XIO_SESSION_REQ)
+			xio_on_client_conn_established(session,
+						       conn, event_data);
+		else
+			xio_on_server_conn_established(session,
+						       conn, event_data);
 		break;
 	case XIO_CONNECTION_DISCONNECTED:
 		DEBUG_LOG("session: [notification] - connection disconnected" \
@@ -2321,7 +2393,6 @@ struct xio_session *xio_session_init(
 			  session);
 		goto cleanup3;
 	}
-
 	return session;
 
 cleanup3:
@@ -2359,7 +2430,8 @@ int xio_session_disconnect(struct xio_session *session,
 			spin_lock(&session->connections_list_lock);
 			teardown = (session->connections_nr == 1);
 			spin_unlock(&session->connections_list_lock);
-			xio_session_notify_connection_closed(session, connection);
+			xio_session_notify_connection_closed(session,
+							     connection);
 			xio_session_free_connection(connection);
 		} else {
 			teardown = list_empty(&session->connections_list);
@@ -2374,7 +2446,6 @@ int xio_session_disconnect(struct xio_session *session,
 
 	return 0;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_close							     */
@@ -2471,14 +2542,6 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			ERROR_LOG("failed to create connection\n");
 			goto cleanup;
 		}
-		/* get transport class routines */
-		session->trans_cls = xio_conn_get_trans_cls(conn);
-		retval = xio_conn_connect(conn, portal, out_if);
-		if (retval != 0) {
-			ERROR_LOG("connection connect failed\n");
-			goto cleanup;
-		}
-
 		/* initialize the lead connection */
 		session->lead_conn = xio_session_alloc_connection(
 				session, ctx,
@@ -2487,6 +2550,16 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		session->lead_conn->conn = conn;
 
 		connection  = session->lead_conn;
+
+		/* get transport class routines */
+		session->trans_cls = xio_conn_get_trans_cls(conn);
+
+		retval = xio_conn_connect(conn, portal,
+					  &session->observer, out_if);
+		if (retval != 0) {
+			ERROR_LOG("connection connect failed\n");
+			goto cleanup;
+		}
 
 		session->state = XIO_SESSION_STATE_CONNECT;
 	} else if ((session->state == XIO_SESSION_STATE_CONNECT) ||
@@ -2524,7 +2597,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			goto cleanup;
 		}
 		DEBUG_LOG("reconnecting to %s, ctx:%p\n", portal, ctx);
-		retval = xio_conn_connect(conn, portal, out_if);
+		retval = xio_conn_connect(conn, portal,
+					  &session->observer, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
@@ -2604,9 +2678,8 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 /* xio_session_notify_msg_error						     */
 /*---------------------------------------------------------------------------*/
 int xio_session_notify_msg_error(struct xio_connection *connection,
-			         struct xio_msg *msg, enum xio_status result)
+				 struct xio_msg *msg, enum xio_status result)
 {
-
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg_error)
 		connection->ses_ops.on_msg_error(

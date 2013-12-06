@@ -587,14 +587,12 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 					XIO_CONNECTION_NEW_MESSAGE,
 					&conn_event_data);
 			return 0;
-		} else if (unlikely(conn->is_first_msg)) {
-			/* route the message to first observer (the server) */
-			conn->is_first_msg = 0;
+		} else if (task->tlv_type == XIO_CONNECTION_HELLO_REQ) {
+			/* always route "hello" to server */
 			xio_conn_notify_server(
 					conn,
 					XIO_CONNECTION_NEW_MESSAGE,
 					&conn_event_data);
-
 			return 0;
 		}
 	}
@@ -604,7 +602,6 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 			&conn->observable,
 			XIO_CONNECTION_NEW_MESSAGE,
 			&conn_event_data);
-
 
 	return 0;
 }
@@ -915,7 +912,6 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	conn->transport_hndl	= transport_hndl;
 	conn->transport		= parent_conn->transport;
 	atomic_set(&conn->refcnt, 1);
-	conn->is_first_msg	 = 1;
 	conn->is_first_setup_req = 1;
 
 	xio_conns_store_add(conn, &conn->cid);
@@ -1131,23 +1127,6 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 	};
 	task->conn = conn;
 
-	if (!conn->transport_hndl->is_client) {
-		if (unlikely(conn->is_first_msg)) {
-			/* route the message to first observer (the server) */
-			conn->is_first_msg = 0;
-
-			xio_conn_notify_server(
-					conn,
-					XIO_CONNECTION_ASSIGN_IN_BUF,
-					&conn_event_data);
-
-			event_data->assign_in_buf.is_assigned =
-				conn_event_data.assign_in_buf.is_assigned;
-
-			return 0;
-		}
-	}
-
 	xio_observable_notify_any_observer(
 			&conn->observable,
 			XIO_CONNECTION_ASSIGN_IN_BUF,
@@ -1310,13 +1289,6 @@ struct xio_conn *xio_conn_open(
 			xio_observable_reg_observer(&conn->observable,
 						    observer);
 			xio_conn_hash_observer(conn, observer, oid);
-
-			if (conn->is_connected &&
-			    conn->transport_hndl->is_client)
-				xio_conn_notify_observer(
-						conn, observer,
-						XIO_CONNECTION_ESTABLISHED,
-						NULL);
 		}
 		atomic_inc(&conn->refcnt);
 
@@ -1396,8 +1368,9 @@ struct xio_conn *xio_conn_open(
 /* xio_conn_connect		                                             */
 /*---------------------------------------------------------------------------*/
 int xio_conn_connect(struct xio_conn *conn,
-		     const char *portal_uri,
-		     const char *out_if)
+		     const char	*portal_uri,
+		     struct xio_observer *observer,
+		     const char	*out_if)
 {
 	int retval;
 
@@ -1414,6 +1387,13 @@ int xio_conn_connect(struct xio_conn *conn,
 			ERROR_LOG("transport connect failed\n");
 			return -1;
 		}
+	} else {
+		if (conn->is_connected &&
+		    conn->transport_hndl->is_client)
+			xio_conn_notify_observer(
+					conn, observer,
+					XIO_CONNECTION_ESTABLISHED,
+					NULL);
 	}
 
 	return 0;
