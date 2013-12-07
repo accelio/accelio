@@ -377,7 +377,9 @@ struct xio_session_event_data {
 	void			*conn_user_context; /**< user context        */
 	enum xio_session_event	event;		    /**< the specific event  */
 	enum xio_status		reason;		    /**< elaborated message  */
-						    /**< code		     */
+	void			*private_data;	    /**< user private data   */
+						    /**< relevant to reject  */
+	size_t			private_data_len;   /**< private length      */
 };
 
 /**

@@ -951,12 +951,15 @@ static int xio_on_connection_rejected(struct xio_session *session,
 
 	/* notify the upper layer */
 	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_REJECT_EVENT,
-		.reason = session->reject_reason,
-		.conn   = connection,
+		.event =		XIO_SESSION_REJECT_EVENT,
+		.reason =		session->reject_reason,
+		.conn =			connection,
 		.conn_user_context =
-			(connection) ? connection->cb_user_context : NULL
+			(connection) ? connection->cb_user_context : NULL,
+		.private_data =		session->new_ses_rsp.user_context,
+		.private_data_len =	session->new_ses_rsp.user_context_len
 	};
+
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
@@ -1183,9 +1186,6 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	switch (action) {
 	case XIO_ACTION_ACCEPT:
 		if (session->portals_array == NULL)  {
-			kfree(rsp->user_context);
-			rsp->user_context = NULL;
-
 			xio_prep_portal(connection);
 
 			/* insert the lead_conn connection into list */
@@ -1222,6 +1222,9 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 					session->ses_ops.on_session_established(
 						session, rsp,
 						session->cb_user_context);
+
+				kfree(rsp->user_context);
+				rsp->user_context = NULL;
 
 				xio_connection_xmit_msgs(connection);
 			}
@@ -1274,16 +1277,20 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		return 0;
 		break;
 	case XIO_ACTION_REJECT:
-
-		kfree(rsp->user_context);
-		rsp->user_context = NULL;
-
 		session->state = XIO_SESSION_STATE_REJECTED;
 
 		TRACE_LOG("session state is now REJECT. session:%p\n",
 			  session);
 
-		return xio_on_connection_rejected(session, connection);
+		retval = xio_on_connection_rejected(session, connection);
+		if (retval != 0)
+			ERROR_LOG("failed to reject connection\n");
+
+		kfree(rsp->user_context);
+		rsp->user_context = NULL;
+
+		return retval;
+
 		break;
 	}
 
