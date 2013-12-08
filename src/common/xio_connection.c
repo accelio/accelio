@@ -483,7 +483,7 @@ int xio_send_request(struct xio_connection *conn,
 		}
 
 		vmsg = &pmsg->out;
-		pmsg->pdata.timestamp = get_cycles();
+		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
@@ -531,7 +531,7 @@ int xio_send_response(struct xio_msg *msg)
 
 		/* Server latency */
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
-			     get_cycles() - task->imsg.pdata.timestamp);
+			     get_cycles() - task->imsg.timestamp);
 
 
 		valid = xio_session_is_valid_out_msg(conn->session, pmsg);
@@ -645,7 +645,7 @@ int xio_send_msg(struct xio_connection *conn,
 		}
 
 		vmsg	= &pmsg->out;
-		pmsg->pdata.timestamp = get_cycles();
+		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
