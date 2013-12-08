@@ -510,9 +510,15 @@ static void xio_handle_task_error(struct xio_task *task)
 static void xio_handle_wc_error(struct ibv_wc *wc)
 {
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport       *rdma_hndl = rdma_task->rdma_hndl;
+	struct xio_rdma_task		*rdma_task = NULL;
+	struct xio_rdma_transport       *rdma_hndl = NULL;
 	int				retval;
+
+
+	if (task) {
+		rdma_task = task->dd_data;
+		rdma_hndl = rdma_task->rdma_hndl;
+	}
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
 		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, " \
@@ -527,27 +533,35 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	} else  {
 		ERROR_LOG("conn:%p, rdma_task:%p, task:%p, "  \
 			  "wr_id:0x%lx, " \
-			  "err:%s, vendor_err:0x%x," \
-			  "ib_op:0x%x\n",
+			  "err:%s, vendor_err:0x%x\n",
 			  rdma_hndl, rdma_task, task,
 			  wc->wr_id,
 			  ibv_wc_status_str(wc->status),
-			  wc->vendor_err,
-			  rdma_task->ib_op);
+			  wc->vendor_err);
 
 		ERROR_LOG("byte_len=%u, immdata=%u, qp_num=0x%x, src_qp=%u\n",
 			  wc->byte_len, wc->imm_data, wc->qp_num, wc->src_qp);
 	}
-	xio_handle_task_error(task);
+
+	if (task)
+		xio_handle_task_error(task);
 
 	/* temporary  */
-	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
-		ERROR_LOG("connection is disconnected\n");
-		rdma_hndl->state = XIO_STATE_DISCONNECTED;
-		retval = rdma_disconnect(rdma_hndl->cm_id);
-		if (retval)
-			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
-				  rdma_hndl);
+	if (wc->status != IBV_WC_WR_FLUSH_ERR)
+	{
+		if (rdma_hndl) {
+			ERROR_LOG("connection is disconnected\n");
+			rdma_hndl->state = XIO_STATE_DISCONNECTED;
+			retval = rdma_disconnect(rdma_hndl->cm_id);
+			if (retval)
+				ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
+						rdma_hndl);
+		} else {
+			/* TODO: handle each error specificly */
+			ERROR_LOG("ASSERT: program abort\n");
+			exit(0);
+
+		}
 	}
 }
 
@@ -990,8 +1004,6 @@ void xio_data_ev_handler(int fd, int events, void *user_context)
 		ibv_ack_cq_events(tcq->cq, UINT_MAX);
 		tcq->cq_events_that_need_ack = 0;
 	}
-	if (tcq->cq == 0)
-		printf("DDDDDDDDDDDDDDDDDDDDDDDDDDDD\n");
 
 	xio_cq_event_handler(tcq, tcq->ctx->polling_timeout);
 
