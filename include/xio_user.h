@@ -325,6 +325,17 @@ struct xio_iovec_ex {
 };
 
 /**
+ * @struct xio_msg_pdata
+ * @brief message private data structure used internaly by the library
+ */
+struct xio_msg_pdata {
+	uint64_t		timestamp;	/**< submission timestamp     */
+	struct xio_msg		*next;          /**< internal library usage   */
+	struct xio_msg		**prev;		/**< internal library usage   */
+};
+
+
+/**
  * @struct xio_vmsg
  * @brief message sub element type
  */
@@ -361,11 +372,10 @@ struct xio_msg {
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 						/**< required                 */
 	int			reserved;	/**< reseved for padding      */
-	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
-	struct xio_msg		*next;          /**< internal library usage   */
-	struct xio_msg		**prev;		/**< internal library usage   */
+	struct xio_msg_pdata	pdata;		/**< accelio private data     */
+	struct xio_msg		*next;          /**< send list of messages    */
 };
 
 /**

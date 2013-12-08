@@ -1380,8 +1380,9 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (xio_session_read_header(task, &hdr) != 0)
 		return -1;
 
-	msg->sn = hdr.serial_num;
-	msg->flags = hdr.flags;
+	msg->sn		= hdr.serial_num;
+	msg->flags	= hdr.flags;
+	msg->next	= NULL;
 	task->connection = connection;
 
 	xio_connection_queue_io_task(connection, task);
@@ -1395,7 +1396,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		xio_task_addref(task);
 
-	msg->timestamp = get_cycles();
+	msg->pdata.timestamp = get_cycles();
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	xio_stat_add(stats, XIO_STAT_RX_BYTES,
 		     vmsg->header.iov_len +
@@ -1442,10 +1443,12 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	msg->sn = hdr.serial_num;
 
 	/* one way messages do not have sender task */
-	omsg = sender_task->omsg;
-	omsg->request = msg;
+	omsg		= sender_task->omsg;
+	omsg->request	= msg;
+	omsg->next	= NULL;
 
-	xio_stat_add(stats, XIO_STAT_DELAY, get_cycles() - omsg->timestamp);
+	xio_stat_add(stats, XIO_STAT_DELAY,
+		     get_cycles() - omsg->pdata.timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 
 	task->connection = connection;
@@ -1561,7 +1564,7 @@ static int xio_on_ow_req_send_comp(
 		struct xio_statistics *stats = &connection->ctx->stats;
 		struct xio_msg *omsg = task->omsg;
 		xio_stat_add(stats, XIO_STAT_DELAY,
-			     get_cycles() - omsg->timestamp);
+			     get_cycles() - omsg->pdata.timestamp);
 		xio_tasks_pool_put(task);
 	}
 

@@ -57,80 +57,80 @@ struct xio_msg_list {
 	(head)->last = &(head)->first;					\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_insert_head(head, elm) do {			\
-	if (((elm)->next = (head)->first) != NULL)			\
-		(head)->first->prev =					\
-		    &(elm)->next;					\
+#define	xio_msg_list_insert_head(head, elm, field) do {			\
+	if (((elm)->field.next = (head)->first) != NULL)		\
+		(head)->first->field.prev =				\
+		    &(elm)->field.next;					\
 	else								\
-		(head)->last = &(elm)->next;				\
+		(head)->last = &(elm)->field.next;			\
 	(head)->first = (elm);						\
-	(elm)->prev = &(head)->first;					\
+	(elm)->field.prev = &(head)->first;				\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_insert_tail(head, elm) do {			\
-	(elm)->next = NULL;						\
-	(elm)->prev = (head)->last;					\
+#define	xio_msg_list_insert_tail(head, elm, field) do {			\
+	(elm)->field.next = NULL;					\
+	(elm)->field.prev = (head)->last;				\
 	*(head)->last = (elm);						\
-	(head)->last = &(elm)->next;					\
+	(head)->last = &(elm)->field.next;				\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_insert_after(head, listelm, elm) do {		\
-	if (((elm)->next = (listelm)->next) != NULL)			\
-		(elm)->next->prev =					\
-		    &(elm)->next;					\
+#define	xio_msg_list_insert_after(head, listelm, elm, field) do {	\
+	if (((elm)->field.next = (listelm)->field.next) != NULL)	\
+		(elm)->field.next->field.prev =				\
+		    &(elm)->field.next;					\
 	else								\
-		(head)->last = &(elm)->next;				\
-	(listelm)->next = (elm);					\
-	(elm)->prev = &(listelm)->next;					\
+		(head)->last = &(elm)->field.next;			\
+	(listelm)->field.next = (elm);					\
+	(elm)->field.prev = &(listelm)->field.next;			\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_insert_before(listelm, elm) do {			\
-	(elm)->prev = (listelm)->prev;					\
-	(elm)->next = (listelm);					\
-	*(listelm)->prev = (elm);					\
-	(listelm)->prev = &(elm)->next;					\
+#define	xio_msg_list_insert_before(listelm, elm, field) do {		\
+	(elm)->field.prev = (listelm)->field.prev;			\
+	(elm)->field.next = (listelm);					\
+	*(listelm)->field.prev = (elm);					\
+	(listelm)->field.prev = &(elm)->field.next;			\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_remove(head, elm) do {				\
-	if (((elm)->next) != NULL)					\
-		(elm)->next->prev =					\
-		    (elm)->prev;					\
+#define	xio_msg_list_remove(head, elm, field) do {			\
+	if (((elm)->field.next) != NULL)				\
+		(elm)->field.next->field.prev =				\
+		    (elm)->field.prev;					\
 	else								\
-		(head)->last = (elm)->prev;				\
-	*(elm)->prev = (elm)->next;					\
+		(head)->last = (elm)->field.prev;			\
+	*(elm)->field.prev = (elm)->field.next;				\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_foreach(var, head)					\
+#define	xio_msg_list_foreach(var, head, field)				\
 	for ((var) = ((head)->first);					\
 		(var);							\
-		(var) = ((var)->next))
+		(var) = ((var)->field.next))
 
-#define	xio_msg_list_foreach_reverse(var, head, headname)		\
+#define	xio_msg_list_foreach_reverse(var, head, headname, field)	\
 	for ((var) = (*(((struct headname *)((head)->last))->last));	\
 		(var);							\
-		(var) = (*(((struct headname *)((var)->prev))->last)))
+		(var) = (*(((struct headname *)((var)->field.prev))->last)))
 
-#define xio_msg_list_foreach_safe(var, head, tvar)			\
+#define xio_msg_list_foreach_safe(var, head, tvar, field)		\
 	for ((var) = xio_msg_list_first((head));                        \
-		(var) && ((tvar) = xio_msg_list_next((var)), 1);	\
+		(var) && ((tvar) = xio_msg_list_next((var), field), 1);	\
 		(var) = (tvar))
 
-#define	xio_msg_list_concat(head1, head2) do {				\
+#define	xio_msg_list_concat(head1, head2, field) do {			\
 	if (!xio_msg_list_empty(head2)) {				\
 		*(head1)->last = (head2)->first;			\
-		(head2)->first->prev = (head1)->last;			\
+		(head2)->first->field.prev = (head1)->last;		\
 		(head1)->last = (head2)->last;				\
 		xio_msg_list_init((head2));				\
 	}								\
 } while (/*CONSTCOND*/0)
 
-#define	xio_msg_list_splice(head, elm) do {			\
-	struct xio_msg *curelm = (elm),  *nextelm;		\
-	do {							\
-		nextelm = (curelm)->next;			\
-		xio_msg_list_insert_tail((head), (curelm));	\
-		curelm = nextelm;				\
-	} while (curelm != NULL);				\
+#define	xio_msg_list_splice(head, elm, field) do {			\
+	struct xio_msg *curelm = (elm),  *nextelm;			\
+	do {								\
+		nextelm = (curelm)->field.next;				\
+		xio_msg_list_insert_tail((head), (curelm));		\
+		curelm = nextelm;					\
+	} while (curelm != NULL);					\
 } while (/*CONSTCOND*/0)
 
 /*
@@ -138,11 +138,11 @@ struct xio_msg_list {
  */
 #define	xio_msg_list_empty(head)		((head)->first == NULL)
 #define	xio_msg_list_first(head)		((head)->first)
-#define	xio_msg_list_next(elm)		((elm)->next)
+#define	xio_msg_list_next(elm, field)		((elm)->field.next)
 
 #define	xio_msg_list_last(head, headname) \
 	(*(((struct headname *)((head)->last))->last))
-#define	xio_msg_list_prev(elm, headname) \
-	(*(((struct headname *)((elm)->prev))->last))
+#define	xio_msg_list_prev(elm, headname, field) \
+	(*(((struct headname *)((elm)->field.prev))->last))
 
 #endif /* XIO_MSG_LIST_H */
