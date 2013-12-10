@@ -2595,6 +2595,9 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 			 min(rlen, llen),
 			 0,
 			 &rdma_hndl->tx_ready_list, &tasks_used);
+	/* xio_prep_rdma_op used splice to transfer "tasks_used"  to
+	 * tx_ready_list
+	 */
 	rdma_hndl->tx_ready_tasks_num += tasks_used;
 	return 0;
 cleanup:
@@ -3413,6 +3416,8 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 			/* return decrease ref count from task */
 			xio_tasks_pool_put(ptask);
 			rdma_hndl->tx_ready_tasks_num--;
+			list_move_tail(&ptask->tasks_list_entry,
+				       &rdma_hndl->tx_comp_list);
 
 			/* fill notification event */
 			event_data.cancel.ulp_msg	=  ulp_msg;
