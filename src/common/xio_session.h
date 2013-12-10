@@ -90,7 +90,7 @@ struct xio_session {
 	struct xio_observer		observer;
 
 	enum xio_session_type		type;
-	enum xio_session_state		state;
+	volatile enum xio_session_state	state;
 
 	struct xio_new_session_rsp	new_ses_rsp;
 	char				*uri;

@@ -525,6 +525,18 @@ static int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_rsp_recv			                     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
+					    struct xio_task *task)
+{
+
+	xio_connection_xmit_msgs(connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
 /*---------------------------------------------------------------------------*/
 static struct xio_msg *xio_session_write_accept_rsp(
@@ -1354,9 +1366,9 @@ static int xio_on_fin_send_comp(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_comp						     */
+/* xio_on_connection_hello_send_comp				     */
 /*---------------------------------------------------------------------------*/
-static int xio_on_connection_hello_comp(
+static int xio_on_connection_hello_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
@@ -1895,18 +1907,6 @@ static int xio_on_client_conn_established(struct xio_session *session,
 						session->cb_user_context);
 
 				kfree(session->new_ses_rsp.user_context);
-
-					/* now try to send */
-				list_for_each_entry(connection,
-						    &session->connections_list,
-						    connections_list_entry) {
-					TRACE_LOG(
-					   "connection established: " \
-					   "connection:%p, session:%p, conn:%p\n",
-					   connection, connection->session,
-					   connection->conn);
-					xio_connection_xmit_msgs(connection);
-				}
 			}
 		}
 		break;
@@ -2024,7 +2024,7 @@ static int xio_on_new_message(struct xio_session *session,
 		retval = xio_on_connection_hello_req_recv(connection, task);
 		break;
 	case XIO_CONNECTION_HELLO_RSP:
-		retval = 0;
+		retval = xio_on_connection_hello_rsp_recv(connection, task);
 		break;
 	default:
 		retval = -1;
@@ -2085,7 +2085,7 @@ static int xio_on_send_completion(struct xio_session *session,
 		break;
 	case XIO_CONNECTION_HELLO_REQ:
 	case XIO_CONNECTION_HELLO_RSP:
-		retval = xio_on_connection_hello_comp(connection, task);
+		retval = xio_on_connection_hello_send_comp(connection, task);
 	default:
 		break;
 	}
