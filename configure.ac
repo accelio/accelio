@@ -15,7 +15,8 @@ AC_PROG_LIBTOOL
 AC_PROG_CC
 
 # automake initialisation (mandatory) and check for minimal automake API version 1.9
-AM_INIT_AUTOMAKE([1.9])
+AM_INIT_AUTOMAKE([1.11])
+AM_SILENT_RULES([yes])
 
 # use the C compiler for the following checks
 AC_LANG([C])
