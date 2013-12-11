@@ -2830,9 +2830,18 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	struct xio_rdma_setup_msg *rsp  = &rdma_hndl->setup_rsp;
 
 	if (rdma_hndl->base.is_client) {
-		struct xio_task *sender_task = list_first_entry(
-				&rdma_hndl->in_flight_list,
-				struct xio_task,  tasks_list_entry);
+		struct xio_task *sender_task = NULL;
+		if (!list_empty(&rdma_hndl->in_flight_list))
+			sender_task = list_first_entry(
+					&rdma_hndl->in_flight_list,
+					struct xio_task,  tasks_list_entry);
+		else if (!list_empty(&rdma_hndl->tx_comp_list))
+			sender_task = list_first_entry(
+					&rdma_hndl->tx_comp_list,
+					struct xio_task,  tasks_list_entry);
+		else
+			ERROR_LOG("could not find sender task\n");
+
 		/* remove the task from in_flight_list */
 		rdma_hndl->reqs_in_flight_nr--;
 		task->sender_task = sender_task;
