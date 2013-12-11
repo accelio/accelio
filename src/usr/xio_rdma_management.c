@@ -725,6 +725,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->qp		= rdma_hndl->cm_id->qp;
 	rdma_hndl->sqe_avail	= MAX_SEND_WR;
 
+	memset(&qp_attr, 0, sizeof(qp_attr));
 	if (ibv_query_qp(rdma_hndl->qp, &qp_attr, 0, &qp_init_attr) != 0)
 		ERROR_LOG("ibv_query_qp failed. (errno=%d %m)\n", errno);
 	rdma_hndl->max_inline_data = qp_attr.cap.max_inline_data;
