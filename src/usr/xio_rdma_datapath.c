@@ -547,15 +547,14 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 		xio_handle_task_error(task);
 
 	/* temporary  */
-	if (wc->status != IBV_WC_WR_FLUSH_ERR)
-	{
+	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
 		if (rdma_hndl) {
 			ERROR_LOG("connection is disconnected\n");
 			rdma_hndl->state = XIO_STATE_DISCONNECTED;
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
 				ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
-						rdma_hndl);
+					  rdma_hndl);
 		} else {
 			/* TODO: handle each error specificly */
 			ERROR_LOG("ASSERT: program abort\n");
@@ -2798,9 +2797,13 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
 		return  -1;
 
+
 	/* set the length */
-	rdma_task->txd.sge[0].length = xio_mbuf_data_length(&task->mbuf);
-	rdma_task->ib_op	= XIO_IB_SEND;
+	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
+	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	rdma_task->txd.send_wr.next	= NULL;
+	rdma_task->ib_op		= XIO_IB_SEND;
+	rdma_task->txd.send_wr.num_sge	= 1;
 
 	if (task->tlv_type == XIO_CONN_SETUP_REQ) {
 		rdma_hndl->reqs_in_flight_nr++;
