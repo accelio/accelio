@@ -533,6 +533,13 @@ static int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 
 	xio_connection_xmit_msgs(connection);
 
+	connection->session->state = XIO_SESSION_STATE_ONLINE;
+
+	TRACE_LOG("session state is now ONLINE. session:%p\n",
+		  connection->session);
+
+	xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+
 	return 0;
 }
 
@@ -1359,14 +1366,11 @@ static int xio_on_fin_send_comp(
 {
 	xio_connection_release_fin(connection, task->omsg);
 
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_send_comp				     */
+/* xio_on_connection_hello_send_comp					     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_connection_hello_send_comp(
 		struct xio_connection *connection,

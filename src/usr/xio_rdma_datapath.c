@@ -523,13 +523,11 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
 		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, " \
 			  "wr_id:0x%lx, " \
-			  "err:%s, vendor_err:0x%x, " \
-			   "ib_op:%x\n",
+			  "err:%s, vendor_err:0x%x\n",
 			   rdma_hndl, rdma_task, task,
 			   wc->wr_id,
 			   ibv_wc_status_str(wc->status),
-			   wc->vendor_err,
-			   rdma_task->ib_op);
+			   wc->vendor_err);
 	} else  {
 		ERROR_LOG("conn:%p, rdma_task:%p, task:%p, "  \
 			  "wr_id:0x%lx, " \
@@ -606,12 +604,15 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->sim_peer_credits--;
 
 	/* prefetch next buffer */
-	task1 = list_first_entry(&task->tasks_list_entry,
+	task1 = list_first_entry_or_null(&task->tasks_list_entry,
 			 struct xio_task,  tasks_list_entry);
-	xio_prefetch(task1->mbuf.buf.head);
-	task2 = list_first_entry(&task1->tasks_list_entry,
-			 struct xio_task,  tasks_list_entry);
-	xio_prefetch(task2->mbuf.buf.head);
+	if (task1) {
+		xio_prefetch(task1->mbuf.buf.head);
+		task2 = list_first_entry_or_null(&task1->tasks_list_entry,
+					 struct xio_task,  tasks_list_entry);
+		if (task2)
+			xio_prefetch(task2->mbuf.buf.head);
+	}
 
 	/* rearm the receive queue  */
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
@@ -2843,7 +2844,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			ERROR_LOG("could not find sender task\n");
 
 		/* remove the task from in_flight_list */
-		rdma_hndl->reqs_in_flight_nr--;
+		//rdma_hndl->reqs_in_flight_nr--;
 		task->sender_task = sender_task;
 		xio_rdma_read_setup_msg(rdma_hndl, task, rsp);
 		/* get the initial credits */
