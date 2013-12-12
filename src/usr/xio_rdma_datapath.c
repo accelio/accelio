@@ -251,12 +251,17 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 		/* prefetch next buffer */
 		if (rdma_hndl->tx_ready_tasks_num > 2) {
-			task1 = list_first_entry(&task->tasks_list_entry,
+			task1 = list_first_entry_or_null(&task->tasks_list_entry,
 					struct xio_task,  tasks_list_entry);
-			xio_prefetch(task1->mbuf.buf.head);
-			task2 = list_first_entry(&task1->tasks_list_entry,
-					struct xio_task,  tasks_list_entry);
-			xio_prefetch(task2->mbuf.buf.head);
+			if (task1) {
+				xio_prefetch(task1->mbuf.buf.head);
+				task2 = list_first_entry_or_null(
+						&task1->tasks_list_entry,
+						struct xio_task,
+						tasks_list_entry);
+				if (task2)
+					xio_prefetch(task2->mbuf.buf.head);
+			}
 		}
 
 		/* phantom task */
@@ -2801,7 +2806,10 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
-	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+
+	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED;
+	if (rdma_task->txd.sge[0].length < rdma_hndl->max_inline_data)
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
 	rdma_task->txd.send_wr.num_sge	= 1;
