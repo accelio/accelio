@@ -2773,36 +2773,29 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rdma_setup_msg));
 }
 
+
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_send_setup_msg						     */
+/* xio_rdma_send_setup_req						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
+static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task)
 {
 	uint16_t payload;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_rdma_setup_msg  req;
 
-	if (rdma_hndl->base.is_client) {
-		struct xio_rdma_setup_msg  req;
-		req.buffer_sz		= rdma_hndl->max_send_buf_sz;
-		req.sq_depth		= rdma_hndl->sq_depth;
-		req.rq_depth		= rdma_hndl->rq_depth;
-		req.credits		= 0;
-		xio_rdma_write_setup_msg(rdma_hndl, task, &req);
-	} else {
-		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
+	req.buffer_sz		= rdma_hndl->max_send_buf_sz;
+	req.sq_depth		= rdma_hndl->sq_depth;
+	req.rq_depth		= rdma_hndl->rq_depth;
+	req.credits		= 0;
 
-		rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
-		xio_rdma_write_setup_msg(rdma_hndl,
-					 task, &rdma_hndl->setup_rsp);
-		rdma_hndl->credits = 0;
-	}
+	xio_rdma_write_setup_msg(rdma_hndl, task, &req);
+
 	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
 
 	/* add tlv */
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
 		return  -1;
-
 
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
@@ -2810,18 +2803,55 @@ static int xio_rdma_send_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED;
 	if (rdma_task->txd.sge[0].length < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
 	rdma_task->txd.send_wr.num_sge	= 1;
 
-	if (task->tlv_type == XIO_CONN_SETUP_REQ) {
-		rdma_hndl->reqs_in_flight_nr++;
-		xio_task_addref(task);
-	} else {
-		rdma_hndl->rsps_in_flight_nr++;
-	}
-
+	xio_task_addref(task);
+	rdma_hndl->reqs_in_flight_nr++;
 	list_add_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
+
+	rdma_hndl->peer_credits--;
+	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_send_setup_rsp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
+		struct xio_task *task)
+{
+	uint16_t payload;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	rdma_hndl->sim_peer_credits += rdma_hndl->credits;
+
+	rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
+	xio_rdma_write_setup_msg(rdma_hndl,
+			task, &rdma_hndl->setup_rsp);
+	rdma_hndl->credits = 0;
+
+
+	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
+
+	/* add tlv */
+	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
+		return  -1;
+
+	/* set the length */
+	rdma_task->txd.sge[0].length = xio_mbuf_data_length(&task->mbuf);
+	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED;
+	if (rdma_task->txd.sge[0].length < rdma_hndl->max_inline_data)
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+	rdma_task->txd.send_wr.next	= NULL;
+	rdma_task->ib_op		= XIO_IB_SEND;
+	rdma_task->txd.send_wr.num_sge	= 1;
+
+	rdma_hndl->rsps_in_flight_nr++;
+	list_move(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
@@ -2851,8 +2881,6 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		else
 			ERROR_LOG("could not find sender task\n");
 
-		/* remove the task from in_flight_list */
-		//rdma_hndl->reqs_in_flight_nr--;
 		task->sender_task = sender_task;
 		xio_rdma_read_setup_msg(rdma_hndl, task, rsp);
 		/* get the initial credits */
@@ -3141,8 +3169,10 @@ int xio_rdma_send(struct xio_transport_base *transport,
 
 	switch (task->tlv_type) {
 	case XIO_CONN_SETUP_REQ:
+		retval = xio_rdma_send_setup_req(rdma_hndl, task);
+		break;
 	case XIO_CONN_SETUP_RSP:
-		retval = xio_rdma_send_setup_msg(rdma_hndl, task);
+		retval = xio_rdma_send_setup_rsp(rdma_hndl, task);
 		break;
 	default:
 		if (IS_REQUEST(task->tlv_type))

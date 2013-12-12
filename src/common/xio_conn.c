@@ -467,7 +467,7 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 	xio_mbuf_reset(&task->mbuf);
 
 	/* write response */
-	task->tlv_type = XIO_CONN_SETUP_RSP;
+	task->tlv_type	= XIO_CONN_SETUP_RSP;
 
 	rsp.cid		= conn->cid;
 	rsp.status	= 0;
@@ -477,8 +477,6 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 	if (retval != 0)
 		goto cleanup;
 
-	/* remove it from io_tasks list */
-	list_del_init(&task->tasks_list_entry);
 	/* send it */
 	retval = conn->transport->send(conn->transport_hndl, task);
 	if (retval != 0) {
