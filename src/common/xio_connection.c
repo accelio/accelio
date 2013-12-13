@@ -310,6 +310,11 @@ int xio_connection_notify_msgs_flush(struct xio_connection *conn)
 
 	xio_msg_list_foreach_safe(pmsg, &conn->rsps_msgq, tmp_pmsg, pdata) {
 		xio_msg_list_remove(&conn->rsps_msgq, pmsg, pdata);
+		if (pmsg->type == XIO_ONE_WAY_RSP) {
+			xio_msg_list_insert_head(&conn->one_way_msg_pool,
+						 pmsg, pdata);
+			continue;
+		}
 		xio_session_notify_msg_error(conn, pmsg, XIO_E_MSG_FLUSHED);
 	}
 
