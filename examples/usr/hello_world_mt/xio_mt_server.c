@@ -201,7 +201,7 @@ cleanup:
 	xio_ctx_close(ctx);
 
 	/* destroy the default loop */
-	xio_ev_loop_destroy(tdata->loop);
+	xio_ev_loop_destroy(&tdata->loop);
 
 	return NULL;
 }
