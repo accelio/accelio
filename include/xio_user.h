@@ -180,10 +180,11 @@ enum xio_status {
 enum xio_ev_loop_events {
 	XIO_POLLIN			= 0x001,
 	XIO_POLLOUT			= 0x002,
-	XIO_POLLLT			= 0x004   /**< level-triggered poll */
+	XIO_POLLLT			= 0x004,  /**< level-triggered poll */
 						  /**< cancels the default  */
 						  /**< event loop behavior  */
 						  /**< edge -triggered	    */
+	XIO_ONESHOT			= 0x008
 };
 
 /**

@@ -65,8 +65,7 @@ struct xio_ev_loop {
 	int				efd;
 	int				stop_loop;
 	int				wakeup_event;
-	int				wait;
-
+	int				reserved;
 	struct list_head		events_list;
 };
 
@@ -99,12 +98,17 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	/* default is edge triggered */
 	if (!(events & XIO_POLLLT))
 		ev.events |= EPOLLET;
+	if (events & XIO_ONESHOT)
+		ev.events |= EPOLLONESHOT;
 
 	ev.data.ptr = tev;
 	err = epoll_ctl(loop->efd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
 		xio_set_error(errno);
-		ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
+		if (errno != EEXIST)
+			ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
+		else
+			DEBUG_LOG("epoll_ctl already exists fd:%d,  %m\n", fd);
 		free(tev);
 	} else {
 		list_add(&tev->events_list_entry, &loop->events_list);
@@ -195,6 +199,7 @@ void *xio_ev_loop_init()
 {
 	struct xio_ev_loop	*loop;
 	int			retval;
+	eventfd_t		val = 1;
 
 	loop = calloc(1, sizeof(struct xio_ev_loop));
 	if (loop == NULL) {
@@ -213,6 +218,7 @@ void *xio_ev_loop_init()
 		goto cleanup;
 	}
 
+	/* prepare the wakeup eventfd */
 	loop->wakeup_event	= eventfd(0, EFD_NONBLOCK);
 	if (loop->wakeup_event == -1) {
 		xio_set_error(errno);
@@ -220,9 +226,10 @@ void *xio_ev_loop_init()
 		goto cleanup1;
 	}
 
-	retval = xio_ev_loop_add(loop, loop->wakeup_event,
-				 EPOLLIN|XIO_POLLLT,
-				 NULL, NULL);
+	/* SET eventfd so wakeup just needs to ADD the already prepared
+	 * eventfd to the epoll
+	 */
+	retval = eventfd_write(loop->wakeup_event, val);
 	if (retval != 0)
 		goto cleanup2;
 
@@ -246,13 +253,9 @@ inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	int			nevent = 0, i;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
-	int			retval;
-	eventfd_t		val;
 
 retry:
-	loop->wait = 1;
 	nevent = epoll_wait(loop->efd, events, ARRAY_SIZE(events), timeout);
-	loop->wait = 0;
 	if (nevent < 0) {
 		if (errno != EINTR) {
 			xio_set_error(errno);
@@ -268,12 +271,9 @@ retry:
 					tev->handler(tev->fd, events[i].events,
 					     tev->data);
 			} else {
-				/* drain the pipe */
-				retval = eventfd_read(loop->wakeup_event,
-						      &val);
-				if (retval != 0)
-					ERROR_LOG("reading from eventfd " \
-						  " failed. %m\n");
+				/* remove the wakeup eventfd from epoll set,
+				 * and check for other events */
+				xio_ev_loop_del(loop, loop->wakeup_event);
 			}
 		}
 	} else {
@@ -311,15 +311,16 @@ int xio_ev_loop_run(void *loop_hndl)
 inline void xio_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
-	eventfd_t		val = 1;
 
 	if (loop == NULL)
 		return;
 
-	loop->stop_loop = 1;
-
-	if (loop->wait == 1)
-		eventfd_write(loop->wakeup_event, val);
+	if (loop->stop_loop == 0) {
+		loop->stop_loop = 1;
+		xio_ev_loop_add(loop, loop->wakeup_event,
+				XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT,
+				NULL, NULL);
+	}
 }
 
 /*---------------------------------------------------------------------------*/
