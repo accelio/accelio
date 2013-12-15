@@ -35,7 +35,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <asm/types.h>
+/*#include <asm/types.h> */
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <linux/netlink.h>
@@ -45,8 +45,9 @@
 #include "xio_observer.h"
 #include "xio_common.h"
 #include "xio_context.h"
+#include "xio_schedwork.h"
+#include "get_clock.h"
 
-extern double get_cpu_mhz(int);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_add_observer						     */
@@ -70,9 +71,9 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 
 void xio_stats_handler(int fd, int events, void *data)
 {
-	struct xio_context *ctx = (struct xio_context *) data;
+	struct xio_context *ctx = (struct xio_context *)data;
 	unsigned char buf[NLMSG_SPACE(1024)];
-	struct nlmsghdr *nlh = (struct nlmsghdr *) buf;
+	struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
 	struct msghdr msg;
 	struct iovec iov;
 	struct sockaddr_nl dest_addr;
@@ -90,12 +91,13 @@ void xio_stats_handler(int fd, int events, void *data)
 	msg.msg_iovlen = 1;
 	recvmsg(fd, &msg, 0);
 
-	ptr = (char *) NLMSG_DATA(nlh);
+	ptr = (char *)NLMSG_DATA(nlh);
 
 	switch (nlh->nlmsg_type - NLMSG_MIN_TYPE) {
 	case 0: /* Format */
 		/* counting will start now */
-		memset(&ctx->stats.counter, 0, XIO_STAT_LAST * sizeof(uint64_t));
+		memset(&ctx->stats.counter, 0,
+		       XIO_STAT_LAST * sizeof(uint64_t));
 		/* First the cycles' hertz (assumed to be fixed) */
 		memcpy(ptr, &ctx->stats.hertz, sizeof(ctx->stats.hertz));
 		ptr += sizeof(ctx->stats.hertz);
@@ -120,7 +122,8 @@ void xio_stats_handler(int fd, int events, void *data)
 		for (i = 0; i < XIO_STAT_LAST; i++) {
 			if (!ctx->stats.name[i])
 				continue;
-			memcpy((void *)ptr, &ctx->stats.counter[i], sizeof(uint64_t));
+			memcpy((void *)ptr, &ctx->stats.counter[i],
+			       sizeof(uint64_t));
 			ptr += sizeof(uint64_t);
 		}
 		break;
@@ -130,7 +133,7 @@ void xio_stats_handler(int fd, int events, void *data)
 	}
 
 	/* header is in the buffer */
-	nlh->nlmsg_len = ptr - (char *) buf;
+	nlh->nlmsg_len = ptr - (char *)buf;
 	iov.iov_len = nlh->nlmsg_len;
 
 	nlh->nlmsg_pid = getpid();
@@ -188,9 +191,17 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 
+	ctx->sched_work = xio_schedwork_init(ctx);
+	if (!ctx->sched_work) {
+		xio_set_error(errno);
+		ERROR_LOG("schedwork_init failed. %m\n");
+		goto cleanup1;
+	}
+
 	/* only root can bind netlink socket */
 	if (geteuid() != 0) {
-		DEBUG_LOG("statistics monitoring disabled. not priviliged user\n");
+		DEBUG_LOG("statistics monitoring disabled. " \
+			  "not priviliged user\n");
 		return ctx;
 	}
 
@@ -222,7 +233,7 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 	}
 
 	addr_len = sizeof(nladdr);
-	if (getsockname(fd, (struct sockaddr *) &nladdr, &addr_len)) {
+	if (getsockname(fd, (struct sockaddr *)&nladdr, &addr_len)) {
 		xio_set_error(errno);
 		ERROR_LOG("getsockname failed. %m\n");
 		goto cleanup2;
@@ -288,8 +299,47 @@ void xio_ctx_close(struct xio_context *ctx)
 		if (ctx->stats.name[i])
 			free(ctx->stats.name[i]);
 
+	xio_schedwork_close(ctx->sched_work);
+
 	free(ctx);
 	ctx = NULL;
+}
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_timer_add							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_timer_add(struct xio_context *ctx,
+		      int msec_duration, void *data,
+		      void (*timer_fn)(void *data),
+		      xio_ctx_timer_handle_t *handle_out)
+{
+	int retval;
+
+	retval = xio_schedwork_add(ctx->sched_work,
+				   msec_duration, data,
+				   timer_fn, handle_out);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("xio_schedwork_add failed. %m\n");
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_timer_del							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_timer_del(struct xio_context *ctx,
+		      xio_ctx_timer_handle_t timer_handle)
+{
+	int retval;
+
+	retval = xio_schedwork_del(ctx->sched_work, timer_handle);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("xio_schedwork_add failed. %m\n");
+	}
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/

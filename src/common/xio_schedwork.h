@@ -35,47 +35,39 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_OS_H
-#define XIO_OS_H
+#ifndef XIO_SCHEDWORK_H
+#define XIO_SCHEDWORK_H
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <errno.h>
-#include <malloc.h>
-#include <fcntl.h>
-#include <utmpx.h>
-#include <time.h>
-#include <netdb.h>
-#include <inttypes.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <pthread.h>
-#include <assert.h>
-#include <limits.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/timerfd.h>
-#include <arpa/inet.h>
-#include <linux/types.h>
-#include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/mman.h>
-#include <linux/printk.h>
-#include <linux/atomic.h>
-#include <linux/kref.h>
-#include <linux/usr.h>
+/* opaque type */
+struct xio_schedwork;
+struct xio_context;
 
-#include "get_clock.h"
+#define xio_schedwork_handle_t  void *
 
-#endif /* XIO_OS_H */
+/*---------------------------------------------------------------------------*/
+/* xio_schedwork_init							     */
+/*---------------------------------------------------------------------------*/
+struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx);
+
+/*---------------------------------------------------------------------------*/
+/* xio_schedwork_close							     */
+/*---------------------------------------------------------------------------*/
+int xio_schedwork_close(struct xio_schedwork *sched_work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_schedwork_add							     */
+/*---------------------------------------------------------------------------*/
+int xio_schedwork_add(struct xio_schedwork *sched_work,
+		      int msec_duration, void *data,
+		      void (*timer_fn)(void *data),
+		      xio_schedwork_handle_t *handle_out);
+
+/*---------------------------------------------------------------------------*/
+/* xio_schedwork_del							     */
+/*---------------------------------------------------------------------------*/
+int xio_schedwork_del(struct xio_schedwork *sched_work,
+		      xio_schedwork_handle_t timer_handle);
+
+
+#endif /* XIO_SCHEDWORK_H */
+

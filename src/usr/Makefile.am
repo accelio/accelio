@@ -35,6 +35,8 @@ libxio_headers = 	./get_clock.h 				\
 			./xio_rdma_transport.h			\
 			./xio_rdma_utils.h			\
 			./xio_tls.h				\
+			./xio_timers_list.h			\
+			../common/xio_schedwork.h		\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
 			../common/xio_conn.h			\
@@ -78,6 +80,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			xio_usr_utils.c			\
 			xio_tls.c			\
 			xio_context.c			\
+			xio_schedwork.c			\
 			./linux/hexdump.c		\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
