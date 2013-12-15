@@ -38,6 +38,8 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
+#define xio_ctx_timer_handle_t	void *
+
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
@@ -75,6 +77,7 @@ struct xio_context {
 	unsigned int			flags;
 	uint64_t			worker;
 	struct xio_statistics		stats;
+	struct xio_schedwork		*sched_work;
 
 	/* list of sessions using this connection */
 	struct xio_observable		observable;
@@ -117,6 +120,21 @@ static inline void xio_stat_inc(struct xio_statistics *stats, int counter)
 {
 	stats->counter[counter]++;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_timer_add							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_timer_add(struct xio_context *ctx,
+		      int msec_duration, void *data,
+		      void (*timer_fn)(void *data),
+		      xio_ctx_timer_handle_t *handle_out);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_timer_del							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_timer_del(struct xio_context *ctx,
+		      xio_ctx_timer_handle_t timer_handle);
+
 
 #endif /*XIO_CONTEXT_H */
 
