@@ -220,8 +220,9 @@ void *xio_ev_loop_init()
 		goto cleanup1;
 	}
 
-	retval = xio_ev_loop_add(loop, loop->wakeup_event, EPOLLIN,
-				   NULL, NULL);
+	retval = xio_ev_loop_add(loop, loop->wakeup_event,
+				 EPOLLIN|XIO_POLLLT,
+				 NULL, NULL);
 	if (retval != 0)
 		goto cleanup2;
 
