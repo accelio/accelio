@@ -65,7 +65,7 @@ struct xio_ev_loop {
 	int				efd;
 	int				stop_loop;
 	int				wakeup_event;
-	int				reserved;
+	int				wakeup_armed;
 	struct list_head		events_list;
 };
 
@@ -211,6 +211,7 @@ void *xio_ev_loop_init()
 	INIT_LIST_HEAD(&loop->events_list);
 
 	loop->stop_loop		= 0;
+	loop->wakeup_armed	= 0;
 	loop->efd		= epoll_create(4096);
 	if (loop->efd == -1) {
 		xio_set_error(errno);
@@ -274,6 +275,8 @@ retry:
 				/* remove the wakeup eventfd from epoll set,
 				 * and check for other events */
 				xio_ev_loop_del(loop, loop->wakeup_event);
+				loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
+				loop->stop_loop = 1; /* to allow self-thread quick stop */
 			}
 		}
 	} else {
@@ -315,12 +318,14 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 	if (loop == NULL)
 		return;
 
-	if (loop->stop_loop == 0) {
-		loop->stop_loop = 1;
-		xio_ev_loop_add(loop, loop->wakeup_event,
-				XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT,
-				NULL, NULL);
-	}
+	if (loop->stop_loop == 1)
+		return; /* loop is already marked for stopping (and also armed for wakeup from blocking) */
+	loop->stop_loop = 1;
+
+	if (loop->wakeup_armed == 1)
+		return; /* wakeup is still armed, probably left loop in previous cycle due to other reasons (timeout, events) */
+	loop->wakeup_armed = 1;
+	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT, NULL, NULL);
 }
 
 /*---------------------------------------------------------------------------*/
