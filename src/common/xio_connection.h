@@ -157,7 +157,7 @@ int xio_send_connection_hello_req(struct xio_connection *conn);
 int xio_send_connection_hello_rsp(struct xio_connection *conn,
 				  struct xio_task *task);
 
-int xio_release_connection_hello(struct xio_connection *conn,
+int xio_connection_release_hello(struct xio_connection *conn,
 				 struct xio_msg *msg);
 
 

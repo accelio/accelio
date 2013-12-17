@@ -589,7 +589,7 @@ static int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 static int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 					    struct xio_task *task)
 {
-	xio_release_connection_hello(connection, task->sender_task->omsg);
+	xio_connection_release_hello(connection, task->sender_task->omsg);
 	/* recycle the task */
 	xio_tasks_pool_put(task->sender_task);
 	task->sender_task = NULL;
@@ -1469,7 +1469,7 @@ static int xio_on_connection_hello_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	xio_release_connection_hello(connection, task->omsg);
+	xio_connection_release_hello(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
 	return 0;

@@ -1089,9 +1089,9 @@ int xio_send_connection_hello_rsp(struct xio_connection *conn,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_release_connection_hello						     */
+/* xio_connection_release_hello						     */
 /*---------------------------------------------------------------------------*/
-int xio_release_connection_hello(struct xio_connection *conn,
+int xio_connection_release_hello(struct xio_connection *conn,
 				 struct xio_msg *msg)
 {
 	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg, pdata);
