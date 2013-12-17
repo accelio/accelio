@@ -215,7 +215,7 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 		break;
 
 	case XIO_CONNECTION_ERROR:
-		DEBUG_LOG("session: [notification] - connection error. " \
+		ERROR_LOG("session: [notification] - connection error. " \
 			  "session:%p, conn:%p\n", observer, notifier);
 		break;
 	default:
@@ -241,7 +241,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	int			backlog = 0;
 
 	if ((ctx == NULL) || (ops == NULL) || (uri == NULL)) {
-		DEBUG_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
+		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
 			  ctx, ops, uri);
 		xio_set_error(EINVAL);
 		return NULL;
@@ -268,7 +268,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 
 	server->listener = xio_conn_open(ctx, uri, NULL, 0);
 	if (server->listener == NULL) {
-		DEBUG_LOG("failed to create connection\n");
+		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
 
@@ -278,7 +278,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	retval = xio_conn_listen(server->listener,
 				 uri, src_port, backlog);
 	if (retval != 0) {
-		DEBUG_LOG("connection listen failed\n");
+		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;
 	}
 
