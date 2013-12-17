@@ -1701,7 +1701,7 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 
 	if (connection && connection->conn) {
 		connection->state = CONNECTION_STATE_DISCONNECT;
-		if (session->type == XIO_SESSION_REQ) {
+		if (session->type == XIO_SESSION_CLIENT) {
 			event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 			event.reason = XIO_E_SUCCESS;
 			event.conn = connection;
@@ -1712,13 +1712,13 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 						session, &event,
 						session->cb_user_context);
 
-		} else if (session->type == XIO_SESSION_REP) {
+		} else if (session->type == XIO_SESSION_SERVER) {
 			xio_session_disconnect(session, connection);
 		}
 	} else {
 		xio_conn_close(conn, &session->observer);
 	}
-	if (session->type == XIO_SESSION_REQ) {
+	if (session->type == XIO_SESSION_CLIENT) {
 		/* only on client */
 		/* also send disconnect to connections that do no have conn */
 		list_for_each_entry_safe(connection, tmp_connection,
@@ -1757,7 +1757,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_ACCEPTED:
-		if (session->type == XIO_SESSION_REP)
+		if (session->type == XIO_SESSION_SERVER)
 			reason = XIO_E_SESSION_DISCONECTED;
 		else
 			reason = XIO_E_SESSION_REFUSED;
@@ -2348,7 +2348,7 @@ static int xio_on_conn_event(void *observer, void *sender, int event,
 	case XIO_CONNECTION_ESTABLISHED:
 		DEBUG_LOG("session: [notification] - connection established. " \
 			 "session:%p, conn:%p\n", observer, sender);
-		if (session->type == XIO_SESSION_REQ)
+		if (session->type == XIO_SESSION_CLIENT)
 			xio_on_client_conn_established(session,
 						       conn, event_data);
 		else

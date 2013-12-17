@@ -184,7 +184,7 @@ static int xio_client_main(void *data)
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_open(XIO_SESSION_REQ,
+	session = xio_session_open(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, session_data);
 
 	/* connect the session  */

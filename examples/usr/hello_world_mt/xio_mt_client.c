@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
 	memset(&session_data, 0, sizeof(session_data));
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_data.session = xio_session_open(XIO_SESSION_REQ,
+	session_data.session = xio_session_open(XIO_SESSION_CLIENT,
 						&attr, url,
 						0, 0, &session_data);
 

@@ -418,7 +418,7 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d",
 		get_ip(addr), get_port(addr));
-	session_data->session = xio_session_open(XIO_SESSION_REQ,
+	session_data->session = xio_session_open(XIO_SESSION_CLIENT,
 						 &attr, url,
 						 0, 0, session_data);
 	if (session_data->session == NULL)

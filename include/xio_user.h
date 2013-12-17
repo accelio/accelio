@@ -90,11 +90,12 @@ enum xio_log_level {
  * @brief session's type defintion
  */
 enum xio_session_type {
-	XIO_SESSION_REQ, /**< represents the active side that initiate	     */
-			 /**< connection				     */
-	XIO_SESSION_REP  /**< represents the passive side that listen to     */
-			 /**< incoming connections			     */
-
+	XIO_SESSION_CLIENT, /**< represents the active side that initiate    */
+			    /**< connection				     */
+	XIO_SESSION_REQ = XIO_SESSION_CLIENT, /**< deprecated		     */
+	XIO_SESSION_SERVER,  /**< represents the passive side that listen to */
+			    /**< incoming connections			     */
+	XIO_SESSION_REP = XIO_SESSION_SERVER /**< deprecated		     */
 };
 
 /**

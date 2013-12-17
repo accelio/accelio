@@ -71,11 +71,12 @@ enum xio_log_level {
 };
 
 enum xio_session_type {
-	XIO_SESSION_REQ,  /* is used by a client to send requests to and
-			       receive replies from a service. */
-	XIO_SESSION_REP  /* is used by a service to receive requests from and
-			      send replies to a client. */
-
+	XIO_SESSION_CLIENT, /**< represents the active side that initiate    */
+			    /**< connection				     */
+	XIO_SESSION_REQ = XIO_SESSION_CLIENT, /**< deprecated		     */
+	XIO_SESSION_SERVER,  /**< represents the passive side that listen to */
+			    /**< incoming connections			     */
+	XIO_SESSION_REP = XIO_SESSION_SERVER /**< deprecated		     */
 };
 
 enum xio_proto {

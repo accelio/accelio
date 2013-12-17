@@ -526,7 +526,7 @@ int main(int argc, char *argv[])
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_open(XIO_SESSION_REQ,
+	session = xio_session_open(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, NULL);
 	if (session == NULL) {
 		error = xio_errno();
