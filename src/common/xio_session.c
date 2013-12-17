@@ -1714,6 +1714,7 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 
 		} else if (session->type == XIO_SESSION_SERVER) {
 			xio_session_disconnect(session, connection);
+			return 0;
 		}
 	} else {
 		xio_conn_close(conn, &session->observer);

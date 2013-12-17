@@ -1359,7 +1359,7 @@ struct xio_conn *xio_conn_open(
 		} else {
 			kref_get(&conn->kref);
 		}
-		TRACE_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
+		TRACE_LOG("conn: [addref] conn:%p, refcnt:%d\n", conn,
 			  atomic_read(&conn->kref.refcount));
 
 		return conn;
@@ -1431,7 +1431,7 @@ struct xio_conn *xio_conn_open(
 
 	xio_conns_store_add(conn, &conn->cid);
 
-	TRACE_LOG("conn: [new] id:%d, transport_hndl:%p\n", conn->cid,
+	TRACE_LOG("conn: [new] conn:%p, transport_hndl:%p\n", conn,
 		  conn->transport_hndl);
 
 	return conn;
@@ -1462,8 +1462,7 @@ int xio_conn_connect(struct xio_conn *conn,
 		}
 		conn->state = XIO_CONN_STATE_CONNECTING;
 	} else {
-		if (conn->state ==  XIO_CONN_STATE_CONNECTING ||
-		    conn->state ==  XIO_CONN_STATE_CONNECTED)
+		if (conn->state ==  XIO_CONN_STATE_CONNECTED)
 			xio_conn_notify_observer(
 					conn, observer,
 					XIO_CONNECTION_ESTABLISHED,
@@ -1574,6 +1573,9 @@ static void xio_conn_delayed_close(struct kref *kref)
 /*---------------------------------------------------------------------------*/
 void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 {
+	TRACE_LOG("conn: [putref] ptr:%p, refcnt:%d\n", conn,
+		   atomic_read(&conn->kref.refcount));
+
 	kref_put(&conn->kref, xio_conn_delayed_close);
 
 	if (observer) {
