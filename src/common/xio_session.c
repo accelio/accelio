@@ -843,16 +843,16 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	if (session->last_opened_service == session->services_array_len)
 		session->last_opened_service = 0;
 
-	conn = xio_conn_open(session->lead_conn->ctx, service, NULL, 0);
+	conn = xio_conn_open(session->lead_connection->ctx, service, NULL, 0);
 	if (conn == NULL) {
 		ERROR_LOG("failed to open connection to %s\n",
 			  service);
 		return -1;
 	}
 	/* initialize the redirected connection */
-	tmp_conn = session->lead_conn->conn;
-	session->redir_conn = session->lead_conn;
-	xio_connection_set_conn(session->redir_conn, conn);
+	tmp_conn = session->lead_connection->conn;
+	session->redir_connection = session->lead_connection;
+	xio_connection_set_conn(session->redir_connection, conn);
 
 	TRACE_LOG("connection redirected to %s\n", service);
 	retval = xio_conn_connect(conn, service, &session->observer, NULL);
@@ -862,11 +862,11 @@ static int xio_session_redirect_connection(struct xio_session *session)
 	}
 
 	/* prep the lead connection for close */
-	session->lead_conn = xio_connection_init(session,
-			session->lead_conn->ctx,
-			session->lead_conn->conn_idx,
-			session->lead_conn->cb_user_context);
-	xio_connection_set_conn(session->lead_conn, tmp_conn);
+	session->lead_connection = xio_connection_init(session,
+			session->lead_connection->ctx,
+			session->lead_connection->conn_idx,
+			session->lead_connection->cb_user_context);
+	xio_connection_set_conn(session->lead_connection, tmp_conn);
 
 	return 0;
 
@@ -1265,10 +1265,10 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			tmp_connection =
 				xio_session_assign_conn(session,
 							connection->conn);
-			if (connection == session->lead_conn)
-				session->lead_conn = NULL;
+			if (connection == session->lead_connection)
+				session->lead_connection = NULL;
 			else
-				session->redir_conn = NULL;
+				session->redir_connection = NULL;
 
 			/* now try to send */
 			xio_connection_set_state(connection,
@@ -1308,13 +1308,13 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				  session);
 
 			/* re - initialize the redirected connection */
-			session->lead_conn = xio_connection_init(
+			session->lead_connection = xio_connection_init(
 					session,
-					session->lead_conn->ctx,
-					session->lead_conn->conn_idx,
-					session->lead_conn->cb_user_context);
+					session->lead_connection->ctx,
+					session->lead_connection->conn_idx,
+					session->lead_connection->cb_user_context);
 
-			xio_connection_set_conn(session->lead_conn,
+			xio_connection_set_conn(session->lead_connection,
 						connection->conn);
 			/* close the lead/redirected connection */
 			xio_conn_close(connection->conn, &session->observer);
@@ -1344,7 +1344,7 @@ static int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		}
 
 		/* close the lead connection */
-		xio_conn_close(session->lead_conn->conn,
+		xio_conn_close(session->lead_connection->conn,
 			       &session->observer);
 
 		return 0;
@@ -1694,8 +1694,8 @@ static int xio_on_conn_disconnected(struct xio_session *session,
 	struct xio_connection		*connection, *tmp_connection;
 	struct xio_session_event_data	event;
 
-	if (session->lead_conn && session->lead_conn->conn == conn)
-		connection = session->lead_conn;
+	if (session->lead_connection && session->lead_connection->conn == conn)
+		connection = session->lead_connection;
 	else
 		connection = xio_session_find_connection(session, conn);
 
@@ -1771,16 +1771,16 @@ static int xio_on_conn_closed(struct xio_session *session,
 	xio_conn_unreg_observer(conn, &session->observer);
 
 	/* leading connection */
-	if (session->lead_conn && session->lead_conn->conn == conn) {
-		xio_connection_close(session->lead_conn);
-		session->lead_conn = NULL;
+	if (session->lead_connection && session->lead_connection->conn == conn) {
+		xio_connection_close(session->lead_connection);
+		session->lead_connection = NULL;
 		TRACE_LOG("lead connection is closed\n");
 		spin_lock(&session->connections_list_lock);
 		teardown = (session->connections_nr == 0);
 		spin_unlock(&session->connections_list_lock);
-	} else if (session->redir_conn && session->redir_conn->conn == conn) {
-		xio_connection_close(session->redir_conn);
-		session->redir_conn = NULL;
+	} else if (session->redir_connection && session->redir_connection->conn == conn) {
+		xio_connection_close(session->redir_connection);
+		session->redir_connection = NULL;
 		TRACE_LOG("redirected connection is closed\n");
 		spin_lock(&session->connections_list_lock);
 		teardown = (session->connections_nr == 0);
@@ -1794,7 +1794,7 @@ static int xio_on_conn_closed(struct xio_session *session,
 		spin_unlock(&session->connections_list_lock);
 		xio_session_free_connection(connection);
 	}
-	if (teardown && !session->lead_conn && !session->redir_conn) {
+	if (teardown && !session->lead_connection && !session->redir_connection) {
 			xio_session_notify_teardown(
 				session,
 				reason);
@@ -1821,10 +1821,10 @@ static int xio_on_conn_refused(struct xio_session *session,
 		list_for_each_entry_safe(connection, tmp_connection,
 					 &session->connections_list,
 					 connections_list_entry) {
-			if (session->lead_conn == connection)
-				session->lead_conn = NULL;
-			else if (session->redir_conn == connection)
-				session->redir_conn = NULL;
+			if (session->lead_connection == connection)
+				session->lead_connection = NULL;
+			else if (session->redir_connection == connection)
+				session->redir_connection = NULL;
 
 			ev_data.conn =  connection;
 			ev_data.conn_user_context = connection->cb_user_context;
@@ -1875,13 +1875,13 @@ static int xio_on_client_conn_established(struct xio_session *session,
 			session->state = XIO_SESSION_STATE_CONNECT;
 
 			msg->type = XIO_SESSION_SETUP_REQ;
-			retval = xio_connection_send(session->lead_conn, msg);
+			retval = xio_connection_send(session->lead_connection, msg);
 			if (retval) {
 				TRACE_LOG("failed to send session "\
 					  "setup request\n");
-				ev_data.conn =  session->lead_conn;
+				ev_data.conn =  session->lead_connection;
 				ev_data.conn_user_context =
-					session->lead_conn->cb_user_context;
+					session->lead_connection->cb_user_context;
 				if (session->ses_ops.on_session_event)
 					session->ses_ops.on_session_event(
 						session, &ev_data,
@@ -1901,13 +1901,13 @@ static int xio_on_client_conn_established(struct xio_session *session,
 
 			msg->type      = XIO_SESSION_SETUP_REQ;
 
-			retval = xio_connection_send(session->redir_conn, msg);
+			retval = xio_connection_send(session->redir_connection, msg);
 			if (retval) {
 				TRACE_LOG("failed to send session " \
 					  "setup request\n");
-				ev_data.conn =  session->redir_conn;
+				ev_data.conn =  session->redir_connection;
 				ev_data.conn_user_context =
-					session->redir_conn->cb_user_context;
+					session->redir_connection->cb_user_context;
 				if (session->ses_ops.on_session_event)
 					session->ses_ops.on_session_event(
 						session, &ev_data,
@@ -2030,13 +2030,13 @@ static int xio_on_new_message(struct xio_session *session,
 	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		/* leading connection is refused */
-		if (session->lead_conn &&
-		    session->lead_conn->conn == conn) {
-			connection = session->lead_conn;
-		} else if (session->redir_conn &&
-			   session->redir_conn->conn == conn) {
+		if (session->lead_connection &&
+		    session->lead_connection->conn == conn) {
+			connection = session->lead_connection;
+		} else if (session->redir_connection &&
+			   session->redir_connection->conn == conn) {
 			/* redirected connection is refused */
-			connection = session->redir_conn;
+			connection = session->redir_connection;
 		} else {
 			ERROR_LOG("failed to find connection\n");
 			xio_tasks_pool_put(task);
@@ -2500,7 +2500,7 @@ int xio_session_disconnect(struct xio_session *session,
 		} else {
 			teardown = list_empty(&session->connections_list);
 		}
-		if (teardown && !session->lead_conn && !session->redir_conn) {
+		if (teardown && !session->lead_connection && !session->redir_connection) {
 			xio_session_notify_teardown(
 						session,
 						XIO_E_SESSION_DISCONECTED);
@@ -2570,7 +2570,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 				       void *conn_user_context)
 {
 	struct xio_session	*psession = NULL;
-	struct xio_connection	*connection = NULL, *tmp_conn;
+	struct xio_connection	*connection = NULL, *tmp_connection;
 	int			retval;
 
 	if ((ctx == NULL) || (session == NULL)) {
@@ -2614,13 +2614,13 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			goto cleanup;
 		}
 		/* initialize the lead connection */
-		session->lead_conn = xio_session_alloc_connection(
+		session->lead_connection = xio_session_alloc_connection(
 				session, ctx,
 				conn_idx,
 				conn_user_context);
-		session->lead_conn->conn = conn;
+		session->lead_connection->conn = conn;
 
-		connection  = session->lead_conn;
+		connection  = session->lead_connection;
 
 		/* get transport class routines */
 		session->trans_cls = xio_conn_get_trans_cls(conn);
@@ -2661,10 +2661,10 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			ERROR_LOG("failed to open connection\n");
 			goto cleanup;
 		}
-		tmp_conn = xio_session_assign_conn(session, conn);
-		if (tmp_conn != connection) {
+		tmp_connection = xio_session_assign_conn(session, conn);
+		if (tmp_connection != connection) {
 			ERROR_LOG("failed to open connection conn:%p, %p %p\n",
-				  conn, tmp_conn, connection);
+				  conn, tmp_connection, connection);
 			goto cleanup;
 		}
 		DEBUG_LOG("reconnecting to %s, ctx:%p\n", portal, ctx);
@@ -2674,7 +2674,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
 		}
-		connection = tmp_conn;
+		connection = tmp_connection;
 		if (session->state == XIO_SESSION_STATE_ONLINE)
 			xio_send_connection_hello_req(connection);
 	}

@@ -111,8 +111,8 @@ struct xio_session {
 	struct mutex                    lock;	   /* lock open connection */
 	spinlock_t                      connections_list_lock;
 	int				pad;
-	struct xio_connection		*lead_conn;
-	struct xio_connection		*redir_conn;
+	struct xio_connection		*lead_connection;
+	struct xio_connection		*redir_connection;
 };
 
 /*---------------------------------------------------------------------------*/
