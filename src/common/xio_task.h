@@ -71,7 +71,7 @@ struct xio_task {
 	struct kref		kref;
 	uint64_t		magic;
 	uint64_t		stag;		/* session unique tag */
-	uint32_t		force_signal;
+	uint32_t		is_control;
 	uint32_t		tlv_type;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/

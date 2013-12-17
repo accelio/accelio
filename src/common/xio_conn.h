@@ -39,13 +39,14 @@
 #define XIO_CONN_H
 
 #include "xio_hash.h"
+#include "xio_context.h"
 #include "xio_transport.h"
 #include "sys/hashtable.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
 /*---------------------------------------------------------------------------*/
-
+#define XIO_CONN_CLOSE_TIMEOUT	60000
 
 /*---------------------------------------------------------------------------*/
 /* typedefs								     */
@@ -67,6 +68,18 @@ enum xio_conn_event {
 	XIO_CONNECTION_CANCEL_REQUEST,
 	XIO_CONNECTION_CANCEL_RESPONSE,
 	XIO_CONNECTION_ERROR,
+};
+
+enum xio_conn_state {
+	XIO_CONN_STATE_INIT,
+	XIO_CONN_STATE_OPEN,
+	XIO_CONN_STATE_LISTEN,
+	XIO_CONN_STATE_CONNECTING,
+	XIO_CONN_STATE_CONNECTED,
+	XIO_CONN_STATE_REJECTED,
+	XIO_CONN_STATE_CLOSED,
+	XIO_CONN_STATE_DISCONNECTED,
+
 };
 
 /*---------------------------------------------------------------------------*/
@@ -113,12 +126,14 @@ struct xio_conn {
 	struct xio_tasks_pool_ops	*initial_pool_ops;
 	struct xio_observer		*server_observer;
 	struct xio_observer		trans_observer;
+	struct xio_observer		ctx_observer;
 	struct xio_observable		observable;
+	struct kref			kref;
 
-	atomic_t			refcnt;
 	int				cid;
-	int				is_connected;
+	enum xio_conn_state		state;
 	int				is_first_setup_req;
+	xio_ctx_timer_handle_t		close_time_hndl;
 
 	struct list_head		observers_htbl;
 
@@ -273,7 +288,7 @@ static inline int xio_conn_get_proto(struct xio_conn *conn)
 /*---------------------------------------------------------------------------*/
 static inline void xio_conn_addref(struct xio_conn *conn)
 {
-	atomic_inc(&conn->refcnt);
+	kref_get(&conn->kref);
 }
 
 /*---------------------------------------------------------------------------*/

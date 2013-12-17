@@ -134,13 +134,13 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 	struct ibv_send_wr	*bad_wr;
 	int			retval, nr_posted;
 
-	/*
+
 	TRACE_LOG("num_sge:%d, len1:%d, len2:%d, send_flags:%d\n",
 		  xio_send->send_wr.num_sge,
 		  xio_send->send_wr.sg_list[0].length,
 		  xio_send->send_wr.sg_list[1].length,
 		  xio_send->send_wr.send_flags);
-	*/
+
 
 	retval = ibv_post_send(rdma_hndl->qp, &xio_send->send_wr, &bad_wr);
 	if (likely(!retval)) {
@@ -251,7 +251,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 		/* prefetch next buffer */
 		if (rdma_hndl->tx_ready_tasks_num > 2) {
-			task1 = list_first_entry_or_null(&task->tasks_list_entry,
+			task1 = list_first_entry_or_null(
+					&task->tasks_list_entry,
 					struct xio_task,  tasks_list_entry);
 			if (task1) {
 				xio_prefetch(task1->mbuf.buf.head);
@@ -526,7 +527,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	}
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
-		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, " \
+		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, " \
 			  "wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x\n",
 			   rdma_hndl, rdma_task, task,
@@ -534,7 +535,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			   ibv_wc_status_str(wc->status),
 			   wc->vendor_err);
 	} else  {
-		ERROR_LOG("conn:%p, rdma_task:%p, task:%p, "  \
+		ERROR_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "  \
 			  "wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x\n",
 			  rdma_hndl, rdma_task, task,
@@ -556,13 +557,12 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			rdma_hndl->state = XIO_STATE_DISCONNECTED;
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
-				ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
-					  rdma_hndl);
+				ERROR_LOG("rdma_hndl:%p rdma_disconnect" \
+					  "failed, %m\n", rdma_hndl);
 		} else {
 			/* TODO: handle each error specificly */
 			ERROR_LOG("ASSERT: program abort\n");
 			exit(0);
-
 		}
 	}
 }
@@ -1690,7 +1690,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (sge_len < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
-	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->force_signal) {
+	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->is_control) {
 		/* avoid race between send completion and response arrival */
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
@@ -1841,7 +1841,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	rdma_task->txd.send_wr.send_flags = 0;
-	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->force_signal) {
+	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->is_control) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->rsp_sig_cnt = 0;
 	}
@@ -2830,8 +2830,7 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->sim_peer_credits += rdma_hndl->credits;
 
 	rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
-	xio_rdma_write_setup_msg(rdma_hndl,
-			task, &rdma_hndl->setup_rsp);
+	xio_rdma_write_setup_msg(rdma_hndl, task, &rdma_hndl->setup_rsp);
 	rdma_hndl->credits = 0;
 
 

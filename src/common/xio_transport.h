@@ -151,6 +151,10 @@ struct xio_transport {
 	int	(*init)(struct xio_transport *self);
 	void	(*release)(struct xio_transport *self);
 
+	/* running thread (context) is going down */
+	int	(*context_shutdown)(struct xio_transport *self,
+				    struct xio_context *ctx);
+
 	/* observers */
 	void	(*reg_observer)(struct xio_transport_base *trans_hndl,
 				struct xio_observer *observer);

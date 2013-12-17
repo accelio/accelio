@@ -231,8 +231,8 @@ int xio_connection_send(struct xio_connection *conn,
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
 
-	/* if fin ask for signal */
-	task->force_signal = IS_FIN(task->tlv_type);
+	/* mark as a control message */
+	task->is_control = !IS_APPLICATION_MSG(msg);
 
 	/* write session header */
 	hdr.flags		= msg->flags;
@@ -878,10 +878,10 @@ static int xio_send_fin_rsp(struct xio_connection *conn, struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_connection_release_fin						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_release_fin(struct xio_connection *conn,
+int xio_connection_release_fin(struct xio_connection *connection,
 			       struct xio_msg *msg)
 {
-	xio_msg_list_insert_head(&conn->one_way_msg_pool, msg, pdata);
+	xio_msg_list_insert_head(&connection->one_way_msg_pool, msg, pdata);
 
 	return 0;
 }
@@ -889,25 +889,26 @@ int xio_connection_release_fin(struct xio_connection *conn,
 /*---------------------------------------------------------------------------*/
 /* xio_do_disconnect							     */
 /*---------------------------------------------------------------------------*/
-int xio_do_disconnect(struct xio_connection *conn)
+int xio_do_disconnect(struct xio_connection *connection)
 {
-	conn->state = CONNECTION_STATE_CLOSE;
-	xio_session_disconnect(conn->session, conn);
+	connection->state = CONNECTION_STATE_CLOSE;
+	xio_session_disconnect(connection->session, connection);
 
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_disconnect							     */
 /*---------------------------------------------------------------------------*/
-int xio_disconnect(struct xio_connection *conn)
+int xio_disconnect(struct xio_connection *connection)
 {
-	if (xio_is_connection_online(conn)) {
-		xio_send_fin_req(conn);
-		conn->state = CONNECTION_STATE_CLOSING;
+	if (xio_is_connection_online(connection)) {
+		TRACE_LOG("send fin response. session:%p, connection:%p\n",
+			  connection->session, connection);
+		xio_send_fin_req(connection);
+		connection->state = CONNECTION_STATE_CLOSING;
 	} else {
-		xio_do_disconnect(conn);
+		xio_do_disconnect(connection);
 	}
 
 	return 0;
@@ -916,11 +917,14 @@ int xio_disconnect(struct xio_connection *conn)
 /*---------------------------------------------------------------------------*/
 /* xio_ack_disconnect							     */
 /*---------------------------------------------------------------------------*/
-int xio_ack_disconnect(struct xio_connection *conn, struct xio_task *task)
+int xio_ack_disconnect(struct xio_connection *connection,
+		       struct xio_task *task)
 {
-	if (conn->state == CONNECTION_STATE_ONLINE) {
-		xio_send_fin_rsp(conn, task);
-		conn->state = CONNECTION_STATE_CLOSING;
+	if (connection->state == CONNECTION_STATE_ONLINE) {
+		TRACE_LOG("send fin response. session:%p, connection:%p\n",
+			  connection->session, connection);
+		xio_send_fin_rsp(connection, task);
+		connection->state = CONNECTION_STATE_CLOSING;
 	}
 
 	return 0;

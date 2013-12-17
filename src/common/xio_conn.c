@@ -66,6 +66,8 @@ struct xio_observers_htbl_node {
 static int xio_conn_primary_pool_setup(struct xio_conn *conn);
 static int xio_on_transport_event(void *observer, void *sender, int event,
 				  void *event_data);
+static void xio_on_conn_closed(struct xio_conn *conn,
+			       union xio_transport_event_data *event_data);
 
 
 /*---------------------------------------------------------------------------*/
@@ -193,6 +195,7 @@ static void xio_pre_put_task(struct xio_task *task)
 	task->imsg.flags		= 0;
 	task->omsg			= NULL;
 	task->tlv_type			= 0xdead;
+	task->sender_task		= NULL;
 	task->omsg_flags		= 0;
 	task->state			= XIO_TASK_STATE_INIT;
 }
@@ -530,7 +533,7 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 		ERROR_LOG("setup primary pool failed\n");
 		return -1;
 	}
-	conn->is_connected = 1;
+	conn->state = XIO_CONN_STATE_CONNECTED;
 
 	xio_observable_notify_all_observers(&conn->observable,
 					    XIO_CONNECTION_ESTABLISHED, NULL);
@@ -548,7 +551,7 @@ cleanup:
 static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 					     struct xio_task *task)
 {
-	conn->is_connected = 1;
+	conn->state = XIO_CONN_STATE_CONNECTED;
 	xio_observable_notify_all_observers(&conn->observable,
 					    XIO_CONNECTION_ESTABLISHED, NULL);
 	/* recycle the task */
@@ -878,12 +881,65 @@ static int xio_conn_primary_pool_free(struct xio_conn *conn)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_conn_release		                                             */
+/*---------------------------------------------------------------------------*/
+static void xio_conn_release(void *data)
+{
+	struct xio_conn *conn = data;
+
+	TRACE_LOG("physical connection close. conn:%p\n", conn);
+
+	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
+		conn->state = XIO_CONN_STATE_CLOSED;
+		TRACE_LOG("conn state changed to closed\n");
+	}
+
+	/* now it is zero */
+	if (conn->transport->close)
+		conn->transport->close(conn->transport_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_context_close							     */
+/*---------------------------------------------------------------------------*/
+static void xio_on_context_close(struct xio_conn *conn,
+				 struct xio_context *ctx)
+{
+	TRACE_LOG("xio_on_context_close. conn:%p, ctx:%p\n", conn, ctx);
+
+	/* shut down the context and its decendent without waiting */
+	if (conn->transport->context_shutdown)
+		conn->transport->context_shutdown(conn->transport, ctx);
+
+	/* at that stage the conn->transport_hndl no longer exist */
+	conn->transport_hndl = NULL;
+
+	/* close the connection */
+	xio_on_conn_closed(conn, NULL);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_context_event							     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_context_event(void *observer,
+			    void *sender, int event, void *event_data)
+{
+	TRACE_LOG("xio_on_context_event\n");
+	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+		TRACE_LOG("context: [close] ctx:%p\n", sender);
+		xio_on_context_close(observer, sender);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_conn_create		                                             */
 /*---------------------------------------------------------------------------*/
 struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 				 struct xio_transport_base *transport_hndl)
 {
-	struct xio_conn	*conn;
+	struct xio_conn		*conn;
 	int			retval;
 
 
@@ -905,12 +961,19 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 
 	xio_conn_init_observers_htbl(conn);
 
+	/* start listen to context events */
+	XIO_OBSERVER_INIT(&conn->ctx_observer, conn,
+			  xio_on_context_event);
+
+	xio_context_reg_observer(transport_hndl->ctx, &conn->ctx_observer);
+
 
 	/* add the conection to temporary list */
-	conn->transport_hndl	= transport_hndl;
-	conn->transport		= parent_conn->transport;
-	atomic_set(&conn->refcnt, 1);
-	conn->is_first_setup_req = 1;
+	conn->transport_hndl		= transport_hndl;
+	conn->transport			= parent_conn->transport;
+	kref_init(&conn->kref);
+	conn->state			= XIO_CONN_STATE_OPEN;
+	conn->is_first_setup_req	= 1;
 
 	xio_conns_store_add(conn, &conn->cid);
 
@@ -985,22 +1048,18 @@ exit:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_connection_closed		                                     */
+/* xio_on_conn_closed							     */
 /*---------------------------------------------------------------------------*/
-static void xio_on_connection_closed(struct xio_conn *conn,
-				    union xio_transport_event_data *
-				    event_data)
+static void xio_on_conn_closed(struct xio_conn *conn,
+			       union xio_transport_event_data *
+			       event_data)
 {
 	TRACE_LOG("conn:%p - close complete\n", conn);
-	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_CLOSED,
-					    NULL);
 
-	if (conn->transport->unreg_observer) {
+	if (conn->transport->unreg_observer && conn->transport_hndl) {
 		conn->transport->unreg_observer(conn->transport_hndl,
 						&conn->trans_observer);
 	}
-
 	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
 
@@ -1010,6 +1069,10 @@ static void xio_on_connection_closed(struct xio_conn *conn,
 
 	xio_conn_primary_free_tasks(conn);
 	xio_conn_primary_pool_free(conn);
+
+	if (conn->transport_hndl)
+		xio_context_unreg_observer(conn->transport_hndl->ctx,
+					   &conn->ctx_observer);
 
 	kfree(conn);
 }
@@ -1235,6 +1298,8 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	case XIO_TRANSPORT_DISCONNECTED:
 		DEBUG_LOG("conn: [notification] - transport disconnected. "  \
 			 "conn:%p, transport:%p\n", observer, sender);
+		conn->state = XIO_CONN_STATE_DISCONNECTED;
+		TRACE_LOG("conn state changed to disconnected\n");
 		xio_observable_notify_all_observers(&conn->observable,
 						    XIO_CONNECTION_DISCONNECTED,
 						    &event_data);
@@ -1242,11 +1307,13 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	case XIO_TRANSPORT_CLOSED:
 		DEBUG_LOG("conn: [notification] - transport closed. "  \
 			 "conn:%p, transport:%p\n", observer, sender);
-		xio_on_connection_closed(conn, ev_data);
+		xio_on_conn_closed(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("conn: [notification] - transport refused. " \
 			 "conn:%p, transport:%p\n", observer, sender);
+		conn->state = XIO_CONN_STATE_DISCONNECTED;
+		TRACE_LOG("conn state changed to disconnected\n");
 		xio_observable_notify_all_observers(&conn->observable,
 						    XIO_CONNECTION_REFUSED,
 						    &event_data);
@@ -1261,7 +1328,6 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	return 0;
 }
 
-#define MAX_SESSIONS_PER_CONN 480
 /*---------------------------------------------------------------------------*/
 /* xio_conn_open		                                             */
 /*---------------------------------------------------------------------------*/
@@ -1279,19 +1345,22 @@ struct xio_conn *xio_conn_open(
 	/* look for opened connection */
 	conn = xio_conns_store_find(ctx, portal_uri);
 	if (conn != NULL) {
-		/* current limitation */
-		if (atomic_read(&conn->refcnt) >= MAX_SESSIONS_PER_CONN)
-			return NULL;
-
 		if (observer) {
 			xio_observable_reg_observer(&conn->observable,
 						    observer);
 			xio_conn_hash_observer(conn, observer, oid);
 		}
-		atomic_inc(&conn->refcnt);
 
+		if (conn->close_time_hndl) {
+			kref_init(&conn->kref);
+			xio_ctx_timer_del(conn->transport_hndl->ctx,
+					  conn->close_time_hndl);
+			conn->close_time_hndl = NULL;
+		} else {
+			kref_get(&conn->kref);
+		}
 		TRACE_LOG("conn: [addref] ptr:%p, refcnt:%d\n", conn,
-			  atomic_read(&conn->refcnt));
+			  atomic_read(&conn->kref.refcount));
 
 		return conn;
 	}
@@ -1316,7 +1385,6 @@ struct xio_conn *xio_conn_open(
 		xio_set_error(ENOSYS);
 		return NULL;
 	}
-
 	/* allocate connection */
 	conn = kcalloc(1, sizeof(struct xio_conn), GFP_KERNEL);
 	if (conn == NULL) {
@@ -1324,8 +1392,8 @@ struct xio_conn *xio_conn_open(
 		ERROR_LOG("kcalloc failed. %m\n");
 		return NULL;
 	}
-	XIO_OBSERVER_INIT(&conn->trans_observer, conn, xio_on_transport_event);
 
+	XIO_OBSERVER_INIT(&conn->trans_observer, conn, xio_on_transport_event);
 	XIO_OBSERVABLE_INIT(&conn->observable, conn);
 
 	xio_conn_init_observers_htbl(conn);
@@ -1335,6 +1403,12 @@ struct xio_conn *xio_conn_open(
 		xio_conn_hash_observer(conn, observer, oid);
 	}
 
+	/* start listen to context events */
+	XIO_OBSERVER_INIT(&conn->ctx_observer, conn,
+			  xio_on_context_event);
+
+	xio_context_reg_observer(ctx, &conn->ctx_observer);
+
 	conn->transport_hndl = transport->open(transport, ctx,
 					       &conn->trans_observer);
 	if (conn->transport_hndl == NULL) {
@@ -1343,7 +1417,8 @@ struct xio_conn *xio_conn_open(
 		return NULL;
 	}
 	conn->transport	= transport;
-	atomic_set(&conn->refcnt, 1);
+	kref_init(&conn->kref);
+	conn->state = XIO_CONN_STATE_OPEN;
 
 	if (conn->transport->get_pools_setup_ops) {
 		conn->transport->get_pools_setup_ops(conn->transport_hndl,
@@ -1377,7 +1452,7 @@ int xio_conn_connect(struct xio_conn *conn,
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (atomic_read(&conn->refcnt) == 1) {
+	if (conn->state == XIO_CONN_STATE_OPEN) {
 		retval = conn->transport->connect(conn->transport_hndl,
 						  portal_uri,
 						  out_if);
@@ -1385,9 +1460,10 @@ int xio_conn_connect(struct xio_conn *conn,
 			ERROR_LOG("transport connect failed\n");
 			return -1;
 		}
+		conn->state = XIO_CONN_STATE_CONNECTING;
 	} else {
-		if (conn->is_connected &&
-		    conn->transport_hndl->is_client)
+		if (conn->state ==  XIO_CONN_STATE_CONNECTING ||
+		    conn->state ==  XIO_CONN_STATE_CONNECTED)
 			xio_conn_notify_observer(
 					conn, observer,
 					XIO_CONNECTION_ESTABLISHED,
@@ -1410,7 +1486,7 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (atomic_read(&conn->refcnt) == 1) {
+	if (conn->state == XIO_CONN_STATE_OPEN) {
 		/* do not hold the listener connection in storage */
 		xio_conns_store_remove(conn->cid);
 		retval = conn->transport->listen(conn->transport_hndl,
@@ -1421,7 +1497,9 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 				  portal_uri);
 			return -1;
 		}
+		conn->state = XIO_CONN_STATE_LISTEN;
 	}
+
 	return 0;
 }
 
@@ -1437,7 +1515,7 @@ int xio_conn_accept(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (atomic_read(&conn->refcnt) == 1) {
+	if (conn->state == XIO_CONN_STATE_OPEN) {
 		retval = conn->transport->accept(conn->transport_hndl);
 		if (retval != 0) {
 			ERROR_LOG("transport accept failed.\n");
@@ -1459,7 +1537,7 @@ int xio_conn_reject(struct xio_conn *conn)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-	if (atomic_read(&conn->refcnt) == 1) {
+	if (conn->state == XIO_CONN_STATE_OPEN) {
 		retval = conn->transport->reject(conn->transport_hndl);
 		if (retval != 0) {
 			ERROR_LOG("transport reject failed.\n");
@@ -1468,31 +1546,43 @@ int xio_conn_reject(struct xio_conn *conn)
 	}
 	return 0;
 }
+/*---------------------------------------------------------------------------*/
+/* xio_conn_delayed_close		                                     */
+/*---------------------------------------------------------------------------*/
+static void xio_conn_delayed_close(struct kref *kref)
+{
+	struct xio_conn *conn = container_of(kref,
+					     struct xio_conn,
+					     kref);
+	int		retval;
+
+	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
+		retval = xio_ctx_timer_add(
+				conn->transport_hndl->ctx,
+				XIO_CONN_CLOSE_TIMEOUT, conn,
+				xio_conn_release,
+				&conn->close_time_hndl);
+		if (retval)
+			ERROR_LOG("xio_conn_delayed_close failed\n");
+	} else {
+		xio_conn_release(conn);
+	}
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_close		                                             */
 /*---------------------------------------------------------------------------*/
 void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 {
-	int was = __atomic_add_unless(&conn->refcnt, -1, 0);
+	kref_put(&conn->kref, xio_conn_delayed_close);
 
-	/* was already 0 */
-	if (!was)
-		return;
+	if (observer) {
+		xio_conn_notify_observer(
+				conn, observer,
+				XIO_CONNECTION_CLOSED, NULL);
 
-	if (was == 1) {
-		/* now it is zero */
-		if (conn->transport->close)
-			conn->transport->close(conn->transport_hndl);
-	} else {
-		if (observer) {
-			xio_conn_notify_observer(
-					conn, observer,
-					XIO_CONNECTION_CLOSED, NULL);
-
-			xio_conn_unhash_observer(conn, observer);
-			xio_conn_unreg_observer(conn, observer);
-		}
+		xio_conn_unhash_observer(conn, observer);
+		xio_conn_unreg_observer(conn, observer);
 	}
 }
 
