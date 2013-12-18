@@ -531,10 +531,10 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			/* re - initialize the redirected connection */
 			session->lead_connection = xio_connection_init(
-					session,
-					session->lead_connection->ctx,
-					session->lead_connection->conn_idx,
-					session->lead_connection->cb_user_context);
+				session,
+				session->lead_connection->ctx,
+				session->lead_connection->conn_idx,
+				session->lead_connection->cb_user_context);
 
 			xio_connection_set_conn(session->lead_connection,
 						connection->conn);
@@ -672,13 +672,14 @@ int xio_on_client_conn_established(struct xio_session *session,
 			session->state = XIO_SESSION_STATE_CONNECT;
 
 			msg->type = XIO_SESSION_SETUP_REQ;
-			retval = xio_connection_send(session->lead_connection, msg);
+			retval = xio_connection_send(session->lead_connection,
+						     msg);
 			if (retval) {
 				TRACE_LOG("failed to send session "\
 					  "setup request\n");
 				ev_data.conn =  session->lead_connection;
 				ev_data.conn_user_context =
-					session->lead_connection->cb_user_context;
+				    session->lead_connection->cb_user_context;
 				if (session->ses_ops.on_session_event)
 					session->ses_ops.on_session_event(
 						session, &ev_data,
@@ -698,13 +699,14 @@ int xio_on_client_conn_established(struct xio_session *session,
 
 			msg->type      = XIO_SESSION_SETUP_REQ;
 
-			retval = xio_connection_send(session->redir_connection, msg);
+			retval = xio_connection_send(session->redir_connection,
+						     msg);
 			if (retval) {
 				TRACE_LOG("failed to send session " \
 					  "setup request\n");
 				ev_data.conn =  session->redir_connection;
 				ev_data.conn_user_context =
-					session->redir_connection->cb_user_context;
+				    session->redir_connection->cb_user_context;
 				if (session->ses_ops.on_session_event)
 					session->ses_ops.on_session_event(
 						session, &ev_data,
@@ -777,7 +779,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event_client				                             */
+/* xio_on_conn_event_client						     */
 /*---------------------------------------------------------------------------*/
 int xio_on_conn_event_client(void *observer, void *sender, int event,
 			     void *event_data)

@@ -174,7 +174,8 @@ int xio_connection_send(struct xio_connection *connection,
 			xio_tasks_pool_put(task);
 			return -1;
 		}
-		list_move_tail(&task->tasks_list_entry, &connection->pre_send_list);
+		list_move_tail(&task->tasks_list_entry,
+			       &connection->pre_send_list);
 
 		task->sender_task	= req_task;
 		task->omsg		= msg;
@@ -204,7 +205,8 @@ int xio_connection_send(struct xio_connection *connection,
 					  "is unknown. - connection:%p," \
 					  "session:%p, conn:%p\n",
 					  msg->request->sn, connection,
-					  connection->session, connection->conn);
+					  connection->session,
+					  connection->conn);
 				xio_set_error(EINVAL);
 				return -1;
 			}
@@ -303,19 +305,24 @@ int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
-	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq, tmp_pmsg, pdata) {
+	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
+				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
-		xio_session_notify_msg_error(connection, pmsg, XIO_E_MSG_FLUSHED);
+		xio_session_notify_msg_error(connection, pmsg,
+					     XIO_E_MSG_FLUSHED);
 	}
 
-	xio_msg_list_foreach_safe(pmsg, &connection->rsps_msgq, tmp_pmsg, pdata) {
+	xio_msg_list_foreach_safe(pmsg, &connection->rsps_msgq,
+				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->rsps_msgq, pmsg, pdata);
 		if (pmsg->type == XIO_ONE_WAY_RSP) {
-			xio_msg_list_insert_head(&connection->one_way_msg_pool,
-						 pmsg, pdata);
+			xio_msg_list_insert_head(
+					&connection->one_way_msg_pool,
+					pmsg, pdata);
 			continue;
 		}
-		xio_session_notify_msg_error(connection, pmsg, XIO_E_MSG_FLUSHED);
+		xio_session_notify_msg_error(connection, pmsg,
+					     XIO_E_MSG_FLUSHED);
 	}
 
 	return 0;
@@ -397,8 +404,10 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 	while (retry_cnt < 2) {
 		msgq		= msg_lists[connection->send_req_toggle];
-		in_flight_msgq	= in_flight_msg_lists[connection->send_req_toggle];
-		connection->send_req_toggle = 1 - connection->send_req_toggle;
+		in_flight_msgq	=
+			in_flight_msg_lists[connection->send_req_toggle];
+		connection->send_req_toggle =
+			1 - connection->send_req_toggle;
 		msg = xio_msg_list_first(msgq);
 		if (msg != NULL) {
 			retval = xio_connection_send(connection, msg);
@@ -408,7 +417,8 @@ static int xio_connection_xmit(struct xio_connection *connection)
 					break;
 				}
 				/* if user requested not to queue messages */
-				if (xio_session_not_queueing(connection->session)) {
+				if (xio_session_not_queueing(
+						connection->session)) {
 					xio_msg_list_remove(msgq, msg, pdata);
 					break;
 				}
@@ -443,9 +453,11 @@ int xio_connection_remove_in_flight(struct xio_connection *connection,
 		return 0;
 
 	if (IS_REQUEST(msg->type))
-		xio_msg_list_remove(&connection->in_flight_reqs_msgq, msg, pdata);
+		xio_msg_list_remove(
+				&connection->in_flight_reqs_msgq, msg, pdata);
 	else
-		xio_msg_list_remove(&connection->in_flight_rsps_msgq, msg, pdata);
+		xio_msg_list_remove(
+				&connection->in_flight_rsps_msgq, msg, pdata);
 
 	return 0;
 }
@@ -849,7 +861,8 @@ static int xio_send_fin_req(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 /* xio_send_fin_rsp							     */
 /*---------------------------------------------------------------------------*/
-static int xio_send_fin_rsp(struct xio_connection *connection, struct xio_task *task)
+static int xio_send_fin_rsp(struct xio_connection *connection,
+			    struct xio_task *task)
 {
 	struct xio_msg *msg;
 
@@ -942,20 +955,25 @@ int xio_cancel_request(struct xio_connection *connection,
 
 
 	/* search the tx */
-	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq, tmp_pmsg, pdata) {
+	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq, i
+				  tmp_pmsg, pdata) {
 		if (pmsg->sn == req->sn) {
 			ERROR_LOG("[%llu] - message found on reqs_msgq\n",
 				  req->sn);
-			xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
+			xio_msg_list_remove(&connection->reqs_msgq,
+					    pmsg, pdata);
 			xio_session_notify_cancel(
 				connection, pmsg, XIO_E_MSG_CANCELED);
 			return 0;
 		}
 	}
 	hdr.sn			 = htonll(req->sn);
-	hdr.requester_session_id = htonl(connection->session->session_id);
-	hdr.responder_session_id = htonl(connection->session->peer_session_id);
-	stag			 = uint64_from_ptr(connection->session);
+	hdr.requester_session_id =
+		htonl(connection->session->session_id);
+	hdr.responder_session_id =
+		htonl(connection->session->peer_session_id);
+	stag			 =
+		uint64_from_ptr(connection->session);
 
 	/* cancel request on tx */
 	xio_conn_cancel_req(connection->conn, req, stag, &hdr, sizeof(hdr));
@@ -988,7 +1006,8 @@ struct xio_task *xio_connection_find_io_task(struct xio_connection *connection,
 	struct xio_task *ptask;
 
 	/* look in the tx_comp */
-	list_for_each_entry(ptask, &connection->io_tasks_list, tasks_list_entry) {
+	list_for_each_entry(ptask, &connection->io_tasks_list,
+			    tasks_list_entry) {
 		if (ptask->imsg.sn == msg_sn)
 			return ptask;
 	}

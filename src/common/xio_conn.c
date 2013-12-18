@@ -1575,7 +1575,7 @@ static void xio_conn_delayed_close(struct kref *kref)
 void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 {
 	TRACE_LOG("conn: [putref] ptr:%p, refcnt:%d\n", conn,
-		   atomic_read(&conn->kref.refcount));
+		  atomic_read(&conn->kref.refcount));
 
 	kref_put(&conn->kref, xio_conn_delayed_close);
 
