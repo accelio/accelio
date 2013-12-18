@@ -289,6 +289,12 @@ retry:
 		goto retry;
 
 	loop->stop_loop = 0;
+
+	if (loop->wakeup_armed) {
+		xio_ev_loop_del(loop, loop->wakeup_event);
+		loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
+	}
+
 	return 0;
 }
 
