@@ -258,6 +258,7 @@ struct xio_buf *xio_alloc(size_t length)
 				  real_size, strerror(retval));
 			goto cleanup;
 		}
+		memset(buf->addr, 0, real_size);
 		alloced = 1;
 	} else {
 		access |= IBV_ACCESS_ALLOCATE_MR;

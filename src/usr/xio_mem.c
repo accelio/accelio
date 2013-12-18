@@ -61,6 +61,7 @@ void *malloc_huge_pages(size_t size)
 				  real_size, strerror(retval));
 			return NULL;
 		}
+		memset(ptr, 0, real_size);
 		return ptr;
 	}
 
@@ -83,6 +84,7 @@ void *malloc_huge_pages(size_t size)
 				  real_size, strerror(retval));
 			return NULL;
 		}
+		memset(ptr, 0, real_size);
 		real_size = 0;
 	} else {
 		DEBUG_LOG("Allocated huge page sz:%zu\n", real_size);
