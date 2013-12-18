@@ -918,14 +918,15 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		/* get transport class routines */
 		session->trans_cls = xio_conn_get_trans_cls(conn);
 
+		session->state = XIO_SESSION_STATE_CONNECT;
+
 		retval = xio_conn_connect(conn, portal,
 					  &session->observer, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
+			session->state = XIO_SESSION_STATE_INIT;
 			goto cleanup;
 		}
-
-		session->state = XIO_SESSION_STATE_CONNECT;
 	} else if ((session->state == XIO_SESSION_STATE_CONNECT) ||
 		   (session->state == XIO_SESSION_STATE_REDIRECTED)) {
 		connection  = xio_session_alloc_connection(session,
