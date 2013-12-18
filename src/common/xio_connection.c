@@ -1045,9 +1045,9 @@ int xio_set_connection_params(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_send_connection_hello_req					     */
+/* xio_connection_send_hello_req					     */
 /*---------------------------------------------------------------------------*/
-int xio_send_connection_hello_req(struct xio_connection *connection)
+int xio_connection_send_hello_req(struct xio_connection *connection)
 {
 	struct xio_msg *msg;
 
@@ -1065,9 +1065,9 @@ int xio_send_connection_hello_req(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_send_connection_hello_rsp					     */
+/* xio_connection_send_hello_rsp					     */
 /*---------------------------------------------------------------------------*/
-int xio_send_connection_hello_rsp(struct xio_connection *connection,
+int xio_connection_send_hello_rsp(struct xio_connection *connection,
 				  struct xio_task *task)
 {
 	struct xio_msg	*msg;

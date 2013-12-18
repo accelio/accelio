@@ -176,7 +176,7 @@ cleanup:
 int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 				     struct xio_task *task)
 {
-	xio_send_connection_hello_rsp(connection, task);
+	xio_connection_send_hello_rsp(connection, task);
 
 	xio_session_notify_new_connection(task->session, connection);
 

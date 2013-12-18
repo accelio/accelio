@@ -725,7 +725,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 			}
 
 			/* introduce the connection to the session */
-			xio_send_connection_hello_req(connection);
+			xio_connection_send_hello_req(connection);
 
 			/* set the new connection to online */
 			xio_connection_set_state(connection,
@@ -969,7 +969,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		}
 		connection = tmp_connection;
 		if (session->state == XIO_SESSION_STATE_ONLINE)
-			xio_send_connection_hello_req(connection);
+			xio_connection_send_hello_req(connection);
 	}
 	mutex_unlock(&session->lock);
 
