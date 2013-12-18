@@ -602,22 +602,17 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	int			retval;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	int			must_send = 0;
-	struct xio_task		*task1, *task2;
+	struct xio_task		*task1;
 
-
-	rdma_hndl->rqe_avail--;
-	rdma_hndl->sim_peer_credits--;
 
 	/* prefetch next buffer */
 	task1 = list_first_entry_or_null(&task->tasks_list_entry,
 			 struct xio_task,  tasks_list_entry);
-	if (task1) {
+	if (task1)
 		xio_prefetch(task1->mbuf.buf.head);
-		task2 = list_first_entry_or_null(&task1->tasks_list_entry,
-					 struct xio_task,  tasks_list_entry);
-		if (task2)
-			xio_prefetch(task2->mbuf.buf.head);
-	}
+
+	rdma_hndl->rqe_avail--;
+	rdma_hndl->sim_peer_credits--;
 
 	/* rearm the receive queue  */
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&

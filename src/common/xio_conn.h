@@ -87,6 +87,16 @@ enum xio_conn_state {
 /*---------------------------------------------------------------------------*/
 union xio_conn_event_data {
 	struct {
+		struct xio_task		*task;
+		enum xio_wc_op		op;
+		int			pad;
+	} msg;
+	struct {
+		struct xio_task		*task;
+		int			is_assigned;
+		int			pad;
+	} assign_in_buf;
+	struct {
 		struct xio_conn		*child_conn;
 	} new_connection;
 	struct {
@@ -94,20 +104,10 @@ union xio_conn_event_data {
 	} error;
 	struct {
 		struct xio_task		*task;
-		enum xio_wc_op		op;
+		enum xio_status		result;
 		int			pad;
-	} msg;
-	struct {
-		struct xio_task	*task;
-		int		 is_assigned;
-		int		 pad;
-	} assign_in_buf;
-	struct {
-		void		*ulp_msg;
-		size_t		ulp_msg_sz;
-		struct xio_task	*task;
-		enum xio_status	result;
-		int		pad;
+		void			*ulp_msg;
+		size_t			ulp_msg_sz;
 	} cancel;
 };
 

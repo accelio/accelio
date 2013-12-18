@@ -315,33 +315,37 @@ struct xio_rdma_transport {
 	struct list_head		rdma_rd_list;
 	struct list_head		rdma_rd_in_flight_list;
 
-	/* connection's flow control */
-	int				sq_depth;     /* max snd allowed  */
-	int				rq_depth;     /* max rcv allowed  */
+	/* rx parameters */
+	int				rq_depth;	 /* max rcv allowed  */
 	int				actual_rq_depth; /* max rcv allowed  */
-	int				rqe_avail;   /* recv queue elements
-							avail */
-	int				sqe_avail;
-	int				tx_ready_tasks_num;
-	int				max_tx_ready_tasks_num;
-	uint16_t			req_sig_cnt;
-	uint16_t			rsp_sig_cnt;
-	enum xio_transport_state	state;
-	int				num_tasks;
-	int				kick_rdma_rd;
-
-	int				more_in_batch;
-	int				rdma_in_flight;
-	int				reqs_in_flight_nr;
-	int				rsps_in_flight_nr;
-	int				max_inline_data;
-	int				pad;
-
-	uint16_t			credits;  /* the ack this peer sends */
-
-	/* sender window parameters */
+	int				rqe_avail;	 /* recv queue elements
+							    avail */
+	uint16_t			sim_peer_credits;  /* simulates the peer
+							    * credits managment
+							    * to control nop
+							    * sends
+							    */
+	uint16_t			credits;	  /* the ack this peer sends */
 	uint16_t			peer_credits;
 
+	uint16_t			pad;
+
+	/* fast path params */
+	int				rdma_in_flight;
+	int				sqe_avail;
+	enum xio_transport_state	state;
+
+	/* tx parameters */
+	size_t				max_send_buf_sz;
+	int				kick_rdma_rd;
+	int				reqs_in_flight_nr;
+	int				rsps_in_flight_nr;
+	int				tx_ready_tasks_num;
+	int				max_tx_ready_tasks_num;
+	int				max_inline_data;
+	uint16_t			req_sig_cnt;
+	uint16_t			rsp_sig_cnt;
+	/* sender window parameters */
 	uint16_t			sn;	   /* serial number */
 	uint16_t			ack_sn;	   /* serial number */
 
@@ -355,16 +359,17 @@ struct xio_rdma_transport {
 	uint16_t			max_exp_sn; /* upper edge of
 						       receiver's window + 1 */
 
-	uint16_t			sim_peer_credits;  /* simulates the peer
-							    * credits managment
-							    * to control nop
-							    * sends
-							    */
+	uint16_t			pad1;
+
+	/* control path params */
+	int				sq_depth;     /* max snd allowed  */
+	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
 
-	size_t				max_send_buf_sz;
+	uint16_t			pad2[2];
 
+	/* connection's flow control */
 	size_t				alloc_sz;
 	size_t				membuf_sz;
 

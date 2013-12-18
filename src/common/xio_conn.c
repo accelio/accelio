@@ -566,12 +566,12 @@ static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 static int xio_conn_on_recv_req(struct xio_conn *conn,
 				struct xio_task *task)
 {
-	union xio_conn_event_data conn_event_data = {
-		.msg		= { .task	= task,
-				    .op		= XIO_WC_OP_RECV
-				  }
-	};
+	union xio_conn_event_data conn_event_data;
+
 	task->conn = conn;
+	conn_event_data.msg.task = task;
+	conn_event_data.msg.op = XIO_WC_OP_RECV;
+
 
 	if (!conn->transport_hndl->is_client) {
 		if (task->tlv_type == XIO_SESSION_SETUP_REQ) {
@@ -614,11 +614,11 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 static int xio_conn_on_recv_rsp(struct xio_conn *conn,
 				struct xio_task *task)
 {
-	union xio_conn_event_data conn_event_data = {
-		.msg.task	= task,
-		.msg.op		= XIO_WC_OP_RECV
-	};
+	union xio_conn_event_data conn_event_data;
+
 	task->conn = conn;
+	conn_event_data.msg.task = task;
+	conn_event_data.msg.op = XIO_WC_OP_RECV;
 
 	if (likely(task->sender_task)) {
 		/* route the response to the sender session */
@@ -644,10 +644,11 @@ static int xio_conn_on_recv_rsp(struct xio_conn *conn,
 static int xio_conn_on_send_msg_comp(struct xio_conn *conn,
 				  struct xio_task *task)
 {
-	union xio_conn_event_data conn_event_data = {
-		.msg.task	= task,
-		.msg.op		= XIO_WC_OP_SEND
-	};
+	union xio_conn_event_data conn_event_data;
+
+	conn_event_data.msg.task	= task;
+	conn_event_data.msg.op		= XIO_WC_OP_SEND;
+
 
 	xio_observable_notify_observer(
 			&conn->observable,
@@ -1183,9 +1184,9 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 {
 	int				retval = 0;
 	struct xio_task			*task = event_data->msg.task;
-	union xio_conn_event_data	conn_event_data = {
-		.assign_in_buf.task		= task,
-	};
+	union xio_conn_event_data	conn_event_data;
+
+	conn_event_data.assign_in_buf.task = event_data->msg.task;
 	task->conn = conn;
 
 	xio_observable_notify_any_observer(
