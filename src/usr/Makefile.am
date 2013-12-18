@@ -48,6 +48,7 @@ libxio_headers = 	./get_clock.h 				\
 			../common/xio_protocol.h		\
 			../common/xio_server.h			\
 			../common/xio_session.h			\
+			../common/xio_session_priv.h	\
 			../common/xio_sessions_store.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
@@ -87,6 +88,8 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_utils.c		\
 			../common/xio_server.c		\
 			../common/xio_session.c		\
+			../common/xio_session_server.c	\
+			../common/xio_session_client.c	\
 			../common/xio_sessions_store.c	\
 			../common/xio_observer.c	\
 			../common/xio_conn.c		\

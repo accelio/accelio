@@ -44,8 +44,8 @@
 #include "xio_task.h"
 #include "xio_context.h"
 #include "xio_session.h"
-#include "xio_connection.h"
 #include "xio_conn.h"
+#include "xio_connection.h"
 
 
 struct xio_server {

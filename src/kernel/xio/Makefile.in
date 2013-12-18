@@ -14,6 +14,8 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_conns_store.c \
 	../../common/xio_options.c \
 	../../common/xio_session.c \
+	../../common/xio_sessions_server.c	\
+	../../common/xio_sessions_client.c	\
 	../../common/xio_transport.c \
 	../../common/xio_connection.c \
 	../../common/xio_error.c \
@@ -73,6 +75,8 @@ xio-objs := \
 	../../common/xio_conns_store.o \
 	../../common/xio_options.o \
 	../../common/xio_session.o \
+	../../common/xio_session_server.o	\
+	../../common/xio_session_client.o	\
 	../../common/xio_transport.o \
 	../../common/xio_connection.o \
 	../../common/xio_error.o \
