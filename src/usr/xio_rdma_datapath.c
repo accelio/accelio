@@ -785,6 +785,30 @@ static void xio_rdma_rd_comp_handler(
 
 		xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_NEW_MESSAGE,
 					 &event_data);
+
+		while (rdma_hndl->rdma_in_flight) {
+			task = list_first_entry(
+					&rdma_hndl->rdma_rd_in_flight_list,
+					struct xio_task,  tasks_list_entry);
+
+			rdma_task = task->dd_data;
+
+			if (rdma_task->ib_op != XIO_IB_RECV)
+				break;
+
+			/* tasks that arrived in Send/Receive while pending
+			 * "RDMA READ" tasks were in flight was fenced.
+			 */
+			rdma_hndl->rdma_in_flight--;
+			list_move_tail(&task->tasks_list_entry,
+				       &rdma_hndl->io_list);
+			event_data.msg.op	= XIO_WC_OP_RECV;
+			event_data.msg.task	= task;
+
+			xio_rdma_notify_observer(rdma_hndl,
+						 XIO_TRANSPORT_NEW_MESSAGE,
+						 &event_data);
+		}
 	} else {
 		xio_tasks_pool_put(task);
 		xio_xmit_rdma_rd(rdma_hndl);
@@ -2679,6 +2703,16 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("unexpected opcode\n");
 		break;
 	};
+
+	/* must delay the send due to pending rdma read requests
+	 * if not user will get out of order messages - need fence
+	 */
+	if (rdma_hndl->rdma_in_flight) {
+		rdma_hndl->rdma_in_flight++;
+		list_move_tail(&task->tasks_list_entry,
+			       &rdma_hndl->rdma_rd_in_flight_list);
+		return 0;
+	}
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
