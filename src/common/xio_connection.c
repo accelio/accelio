@@ -955,7 +955,7 @@ int xio_cancel_request(struct xio_connection *connection,
 
 
 	/* search the tx */
-	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq, i
+	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
 				  tmp_pmsg, pdata) {
 		if (pmsg->sn == req->sn) {
 			ERROR_LOG("[%llu] - message found on reqs_msgq\n",
