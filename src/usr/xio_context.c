@@ -162,8 +162,10 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
 	xio_read_logging_level();
 
 	cpu = sched_getcpu();
-	if (cpu == -1)
+	if (cpu == -1) {
+		xio_set_error(errno);
 		return NULL;
+	}
 
 	/* allocate new context */
 	ctx = calloc(1, sizeof(struct xio_context));

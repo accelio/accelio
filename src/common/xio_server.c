@@ -169,6 +169,7 @@ static int xio_on_new_message(struct xio_server *server,
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 	} else {
 		ERROR_LOG("server unexpected message\n");
+		return -1;
 	}
 
 	/* route the message to the session */
