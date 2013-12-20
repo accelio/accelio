@@ -42,6 +42,7 @@
 /* xio_thread_data_construct						     */
 /*---------------------------------------------------------------------------*/
 void xio_thread_data_construct(void);
+void xio_thread_data_destruct(void);
 
 
 #endif /* XIO_TLS_H */

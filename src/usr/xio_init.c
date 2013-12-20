@@ -79,6 +79,7 @@ __attribute__((destructor)) void xio_shutdown(void)
 		pthread_mutex_lock(&mtx);
 		if (!atomic_read(&initialized)) {
 			xio_rdma_transport_destructor();
+			xio_thread_data_destruct();
 		}
 		pthread_mutex_unlock(&mtx);
 	}

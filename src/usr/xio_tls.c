@@ -93,6 +93,16 @@ void xio_thread_data_construct(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_thread_data_destruct						     */
+/*---------------------------------------------------------------------------*/
+void xio_thread_data_destruct(void)
+{
+	/* for main thread only */
+	free(xio_thread_data_get());
+	pthread_setspecific(thread_data_key, NULL);
+}
+
+/*---------------------------------------------------------------------------*/
 /* debuging facilities							     */
 /*---------------------------------------------------------------------------*/
 void xio_set_error(int errnum) { xio_thread_data_get()->_xio_errno = errnum; }
