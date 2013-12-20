@@ -2021,6 +2021,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			memcpy(omsg->in.header.iov_base,
 			       imsg->in.header.iov_base,
 			       hdr_len);
+		else
+			*((char *)omsg->in.header.iov_base) = 0;
 
 		omsg->in.header.iov_len = hdr_len;
 	} else {

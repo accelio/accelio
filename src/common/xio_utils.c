@@ -189,8 +189,11 @@ size_t memclonev(struct xio_iovec *dst, int dsize,
 {
 	int			nr = 0;
 
-	if (dsize < ssize)
+	if (dsize < ssize) {
+		dst[nr].iov_base = NULL;
+		dst[nr].iov_len = 0;
 		return 0;
+	}
 
 	while (nr < ssize) {
 		dst[nr].iov_base = src[nr].iov_base;
