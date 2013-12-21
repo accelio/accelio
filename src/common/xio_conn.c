@@ -536,7 +536,7 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 	conn->state = XIO_CONN_STATE_CONNECTED;
 
 	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_ESTABLISHED, NULL);
+					    XIO_CONN_EVENT_ESTABLISHED, NULL);
 
 	return 0;
 cleanup:
@@ -553,7 +553,7 @@ static int xio_conn_on_send_setup_rsp_comp(struct xio_conn *conn,
 {
 	conn->state = XIO_CONN_STATE_CONNECTED;
 	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_ESTABLISHED, NULL);
+					    XIO_CONN_EVENT_ESTABLISHED, NULL);
 	/* recycle the task */
 	xio_tasks_pool_put(task);
 
@@ -585,14 +585,14 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 			/* always route "hello" to server */
 			xio_conn_notify_server(
 					conn,
-					XIO_CONNECTION_NEW_MESSAGE,
+					XIO_CONN_EVENT_NEW_MESSAGE,
 					&conn_event_data);
 			return 0;
 		} else if (task->tlv_type == XIO_CONNECTION_HELLO_REQ) {
 			/* always route "hello" to server */
 			xio_conn_notify_server(
 					conn,
-					XIO_CONNECTION_NEW_MESSAGE,
+					XIO_CONN_EVENT_NEW_MESSAGE,
 					&conn_event_data);
 			return 0;
 		}
@@ -601,7 +601,7 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 	/* route the message to any of observer */
 	xio_observable_notify_any_observer(
 			&conn->observable,
-			XIO_CONNECTION_NEW_MESSAGE,
+			XIO_CONN_EVENT_NEW_MESSAGE,
 			&conn_event_data);
 
 	return 0;
@@ -625,13 +625,13 @@ static int xio_conn_on_recv_rsp(struct xio_conn *conn,
 		xio_observable_notify_observer(
 				&conn->observable,
 				&task->sender_task->session->observer,
-				XIO_CONNECTION_NEW_MESSAGE,
+				XIO_CONN_EVENT_NEW_MESSAGE,
 				&conn_event_data);
 	} else {
 		/* route the message to any of observer */
 		xio_observable_notify_any_observer(
 			&conn->observable,
-			XIO_CONNECTION_NEW_MESSAGE,
+			XIO_CONN_EVENT_NEW_MESSAGE,
 			&conn_event_data);
 	}
 
@@ -653,7 +653,7 @@ static int xio_conn_on_send_msg_comp(struct xio_conn *conn,
 	xio_observable_notify_observer(
 			&conn->observable,
 			&task->session->observer,
-			XIO_CONNECTION_SEND_COMPLETION,
+			XIO_CONN_EVENT_SEND_COMPLETION,
 			&conn_event_data);
 
 	return 0;
@@ -1011,12 +1011,28 @@ cleanup:
 	kfree(conn);
 	return NULL;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_message_error							     */
+/*---------------------------------------------------------------------------*/
+static void xio_on_message_error(struct xio_conn *conn,
+				 union xio_transport_event_data *event_data)
+{
+	union xio_conn_event_data	conn_event_data;
+
+	conn_event_data.msg_error.reason =  event_data->msg_error.reason;
+	conn_event_data.msg_error.task	=  event_data->msg_error.task;
+
+	xio_observable_notify_any_observer(&conn->observable,
+					   XIO_CONN_EVENT_MESSAGE_ERROR,
+					   &conn_event_data);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_connection		                                     */
 /*---------------------------------------------------------------------------*/
 static void xio_on_new_connection(struct xio_conn *conn,
-				    union xio_transport_event_data *
-				    event_data)
+				  union xio_transport_event_data *event_data)
 {
 	union xio_conn_event_data	conn_event_data;
 	struct xio_conn			*child_conn;
@@ -1034,14 +1050,14 @@ static void xio_on_new_connection(struct xio_conn *conn,
 
 	xio_conn_notify_server(
 			conn,
-			XIO_CONNECTION_NEW_CONNECTION,
+			XIO_CONN_EVENT_NEW_CONNECTION,
 			&conn_event_data);
 
 	return;
 exit:
 	xio_conn_notify_server(
 			conn,
-			XIO_CONNECTION_ERROR,
+			XIO_CONN_EVENT_ERROR,
 			&conn_event_data);
 
 	xio_conn_reject(child_conn);
@@ -1090,7 +1106,7 @@ static void xio_on_transport_error(struct xio_conn *conn,
 	conn_event_data.error.reason =  event_data->error.reason;
 
 	xio_observable_notify_all_observers(&conn->observable,
-					    XIO_CONNECTION_ERROR,
+					    XIO_CONN_EVENT_ERROR,
 					    &conn_event_data);
 }
 
@@ -1191,7 +1207,7 @@ static int xio_on_assign_in_buf(struct xio_conn *conn,
 
 	xio_observable_notify_any_observer(
 			&conn->observable,
-			XIO_CONNECTION_ASSIGN_IN_BUF,
+			XIO_CONN_EVENT_ASSIGN_IN_BUF,
 			&conn_event_data);
 
 	event_data->assign_in_buf.is_assigned =
@@ -1217,7 +1233,7 @@ static int xio_on_cancel_request(struct xio_conn *conn,
 	/* route the message to any of the sessions */
 	xio_observable_notify_any_observer(
 			&conn->observable,
-			XIO_CONNECTION_CANCEL_REQUEST,
+			XIO_CONN_EVENT_CANCEL_REQUEST,
 			&conn_event_data);
 
 	return 0;
@@ -1240,7 +1256,7 @@ static int xio_on_cancel_response(struct xio_conn *conn,
 	/* route the message to any of the sessions */
 	xio_observable_notify_any_observer(
 			&conn->observable,
-			XIO_CONNECTION_CANCEL_RESPONSE,
+			XIO_CONN_EVENT_CANCEL_RESPONSE,
 			&conn_event_data);
 
 	return 0;
@@ -1276,6 +1292,11 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 			 "conn:%p, transport:%p\n", observer, sender);
 		xio_on_assign_in_buf(conn, ev_data);
 		break;
+	case XIO_TRANSPORT_MESSAGE_ERROR:
+		DEBUG_LOG("conn: [notification] - message error. " \
+			 "conn:%p, transport:%p\n", observer, sender);
+		xio_on_message_error(conn, ev_data);
+		break;
 	case XIO_TRANSPORT_CANCEL_REQUEST:
 		DEBUG_LOG("conn: [notification] - cancel request. " \
 			 "conn:%p, transport:%p\n", observer, sender);
@@ -1302,7 +1323,7 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 		conn->state = XIO_CONN_STATE_DISCONNECTED;
 		TRACE_LOG("conn state changed to disconnected\n");
 		xio_observable_notify_all_observers(&conn->observable,
-						    XIO_CONNECTION_DISCONNECTED,
+						    XIO_CONN_EVENT_DISCONNECTED,
 						    &event_data);
 		break;
 	case XIO_TRANSPORT_CLOSED:
@@ -1316,7 +1337,7 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 		conn->state = XIO_CONN_STATE_DISCONNECTED;
 		TRACE_LOG("conn state changed to disconnected\n");
 		xio_observable_notify_all_observers(&conn->observable,
-						    XIO_CONNECTION_REFUSED,
+						    XIO_CONN_EVENT_REFUSED,
 						    &event_data);
 		break;
 	case XIO_TRANSPORT_ERROR:
@@ -1466,7 +1487,7 @@ int xio_conn_connect(struct xio_conn *conn,
 		if (conn->state ==  XIO_CONN_STATE_CONNECTED)
 			xio_conn_notify_observer(
 					conn, observer,
-					XIO_CONNECTION_ESTABLISHED,
+					XIO_CONN_EVENT_ESTABLISHED,
 					NULL);
 	}
 
@@ -1582,7 +1603,7 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 	if (observer) {
 		xio_conn_notify_observer(
 				conn, observer,
-				XIO_CONNECTION_CLOSED, NULL);
+				XIO_CONN_EVENT_CLOSED, NULL);
 
 		xio_conn_unhash_observer(conn, observer);
 		xio_conn_unreg_observer(conn, observer);
@@ -1599,8 +1620,20 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 	if (conn->transport->send) {
 		retval = conn->transport->send(conn->transport_hndl, task);
 		if (retval != 0) {
-			if (xio_errno() != EAGAIN)
+			if (xio_errno() != EAGAIN) {
+				union xio_conn_event_data conn_event_data;
+
 				ERROR_LOG("transport send failed\n");
+				conn_event_data.msg_error.reason = xio_errno();
+				conn_event_data.msg_error.task	= task;
+
+				xio_observable_notify_any_observer(
+					   &conn->observable,
+					   XIO_CONN_EVENT_MESSAGE_ERROR,
+					   &conn_event_data);
+
+				xio_set_error(ENOMSG);
+			}
 			return -1;
 		}
 	}

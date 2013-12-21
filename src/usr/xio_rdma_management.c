@@ -1461,8 +1461,11 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 {
 	int retval;
 
-	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p\n", rdma_hndl);
+	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
+		  rdma_hndl, rdma_hndl->state);
 	if (rdma_hndl->state == XIO_STATE_CONNECTED)  {
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
@@ -2292,8 +2295,8 @@ static struct xio_transport xio_rdma_transport = {
 	.get_pools_setup_ops	= xio_rdma_get_pools_ops,
 	.set_pools_cls		= xio_rdma_set_pools_cls,
 
-	.trans_cls.is_valid_in_req  = xio_rdma_is_valid_in_req,
-	.trans_cls.is_valid_out_msg = xio_rdma_is_valid_out_msg,
+	.validators_cls.is_valid_in_req  = xio_rdma_is_valid_in_req,
+	.validators_cls.is_valid_out_msg = xio_rdma_is_valid_out_msg,
 };
 
 /*---------------------------------------------------------------------------*/

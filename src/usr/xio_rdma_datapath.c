@@ -345,7 +345,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_xmit_rdma_rd							     */
 /*---------------------------------------------------------------------------*/
-static void xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
+static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_task		*task = NULL;
 	struct xio_rdma_task	*rdma_task = NULL;
@@ -385,6 +385,8 @@ static void xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 	} else if (!list_empty(&rdma_hndl->rdma_rd_list)) {
 		rdma_hndl->kick_rdma_rd = 1;
 	}
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1455,7 +1457,9 @@ static int xio_rdma_prep_req_out_data(
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
-			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz);
+			  ulp_out_hdr_len, rdma_hndl->max_send_buf_sz -
+			  xio_hdr_len);
+		xio_set_error(XIO_E_MSG_SIZE);
 		return -1;
 	}
 
@@ -1731,12 +1735,22 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	/* resource are now available and rdma rd  requests are pending kick
 	 * them
 	 */
-	if (rdma_hndl->kick_rdma_rd)
-		xio_xmit_rdma_rd(rdma_hndl);
+	if (rdma_hndl->kick_rdma_rd) {
+		retval = xio_xmit_rdma_rd(rdma_hndl);
+		if (retval) {
+			ERROR_LOG("xio_xmit_rdma_rd failed\n");
+			return -1;
+		}
+	}
 
 
-	if (must_send)
-		xio_rdma_xmit(rdma_hndl);
+	if (must_send) {
+		retval = xio_rdma_xmit(rdma_hndl);
+		if (retval) {
+			ERROR_LOG("xio_rdma_xmit failed\n");
+			return -1;
+		}
+	}
 
 	return retval;
 }
@@ -1787,9 +1801,12 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
-			  ulp_imm_len, rdma_hndl->max_send_buf_sz);
+			  ulp_hdr_len,
+			  rdma_hndl->max_send_buf_sz - xio_hdr_len);
+		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
+
 	/* the data is outgoing via SEND */
 	if ((xio_hdr_len + ulp_hdr_len + data_alignment +
 	    ulp_imm_len) < rdma_hndl->max_send_buf_sz) {
@@ -1889,12 +1906,21 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* resource are now available and rdma rd  requests are pending kick
 	 * them
 	 */
-	if (rdma_hndl->kick_rdma_rd)
-		xio_xmit_rdma_rd(rdma_hndl);
+	if (rdma_hndl->kick_rdma_rd) {
+		retval = xio_xmit_rdma_rd(rdma_hndl);
+		if (retval) {
+			ERROR_LOG("xio_xmit_rdma_rd failed\n");
+			return -1;
+		}
+	}
 
-
-	if (must_send)
-		xio_rdma_xmit(rdma_hndl);
+	if (must_send) {
+		retval = xio_rdma_xmit(rdma_hndl);
+		if (retval) {
+			ERROR_LOG("xio_rdma_xmit failed\n");
+			return -1;
+		};
+	}
 
 	return retval;
 

@@ -57,17 +57,18 @@ struct xio_conn;
 /* enum									     */
 /*---------------------------------------------------------------------------*/
 enum xio_conn_event {
-	XIO_CONNECTION_NEW_CONNECTION,
-	XIO_CONNECTION_ESTABLISHED,
-	XIO_CONNECTION_DISCONNECTED,
-	XIO_CONNECTION_CLOSED,
-	XIO_CONNECTION_REFUSED,
-	XIO_CONNECTION_NEW_MESSAGE,
-	XIO_CONNECTION_SEND_COMPLETION,
-	XIO_CONNECTION_ASSIGN_IN_BUF,
-	XIO_CONNECTION_CANCEL_REQUEST,
-	XIO_CONNECTION_CANCEL_RESPONSE,
-	XIO_CONNECTION_ERROR,
+	XIO_CONN_EVENT_NEW_CONNECTION,
+	XIO_CONN_EVENT_ESTABLISHED,
+	XIO_CONN_EVENT_DISCONNECTED,
+	XIO_CONN_EVENT_CLOSED,
+	XIO_CONN_EVENT_REFUSED,
+	XIO_CONN_EVENT_NEW_MESSAGE,
+	XIO_CONN_EVENT_SEND_COMPLETION,
+	XIO_CONN_EVENT_ASSIGN_IN_BUF,
+	XIO_CONN_EVENT_CANCEL_REQUEST,
+	XIO_CONN_EVENT_CANCEL_RESPONSE,
+	XIO_CONN_EVENT_ERROR,
+	XIO_CONN_EVENT_MESSAGE_ERROR
 };
 
 enum xio_conn_state {
@@ -96,6 +97,11 @@ union xio_conn_event_data {
 		int			is_assigned;
 		int			pad;
 	} assign_in_buf;
+	struct {
+		struct xio_task		*task;
+		enum xio_status		reason;
+		int			pad;
+	} msg_error;
 	struct {
 		struct xio_conn		*child_conn;
 	} new_connection;
@@ -267,12 +273,13 @@ int xio_conn_get_src_addr(struct xio_conn *conn,
 			  struct sockaddr_storage *sa, socklen_t len);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_trans_cls						     */
+/* xio_conn_get_validators_cls						     */
 /*---------------------------------------------------------------------------*/
-static inline struct xio_transport_cls *xio_conn_get_trans_cls(
-				struct xio_conn *conn)
+static inline
+struct xio_transport_msg_validators_cls *xio_conn_get_validators_cls(
+						struct xio_conn *conn)
 {
-	return &conn->transport->trans_cls;
+	return &conn->transport->validators_cls;
 }
 
 /*---------------------------------------------------------------------------*/

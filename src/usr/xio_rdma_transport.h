@@ -325,7 +325,8 @@ struct xio_rdma_transport {
 							    * to control nop
 							    * sends
 							    */
-	uint16_t			credits;	  /* the ack this peer sends */
+	uint16_t			credits;	  /* the ack this
+							     peer sends */
 	uint16_t			peer_credits;
 
 	uint16_t			pad;
@@ -439,17 +440,15 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode);
 
 
 /* xio_rdma_datapath.c */
-static inline int xio_rdma_notify_observer(
+static inline void xio_rdma_notify_observer(
 		struct xio_rdma_transport *rdma_hndl,
 		int event, void *event_data)
 {
 	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
 					    event, event_data);
-
-	return 0;
 }
 
-static inline int xio_rdma_notify_observer_error(
+static inline void xio_rdma_notify_observer_error(
 				struct xio_rdma_transport *rdma_hndl,
 				int reason)
 {
@@ -460,7 +459,24 @@ static inline int xio_rdma_notify_observer_error(
 	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
 					    XIO_TRANSPORT_ERROR,
 					    &ev_data);
-	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_notify_message_error					     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_rdma_notify_message_error(
+				struct xio_rdma_transport *rdma_hndl,
+				struct xio_task *task,
+				enum xio_status reason)
+{
+	union xio_transport_event_data ev_data;
+
+	ev_data.msg_error.task		= task;
+	ev_data.msg_error.reason	= reason;
+
+	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
+					    XIO_TRANSPORT_MESSAGE_ERROR,
+					    &ev_data);
 }
 
 void xio_data_ev_handler(int fd, int events, void *user_context);

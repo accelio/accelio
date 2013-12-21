@@ -661,6 +661,32 @@ int xio_on_conn_closed(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_conn_message_error						     */
+/*---------------------------------------------------------------------------*/
+int xio_on_conn_message_error(struct xio_session *session,
+			      struct xio_conn *conn,
+			      union xio_conn_event_data *event_data)
+{
+	struct xio_task *task = event_data->msg_error.task;
+
+	xio_connection_remove_msg_from_queue(task->connection, task->omsg);
+
+	if (task->session->ses_ops.on_msg_error)
+		task->session->ses_ops.on_msg_error(
+				task->session,
+				event_data->msg_error.reason,
+				task->omsg,
+				task->connection->cb_user_context);
+
+	if (IS_REQUEST(task->tlv_type))
+		xio_tasks_pool_put(task);
+	else
+		xio_connection_queue_io_task(task->connection, task);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_conn_error							     */
 /*---------------------------------------------------------------------------*/
 int xio_on_conn_error(struct xio_session *session,

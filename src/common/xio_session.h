@@ -85,7 +85,7 @@ struct xio_session {
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
 
 	struct xio_session_ops		ses_ops;
-	struct xio_transport_cls	*trans_cls;
+	struct xio_transport_msg_validators_cls	*validators_cls;
 	struct xio_msg			*setup_req;
 	struct xio_observer		observer;
 
@@ -178,8 +178,8 @@ struct xio_connection *xio_server_create_accepted_connection(
 static inline int xio_session_is_valid_in_req(struct xio_session *session,
 					   struct xio_msg *msg)
 {
-	if (session->trans_cls->is_valid_in_req)
-		return session->trans_cls->is_valid_in_req(msg);
+	if (session->validators_cls->is_valid_in_req)
+		return session->validators_cls->is_valid_in_req(msg);
 
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
@@ -191,8 +191,8 @@ static inline int xio_session_is_valid_in_req(struct xio_session *session,
 static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 					    struct xio_msg *msg)
 {
-	if (session->trans_cls->is_valid_out_msg)
-		return session->trans_cls->is_valid_out_msg(msg);
+	if (session->validators_cls->is_valid_out_msg)
+		return session->validators_cls->is_valid_out_msg(msg);
 
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;

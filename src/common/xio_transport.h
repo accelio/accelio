@@ -61,6 +61,7 @@ enum xio_transport_event {
 	XIO_TRANSPORT_ASSIGN_IN_BUF,
 	XIO_TRANSPORT_CANCEL_REQUEST,
 	XIO_TRANSPORT_CANCEL_RESPONSE,
+	XIO_TRANSPORT_MESSAGE_ERROR,
 	XIO_TRANSPORT_ERROR,
 };
 
@@ -78,15 +79,6 @@ union xio_transport_event_data {
 		int			pad;
 	} msg;
 	struct {
-		struct xio_transport_base	*child_trans_hndl;
-	} new_connection;
-	struct {
-		uint32_t	cid;
-	} established;
-	struct {
-		enum xio_status	reason;
-	} error;
-	struct {
 		struct xio_task	 *task;
 		int		 is_assigned;
 		int		 pad;
@@ -98,6 +90,20 @@ union xio_transport_event_data {
 		enum xio_status	result;
 		int		pad;
 	} cancel;
+	struct {
+		struct xio_transport_base	*child_trans_hndl;
+	} new_connection;
+	struct {
+		uint32_t	cid;
+	} established;
+	struct {
+		struct xio_task	 *task;
+		enum xio_status	reason;
+		int		pad;
+	} msg_error;
+	struct {
+		enum xio_status	reason;
+	} error;
 };
 
 struct xio_transport_base {
@@ -111,7 +117,7 @@ struct xio_transport_base {
 	int				pad;
 };
 
-struct xio_transport_cls {
+struct xio_transport_msg_validators_cls {
 	int	(*is_valid_in_req)(struct xio_msg *msg);
 	int	(*is_valid_out_msg)(struct xio_msg *msg);
 };
@@ -143,9 +149,9 @@ struct xio_tasks_pool_cls {
 };
 
 struct xio_transport {
-	const char			*name;
+	const char				*name;
 
-	struct xio_transport_cls	trans_cls;
+	struct xio_transport_msg_validators_cls	validators_cls;
 
 	/* transport initialization */
 	int	(*init)(struct xio_transport *self);

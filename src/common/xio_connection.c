@@ -245,8 +245,13 @@ int xio_connection_send(struct xio_connection *connection,
 	/* send it */
 	retval = xio_conn_send(connection->conn, task);
 	if (retval != 0) {
-		if (xio_errno() != EAGAIN)
-			ERROR_LOG("xio_conn_send failed\n");
+		if (xio_errno() != EAGAIN) {
+			/* ERROR_LOG("xio_conn_send failed\n"); */
+			/* message error notification expected no need
+			 * to do cleanup
+			 */
+			return -1;
+		}
 		goto cleanup;
 	}
 
@@ -301,6 +306,9 @@ int xio_connection_flush_msgs(struct xio_connection *connection)
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_connection_notify_msgs_flush					     */
+/*---------------------------------------------------------------------------*/
 int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
@@ -392,6 +400,7 @@ static int xio_connection_xmit(struct xio_connection *connection)
 	struct xio_msg *msg;
 	int    retval = 0;
 	int    retry_cnt = 0;
+	int    error;
 	struct xio_msg_list *msg_lists[] = {
 		&connection->reqs_msgq,
 		&connection->rsps_msgq
@@ -412,24 +421,38 @@ static int xio_connection_xmit(struct xio_connection *connection)
 		if (msg != NULL) {
 			retval = xio_connection_send(connection, msg);
 			if (retval) {
-				if (EAGAIN != xio_errno()) {
+				error = xio_errno();
+				if (error == EAGAIN) {
+					/* if user requested not to
+					 * queue messages */
+					if (xio_session_not_queueing(
+							connection->session)) {
+						xio_msg_list_remove(msgq, msg,
+								    pdata);
+						break;
+					}
+					retval = 0;
+					retry_cnt++;
+					continue;
+				} else if (error == ENOMSG) {
+					/* message error was notified */
+					TRACE_LOG(
+					    "xio_connection_send failed.\n");
+					retval = 0;
+					/* while error drain the messages */
+					retry_cnt = 0;
+					continue;
+				} else  {
 					xio_msg_list_remove(msgq, msg, pdata);
 					break;
 				}
-				/* if user requested not to queue messages */
-				if (xio_session_not_queueing(
-						connection->session)) {
-					xio_msg_list_remove(msgq, msg, pdata);
-					break;
-				}
-				retval = 0;
-				retry_cnt++;
 			} else {
 				retry_cnt = 0;
 				xio_msg_list_remove(msgq, msg, pdata);
 				if (IS_APPLICATION_MSG(msg))
-					xio_msg_list_insert_tail(in_flight_msgq,
-								 msg, pdata);
+					xio_msg_list_insert_tail(
+							in_flight_msgq, msg,
+							pdata);
 			}
 		} else {
 			retry_cnt++;
@@ -458,6 +481,25 @@ int xio_connection_remove_in_flight(struct xio_connection *connection,
 	else
 		xio_msg_list_remove(
 				&connection->in_flight_rsps_msgq, msg, pdata);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_remove_msg_from_queue					     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_remove_msg_from_queue(struct xio_connection *connection,
+					 struct xio_msg *msg)
+{
+	if (!IS_APPLICATION_MSG(msg))
+		return 0;
+
+	if (IS_REQUEST(msg->type))
+		xio_msg_list_remove(
+				&connection->reqs_msgq, msg, pdata);
+	else
+		xio_msg_list_remove(
+				&connection->rsps_msgq, msg, pdata);
 
 	return 0;
 }
@@ -699,6 +741,7 @@ int xio_connection_xmit_msgs(struct xio_connection *connection)
 
 	return -1;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
@@ -775,7 +818,7 @@ int xio_release_response(struct xio_msg *msg)
 		pmsg = pmsg->next;
 	}
 	if (connection)
-		xio_connection_xmit_msgs(connection);
+		return xio_connection_xmit_msgs(connection);
 
 	return 0;
 }
@@ -813,7 +856,7 @@ int xio_release_msg(struct xio_msg *msg)
 		xio_tasks_pool_put(task);
 	}
 	if (connection)
-		xio_connection_xmit_msgs(connection);
+		return xio_connection_xmit_msgs(connection);
 
 	return 0;
 }

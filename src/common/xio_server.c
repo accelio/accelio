@@ -122,7 +122,7 @@ static int xio_on_new_message(struct xio_server *server,
 			  server, session, conn, session->session_id);
 
 		/* get transport class routines */
-		session->trans_cls = xio_conn_get_trans_cls(conn);
+		session->validators_cls = xio_conn_get_validators_cls(conn);
 
 		connection =
 			xio_session_alloc_connection(session,
@@ -197,25 +197,25 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 	int			retval  = 0;
 
 	switch (event) {
-	case XIO_CONNECTION_NEW_MESSAGE:
-	case XIO_CONNECTION_ASSIGN_IN_BUF:
+	case XIO_CONN_EVENT_NEW_MESSAGE:
+	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
 		TRACE_LOG("server: [notification] - new message. " \
 			 "server:%p, conn:%p\n", observer, notifier);
 
 		xio_on_new_message(server, conn, event, event_data);
 		break;
-	case XIO_CONNECTION_NEW_CONNECTION:
+	case XIO_CONN_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("server: [notification] - new connection. " \
 			 "server:%p, conn:%p\n", observer, notifier);
 		xio_on_new_conn(server, conn, event_data);
 		break;
 
-	case XIO_CONNECTION_DISCONNECTED:
-	case XIO_CONNECTION_CLOSED:
-	case XIO_CONNECTION_ESTABLISHED:
+	case XIO_CONN_EVENT_DISCONNECTED:
+	case XIO_CONN_EVENT_CLOSED:
+	case XIO_CONN_EVENT_ESTABLISHED:
 		break;
 
-	case XIO_CONNECTION_ERROR:
+	case XIO_CONN_EVENT_ERROR:
 		ERROR_LOG("session: [notification] - connection error. " \
 			  "session:%p, conn:%p\n", observer, notifier);
 		break;

@@ -790,59 +790,64 @@ int xio_on_conn_event_client(void *observer, void *sender, int event,
 
 
 	switch (event) {
-	case XIO_CONNECTION_NEW_MESSAGE:
+	case XIO_CONN_EVENT_NEW_MESSAGE:
 /*
 		TRACE_LOG("session: [notification] - new message. " \
 			 "session:%p, conn:%p\n", observer, sender);
 
 */		xio_on_new_message(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_SEND_COMPLETION:
+	case XIO_CONN_EVENT_SEND_COMPLETION:
 /*		TRACE_LOG("session: [notification] - send_completion. " \
 			 "session:%p, conn:%p\n", observer, sender);
 */
 		xio_on_send_completion(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_ASSIGN_IN_BUF:
+	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
 			 "session:%p, conn:%p\n", observer, sender);
 */
 		xio_on_assign_in_buf(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_CANCEL_REQUEST:
+	case XIO_CONN_EVENT_CANCEL_REQUEST:
 		DEBUG_LOG("session: [notification] - cancel request. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_cancel_request(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_CANCEL_RESPONSE:
+	case XIO_CONN_EVENT_CANCEL_RESPONSE:
 		DEBUG_LOG("session: [notification] - cancel response. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_cancel_response(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_ESTABLISHED:
-		DEBUG_LOG("session: [notification] - connection established. " \
+	case XIO_CONN_EVENT_ESTABLISHED:
+		DEBUG_LOG("session: [notification] - conn established. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_client_conn_established(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_DISCONNECTED:
-		DEBUG_LOG("session: [notification] - connection disconnected" \
+	case XIO_CONN_EVENT_DISCONNECTED:
+		DEBUG_LOG("session: [notification] - conn disconnected" \
 			 " session:%p, conn:%p\n", observer, sender);
 		xio_on_conn_disconnected(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_CLOSED:
-		DEBUG_LOG("session: [notification] - connection closed. " \
+	case XIO_CONN_EVENT_CLOSED:
+		DEBUG_LOG("session: [notification] - conn closed. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_conn_closed(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_REFUSED:
-		DEBUG_LOG("session: [notification] - connection refused. " \
+	case XIO_CONN_EVENT_REFUSED:
+		DEBUG_LOG("session: [notification] - conn refused. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_conn_refused(session, conn, event_data);
 		break;
-	case XIO_CONNECTION_ERROR:
-		DEBUG_LOG("session: [notification] - connection error. " \
+	case XIO_CONN_EVENT_ERROR:
+		DEBUG_LOG("session: [notification] - conn error. " \
 			 "session:%p, conn:%p\n", observer, sender);
 		xio_on_conn_error(session, conn, event_data);
+		break;
+	case XIO_CONN_EVENT_MESSAGE_ERROR:
+		DEBUG_LOG("session: [notification] - conn message error. " \
+			 "session:%p, conn:%p\n", observer, sender);
+		xio_on_conn_message_error(session, conn, event_data);
 		break;
 	default:
 		DEBUG_LOG("session: [notification] - unexpected event. " \
@@ -918,7 +923,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		connection  = session->lead_connection;
 
 		/* get transport class routines */
-		session->trans_cls = xio_conn_get_trans_cls(conn);
+		session->validators_cls = xio_conn_get_validators_cls(conn);
 
 		session->state = XIO_SESSION_STATE_CONNECT;
 
