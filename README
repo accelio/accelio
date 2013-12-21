@@ -86,7 +86,7 @@ Configuration options:
 
 			run configure as follows:
 
-			./configure --enable-fio=yes FIO_ROOT=/home/fio
+			./configure --enable-fio-build=yes FIO_ROOT=/home/fio
 
 
 Building blocks:
