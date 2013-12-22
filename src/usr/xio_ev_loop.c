@@ -101,17 +101,18 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	if (events & XIO_ONESHOT)
 		ev.events |= EPOLLONESHOT;
 
+	list_add(&tev->events_list_entry, &loop->events_list);
+
 	ev.data.ptr = tev;
 	err = epoll_ctl(loop->efd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
+		list_del(&tev->events_list_entry);
 		xio_set_error(errno);
 		if (errno != EEXIST)
 			ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
 		else
 			DEBUG_LOG("epoll_ctl already exists fd:%d,  %m\n", fd);
 		free(tev);
-	} else {
-		list_add(&tev->events_list_entry, &loop->events_list);
 	}
 
 	return err;
@@ -147,14 +148,14 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 		ERROR_LOG("event lookup failed. fd:%d\n", fd);
 		return -1;
 	}
+	list_del(&tev->events_list_entry);
+	free(tev);
 
 	ret = epoll_ctl(loop->efd, EPOLL_CTL_DEL, fd, NULL);
 	if (ret < 0) {
 		xio_set_error(errno);
 		ERROR_LOG("epoll_ctl failed. %m\n");
 	}
-	list_del(&tev->events_list_entry);
-	free(tev);
 
 	return ret;
 }
