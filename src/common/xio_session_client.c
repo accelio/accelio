@@ -771,6 +771,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 		/* now try to send */
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 		xio_connection_xmit_msgs(connection);
+		break;
 	default:
 		break;
 	}
@@ -855,7 +856,7 @@ int xio_on_conn_event_client(void *observer, void *sender, int event,
 			 event, observer, sender);
 		xio_on_conn_error(session, conn, event_data);
 		break;
-	};
+	}
 
 	return retval;
 }

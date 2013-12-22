@@ -847,6 +847,7 @@ int xio_on_send_completion(struct xio_session *session,
 	case XIO_CONNECTION_HELLO_RSP:
 		retval = xio_on_connection_hello_rsp_send_comp(connection,
 							       task);
+		break;
 	default:
 		break;
 	}

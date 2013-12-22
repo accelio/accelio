@@ -131,9 +131,10 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_new_session) {
-		connection->ses_ops.on_new_session(
-				session, &req,
-				connection->cb_user_context);
+		retval = connection->ses_ops.on_new_session(session, &req,
+						connection->cb_user_context);
+		if (retval)
+			goto cleanup2;
 	} else {
 		retval = xio_accept(session, NULL, 0, NULL, 0);
 		if (retval) {
@@ -143,14 +144,16 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 		}
 	}
 
-	connection->session->state = XIO_SESSION_STATE_ONLINE;
-	TRACE_LOG("session state changed to ONLINE. session:%p\n",
-		  connection->session);
+	/* Don't move session state to ONLINE. In case of multiple portals
+	 * the accept moves the state to ACCEPTED until the first "HELLO"
+	 * message arrives. Note that the "upper layer" may call redirect or
+	 * reject.
+	 */
 
 	xio_session_notify_new_connection(session, connection);
 
-	kfree(req.uri);
 	kfree(req.user_context);
+	kfree(req.uri);
 
 	return 0;
 
@@ -387,12 +390,6 @@ int xio_accept(struct xio_session *session,
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
 	}
-	if (portals_array_len != 0) {
-		/* server side state is changed to ACCEPT */
-		session->state = XIO_SESSION_STATE_ACCEPTED;
-		TRACE_LOG("session state is now ACCEPT. session:%p\n",
-			  session);
-	}
 
 	msg->request	= session->setup_req;
 	msg->type	= XIO_SESSION_SETUP_RSP;
@@ -406,7 +403,21 @@ int xio_accept(struct xio_session *session,
 		ERROR_LOG("failed to send message\n");
 		return -1;
 
-	};
+	}
+
+	if (portals_array_len != 0) {
+		/* server side state is changed to ACCEPT, will be move to
+		 * ONLINE state when first "hello" message arrives
+		 */
+		session->state = XIO_SESSION_STATE_ACCEPTED;
+		TRACE_LOG("session state is now ACCEPT. session:%p\n",
+			  session);
+	} else {
+		/* server side state is changed to ONLINE, immediately  */
+		session->state = XIO_SESSION_STATE_ONLINE;
+		TRACE_LOG("session state changed to ONLINE. session:%p\n",
+			  session);
+	}
 
 	return 0;
 }
@@ -455,7 +466,7 @@ int xio_redirect(struct xio_session *session,
 		ERROR_LOG("failed to send message\n");
 		return -1;
 
-	};
+	}
 
 	return 0;
 }
@@ -497,7 +508,7 @@ int xio_reject(struct xio_session *session,
 		ERROR_LOG("failed to send message\n");
 		return -1;
 
-	};
+	}
 
 	return 0;
 }
@@ -668,7 +679,7 @@ int xio_on_conn_event_server(void *observer, void *sender, int event,
 			 event, observer, sender);
 		xio_on_conn_error(session, conn, event_data);
 		break;
-	};
+	}
 
 	return retval;
 }

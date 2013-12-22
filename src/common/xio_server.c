@@ -166,6 +166,8 @@ static int xio_on_new_message(struct xio_server *server,
 
 		task->connection = connection;
 
+		/* This in a multiple-portal situation */
+		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
 	} else {
 		ERROR_LOG("server unexpected message\n");
@@ -200,13 +202,13 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 	case XIO_CONN_EVENT_NEW_MESSAGE:
 	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
 		TRACE_LOG("server: [notification] - new message. " \
-			 "server:%p, conn:%p\n", observer, notifier);
+			  "server:%p, conn:%p\n", observer, notifier);
 
 		xio_on_new_message(server, conn, event, event_data);
 		break;
 	case XIO_CONN_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("server: [notification] - new connection. " \
-			 "server:%p, conn:%p\n", observer, notifier);
+			  "server:%p, conn:%p\n", observer, notifier);
 		xio_on_new_conn(server, conn, event_data);
 		break;
 
@@ -216,13 +218,14 @@ static int xio_on_conn_event(void *observer, void *notifier, int event,
 		break;
 
 	case XIO_CONN_EVENT_ERROR:
-		ERROR_LOG("session: [notification] - connection error. " \
-			  "session:%p, conn:%p\n", observer, notifier);
+		ERROR_LOG("server: [notification] - connection error. " \
+			  "server:%p, conn:%p\n", observer, notifier);
 		break;
 	default:
 		ERROR_LOG("server: [notification] - unexpected event :%d. " \
 			  "server:%p, conn:%p\n", event, observer, notifier);
-	};
+		break;
+	}
 
 	return retval;
 }
