@@ -1738,17 +1738,22 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_hndl->kick_rdma_rd) {
 		retval = xio_xmit_rdma_rd(rdma_hndl);
 		if (retval) {
-			ERROR_LOG("xio_xmit_rdma_rd failed\n");
-			return -1;
+			if (xio_errno() != EAGAIN) {
+				ERROR_LOG("xio_xmit_rdma_rd failed\n");
+				return -1;
+			}
+			retval = 0;
 		}
 	}
-
 
 	if (must_send) {
 		retval = xio_rdma_xmit(rdma_hndl);
 		if (retval) {
-			ERROR_LOG("xio_rdma_xmit failed\n");
-			return -1;
+			if (xio_errno() != EAGAIN) {
+				ERROR_LOG("xio_rdma_xmit failed\n");
+				return -1;
+			}
+			retval = 0;
 		}
 	}
 
@@ -1909,17 +1914,23 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_hndl->kick_rdma_rd) {
 		retval = xio_xmit_rdma_rd(rdma_hndl);
 		if (retval) {
-			ERROR_LOG("xio_xmit_rdma_rd failed\n");
-			return -1;
+			if (xio_errno() != EAGAIN) {
+				ERROR_LOG("xio_xmit_rdma_rd failed\n");
+				return -1;
+			}
+			retval = 0;
 		}
 	}
 
 	if (must_send) {
 		retval = xio_rdma_xmit(rdma_hndl);
 		if (retval) {
-			ERROR_LOG("xio_rdma_xmit failed\n");
-			return -1;
-		};
+			if (xio_errno() != EAGAIN) {
+				ERROR_LOG("xio_rdma_xmit failed\n");
+				return -1;
+			}
+			retval = 0;
+		}
 	}
 
 	return retval;
