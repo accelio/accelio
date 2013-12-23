@@ -650,6 +650,9 @@ int xio_on_conn_closed(struct xio_session *session,
 		spin_unlock(&session->connections_list_lock);
 		xio_session_free_connection(connection);
 	}
+	if (session->disable_teardown)
+		return 0;
+
 	if (teardown && !session->lead_connection &&
 	    !session->redir_connection) {
 		xio_session_notify_teardown(

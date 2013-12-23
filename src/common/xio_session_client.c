@@ -539,8 +539,15 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			xio_connection_set_conn(session->lead_connection,
 						connection->conn);
 			/* close the lead/redirected connection */
+
+			/* temporary disable teardown - on cached conns close
+			 * callback may jump immidatly and since there are no
+			 * connections. teardown may notified
+			 */
+			session->disable_teardown = 1;
 			xio_conn_close(connection->conn, &session->observer);
 			connection->conn = NULL;
+			session->disable_teardown = 0;
 
 			session->state = XIO_SESSION_STATE_ACCEPTED;
 			/* open new connections */

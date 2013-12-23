@@ -110,7 +110,7 @@ struct xio_session {
 	uint32_t			reject_reason;
 	struct mutex                    lock;	   /* lock open connection */
 	spinlock_t                      connections_list_lock;
-	int				pad;
+	int				disable_teardown;
 	struct xio_connection		*lead_connection;
 	struct xio_connection		*redir_connection;
 };
