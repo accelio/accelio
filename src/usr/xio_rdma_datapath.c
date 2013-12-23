@@ -2048,10 +2048,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		/* copy header to user buffers */
 		size_t hdr_len = 0;
 		if (imsg->in.header.iov_len > omsg->in.header.iov_len)  {
-			hdr_len = imsg->in.header.iov_len;
+			hdr_len = omsg->in.header.iov_len;
 			omsg->status = XIO_E_MSG_SIZE;
 		} else {
-			hdr_len = omsg->in.header.iov_len;
+			hdr_len = imsg->in.header.iov_len;
 			omsg->status = XIO_E_SUCCESS;
 		}
 		if (hdr_len)
