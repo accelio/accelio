@@ -1068,12 +1068,24 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_hdr_len);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_pad_len);
 	PACK_LLVAL(req_hdr, tmp_req_hdr, ulp_imm_len);
+	PACK_LVAL(req_hdr, tmp_req_hdr, recv_num_sge);
 	PACK_LVAL(req_hdr, tmp_req_hdr, read_num_sge);
 	PACK_LVAL(req_hdr, tmp_req_hdr, write_num_sge);
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			   sizeof(struct xio_req_hdr));
 
+	/* IN: requester expect small input writen via send */
+	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
+		sge.addr = 0;
+		sge.length = task->omsg->in.data_iov[i].iov_len;
+		sge.stag = 0;
+		PACK_LLVAL(&sge, tmp_sge, addr);
+		PACK_LVAL(&sge, tmp_sge,length);
+		PACK_LVAL(&sge, tmp_sge, stag);
+		tmp_sge++;
+	}
+	/* IN: requester expect big input written rdma write */
 	for (i = 0;  i < req_hdr->read_num_sge; i++) {
 		sge.addr = uint64_from_ptr(rdma_task->read_sge[i].addr);
 		sge.length  = rdma_task->read_sge[i].length;
@@ -1093,6 +1105,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		PACK_LVAL(&sge, tmp_sge, stag);
 		tmp_sge++;
 	}
+	/* OUT: requester want to write data via rdma read */
 	for (i = 0;  i < req_hdr->write_num_sge; i++) {
 		sge.addr = uint64_from_ptr(rdma_task->write_sge[i].addr);
 		sge.length  = rdma_task->write_sge[i].length;
@@ -1113,7 +1126,8 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		tmp_sge++;
 	}
 	hdr_len	= sizeof(struct xio_req_hdr);
-	hdr_len += sizeof(struct xio_sge)*(req_hdr->read_num_sge +
+	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
+					   req_hdr->read_num_sge +
 					   req_hdr->write_num_sge);
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -1160,6 +1174,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_pad_len);
 	UNPACK_LLVAL(tmp_req_hdr, req_hdr, ulp_imm_len);
+	UNPACK_LVAL(tmp_req_hdr, req_hdr,  recv_num_sge);
 	UNPACK_LVAL(tmp_req_hdr, req_hdr, read_num_sge);
 	UNPACK_LVAL(tmp_req_hdr, req_hdr, write_num_sge);
 
@@ -1167,6 +1182,15 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 			   sizeof(struct xio_req_hdr));
 
 	rdma_task->sn = req_hdr->sn;
+
+	/* params for SEND */
+	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
+		UNPACK_LLVAL(tmp_sge, &rdma_task->req_recv_sge[i], addr);
+		UNPACK_LVAL(tmp_sge, &rdma_task->req_recv_sge[i], length);
+		UNPACK_LVAL(tmp_sge, &rdma_task->req_recv_sge[i], stag);
+		tmp_sge++;
+	}
+	rdma_task->req_recv_num_sge	= i;
 
 	/* params for RDMA_WRITE */
 	for (i = 0;  i < req_hdr->read_num_sge; i++) {
@@ -1288,6 +1312,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.ulp_hdr_len	= ulp_hdr_len;
 	req_hdr.ulp_pad_len	= ulp_pad_len;
 	req_hdr.ulp_imm_len	= ulp_imm_len;
+	req_hdr.recv_num_sge	= rdma_task->recv_num_sge;
 	req_hdr.read_num_sge	= rdma_task->read_num_sge;
 	req_hdr.write_num_sge	= rdma_task->write_num_sge;
 
@@ -1583,6 +1608,11 @@ static int xio_rdma_prep_req_in_data(
 	if (data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
+		if (data_len) {
+			rdma_task->recv_num_sge = vmsg->data_iovlen;
+			rdma_task->read_num_sge = 0;
+
+		}
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
 		/* user provided mr */
@@ -1626,6 +1656,7 @@ static int xio_rdma_prep_req_in_data(
 			}
 		}
 		rdma_task->read_num_sge = vmsg->data_iovlen;
+		rdma_task->recv_num_sge = 0;
 	}
 
 	return 0;
@@ -1635,6 +1666,7 @@ cleanup:
 		xio_rdma_mempool_free(&rdma_task->read_sge[i]);
 
 	rdma_task->read_num_sge = 0;
+	rdma_task->recv_num_sge = 0;
 
 	return -1;
 }
@@ -2456,6 +2488,25 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	}
 	task->imsg.in.data_iovlen = rdma_task->req_write_num_sge;
 
+	for (i = 0;  i < rdma_task->req_read_num_sge; i++) {
+		task->imsg.out.data_iov[i].iov_base  = NULL;
+		task->imsg.out.data_iov[i].iov_len  =
+					rdma_task->req_read_sge[i].length;
+		rdma_task->write_sge[i].cache = NULL;
+	}
+	for (i = 0;  i < rdma_task->req_recv_num_sge; i++) {
+		task->imsg.out.data_iov[i].iov_base  = NULL;
+		task->imsg.out.data_iov[i].iov_len  =
+					rdma_task->req_recv_sge[i].length;
+		task->imsg.out.data_iov[i].mr  = NULL;
+	}
+	if (rdma_task->req_read_num_sge)
+		task->imsg.out.data_iovlen = rdma_task->req_read_num_sge;
+	else if (rdma_task->req_recv_num_sge)
+		task->imsg.out.data_iovlen = rdma_task->req_read_num_sge;
+	else
+		task->imsg.out.data_iovlen = 0;
+
 	xio_rdma_assign_in_buf(rdma_hndl, task, &user_assign_flag);
 
 	if (user_assign_flag) {
@@ -2683,6 +2734,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	struct xio_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
+	int			i;
 
 	/* read header */
 	retval = xio_rdma_read_req_header(rdma_hndl, task, &req_hdr);
@@ -2713,6 +2765,28 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		imsg->in.header.iov_base	= ulp_hdr;
 	else
 		imsg->in.header.iov_base	= NULL;
+
+	/* hint upper layer about expected response */
+	for (i = 0;  i < rdma_task->req_read_num_sge; i++) {
+		imsg->out.data_iov[i].iov_base  = NULL;
+		imsg->out.data_iov[i].iov_len  =
+					rdma_task->req_read_sge[i].length;
+		imsg->out.data_iov[i].mr  = NULL;
+	}
+	for (i = 0;  i < rdma_task->req_recv_num_sge; i++) {
+		imsg->out.data_iov[i].iov_base  = NULL;
+		imsg->out.data_iov[i].iov_len  =
+					rdma_task->req_recv_sge[i].length;
+		imsg->out.data_iov[i].mr  = NULL;
+	}
+	if (rdma_task->req_read_num_sge)
+		imsg->out.data_iovlen = rdma_task->req_read_num_sge;
+	else if (rdma_task->req_recv_num_sge)
+		imsg->out.data_iovlen = rdma_task->req_read_num_sge;
+	else
+		imsg->out.data_iovlen = 0;
+
+
 
 	switch (req_hdr.opcode) {
 	case XIO_IB_SEND:

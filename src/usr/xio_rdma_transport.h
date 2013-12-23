@@ -158,6 +158,7 @@ struct __attribute__((__packed__)) xio_req_hdr {
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 	uint32_t		remain_data_len;/* remaining data length */
+	uint32_t		recv_num_sge;
 	uint32_t		read_num_sge;
 	uint32_t		write_num_sge;
 };
@@ -216,13 +217,15 @@ struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
 	enum xio_ib_op_code		ib_op;
 	uint32_t			phantom_idx;
+	uint32_t			recv_num_sge;
 	uint32_t			read_num_sge;
 	uint32_t			write_num_sge;
 	uint32_t			req_write_num_sge;
 	uint32_t			req_read_num_sge;
+	uint32_t			req_recv_num_sge;
 	uint16_t			sn;
 	uint16_t			more_in_batch;
-	uint16_t			pad[2];
+	uint32_t			pad;
 
 
 	/* The buffer mapped with the 3 xio_work_req
@@ -237,10 +240,13 @@ struct xio_rdma_task {
 	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
 
 	/* What this side got from the peer for RDMA R/W
-	 * Currently limitd to 1
 	 */
 	struct xio_sge			req_read_sge[XIO_MAX_IOV];
 	struct xio_sge			req_write_sge[XIO_MAX_IOV];
+
+	/* What this side got from the peer for SEND
+	 */
+	struct xio_sge			req_recv_sge[XIO_MAX_IOV];
 };
 
 struct xio_cq  {
