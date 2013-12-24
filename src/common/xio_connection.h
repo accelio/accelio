@@ -208,6 +208,7 @@ int xio_connection_release_hello(struct xio_connection *conn,
 
 char *xio_connection_state_str(enum xio_connection_state state);
 
+int xio_connection_restart(struct xio_connection *connection);
 
 #endif /*XIO_CONNECTION_H */
 

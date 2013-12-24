@@ -121,8 +121,9 @@ enum xio_transport_state {
 	XIO_STATE_LISTEN,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
+	XIO_STATE_RECONNECT,
 	XIO_STATE_CLOSED,
-	XIO_STATE_DESTROYED,
+	XIO_STATE_DESTROYED
 };
 
 enum xio_ib_op_code {
@@ -212,7 +213,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint16_t		credits;	/* peer send credits	*/
 	uint16_t		sq_depth;
 	uint16_t		rq_depth;
-	uint16_t		pad;
+	uint16_t		rkey_tbl_size;
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
@@ -310,18 +311,24 @@ struct xio_device {
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
 	struct ibv_device_attr		device_attr;
+	struct list_head		xm_list; /* list of xio_mr_elem */
+	struct kref			kref;
+	uint32_t			kref_pad;
 };
 
 struct xio_mr_elem {
 	struct ibv_mr			*mr;
 	struct xio_device		*dev;
-	struct list_head		dm_list_entry;
+	struct list_head		dm_list_entry; /* entry in mr list */
+	struct list_head		xm_list_entry; /* entry in dev list */
 };
 
 struct xio_mr {
+	void				*addr;  /* for new devices */
+	size_t				length; /* for new devices */
+	int				access; /* for new devices */
 	int				addr_alloced;	/* address was
 							   allocated by xio */
-	int				pad;
 	struct list_head		dm_list;
 	struct list_head		mr_list_entry;
 };
@@ -335,6 +342,16 @@ struct xio_rdma_tasks_slab {
 	struct xio_buf			*io_buf;
 	int				buf_size;
 	int				pad;
+};
+
+struct __attribute__((__packed__)) xio_rkey_tbl_pack {
+	uint32_t			old_rkey;
+	uint32_t			new_rkey;
+};
+
+struct xio_rkey_tbl {
+	uint32_t			old_rkey;
+	uint32_t			new_rkey;
 };
 
 struct xio_rdma_transport {
@@ -423,6 +440,16 @@ struct xio_rdma_transport {
 	struct xio_tasks_pool_cls	primary_pool_cls;
 
 	struct xio_rdma_setup_msg	setup_rsp;
+
+	struct rdma_cm_event		*ev_to_ack; /* for reconnect */
+	/* for reconnect */
+	struct xio_rkey_tbl		*rkey_tbl;
+	struct xio_rkey_tbl		*peer_rkey_tbl;
+
+	/* for reconnect */
+	uint16_t			rkey_tbl_size;
+	uint16_t			peer_rkey_tbl_size;
+	uint16_t			pad2[2];
 
 	/* too big to be on stack - use as temporaries */
 	union {
@@ -520,5 +547,34 @@ struct xio_task *xio_rdma_primary_task_lookup(
 
 void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
 			struct xio_task *task);
+
+static inline void xio_device_get(struct xio_device *dev)
+{
+	kref_get(&dev->kref);
+}
+
+void xio_device_down(struct kref *kref);
+
+static inline void xio_device_put(struct xio_device *dev)
+{
+	kref_put(&dev->kref, xio_device_down);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_reg_mr_add_dev							     */
+/* add a new discovered device to a the mr list				     */
+/*---------------------------------------------------------------------------*/
+int xio_reg_mr_add_dev(struct xio_device *dev);
+
+/*---------------------------------------------------------------------------*/
+/* xio_dereg_mr_by_dev							     */
+/*---------------------------------------------------------------------------*/
+int xio_dereg_mr_by_dev(struct xio_device *dev);
+
+/*---------------------------------------------------------------------------*/
+/* xio_rkey_table_create						     */
+/*---------------------------------------------------------------------------*/
+int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
+			  struct xio_rkey_tbl **htbl, uint16_t *len);
 
 #endif  /* XIO_RDMA_TRANSPORT_H */

@@ -126,6 +126,8 @@ EXPORT_SYMBOL(xio_context_stop_loop);
 EXPORT_SYMBOL(xio_context_run_loop);
 
 EXPORT_SYMBOL(xio_uri_to_ss);
+EXPORT_SYMBOL(xio_host_port_to_ss);
+
 EXPORT_SYMBOL(xio_session_create);
 EXPORT_SYMBOL(xio_session_destroy);
 EXPORT_SYMBOL(xio_session_event_str);

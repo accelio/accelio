@@ -499,6 +499,8 @@ cleanup1:
 cleanup0:
 	complete_and_exit(&main_complete, ret);
 
+	printk("Main thread finished\n");
+
 	/* routine is defined as int */
 	return ret;
 }

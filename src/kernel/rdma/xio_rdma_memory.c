@@ -253,8 +253,8 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  */
 
 static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
-                              struct ib_device *ibdev, u64 *pages,
-                              int *offset, int *data_size)
+			      struct ib_device *ibdev, u64 *pages,
+			      int *offset, int *data_size)
 {
 	struct scatterlist *sg, *sgl = mdesc->sgl;
 	u64 start_addr, end_addr, page, chunk_start = 0;
@@ -305,7 +305,7 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
  * consecutive SG elements are actually fragments of the same physcial page.
  */
 static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
-		                    struct ib_device *ibdev)
+				    struct ib_device *ibdev)
 {
 	struct scatterlist *sgl, *sg, *next_sg = NULL;
 	u64 start_addr, end_addr;

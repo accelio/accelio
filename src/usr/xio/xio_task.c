@@ -224,6 +224,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 		if (q->params.pool_hooks.slab_uninit_task) {
 			for (i = 0; i < pslab->nr; i++)
 				q->params.pool_hooks.slab_uninit_task(
+						q->params.pool_hooks.context,
 						pslab->dd_data,
 						pslab->array[i]);
 		}
@@ -249,3 +250,26 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 	ufree(q);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_remap							     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
+{
+	struct xio_tasks_slab	*pslab, *next_pslab;
+	int			i;
+
+	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
+				 slabs_list_entry) {
+		list_del(&pslab->slabs_list_entry);
+
+		if (q->params.pool_hooks.slab_remap_task) {
+			for (i = 0; i < pslab->nr; i++)
+				q->params.pool_hooks.slab_remap_task(
+						q->params.pool_hooks.context,
+						new_context,
+						pslab->dd_data,
+						pslab->array[i]);
+		}
+	}
+	q->params.pool_hooks.context = new_context;
+}

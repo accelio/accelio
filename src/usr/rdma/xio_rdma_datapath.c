@@ -3175,7 +3175,10 @@ cleanup:
 static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task, struct xio_rdma_setup_msg *msg)
 {
-	struct xio_rdma_setup_msg	*tmp_msg;
+	struct xio_rdma_setup_msg *tmp_msg;
+	struct xio_rkey_tbl_pack *ptbl;
+	struct xio_rkey_tbl *tbl;
+	int i;
 
 	/* set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
@@ -3197,6 +3200,7 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(msg, tmp_msg, credits);
 	PACK_LVAL(msg, tmp_msg, max_in_iovsz);
 	PACK_LVAL(msg, tmp_msg, max_out_iovsz);
+	PACK_SVAL(msg, tmp_msg, rkey_tbl_size);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3204,6 +3208,19 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			     64);
 #endif
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rdma_setup_msg));
+
+	if (!msg->rkey_tbl_size)
+		return;
+
+	tbl = rdma_hndl->rkey_tbl;
+	ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	for (i = 0; i < rdma_hndl->rkey_tbl_size; i++) {
+		PACK_LVAL(tbl, ptbl, old_rkey);
+		PACK_LVAL(tbl, ptbl, new_rkey);
+		tbl++;
+		xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rkey_tbl_pack));
+		ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3212,7 +3229,10 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task, struct xio_rdma_setup_msg *msg)
 {
-	struct xio_rdma_setup_msg	*tmp_msg;
+	struct xio_rdma_setup_msg *tmp_msg;
+	struct xio_rkey_tbl_pack *ptbl;
+	struct xio_rkey_tbl *tbl;
+	int i;
 
 	/* set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
@@ -3234,6 +3254,7 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_msg, msg, credits);
 	UNPACK_LVAL(tmp_msg, msg, max_in_iovsz);
 	UNPACK_LVAL(tmp_msg, msg, max_out_iovsz);
+	UNPACK_SVAL(tmp_msg, msg, rkey_tbl_size);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3241,6 +3262,28 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			     64);
 #endif
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rdma_setup_msg));
+
+	if (!msg->rkey_tbl_size)
+		return;
+
+	rdma_hndl->peer_rkey_tbl = calloc(msg->rkey_tbl_size, sizeof(*tbl));
+	if (!rdma_hndl->peer_rkey_tbl) {
+		ERROR_LOG("calloc failed. (errno=%m)\n");
+		xio_strerror(ENOMEM);
+		msg->rkey_tbl_size = -1;
+		return;
+	}
+
+	tbl = rdma_hndl->peer_rkey_tbl;
+	ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	for (i = 0; i < msg->rkey_tbl_size; i++) {
+		UNPACK_LVAL(ptbl, tbl, old_rkey);
+		UNPACK_LVAL(ptbl, tbl, new_rkey);
+		tbl++;
+		xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rkey_tbl_pack));
+		ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	}
+	rdma_hndl->peer_rkey_tbl_size = msg->rkey_tbl_size;
 }
 
 
@@ -3248,7 +3291,7 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 /* xio_rdma_send_setup_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
-		struct xio_task *task)
+				   struct xio_task *task)
 {
 	uint16_t payload;
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -3260,6 +3303,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	req.credits		= 0;
 	req.max_in_iovsz	= rdma_options.max_in_iovsz;
 	req.max_out_iovsz	= rdma_options.max_out_iovsz;
+	req.rkey_tbl_size	= rdma_hndl->rkey_tbl_size;
 
 	xio_rdma_write_setup_msg(rdma_hndl, task, &req);
 
@@ -3268,6 +3312,8 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	/* add tlv */
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
 		return  -1;
+
+	TRACE_LOG("rdma send setup request\n");
 
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
@@ -3294,7 +3340,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 /* xio_rdma_send_setup_rsp						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
-		struct xio_task *task)
+				   struct xio_task *task)
 {
 	uint16_t payload;
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -3314,6 +3360,8 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* add tlv */
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
 		return  -1;
+
+	TRACE_LOG("rdma send setup response\n");
 
 	/* set the length */
 	rdma_task->txd.sge[0].length = xio_mbuf_data_length(&task->mbuf);
