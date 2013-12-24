@@ -303,6 +303,9 @@ static int xio_conn_write_setup_req(struct xio_task *task,
 {
 	struct xio_conn_setup_req *tmp_req;
 
+	 /* reset the whole mbuf before building a message */
+	 xio_mbuf_reset(&task->mbuf);
+
 	/* set start of the tlv */
 	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
 		return -1;
@@ -327,6 +330,9 @@ static int xio_conn_read_setup_req(struct xio_task *task,
 		struct xio_conn_setup_req *req)
 {
 	struct xio_conn_setup_req *tmp_req;
+
+	 /* reset the whole mbuf before building a message */
+	 xio_mbuf_reset(&task->mbuf);
 
 	/* set start of the tlv */
 	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
