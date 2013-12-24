@@ -112,37 +112,43 @@ struct xio_sge {
 	u32		stag;		/* rkey		   */
 };
 
+#define XIO_REQ_HEADER_VERSION	1
+
 struct __attribute__((__packed__)) xio_req_hdr {
+	u8		version;	/* response version     */
+	u8		flags;		/* not used		*/
 	u16		req_hdr_len;	/* req header length	*/
 	u16		sn;		/* serial number	*/
 	u16		ack_sn;		/* ack serial number	*/
 	u16		credits;	/* peer send credits	*/
-	u8		opcode;		/* opcode  for peers	*/
-	u8		flags;		/* not used		*/
 	u16		tid;		/* originator identifier*/
+	u8		opcode;		/* opcode  for peers	*/
+	u8		recv_num_sge;
+	u8		read_num_sge;
+	u8		write_num_sge;
 	u16		ulp_hdr_len;	/* ulp header length	*/
 	u16		ulp_pad_len;	/* pad_len length	*/
-	u64		ulp_imm_len;	/* ulp data length	*/
 	u32		remain_data_len;/* remaining data length */
-	u32		read_num_sge;
-	u32		write_num_sge;
+	u64		ulp_imm_len;	/* ulp data length	*/
 };
 
+#define XIO_RSP_HEADER_VERSION	1
+
 struct __attribute__((__packed__)) xio_rsp_hdr {
+	u8		version;	/* response version     */
+	u8		flags;		/* not used		*/
 	u16		rsp_hdr_len;	/* rsp header length	*/
 	u16		sn;		/* serial number	*/
 	u16		ack_sn;		/* ack serial number	*/
 	u16		credits;	/* peer send credits	*/
-	u8		opcode;		/* opcode  for peers	*/
-	u8		flags;		/* not used		*/
 	u16		tid;		/* originator identifier*/
+	u8		opcode;		/* opcode  for peers	*/
+	u8		pad[3];
+	u32		status;		/* status		*/
 	u16		ulp_hdr_len;	/* ulp header length	*/
 	u16		ulp_pad_len;	/* pad_len length	*/
-	u64		ulp_imm_len;	/* ulp data length	*/
 	u32		remain_data_len; /* remaining data length */
-	u32		status;		/* status		*/
-	u32		read_num_sge;
-	u32		write_num_sge;
+	u64		ulp_imm_len;	/* ulp data length	*/
 };
 
 struct __attribute__((__packed__)) xio_rdma_setup_msg {

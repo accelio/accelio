@@ -146,38 +146,48 @@ struct xio_sge {
 
 };
 
+#define XIO_REQ_HEADER_VERSION	1
+
 struct __attribute__((__packed__)) xio_req_hdr {
+	uint8_t			version;	/* request version	*/
+	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		ack_sn;		/* ack serial number	*/
+
 	uint16_t		credits;	/* peer send credits	*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			flags;		/* not used		*/
 	uint16_t		tid;		/* originator identifier*/
+	uint8_t			opcode;		/* opcode  for peers	*/
+	uint8_t			recv_num_sge;
+	uint8_t			read_num_sge;
+	uint8_t			write_num_sge;
+
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-	uint64_t		ulp_imm_len;	/* ulp data length	*/
 	uint32_t		remain_data_len;/* remaining data length */
-	uint32_t		recv_num_sge;
-	uint32_t		read_num_sge;
-	uint32_t		write_num_sge;
+	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 
+#define XIO_RSP_HEADER_VERSION	1
+
 struct __attribute__((__packed__)) xio_rsp_hdr {
+	uint8_t			version;	/* response version     */
+	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		ack_sn;		/* ack serial number	*/
+
 	uint16_t		credits;	/* peer send credits	*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			flags;		/* not used		*/
 	uint16_t		tid;		/* originator identifier*/
+	uint8_t			opcode;		/* opcode  for peers	*/
+	uint8_t			pad[3];
+
+	uint32_t		status;		/* status		*/
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-	uint64_t		ulp_imm_len;	/* ulp data length	*/
+
 	uint32_t		remain_data_len;/* remaining data length */
-	uint32_t		status;		/* status		*/
-	uint32_t		read_num_sge;
-	uint32_t		write_num_sge;
+	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 
 struct __attribute__((__packed__)) xio_rdma_setup_msg {

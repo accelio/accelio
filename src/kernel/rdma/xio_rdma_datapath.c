@@ -181,8 +181,8 @@ static int xio_rdma_write_sn(struct xio_task *task,
 	/* goto the first transport header*/
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 
-	/* jump over the first uint16_t */
-	xio_mbuf_inc(&task->mbuf, sizeof(uint16_t));
+	/* jump over the first uint32_t */
+	xio_mbuf_inc(&task->mbuf, sizeof(uint32_t));
 
 	/* and set serial number */
 	psn = xio_mbuf_get_curr_ptr(&task->mbuf);
@@ -1334,8 +1334,6 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	struct xio_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	struct xio_sge			sge;
-	static struct xio_req_hdr	zero_req_hdr;
-	static int			first_time = 1;
 	size_t				hdr_len;
 	int				i;
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -1346,26 +1344,36 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	if (first_time) {
-		memset(&zero_req_hdr, 0, sizeof(zero_req_hdr));
-		first_time = 0;
-	}
-	*tmp_req_hdr = zero_req_hdr;
-
 	/* pack relevant values */
+	tmp_req_hdr->version  = req_hdr->version;
+	tmp_req_hdr->flags    = req_hdr->flags;
 	PACK_SVAL(req_hdr, tmp_req_hdr, req_hdr_len);
+	/* sn		shall be coded later */
+	/* ack_sn	shall be coded later */
+	/* credits	shall be coded later */
 	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
-	tmp_req_hdr->opcode = req_hdr->opcode;
-	tmp_req_hdr->flags  = req_hdr->flags;
+	tmp_req_hdr->opcode	   = req_hdr->opcode;
+	tmp_req_hdr->recv_num_sge  = req_hdr->recv_num_sge;
+	tmp_req_hdr->read_num_sge  = req_hdr->read_num_sge;
+	tmp_req_hdr->write_num_sge = req_hdr->write_num_sge;
+
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_hdr_len);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_pad_len);
+	/*remain_data_len is not used		*/
 	PACK_LLVAL(req_hdr, tmp_req_hdr, ulp_imm_len);
-	PACK_LVAL(req_hdr, tmp_req_hdr, read_num_sge);
-	PACK_LVAL(req_hdr, tmp_req_hdr, write_num_sge);
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			   sizeof(struct xio_req_hdr));
 
+	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
+		sge.addr = 0;
+		sge.length = task->omsg->in.data_iov[i].iov_len;
+		sge.stag = 0;
+		PACK_LLVAL(&sge, tmp_sge, addr);
+		PACK_LVAL(&sge, tmp_sge,length);
+		PACK_LVAL(&sge, tmp_sge, stag);
+		tmp_sge++;
+	}
 	for (i = 0;  i < req_hdr->read_num_sge; i++) {
 		sge.addr = ib_sg_dma_address(ib_dev,
 					     &rdma_task->read_sge.sgl[i]);
@@ -1389,7 +1397,8 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		tmp_sge++;
 	}
 	hdr_len	= sizeof(struct xio_req_hdr);
-	hdr_len += sizeof(struct xio_sge)*(req_hdr->read_num_sge +
+	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
+					   req_hdr->read_num_sge +
 					   req_hdr->write_num_sge);
 
 #ifdef EYAL_TODO
@@ -1409,10 +1418,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_task *task,
 				    struct xio_req_hdr *req_hdr)
 {
-	static struct xio_req_hdr	zero_req_hdr;
-	struct xio_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
-	static int			first_time = 1;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	size_t				hdr_len;
 	int				i;
@@ -1421,12 +1427,8 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	if (first_time) {
-		memset(&zero_req_hdr, 0, sizeof(zero_req_hdr));
-		first_time = 0;
-	}
-	*req_hdr = zero_req_hdr;
-
+	req_hdr->version  = tmp_req_hdr->version;
+	req_hdr->flags    = tmp_req_hdr->flags;
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, req_hdr_len);
 
 	if (req_hdr->req_hdr_len != sizeof(struct xio_req_hdr)) {
@@ -1438,15 +1440,28 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, credits);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
-	req_hdr->opcode = tmp_req_hdr->opcode;
+	req_hdr->opcode		= tmp_req_hdr->opcode;
+	req_hdr->recv_num_sge	= tmp_req_hdr->recv_num_sge;
+	req_hdr->read_num_sge	= tmp_req_hdr->read_num_sge;
+	req_hdr->write_num_sge	= tmp_req_hdr->write_num_sge;
+
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_pad_len);
+
+	/* remain_data_len not in use */
 	UNPACK_LLVAL(tmp_req_hdr, req_hdr, ulp_imm_len);
-	UNPACK_LVAL(tmp_req_hdr, req_hdr, read_num_sge);
-	UNPACK_LVAL(tmp_req_hdr, req_hdr, write_num_sge);
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			   sizeof(struct xio_req_hdr));
+
+	/* params for SEND */
+	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
+		UNPACK_LLVAL(tmp_sge, &rdma_task->req_recv_sge[i], addr);
+		UNPACK_LVAL(tmp_sge, &rdma_task->req_recv_sge[i], length);
+		UNPACK_LVAL(tmp_sge, &rdma_task->req_recv_sge[i], stag);
+		tmp_sge++;
+	}
+	rdma_task->req_recv_num_sge	= i;
 
 	/* params for RDMA_WRITE */
 	for (i = 0; i < req_hdr->read_num_sge; i++) {
@@ -1467,7 +1482,8 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->req_write_num_sge = req_hdr->write_num_sge;
 
 	hdr_len	= sizeof(struct xio_req_hdr);
-	hdr_len += sizeof(struct xio_sge)*(req_hdr->read_num_sge +
+	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
+					   req_hdr->read_num_sge +
 					   req_hdr->write_num_sge);
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
@@ -1483,27 +1499,25 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_rsp_hdr *rsp_hdr)
 {
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
-	static struct xio_rsp_hdr	zero_rsp_hdr;
-	static int			first_time = 1;
 
 	/* point to trasport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_rsp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	if (first_time) {
-		memset(&zero_rsp_hdr, 0, sizeof(zero_rsp_hdr));
-		first_time = 0;
-	}
-	*tmp_rsp_hdr = zero_rsp_hdr;
-
 	/* pack relevant values */
+	tmp_rsp_hdr->version  = rsp_hdr->version;
+	tmp_rsp_hdr->flags    = rsp_hdr->flags;
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, rsp_hdr_len);
+	/* sn		shall be coded later */
+	/* ack_sn	shall be coded later */
+	/* credits	shall be coded later */
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, tid);
 	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_hdr_len);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_pad_len);
+	/* remain_data_len not in use */
 	PACK_LLVAL(rsp_hdr, tmp_rsp_hdr, ulp_imm_len);
-	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rsp_hdr));
 #ifdef EYAL_TODO
@@ -1520,21 +1534,14 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_task *task,
 				    struct xio_rsp_hdr *rsp_hdr)
 {
-	static struct xio_rsp_hdr	zero_rsp_hdr;
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
-	static int			first_time = 1;
 
 	/* point to trasport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_rsp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	if (first_time) {
-		memset(&zero_rsp_hdr, 0, sizeof(zero_rsp_hdr));
-		first_time = 0;
-	}
-	*rsp_hdr = zero_rsp_hdr;
-
-
+	rsp_hdr->version  = tmp_rsp_hdr->version;
+	rsp_hdr->flags    = tmp_rsp_hdr->flags;
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, rsp_hdr_len);
 
 	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_rsp_hdr)) {
@@ -1543,15 +1550,16 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_rsp_hdr));
 		return -1;
 	}
-
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
+	/* ack_sn not used */
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, credits);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_pad_len);
+	/* remain_data_len not in use */
 	UNPACK_LLVAL(tmp_rsp_hdr, rsp_hdr, ulp_imm_len);
-	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rsp_hdr));
 
