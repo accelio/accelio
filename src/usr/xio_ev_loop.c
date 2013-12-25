@@ -77,18 +77,9 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct epoll_event	ev;
-	struct xio_ev_data	*tev;
+	struct xio_ev_data	*tev = NULL;
 	int			err;
 
-	tev = calloc(1, sizeof(*tev));
-	if (!tev) {
-		xio_set_error(errno);
-		ERROR_LOG("calloc failed, %m\n");
-		return -1;
-	}
-	tev->data	= data;
-	tev->handler	= handler;
-	tev->fd		= fd;
 
 	memset(&ev, 0, sizeof(ev));
 	if (events & XIO_POLLIN)
@@ -101,12 +92,25 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	if (events & XIO_ONESHOT)
 		ev.events |= EPOLLONESHOT;
 
-	list_add(&tev->events_list_entry, &loop->events_list);
+	if (fd != loop->wakeup_event) {
+		tev = calloc(1, sizeof(*tev));
+		if (!tev) {
+			xio_set_error(errno);
+			ERROR_LOG("calloc failed, %m\n");
+			return -1;
+		}
+		tev->data	= data;
+		tev->handler	= handler;
+		tev->fd		= fd;
+
+		list_add(&tev->events_list_entry, &loop->events_list);
+	}
 
 	ev.data.ptr = tev;
 	err = epoll_ctl(loop->efd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
-		list_del(&tev->events_list_entry);
+		if (fd != loop->wakeup_event)
+			list_del(&tev->events_list_entry);
 		xio_set_error(errno);
 		if (errno != EEXIST)
 			ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
@@ -142,14 +146,16 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 	struct xio_ev_data	*tev;
 	int ret;
 
-	tev = xio_event_lookup(loop, fd);
-	if (!tev) {
-		xio_set_error(ENOENT);
-		ERROR_LOG("event lookup failed. fd:%d\n", fd);
-		return -1;
+	if (fd != loop->wakeup_event) {
+		tev = xio_event_lookup(loop, fd);
+		if (!tev) {
+			xio_set_error(ENOENT);
+			ERROR_LOG("event lookup failed. fd:%d\n", fd);
+			return -1;
+		}
+		list_del(&tev->events_list_entry);
+		free(tev);
 	}
-	list_del(&tev->events_list_entry);
-	free(tev);
 
 	ret = epoll_ctl(loop->efd, EPOLL_CTL_DEL, fd, NULL);
 	if (ret < 0) {
@@ -167,14 +173,16 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct epoll_event	ev;
-	struct xio_ev_data	*tev;
+	struct xio_ev_data	*tev = NULL;
 	int			retval;
 
-	tev = xio_event_lookup(loop, fd);
-	if (!tev) {
-		xio_set_error(ENOENT);
-		ERROR_LOG("event lookup failed. fd:%d\n", fd);
-		return -1;
+	if (fd != loop->wakeup_event) {
+		tev = xio_event_lookup(loop, fd);
+		if (!tev) {
+			xio_set_error(ENOENT);
+			ERROR_LOG("event lookup failed. fd:%d\n", fd);
+			return -1;
+		}
 	}
 
 	memset(&ev, 0, sizeof(ev));
@@ -269,7 +277,7 @@ retry:
 	} else if (likely(nevent)) {
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
-			if (likely(tev->fd != loop->wakeup_event)) {
+			if (likely(tev != NULL)) { // (fd != loop->wakeup_event)
 					tev->handler(tev->fd, events[i].events,
 					     tev->data);
 			} else {
@@ -352,7 +360,11 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	}
 
 	close((*loop)->efd);
+	(*loop)->efd = -1;
+
 	close((*loop)->wakeup_event);
+	(*loop)->wakeup_event = -1;
+
 	free((*loop));
 	*loop = NULL;
 }
