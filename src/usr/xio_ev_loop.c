@@ -80,7 +80,6 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	struct xio_ev_data	*tev = NULL;
 	int			err;
 
-
 	memset(&ev, 0, sizeof(ev));
 	if (events & XIO_POLLIN)
 		ev.events |= EPOLLIN;
@@ -186,10 +185,16 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	}
 
 	memset(&ev, 0, sizeof(ev));
-	if (events == XIO_POLLIN)
-		ev.events = EPOLLIN;
-	else if (events == XIO_POLLOUT)
-		ev.events = EPOLLOUT;
+	if (events & XIO_POLLIN)
+		ev.events |= EPOLLIN;
+	if (events & XIO_POLLOUT)
+		ev.events |= EPOLLOUT;
+	/* default is edge triggered */
+	if (!(events & XIO_POLLLT))
+		ev.events |= EPOLLET;
+	if (events & XIO_ONESHOT)
+		ev.events |= EPOLLONESHOT;
+
 	ev.data.ptr = tev;
 
 	retval = epoll_ctl(loop->efd, EPOLL_CTL_MOD, fd, &ev);
@@ -214,7 +219,7 @@ void *xio_ev_loop_init()
 	if (loop == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
-		return  NULL;
+		return NULL;
 	}
 
 	INIT_LIST_HEAD(&loop->events_list);
@@ -235,10 +240,9 @@ void *xio_ev_loop_init()
 		ERROR_LOG("eventfd failed. %m\n");
 		goto cleanup1;
 	}
-
-	/* SET eventfd so wakeup just needs to ADD the already prepared
-	 * eventfd to the epoll
-	 */
+	/* ADD & SET the wakeup fd and once application wants to arm 
+	 * just MODify the already prepared eventfd to the epoll */
+	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLLT, NULL, NULL);
 	retval = eventfd_write(loop->wakeup_event, val);
 	if (retval != 0)
 		goto cleanup2;
@@ -276,16 +280,18 @@ retry:
 		}
 	} else if (likely(nevent)) {
 		for (i = 0; i < nevent; i++) {
-			tev = (struct xio_ev_data *)events[i].data.ptr;
+			tev = (struct xio_ev_data *) events[i].data.ptr;
 			if (likely(tev != NULL)) { // (fd != loop->wakeup_event)
-					tev->handler(tev->fd, events[i].events,
-					     tev->data);
-			} else {
-				/* remove the wakeup eventfd from epoll set,
-				 * and check for other events */
-				xio_ev_loop_del(loop, loop->wakeup_event);
-				loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
-				loop->stop_loop = 1; /* to allow self-thread quick stop */
+				tev->handler(tev->fd, events[i].events, tev->data);
+			}
+			else {
+				/* wakeup event auto-removed from epoll due to ONESHOT */
+
+				/* check wakeup is armed to prevent false wakeups */
+				if (loop->wakeup_armed == 1) {
+					loop->wakeup_armed = 0;
+					loop->stop_loop = 1;
+				}
 			}
 		}
 	} else {
@@ -298,11 +304,7 @@ retry:
 		goto retry;
 
 	loop->stop_loop = 0;
-
-	if (loop->wakeup_armed) {
-		xio_ev_loop_del(loop, loop->wakeup_event);
-		loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
-	}
+	loop->wakeup_armed = 0;
 
 	return 0;
 }
@@ -340,7 +342,7 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 	if (loop->wakeup_armed == 1)
 		return; /* wakeup is still armed, probably left loop in previous cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
-	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT, NULL, NULL);
+	xio_ev_loop_modify(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -358,6 +360,8 @@ void xio_ev_loop_destroy(void **loop_hndl)
 				 events_list_entry) {
 		xio_ev_loop_del((*loop), tev->fd);
 	}
+
+	xio_ev_loop_del((*loop), (*loop)->wakeup_event);
 
 	close((*loop)->efd);
 	(*loop)->efd = -1;
