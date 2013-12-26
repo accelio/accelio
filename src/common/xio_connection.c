@@ -802,6 +802,9 @@ int xio_release_response(struct xio_msg *msg)
 	struct xio_connection	*connection = NULL;
 	struct xio_msg		*pmsg = msg;
 
+
+
+
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
 		if (task == NULL) {
@@ -809,7 +812,8 @@ int xio_release_response(struct xio_msg *msg)
 			ERROR_LOG("request not found\n");
 			return -1;
 		}
-		if (task->tlv_type != XIO_MSG_RSP) {
+		if (task->sender_task == NULL) {
+			/* do not release resopnse in responder */
 			xio_set_error(EINVAL);
 			return -1;
 		}
