@@ -80,11 +80,6 @@ int xio_validate_rdma_op(
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 		} else if (llen < rlen) {
-			/* check page alignment when source buff spans more
-			 * then one destination buffer */
-			if (!IS_PAGE_ALIGNED(
-				    lsg_list[l].addr + lsg_list[l].length))
-				return -1;
 			l++;
 			tot_len	+= llen;
 			if (l == lsize)
@@ -93,9 +88,6 @@ int xio_validate_rdma_op(
 			raddr	+= llen;
 			laddr	= lsg_list[l].addr;
 			llen	= lsg_list[l].length;
-
-			if (!IS_PAGE_ALIGNED(lsg_list[l].addr))
-				return -1;
 		} else {
 			l++;
 			r++;
