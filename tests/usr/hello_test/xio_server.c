@@ -49,7 +49,7 @@
 #include "libxio.h"
 #include "xio_msg.h"
 
-#define MAX_POOL_SIZE		512
+#define MAX_POOL_SIZE		6000
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
@@ -77,6 +77,7 @@ static void			*loop;
 static struct msg_pool		*pool;
 static uint64_t			last_sent;
 static uint64_t			last_comp;
+
 
 
 static struct xio_test_config  test_config = {
@@ -175,7 +176,7 @@ static int on_session_event(struct xio_session *session,
 		/* assign connection private data */
 		event_data->conn_user_context = cb_prv_data;
 		break;
-	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%lu, last comp:%lu, delta:%lu\n",
 		       last_sent,  last_comp, last_sent-last_comp);
 		break;
@@ -219,7 +220,6 @@ static int on_request(struct xio_session *session,
 	if (req->status)
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(req->status));
-
 
 	/* process request */
 	process_request(req);
@@ -270,6 +270,7 @@ int on_msg_error(struct xio_session *session,
 	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
 
+	last_comp = msg->request->sn;
 	msg_pool_put(pool, msg);
 
 	return 0;
@@ -442,6 +443,7 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;
 	char			url[256];
 	struct xio_context	*ctx;
+
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;

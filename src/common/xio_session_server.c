@@ -540,6 +540,7 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 			struct xio_task *task)
 {
 	xio_ack_disconnect(connection, task);
+	xio_session_notify_connection_closed(connection->session, connection);
 
 	return 0;
 }
@@ -551,36 +552,12 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 			     struct xio_task *task)
 {
 	struct xio_session *session = connection->session;
-	int reason = XIO_E_SESSION_DISCONECTED;
-	int teardown = 0;
 
 	xio_connection_release_fin(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	/* flush all messages from in flight message queue to in queue */
-	xio_connection_flush_msgs(connection);
-
-	/* flush all messages back to user */
-	xio_connection_notify_msgs_flush(connection);
-	xio_connection_flush_tasks(connection);
-
-	xio_session_notify_connection_closed(connection->session, connection);
-
-	/* no more notifications */
-	xio_conn_unreg_observer(connection->conn, &session->observer);
-
-	spin_lock(&session->connections_list_lock);
-	teardown = (session->connections_nr == 1);
-	spin_unlock(&session->connections_list_lock);
-
-	xio_session_free_connection(connection);
-
-	if (teardown) {
-		session->state = XIO_SESSION_STATE_CLOSED;
-		xio_session_notify_teardown(
-				session,
-				reason);
-	}
+	connection->state = CONNECTION_STATE_CLOSE;
+	xio_session_disconnect(session, connection);
 
 	return 0;
 }

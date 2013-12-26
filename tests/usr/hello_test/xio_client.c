@@ -221,21 +221,24 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
+		xio_disconnect(event_data->conn);
+		break;
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%lu, last recv:%lu, delta:%lu\n",
 		       last_sent,  last_recv, last_sent-last_recv);
-		xio_disconnect(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop);  /* exit */
+		if (pool) {
+			msg_pool_free(pool);
+			pool = NULL;
+		}
 		break;
 	default:
 		break;
 	};
 
-	if (pool) {
-		msg_pool_free(pool);
-		pool = NULL;
-	}
+
 
 	return 0;
 }

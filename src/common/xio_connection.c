@@ -582,6 +582,11 @@ int xio_send_response(struct xio_msg *msg)
 		stats	   = &connection->ctx->stats;
 		vmsg	   = &msg->out;
 
+		if (connection->state == CONNECTION_STATE_CLOSING) {
+			xio_set_error(ESHUTDOWN);
+			return -1;
+		}
+
 		if (xio_session_not_queueing(connection->session) &&
 		    !xio_is_connection_online(connection)) {
 			xio_set_error(EAGAIN);
@@ -804,21 +809,21 @@ int xio_release_response(struct xio_msg *msg)
 			ERROR_LOG("request not found\n");
 			return -1;
 		}
+		if (task->tlv_type != XIO_MSG_RSP) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
 		connection = task->connection;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
 
-		if (task->tlv_type != XIO_MSG_RSP) {
-			xio_set_error(EINVAL);
-			return -1;
-		}
 		xio_release_response_task(task);
 
 		pmsg = pmsg->next;
 	}
-	if (connection)
-		return xio_connection_xmit_msgs(connection);
+	if (connection && xio_is_connection_online(connection))
+		return xio_connection_xmit(connection);
 
 	return 0;
 }
@@ -839,24 +844,25 @@ int xio_release_msg(struct xio_msg *msg)
 			ERROR_LOG("request not found\n");
 			return -1;
 		}
-
-		connection = task->connection;
-		list_move_tail(&task->tasks_list_entry,
-			       &connection->post_io_tasks_list);
-
 		if (task->tlv_type != XIO_ONE_WAY_REQ) {
 			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 				  task->tlv_type);
 			xio_set_error(EINVAL);
 			return -1;
 		}
+
+		connection = task->connection;
+		list_move_tail(&task->tasks_list_entry,
+			       &connection->post_io_tasks_list);
+
 		pmsg = pmsg->next;
 
 		/* the rx task is returend back to pool */
 		xio_tasks_pool_put(task);
 	}
-	if (connection)
-		return xio_connection_xmit_msgs(connection);
+
+	if (connection && xio_is_connection_online(connection))
+		return xio_connection_xmit(connection);
 
 	return 0;
 }
@@ -959,12 +965,15 @@ int xio_do_disconnect(struct xio_connection *connection)
 int xio_disconnect(struct xio_connection *connection)
 {
 	if (xio_is_connection_online(connection)) {
-		TRACE_LOG("send fin response. session:%p, connection:%p\n",
+		TRACE_LOG("send fin request. session:%p, connection:%p\n",
 			  connection->session, connection);
 		xio_send_fin_req(connection);
 		connection->state = CONNECTION_STATE_CLOSING;
+		xio_session_notify_connection_closed(connection->session,
+						     connection);
 	} else {
-		xio_do_disconnect(connection);
+		if (connection->state != CONNECTION_STATE_CLOSING)
+			xio_do_disconnect(connection);
 	}
 
 	return 0;
