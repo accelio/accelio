@@ -328,7 +328,7 @@ int xio_ev_loop_run(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_stop                                                        */
 /*---------------------------------------------------------------------------*/
-inline void xio_ev_loop_stop(void *loop_hndl)
+inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 
@@ -339,7 +339,7 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 		return; /* loop is already marked for stopping (and also armed for wakeup from blocking) */
 	loop->stop_loop = 1;
 
-	if (loop->wakeup_armed == 1)
+	if (is_self_thread || loop->wakeup_armed == 1)
 		return; /* wakeup is still armed, probably left loop in previous cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
 	xio_ev_loop_modify(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);

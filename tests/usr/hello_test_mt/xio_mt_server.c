@@ -406,9 +406,9 @@ static int on_session_event(struct xio_session *session,
 		xio_session_close(session);
 		for (i = 0; i < server_data->tdata_nr; i++) {
 			process_request(&server_data->tdata[i], NULL);
-			xio_ev_loop_stop(server_data->tdata[i].loop);
+			xio_ev_loop_stop(server_data->tdata[i].loop, 0);
 		}
-		xio_ev_loop_stop(server_data->loop);
+		xio_ev_loop_stop(server_data->loop, 0);
 		break;
 	default:
 		break;

@@ -185,7 +185,7 @@ static int xio_device_thread_init()
 /*---------------------------------------------------------------------------*/
 static void xio_device_thread_stop()
 {
-	xio_ev_loop_stop(dev_tdata.async_loop);
+	xio_ev_loop_stop(dev_tdata.async_loop, 0);
 
 	pthread_join(dev_tdata.dev_thread, NULL);
 }
