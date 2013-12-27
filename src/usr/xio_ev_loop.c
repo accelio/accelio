@@ -240,7 +240,7 @@ void *xio_ev_loop_init()
 		ERROR_LOG("eventfd failed. %m\n");
 		goto cleanup1;
 	}
-	/* ADD & SET the wakeup fd and once application wants to arm 
+	/* ADD & SET the wakeup fd and once application wants to arm
 	 * just MODify the already prepared eventfd to the epoll */
 	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLLT, NULL, NULL);
 	retval = eventfd_write(loop->wakeup_event, val);
@@ -280,14 +280,19 @@ retry:
 		}
 	} else if (likely(nevent)) {
 		for (i = 0; i < nevent; i++) {
-			tev = (struct xio_ev_data *) events[i].data.ptr;
-			if (likely(tev != NULL)) { // (fd != loop->wakeup_event)
-				tev->handler(tev->fd, events[i].events, tev->data);
-			}
-			else {
-				/* wakeup event auto-removed from epoll due to ONESHOT */
+			tev = (struct xio_ev_data *)events[i].data.ptr;
+			if (likely(tev != NULL)) {
+				/* (fd != loop->wakeup_event) */
+				tev->handler(tev->fd, events[i].events,
+					     tev->data);
+			} else {
+				/* wakeup event auto-removed from epoll
+				 * due to ONESHOT
+				 * */
 
-				/* check wakeup is armed to prevent false wakeups */
+				/* check wakeup is armed to prevent false
+				 * wakeups
+				 * */
 				if (loop->wakeup_armed == 1) {
 					loop->wakeup_armed = 0;
 					loop->stop_loop = 1;
@@ -297,8 +302,9 @@ retry:
 	} else {
 		/* timed out */
 		loop->stop_loop = 1;
-		/* TODO: timeout should be updated by the elapsed duration of
-		 * each loop */
+		/* TODO: timeout should be updated by the elapsed
+		 * duration of each loop
+		 * */
 	}
 	if (likely(loop->stop_loop == 0))
 		goto retry;
@@ -310,7 +316,7 @@ retry:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_run_timeout                                              */
+/* xio_ev_loop_run_timeout						     */
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec)
 {
@@ -326,7 +332,7 @@ int xio_ev_loop_run(void *loop_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_stop                                                        */
+/* xio_ev_loop_stop							     */
 /*---------------------------------------------------------------------------*/
 inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 {
@@ -336,13 +342,16 @@ inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 		return;
 
 	if (loop->stop_loop == 1)
-		return; /* loop is already marked for stopping (and also armed for wakeup from blocking) */
+		return; /* loop is already marked for stopping (and also
+			   armed for wakeup from blocking) */
 	loop->stop_loop = 1;
 
 	if (is_self_thread || loop->wakeup_armed == 1)
-		return; /* wakeup is still armed, probably left loop in previous cycle due to other reasons (timeout, events) */
+		return; /* wakeup is still armed, probably left loop in previous
+			   cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
-	xio_ev_loop_modify(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);
+	xio_ev_loop_modify(loop, loop->wakeup_event,
+			   XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);
 }
 
 /*---------------------------------------------------------------------------*/
