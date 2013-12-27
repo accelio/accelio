@@ -178,7 +178,7 @@ static int on_session_event(struct xio_session *session,
 		process_request(NULL);
 		xio_session_close(session);
 		connection = NULL;
-		xio_ev_loop_stop(loop);
+		xio_ev_loop_stop(loop, 0);
 		break;
 	default:
 		break;

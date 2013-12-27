@@ -77,18 +77,8 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct epoll_event	ev;
-	struct xio_ev_data	*tev;
+	struct xio_ev_data	*tev = NULL;
 	int			err;
-
-	tev = calloc(1, sizeof(*tev));
-	if (!tev) {
-		xio_set_error(errno);
-		ERROR_LOG("calloc failed, %m\n");
-		return -1;
-	}
-	tev->data	= data;
-	tev->handler	= handler;
-	tev->fd		= fd;
 
 	memset(&ev, 0, sizeof(ev));
 	if (events & XIO_POLLIN)
@@ -101,12 +91,25 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	if (events & XIO_ONESHOT)
 		ev.events |= EPOLLONESHOT;
 
-	list_add(&tev->events_list_entry, &loop->events_list);
+	if (fd != loop->wakeup_event) {
+		tev = calloc(1, sizeof(*tev));
+		if (!tev) {
+			xio_set_error(errno);
+			ERROR_LOG("calloc failed, %m\n");
+			return -1;
+		}
+		tev->data	= data;
+		tev->handler	= handler;
+		tev->fd		= fd;
+
+		list_add(&tev->events_list_entry, &loop->events_list);
+	}
 
 	ev.data.ptr = tev;
 	err = epoll_ctl(loop->efd, EPOLL_CTL_ADD, fd, &ev);
 	if (err) {
-		list_del(&tev->events_list_entry);
+		if (fd != loop->wakeup_event)
+			list_del(&tev->events_list_entry);
 		xio_set_error(errno);
 		if (errno != EEXIST)
 			ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
@@ -142,14 +145,16 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 	struct xio_ev_data	*tev;
 	int ret;
 
-	tev = xio_event_lookup(loop, fd);
-	if (!tev) {
-		xio_set_error(ENOENT);
-		ERROR_LOG("event lookup failed. fd:%d\n", fd);
-		return -1;
+	if (fd != loop->wakeup_event) {
+		tev = xio_event_lookup(loop, fd);
+		if (!tev) {
+			xio_set_error(ENOENT);
+			ERROR_LOG("event lookup failed. fd:%d\n", fd);
+			return -1;
+		}
+		list_del(&tev->events_list_entry);
+		free(tev);
 	}
-	list_del(&tev->events_list_entry);
-	free(tev);
 
 	ret = epoll_ctl(loop->efd, EPOLL_CTL_DEL, fd, NULL);
 	if (ret < 0) {
@@ -167,21 +172,29 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct epoll_event	ev;
-	struct xio_ev_data	*tev;
+	struct xio_ev_data	*tev = NULL;
 	int			retval;
 
-	tev = xio_event_lookup(loop, fd);
-	if (!tev) {
-		xio_set_error(ENOENT);
-		ERROR_LOG("event lookup failed. fd:%d\n", fd);
-		return -1;
+	if (fd != loop->wakeup_event) {
+		tev = xio_event_lookup(loop, fd);
+		if (!tev) {
+			xio_set_error(ENOENT);
+			ERROR_LOG("event lookup failed. fd:%d\n", fd);
+			return -1;
+		}
 	}
 
 	memset(&ev, 0, sizeof(ev));
-	if (events == XIO_POLLIN)
-		ev.events = EPOLLIN;
-	else if (events == XIO_POLLOUT)
-		ev.events = EPOLLOUT;
+	if (events & XIO_POLLIN)
+		ev.events |= EPOLLIN;
+	if (events & XIO_POLLOUT)
+		ev.events |= EPOLLOUT;
+	/* default is edge triggered */
+	if (!(events & XIO_POLLLT))
+		ev.events |= EPOLLET;
+	if (events & XIO_ONESHOT)
+		ev.events |= EPOLLONESHOT;
+
 	ev.data.ptr = tev;
 
 	retval = epoll_ctl(loop->efd, EPOLL_CTL_MOD, fd, &ev);
@@ -206,7 +219,7 @@ void *xio_ev_loop_init()
 	if (loop == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
-		return  NULL;
+		return NULL;
 	}
 
 	INIT_LIST_HEAD(&loop->events_list);
@@ -227,10 +240,9 @@ void *xio_ev_loop_init()
 		ERROR_LOG("eventfd failed. %m\n");
 		goto cleanup1;
 	}
-
-	/* SET eventfd so wakeup just needs to ADD the already prepared
-	 * eventfd to the epoll
-	 */
+	/* ADD & SET the wakeup fd and once application wants to arm 
+	 * just MODify the already prepared eventfd to the epoll */
+	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLLT, NULL, NULL);
 	retval = eventfd_write(loop->wakeup_event, val);
 	if (retval != 0)
 		goto cleanup2;
@@ -268,16 +280,18 @@ retry:
 		}
 	} else if (likely(nevent)) {
 		for (i = 0; i < nevent; i++) {
-			tev = (struct xio_ev_data *)events[i].data.ptr;
-			if (likely(tev->fd != loop->wakeup_event)) {
-					tev->handler(tev->fd, events[i].events,
-					     tev->data);
-			} else {
-				/* remove the wakeup eventfd from epoll set,
-				 * and check for other events */
-				xio_ev_loop_del(loop, loop->wakeup_event);
-				loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
-				loop->stop_loop = 1; /* to allow self-thread quick stop */
+			tev = (struct xio_ev_data *) events[i].data.ptr;
+			if (likely(tev != NULL)) { // (fd != loop->wakeup_event)
+				tev->handler(tev->fd, events[i].events, tev->data);
+			}
+			else {
+				/* wakeup event auto-removed from epoll due to ONESHOT */
+
+				/* check wakeup is armed to prevent false wakeups */
+				if (loop->wakeup_armed == 1) {
+					loop->wakeup_armed = 0;
+					loop->stop_loop = 1;
+				}
 			}
 		}
 	} else {
@@ -290,11 +304,7 @@ retry:
 		goto retry;
 
 	loop->stop_loop = 0;
-
-	if (loop->wakeup_armed) {
-		xio_ev_loop_del(loop, loop->wakeup_event);
-		loop->wakeup_armed = 0; /* to allow re-arm of wakeupfd */
-	}
+	loop->wakeup_armed = 0;
 
 	return 0;
 }
@@ -318,7 +328,7 @@ int xio_ev_loop_run(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_stop                                                        */
 /*---------------------------------------------------------------------------*/
-inline void xio_ev_loop_stop(void *loop_hndl)
+inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 
@@ -329,10 +339,10 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 		return; /* loop is already marked for stopping (and also armed for wakeup from blocking) */
 	loop->stop_loop = 1;
 
-	if (loop->wakeup_armed == 1)
+	if (is_self_thread || loop->wakeup_armed == 1)
 		return; /* wakeup is still armed, probably left loop in previous cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
-	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT, NULL, NULL);
+	xio_ev_loop_modify(loop, loop->wakeup_event, XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -351,8 +361,14 @@ void xio_ev_loop_destroy(void **loop_hndl)
 		xio_ev_loop_del((*loop), tev->fd);
 	}
 
+	xio_ev_loop_del((*loop), (*loop)->wakeup_event);
+
 	close((*loop)->efd);
+	(*loop)->efd = -1;
+
 	close((*loop)->wakeup_event);
+	(*loop)->wakeup_event = -1;
+
 	free((*loop));
 	*loop = NULL;
 }

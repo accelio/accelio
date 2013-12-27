@@ -228,7 +228,7 @@ static int on_session_event(struct xio_session *session,
 		       last_sent,  last_recv, last_sent-last_recv);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_ev_loop_stop(loop);  /* exit */
+		xio_ev_loop_stop(loop, 0);  /* exit */
 		if (pool) {
 			msg_pool_free(pool);
 			pool = NULL;
