@@ -348,7 +348,9 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_task		*task = NULL;
+	struct xio_task		*tmp_task;
 	struct xio_rdma_task	*rdma_task = NULL;
+	struct xio_rdma_task	*tmp_rdma_task;
 	struct xio_rdma_task	*prev_rdma_task = NULL;
 	struct xio_work_req	*first_wr = NULL;
 	int num_reqs = 0;
@@ -362,6 +364,23 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 		list_move_tail(&task->tasks_list_entry,
 			       &rdma_hndl->rdma_rd_in_flight_list);
 		rdma_task = task->dd_data;
+
+		/* pending "sends" that were delayed for rdma read completion
+		 *  are moved to wait in the in_filght list
+		 *   beacuse of the need to keep order
+		 */
+		while (!list_empty(&rdma_hndl->rdma_rd_list)) {
+			tmp_task = list_first_entry(
+				&rdma_hndl->rdma_rd_list,
+				struct xio_task,  tasks_list_entry);
+			tmp_rdma_task = tmp_task->dd_data;
+
+			if (tmp_rdma_task->ib_op != XIO_IB_RECV)
+				break;
+			list_move_tail(&task->tasks_list_entry,
+			       &rdma_hndl->rdma_rd_in_flight_list);
+			rdma_hndl->rdma_in_flight++;
+		}
 
 		/* prepare it for rdma read */
 		if (first_wr == NULL)
@@ -2843,6 +2862,11 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	/* must delay the send due to pending rdma read requests
 	 * if not user will get out of order messages - need fence
 	 */
+	if (!list_empty(&rdma_hndl->rdma_rd_list)) {
+		list_move_tail(&task->tasks_list_entry,
+			       &rdma_hndl->rdma_rd_list);
+		return 0;
+	}
 	if (rdma_hndl->rdma_in_flight) {
 		rdma_hndl->rdma_in_flight++;
 		list_move_tail(&task->tasks_list_entry,
