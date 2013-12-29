@@ -378,7 +378,7 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 			if (tmp_rdma_task->ib_op != XIO_IB_RECV)
 				break;
 			list_move_tail(&task->tasks_list_entry,
-			       &rdma_hndl->rdma_rd_in_flight_list);
+				       &rdma_hndl->rdma_rd_in_flight_list);
 			rdma_hndl->rdma_in_flight++;
 		}
 
@@ -1106,7 +1106,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		sge.length = task->omsg->in.data_iov[i].iov_len;
 		sge.stag = 0;
 		PACK_LLVAL(&sge, tmp_sge, addr);
-		PACK_LVAL(&sge, tmp_sge,length);
+		PACK_LVAL(&sge, tmp_sge, length);
 		PACK_LVAL(&sge, tmp_sge, stag);
 		tmp_sge++;
 	}
@@ -1655,7 +1655,6 @@ static int xio_rdma_prep_req_in_data(
 		if (data_len) {
 			rdma_task->recv_num_sge = vmsg->data_iovlen;
 			rdma_task->read_num_sge = 0;
-
 		}
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
