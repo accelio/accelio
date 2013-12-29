@@ -494,7 +494,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			/* now try to send */
 			xio_connection_set_state(connection,
-						 CONNECTION_STATE_ONLINE);
+						 XIO_CONNECTION_STATE_ONLINE);
 
 			if (session->connections_nr > 1) {
 				session->state = XIO_SESSION_STATE_ACCEPTED;
@@ -661,7 +661,9 @@ int xio_on_client_conn_established(struct xio_session *session,
 				   union xio_conn_event_data *event_data)
 {
 	int				retval = 0;
+	int				is_last = 1;
 	struct xio_connection		*connection;
+	struct xio_msg			*msg;
 	struct xio_session_event_data	ev_data = {
 		.event	=	XIO_SESSION_ERROR_EVENT,
 		.reason =	XIO_E_SESSION_REFUSED
@@ -669,100 +671,85 @@ int xio_on_client_conn_established(struct xio_session *session,
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:
-		{
-			struct xio_msg *msg =
-				xio_session_write_setup_req(session);
-			if (msg == NULL) {
-				ERROR_LOG("setup request creation failed\n");
-				return -1;
-			}
-			session->state = XIO_SESSION_STATE_CONNECT;
+		msg = xio_session_write_setup_req(session);
+		if (msg == NULL) {
+			ERROR_LOG("setup request creation failed\n");
+			return -1;
+		}
 
-			msg->type = XIO_SESSION_SETUP_REQ;
-			retval = xio_connection_send(session->lead_connection,
-						     msg);
-			if (retval) {
-				TRACE_LOG("failed to send session "\
-					  "setup request\n");
-				ev_data.conn =  session->lead_connection;
-				ev_data.conn_user_context =
-				    session->lead_connection->cb_user_context;
-				if (session->ses_ops.on_session_event)
-					session->ses_ops.on_session_event(
+		msg->type = XIO_SESSION_SETUP_REQ;
+		retval = xio_connection_send(session->lead_connection,
+				msg);
+		if (retval) {
+			TRACE_LOG("failed to send session "\
+					"setup request\n");
+			ev_data.conn =  session->lead_connection;
+			ev_data.conn_user_context =
+				session->lead_connection->cb_user_context;
+			if (session->ses_ops.on_session_event)
+				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
-			}
 		}
+
 		break;
 	case XIO_SESSION_STATE_REDIRECTED:
-		{
-			struct xio_msg *msg =
-				xio_session_write_setup_req(session);
-			if (msg == NULL) {
-				ERROR_LOG("setup request creation failed\n");
-				return -1;
-			}
-			session->state = XIO_SESSION_STATE_CONNECT;
+		msg = xio_session_write_setup_req(session);
+		if (msg == NULL) {
+			ERROR_LOG("setup request creation failed\n");
+			return -1;
+		}
+		session->state = XIO_SESSION_STATE_CONNECT;
 
-			msg->type      = XIO_SESSION_SETUP_REQ;
+		msg->type      = XIO_SESSION_SETUP_REQ;
 
-			retval = xio_connection_send(session->redir_connection,
-						     msg);
-			if (retval) {
-				TRACE_LOG("failed to send session " \
-					  "setup request\n");
-				ev_data.conn =  session->redir_connection;
-				ev_data.conn_user_context =
-				    session->redir_connection->cb_user_context;
-				if (session->ses_ops.on_session_event)
-					session->ses_ops.on_session_event(
+		retval = xio_connection_send(session->redir_connection,
+				msg);
+		if (retval) {
+			TRACE_LOG("failed to send session setup request\n");
+			ev_data.conn =  session->redir_connection;
+			ev_data.conn_user_context =
+				session->redir_connection->cb_user_context;
+			if (session->ses_ops.on_session_event)
+				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
-			}
 		}
 		break;
 	case XIO_SESSION_STATE_ACCEPTED:
-		{
-			int is_last = 1;
+		connection = xio_session_find_connection(session, conn);
+		if (connection == NULL) {
+			ERROR_LOG("failed to find connection session:%p, conn:%p\n",
+				  session, conn);
+			return -1;
+		}
 
-			connection = xio_session_find_connection(session, conn);
-			if (connection == NULL) {
-				ERROR_LOG(
-				   "failed to find connection session:%p, conn:%p\n",
-				   session, conn);
-				return -1;
+		/* introduce the connection to the session */
+		xio_connection_send_hello_req(connection);
+
+		/* set the new connection to online */
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
+
+		/* is this the last to accept */
+		list_for_each_entry(connection,
+				    &session->connections_list,
+				    connections_list_entry) {
+			if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
+				is_last = 0;
+				break;
 			}
-
-			/* introduce the connection to the session */
-			xio_connection_send_hello_req(connection);
-
-			/* set the new connection to online */
-			xio_connection_set_state(connection,
-						 CONNECTION_STATE_ONLINE);
-
-			/* is this the last to accept */
-			list_for_each_entry(connection,
-					    &session->connections_list,
-					    connections_list_entry) {
-				if (connection->state !=
-						CONNECTION_STATE_ONLINE) {
-					is_last = 0;
-					break;
-				}
-			}
-			if (is_last) {
-				session->state = XIO_SESSION_STATE_ONLINE;
-				TRACE_LOG(
-				  "session state is now ONLINE. session:%p\n",
+		}
+		if (is_last) {
+			session->state = XIO_SESSION_STATE_ONLINE;
+			TRACE_LOG("session state is now ONLINE. session:%p\n",
 				  session);
-
-				if (session->ses_ops.on_session_established)
-					session->ses_ops.on_session_established(
+			if (session->ses_ops.on_session_established)
+				session->ses_ops.on_session_established(
 						session, &session->new_ses_rsp,
 						session->cb_user_context);
 
-				kfree(session->new_ses_rsp.user_context);
-			}
+			kfree(session->new_ses_rsp.user_context);
 		}
 		break;
 	case XIO_SESSION_STATE_ONLINE:
@@ -776,7 +763,8 @@ int xio_on_client_conn_established(struct xio_session *session,
 			   connection, connection->session,
 			   connection->conn);
 		/* now try to send */
-		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
 		xio_connection_xmit_msgs(connection);
 		break;
 	default:

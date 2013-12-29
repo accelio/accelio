@@ -42,14 +42,12 @@
 
 
 enum xio_connection_state {
-		CONNECTION_STATE_INIT,
-		CONNECTION_STATE_ONLINE,
-		CONNECTION_STATE_CLOSING,	/* user initiate */
-		CONNECTION_STATE_CLOSE,		/* user close */
-		CONNECTION_STATE_DISCONNECT,	/* peer close */
-		CONNECTION_STATE_CLOSED,
+		XIO_CONNECTION_STATE_INIT,
+		XIO_CONNECTION_STATE_ONLINE,
+		XIO_CONNECTION_STATE_CLOSING,		/* user initiate */
+		XIO_CONNECTION_STATE_CLOSED,		/* user close */
+		XIO_CONNECTION_STATE_DISCONNECTED,	/* disconnect */
 };
-
 
 struct xio_connection {
 	struct xio_conn			*conn;

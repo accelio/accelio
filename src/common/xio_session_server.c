@@ -188,7 +188,7 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 	TRACE_LOG("session state is now ONLINE. session:%p\n",
 		  connection->session);
 
-	xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+	xio_connection_set_state(connection, XIO_CONNECTION_STATE_ONLINE);
 
 	return 0;
 }
@@ -402,7 +402,6 @@ int xio_accept(struct xio_session *session,
 	if (retval != 0) {
 		ERROR_LOG("failed to send message\n");
 		return -1;
-
 	}
 
 	if (portals_array_len != 0) {
@@ -465,7 +464,6 @@ int xio_redirect(struct xio_session *session,
 	if (retval != 0) {
 		ERROR_LOG("failed to send message\n");
 		return -1;
-
 	}
 
 	return 0;
@@ -507,7 +505,6 @@ int xio_reject(struct xio_session *session,
 	if (retval != 0) {
 		ERROR_LOG("failed to send message\n");
 		return -1;
-
 	}
 
 	return 0;
@@ -556,7 +553,7 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 	xio_connection_release_fin(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	connection->state = CONNECTION_STATE_CLOSE;
+	connection->state = XIO_CONNECTION_STATE_CLOSED;
 	xio_session_disconnect(session, connection);
 
 	return 0;

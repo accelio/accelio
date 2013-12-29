@@ -358,7 +358,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_vmsg *vmsg = &msg->in;
 
 
-	if (connection->state != CONNECTION_STATE_ONLINE)
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
 		return 0;
 
 	/* read session header */
@@ -422,7 +422,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_statistics *stats = &connection->ctx->stats;
 
 
-	if (connection->state != CONNECTION_STATE_ONLINE)
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
 		return 0;
 
 	/* read session header */
@@ -579,7 +579,7 @@ int xio_on_conn_disconnected(struct xio_session *session,
 		connection = xio_session_find_connection(session, conn);
 
 	if (connection && connection->conn) {
-		connection->state = CONNECTION_STATE_DISCONNECT;
+		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
 		event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 		event.reason = XIO_E_SUCCESS;
 		event.conn = connection;
@@ -1141,16 +1141,16 @@ int xio_session_disconnect(struct xio_session *session,
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
-	if ((connection->state == CONNECTION_STATE_CLOSE) ||
-	    (connection->state == CONNECTION_STATE_DISCONNECT))
-	     xio_session_notify_connection_teardown(session, connection);
+	if ((connection->state == XIO_CONNECTION_STATE_CLOSED) ||
+	    (connection->state == XIO_CONNECTION_STATE_DISCONNECTED))
+		xio_session_notify_connection_teardown(session, connection);
 
 	/* remove the connection from the session's connections list */
 	if (connection->conn) {
 		xio_conn_close(connection->conn, &session->observer);
 	} else {
-		if ((connection->state == CONNECTION_STATE_DISCONNECT) ||
-		    (connection->state == CONNECTION_STATE_CLOSE)) {
+		if ((connection->state == XIO_CONNECTION_STATE_DISCONNECTED) ||
+		    (connection->state == XIO_CONNECTION_STATE_CLOSED)) {
 			spin_lock(&session->connections_list_lock);
 			teardown = (session->connections_nr == 1);
 			spin_unlock(&session->connections_list_lock);

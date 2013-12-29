@@ -138,7 +138,8 @@ static int xio_on_new_message(struct xio_server *server,
 			goto cleanup1;
 		}
 
-		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
 	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
 		struct xio_task	*task = event_data->msg.task;
 
@@ -168,7 +169,8 @@ static int xio_on_new_message(struct xio_server *server,
 
 		/* This in a multiple-portal situation */
 		session->state = XIO_SESSION_STATE_ONLINE;
-		xio_connection_set_state(connection, CONNECTION_STATE_ONLINE);
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
 	} else {
 		ERROR_LOG("server unexpected message\n");
 		return -1;
