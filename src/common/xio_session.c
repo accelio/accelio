@@ -1170,9 +1170,9 @@ int xio_session_disconnect(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_close							     */
+/* xio_session_destroy							     */
 /*---------------------------------------------------------------------------*/
-int xio_session_close(struct xio_session *session)
+int xio_session_destroy(struct xio_session *session)
 {
 	if (session == NULL)
 		return 0;
@@ -1190,9 +1190,9 @@ int xio_session_close(struct xio_session *session)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_open			                                     */
+/* xio_session_create			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_open(
+struct xio_session *xio_session_create(
 		enum xio_session_type type,
 		struct xio_session_attr *attr,
 		const char *uri,

@@ -163,10 +163,10 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* open default event loop */
-	tdata->loop = xio_ev_loop_init();
+	tdata->loop = xio_ev_loop_create();
 
 	/* create thread context for the client */
-	ctx = xio_ctx_open(NULL, tdata->loop, 0);
+	ctx = xio_ctx_create(NULL, tdata->loop, 0);
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
@@ -198,7 +198,7 @@ static void *portal_server_cb(void *data)
 
 cleanup:
 	/* free the context */
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&tdata->loop);
@@ -224,7 +224,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_session_close(session);
+		xio_session_destroy(session);
 		break;
 	default:
 		break;
@@ -281,10 +281,10 @@ int main(int argc, char *argv[])
 	memset(&server_data, 0, sizeof(server_data));
 
 	/* open default event loop */
-	loop	= xio_ev_loop_init();
+	loop	= xio_ev_loop_create();
 
 	/* create thread context for the client */
-	ctx	= xio_ctx_open(NULL, loop, 0);
+	ctx	= xio_ctx_create(NULL, loop, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
@@ -317,7 +317,7 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&loop);

@@ -79,10 +79,10 @@ static void *hw_worker_thread(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* open default event loop */
-	tdata->loop = xio_ev_loop_init();
+	tdata->loop = xio_ev_loop_create();
 
 	/* create thread context for the client */
-	tdata->ctx = xio_ctx_open(NULL, tdata->loop, 0);
+	tdata->ctx = xio_ctx_create(NULL, tdata->loop, 0);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
@@ -106,7 +106,7 @@ static void *hw_worker_thread(void *data)
 	fprintf(stdout, "exit signaled\n");
 
 	/* free the context */
-	xio_ctx_close(tdata->ctx);
+	xio_ctx_destroy(tdata->ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&tdata->loop);
@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
 	memset(&session_data, 0, sizeof(session_data));
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_data.session = xio_session_open(XIO_SESSION_CLIENT,
+	session_data.session = xio_session_create(XIO_SESSION_CLIENT,
 						&attr, url,
 						0, 0, &session_data);
 
@@ -239,7 +239,7 @@ int main(int argc, char *argv[])
 		pthread_join(session_data.tdata[i].thread_id, NULL);
 
 	/* close the session */
-	xio_session_close(session_data.session);
+	xio_session_destroy(session_data.session);
 
 cleanup:
 

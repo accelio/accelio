@@ -170,7 +170,7 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
-		xio_session_close(session);
+		xio_session_destroy(session);
 
 		break;
 	default:
@@ -437,8 +437,8 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
-	loop	= xio_ev_loop_init();
-	ctx	= xio_ctx_open(NULL, loop, POLLING_TIMEOUT);
+	loop	= xio_ev_loop_create();
+	ctx	= xio_ctx_create(NULL, loop, POLLING_TIMEOUT);
 
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
@@ -467,7 +467,7 @@ int main(int argc, char *argv[])
 		msg_pool_free(pool);
 	pool = NULL;
 
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 	xio_ev_loop_destroy(&loop);
 
 	return 0;

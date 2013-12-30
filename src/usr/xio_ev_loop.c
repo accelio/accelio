@@ -207,9 +207,9 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_init							     */
+/* xio_ev_loop_create							     */
 /*---------------------------------------------------------------------------*/
-void *xio_ev_loop_init()
+void *xio_ev_loop_create()
 {
 	struct xio_ev_loop	*loop;
 	int			retval;

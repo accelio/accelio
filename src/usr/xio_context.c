@@ -147,9 +147,9 @@ void xio_stats_handler(int fd, int events, void *data)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_open                                                              */
+/* xio_ctx_create                                                            */
 /*---------------------------------------------------------------------------*/
-struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
+struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
 		void *ev_loop,
 		int polling_timeout)
 {
@@ -280,9 +280,9 @@ cleanup1:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_close	                                                     */
+/* xio_ctx_destroy	                                                     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_close(struct xio_context *ctx)
+void xio_ctx_destroy(struct xio_context *ctx)
 {
 	int i;
 

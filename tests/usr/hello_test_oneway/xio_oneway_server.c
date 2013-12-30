@@ -176,7 +176,7 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
-		xio_session_close(session);
+		xio_session_destroy(session);
 		connection = NULL;
 		xio_ev_loop_stop(loop, 0);
 		break;
@@ -497,7 +497,7 @@ int main(int argc, char *argv[])
 		return -1;
 
 	/* initiate event loop dispatcher */
-	loop	= xio_ev_loop_init();
+	loop	= xio_ev_loop_create();
 	if (loop == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "event loop creation failed. reason " \
@@ -505,7 +505,7 @@ int main(int argc, char *argv[])
 		goto exit1;
 	}
 
-	ctx	= xio_ctx_open(NULL, loop, 0);
+	ctx	= xio_ctx_create(NULL, loop, 0);
 	if (ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
@@ -532,7 +532,7 @@ int main(int argc, char *argv[])
 		xio_unbind(server);
 	}
 
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 exit2:
 	xio_ev_loop_destroy(&loop);
 

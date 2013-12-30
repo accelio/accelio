@@ -88,7 +88,7 @@ static int on_session_event(struct xio_session *session,
 		xio_disconnect(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_session_close(session);
+		xio_session_destroy(session);
 		xio_ev_loop_stop(session_data->loop, 0);  /* exit */
 		break;
 	default:
@@ -153,14 +153,14 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	/* open default event loop */
-	session_data.loop = xio_ev_loop_init();
+	session_data.loop = xio_ev_loop_create();
 
 	/* create thread context for the client */
-	ctx = xio_ctx_open(NULL, session_data.loop, 0);
+	ctx = xio_ctx_create(NULL, session_data.loop, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_open(XIO_SESSION_CLIENT,
+	session = xio_session_create(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, &session_data);
 
 	/* connect the session  */
@@ -189,7 +189,7 @@ int main(int argc, char *argv[])
 		free(session_data.req[i].out.header.iov_base);
 
 	/* free the context */
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&session_data.loop);

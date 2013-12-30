@@ -714,7 +714,7 @@ void xio_shutdown(void);
  *
  * @returns xio context handle, or NULL upon error
  */
-struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
+struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
 				 void *ev_loop,
 				 int polling_timeout_us);
 
@@ -724,13 +724,13 @@ struct xio_context *xio_ctx_open(struct xio_loop_ops *loop_ops,
  * @param[in] ctx	Pointer to the xio context handle
  *
  */
-void xio_ctx_close(struct xio_context *ctx);
+void xio_ctx_destroy(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
 /* XIO session API                                                           */
 /*---------------------------------------------------------------------------*/
 /**
- * open new requester session
+ * creates new requester session
  *
  * @param[in] type	The type of the session
  * @param[in] attr	Structure of session attributes
@@ -742,7 +742,7 @@ void xio_ctx_close(struct xio_context *ctx);
  *
  * @returns xio session context, or NULL upon error
  */
-struct xio_session *xio_session_open(
+struct xio_session *xio_session_create(
 		enum xio_session_type type,
 		struct xio_session_attr *attr,
 		const char *uri,
@@ -757,7 +757,7 @@ struct xio_session *xio_session_open(
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_session_close(struct xio_session *session);
+int xio_session_destroy(struct xio_session *session);
 
 /**
  * creates connection handle
@@ -1055,7 +1055,7 @@ int xio_get_opt(void *xio_obj, int level, int optname,
  *
  * @returns event loop handle or NULL upon error
  */
-void *xio_ev_loop_init(void);
+void *xio_ev_loop_create(void);
 
 /**
  * xio_ev_loop_run - event loop main loop

@@ -185,7 +185,7 @@ cleanup1:
 	xio_session_free_connection(connection);
 
 cleanup:
-	xio_session_close(session);
+	xio_session_destroy(session);
 
 	return -1;
 }

@@ -410,15 +410,15 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 
 
 	/* open default event loop */
-	session_data->loop = xio_ev_loop_init();
+	session_data->loop = xio_ev_loop_create();
 
 	/* create thread context for the client */
-	session_data->ctx = xio_ctx_open(NULL, session_data->loop, 0);
+	session_data->ctx = xio_ctx_create(NULL, session_data->loop, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d",
 		get_ip(addr), get_port(addr));
-	session_data->session = xio_session_open(XIO_SESSION_CLIENT,
+	session_data->session = xio_session_create(XIO_SESSION_CLIENT,
 						 &attr, url,
 						 0, 0, session_data);
 	if (session_data->session == NULL)
@@ -472,15 +472,15 @@ cleanup1:
 	if (session_data->session) {
 		if (!session_data->disconnected) {
 			xio_ev_loop_run(session_data->loop);
-			xio_session_close(session_data->session);
+			xio_session_destroy(session_data->session);
 		}
 		else
-		     xio_session_close(session_data->session);
+		     xio_session_destroy(session_data->session);
 		session_data->session = NULL;
 	}
 cleanup:
 	/* free the context */
-	xio_ctx_close(session_data->ctx);
+	xio_ctx_destroy(session_data->ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&session_data->loop);
@@ -540,10 +540,10 @@ cleanup:
 	if (!session_data->disconnected) {
 		xio_disconnect(session_data->conn);
 		xio_ev_loop_run(session_data->loop);
-		xio_session_close(session_data->session);
+		xio_session_destroy(session_data->session);
 	}
 	/* free the context */
-	xio_ctx_close(session_data->ctx);
+	xio_ctx_destroy(session_data->ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&session_data->loop);

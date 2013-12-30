@@ -118,10 +118,6 @@ struct xio_session {
 /*---------------------------------------------------------------------------*/
 /* functions								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_create(
-		struct xio_session *parent_session,
-		struct xio_conn *conn);
-
 struct xio_session *xio_session_init(
 		enum xio_session_type type,
 		struct xio_session_attr *attr,

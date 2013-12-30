@@ -162,7 +162,7 @@ static int xio_device_thread_init()
 	int ret;
 
 	/* open default event loop */
-	dev_tdata.async_loop = xio_ev_loop_init();
+	dev_tdata.async_loop = xio_ev_loop_create();
 	if (!dev_tdata.async_loop) {
 		ERROR_LOG("xio_ev_loop_init failed\n");
 		return -1;

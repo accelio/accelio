@@ -562,7 +562,7 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
-	loop = xio_ev_loop_init();
+	loop = xio_ev_loop_create();
 	if (loop == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "event loop creation failed. reason " \
@@ -570,7 +570,7 @@ int main(int argc, char *argv[])
 		goto exit1;
 	}
 
-	ctx = xio_ctx_open(NULL, loop, 0);
+	ctx = xio_ctx_create(NULL, loop, 0);
 	if (ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
@@ -583,7 +583,7 @@ int main(int argc, char *argv[])
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_open(XIO_SESSION_CLIENT,
+	session = xio_session_create(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, NULL);
 	if (session == NULL) {
 		error = xio_errno();
@@ -647,7 +647,7 @@ int main(int argc, char *argv[])
 	fprintf(stdout, "exit signaled\n");
 
 exit4:
-	retval = xio_session_close(session);
+	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
 		fprintf(stderr, "session close failed. reason %d - (%s)\n",
@@ -655,7 +655,7 @@ exit4:
 	}
 
 exit3:
-	xio_ctx_close(ctx);
+	xio_ctx_destroy(ctx);
 exit2:
 	xio_ev_loop_destroy(&loop);
 exit1:

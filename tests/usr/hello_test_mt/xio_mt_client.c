@@ -251,11 +251,11 @@ static void *worker_thread(void *data)
 				     0, 0);
 
 	/* open default event loop */
-	tdata->loop = xio_ev_loop_init();
+	tdata->loop = xio_ev_loop_create();
 
 
 	/* create thread context for the client */
-	tdata->ctx = xio_ctx_open(NULL, tdata->loop, test_config.poll_timeout);
+	tdata->ctx = xio_ctx_create(NULL, tdata->loop, test_config.poll_timeout);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
@@ -302,7 +302,7 @@ static void *worker_thread(void *data)
 		msg_pool_free(tdata->pool);
 
 	/* free the context */
-	xio_ctx_close(tdata->ctx);
+	xio_ctx_destroy(tdata->ctx);
 
 	/* destroy the default loop */
 	xio_ev_loop_destroy(&tdata->loop);
@@ -585,7 +585,7 @@ int main(int argc, char *argv[])
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
-	sess_data.session = xio_session_open(XIO_SESSION_CLIENT,
+	sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, &sess_data);
 	if (sess_data.session == NULL) {
 		int error = xio_errno();
@@ -613,7 +613,7 @@ int main(int argc, char *argv[])
 		pthread_join(sess_data.tdata[i].thread_id, NULL);
 
 	/* close the session */
-	xio_session_close(sess_data.session);
+	xio_session_destroy(sess_data.session);
 
 cleanup:
 
