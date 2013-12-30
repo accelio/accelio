@@ -103,6 +103,14 @@ static struct xio_observer_node *xio_observable_find(
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
+	if (observable->observer_node &&
+	    observable->observer_node->observer == observer) {
+		ERROR_LOG("already exist: " \
+			  "observable:%p, observer:%p\n",
+			  observable, observable->observer_node->observer);
+		return observable->observer_node;
+	}
+
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 				 observers_list_node) {
@@ -136,6 +144,12 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 		return;
 	}
 	observer_node->observer = observer;
+
+	if (list_empty(&observable->observers_list))
+		observable->observer_node = observer_node;
+	else
+		observable->observer_node = NULL;
+
 	list_add(&observer_node->observers_list_node,
 		 &observable->observers_list);
 }
@@ -148,10 +162,14 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
+
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 			observers_list_node) {
 		if (observer == observer_node->observer) {
+			if (observable->observer_node == observer_node)
+				observable->observer_node = NULL;
+
 			list_del(&observer_node->observers_list_node);
 			kfree(observer_node);
 			break;
@@ -177,6 +195,13 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
+	if (observable->observer_node) {
+		observable->observer_node->observer->notify(
+				observable->observer_node->observer->impl,
+				observable->impl, event, event_data);
+		return;
+	}
+
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 				 observers_list_node) {
@@ -193,6 +218,13 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 					int event, void *event_data)
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
+
+	if (observable->observer_node) {
+		observable->observer_node->observer->notify(
+				observable->observer_node->observer->impl,
+				observable->impl, event, event_data);
+		return;
+	}
 
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
@@ -217,5 +249,6 @@ void xio_observable_unreg_all_observers(struct xio_observable *observable)
 		list_del(&observer_node->observers_list_node);
 		kfree(observer_node);
 	}
+	observable->observer_node = NULL;
 }
 

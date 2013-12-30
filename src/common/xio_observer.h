@@ -72,6 +72,7 @@ struct xio_observer_node {
 struct xio_observable {
 	void			*impl;
 	struct list_head	observers_list;
+	struct xio_observer_node *observer_node; /* for one observer */
 };
 #define XIO_OBSERVABLE_INIT(name, obj) \
 	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); }
