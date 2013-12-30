@@ -35,6 +35,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#define __GNU_SOURCE
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -225,7 +226,9 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%lu, last recv:%lu, delta:%lu\n",
-		       last_sent,  last_recv, last_sent-last_recv);
+		       (unsigned long)last_sent,
+		       (unsigned long)last_recv,
+		       (unsigned long)last_sent-last_recv);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop, 0);  /* exit */

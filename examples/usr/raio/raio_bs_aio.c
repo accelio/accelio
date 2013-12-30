@@ -114,7 +114,7 @@ static void raio_aio_iocb_prep(struct raio_bs_aio_info *info, int idx,
 	switch (cmd->op) {
 	case RAIO_CMD_PREAD:
 		/*
-		printf("fd:%d, buf:%p, count:%zd, offset:%zd\n",
+		printf("fd:%d, buf:%p, count:%ld, offset:%ld\n",
 		       cmd->fd, cmd->buf, cmd->bcount, cmd->offset);
 		*/
 		io_prep_pread(iocb, cmd->fd, cmd->buf,
@@ -122,7 +122,7 @@ static void raio_aio_iocb_prep(struct raio_bs_aio_info *info, int idx,
 		break;
 	case RAIO_CMD_PWRITE:
 		/*
-		printf("%d fd:%d, buf:%p, count:%zd, offset:%zd\n",
+		printf("%d fd:%d, buf:%p, count:%ld, offset:%ld\n",
 		       cmd->fd, cmd->buf, cmd->bcount, cmd->offset);
 		*/
 		io_prep_pwrite(iocb, cmd->fd, cmd->buf,
@@ -205,13 +205,13 @@ static void raio_aio_complete_one(struct io_event *ep)
 		if (((long)ep->res) < 0) {
 			fprintf(stderr, "completion error: %s - ",
 				strerror(-ep->res));
-			fprintf(stderr, "fd:%d, buf:%p, count:%zd, " \
-				"offset:%zd\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%ld, " \
+				"offset:%ld\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 		} else  {
-			fprintf(stderr, "fd:%d, buf:%p, count:%zd, " \
-				"offset:%zd\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%ld, " \
+				"offset:%ld\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 			fprintf(stderr, "fd:%d missing bytes got %ld\n",

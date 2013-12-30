@@ -3,7 +3,7 @@
 # additional include pathes necessary to compile the C programs
 AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@
 
-AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt \
+AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -lpthread \
 	     -L$(top_builddir)/src/usr/
 
 ###############################################################################

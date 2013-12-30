@@ -69,13 +69,13 @@ void *malloc_huge_pages(size_t size)
 	/* (libhugetlbfs is more efficient in this regard) */
 	real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
 
-	ptr = mmap64(NULL, real_size, PROT_READ | PROT_WRITE,
+	ptr = mmap(NULL, real_size, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS |
 			MAP_POPULATE | MAP_HUGETLB, -1, 0);
 	if (ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
 		int page_size = sysconf(_SC_PAGESIZE);
-		WARN_LOG("mmap64 rdma pool sz:%zu failed (errno=%d %m)\n",
+		WARN_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
 			 real_size, errno);
 		real_size = ALIGN(size + HUGE_PAGE_SZ, page_size);
 		retval = posix_memalign(&ptr, page_size, real_size);

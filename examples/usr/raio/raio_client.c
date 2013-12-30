@@ -309,7 +309,7 @@ int main(int argc, char *argv[])
 	/* calculate how many iterations are needed */
 	tot_num = div_and_round_up(stbuf.st_size, block_size);
 	if (tot_num == 0) {
-		fprintf(stderr, "invalid file size %zd %d\n",
+		fprintf(stderr, "invalid file size %ld %d\n",
 			stbuf.st_size, block_size);
 		goto close_file;
 	}

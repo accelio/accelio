@@ -19,6 +19,7 @@ RedHat
 	yum install librdmacm-devel libibverbs-devel numactl numactl-devel libaio-devel
 
 Ubuntu:
+	apt-get install libtool autoconf automake build-essential
 	apt-get install librdmacm-dev libibverbs-dev numactl libnuma-dev libaio-dev
 
 

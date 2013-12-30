@@ -219,7 +219,7 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, RX: %zd B\n",
 		       pps, txbw, rxbw, tdata->stat.txlen, tdata->stat.rxlen);
 		get_time(timeb, 40);
-		printf("[%s] thread [%d] - tid:%p  - message [%lu] %s - %s\n",
+		printf("[%s] thread [%d] - tid:%p  - message [%"PRIu64"] %s - %s\n",
 		       timeb,
 		       tdata->affinity,
 		       (void *)pthread_self(),
@@ -398,7 +398,7 @@ int on_msg_error(struct xio_session *session,
 	struct thread_data  *tdata = cb_user_context;
 
 	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	       session, msg->request->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
 

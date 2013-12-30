@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <sched.h>
 
 #include "libxio.h"
 

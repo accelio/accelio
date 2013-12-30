@@ -57,6 +57,10 @@
 #include <pthread.h>
 #include <assert.h>
 #include <limits.h>
+//#ifndef __USE_GNU
+//#define __USE_GNU
+//#endif
+#include <sched.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
