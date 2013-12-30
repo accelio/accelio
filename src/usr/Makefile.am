@@ -1,8 +1,12 @@
 # this is example-file: src/Makefile.am
 
 # additional include paths necessary to compile the C library
-AM_CFLAGS = -fPIC -DPIC  				\
-	    -I$(top_srcdir)/src/usr -I$(top_srcdir)/src/common -I$(top_srcdir)/include \
+AM_CFLAGS = -fPIC -DPIC  			\
+	    -I$(top_srcdir)/src/usr 		\
+	    -I$(top_srcdir)/src/usr/xio		\
+	    -I$(top_srcdir)/src/usr/rdma	\
+	    -I$(top_srcdir)/src/common  	\
+	    -I$(top_srcdir)/include		\
 	    @AM_CFLAGS@
 
 if HAVE_LD_VERSION_SCRIPT
@@ -27,15 +31,15 @@ libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  \
 			 $(top_srcdir)/include/xio_user.h 
 
 
-libxio_headers = 	./get_clock.h 				\
-			./xio_log.h				\
-			./xio_mem.h				\
-			./xio_os.h				\
-			./xio_rdma_mempool.h			\
-			./xio_rdma_transport.h			\
-			./xio_rdma_utils.h			\
-			./xio_tls.h				\
-			./xio_timers_list.h			\
+libxio_headers = 	./xio/get_clock.h 			\
+			./xio/xio_log.h				\
+			./xio/xio_mem.h				\
+			./xio/xio_os.h				\
+			./xio/xio_tls.h				\
+			./xio/xio_timers_list.h			\
+			./rdma/xio_rdma_mempool.h		\
+			./rdma/xio_rdma_transport.h		\
+			./rdma/xio_rdma_utils.h			\
 			../common/xio_schedwork.h		\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
@@ -48,7 +52,7 @@ libxio_headers = 	./get_clock.h 				\
 			../common/xio_protocol.h		\
 			../common/xio_server.h			\
 			../common/xio_session.h			\
-			../common/xio_session_priv.h	\
+			../common/xio_session_priv.h		\
 			../common/xio_sessions_store.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
@@ -67,21 +71,21 @@ libxio_headers = 	./get_clock.h 				\
 
 # the sources to add to the library and to add to the source distribution
 libxio_la_SOURCES =	$(libxio_headers)		\
-			xio_init.c			\
-			get_clock.c			\
-			xio_rdma_mempool.c		\
-			xio_rdma_utils.c		\
-			xio_rdma_verbs.c		\
-			xio_rdma_management.c		\
-			xio_rdma_datapath.c		\
-			xio_ev_loop.c			\
-			xio_log.c			\
-			xio_mem.c			\
-			xio_task.c			\
-			xio_usr_utils.c			\
-			xio_tls.c			\
-			xio_context.c			\
-			xio_schedwork.c			\
+			./xio/xio_init.c		\
+			./xio/get_clock.c		\
+			./xio/xio_ev_loop.c		\
+			./xio/xio_log.c			\
+			./xio/xio_mem.c			\
+			./xio/xio_task.c		\
+			./xio/xio_usr_utils.c		\
+			./xio/xio_tls.c			\
+			./xio/xio_context.c		\
+			./xio/xio_schedwork.c		\
+			./rdma/xio_rdma_mempool.c	\
+			./rdma/xio_rdma_utils.c		\
+			./rdma/xio_rdma_verbs.c		\
+			./rdma/xio_rdma_management.c	\
+			./rdma/xio_rdma_datapath.c	\
 			./linux/hexdump.c		\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
