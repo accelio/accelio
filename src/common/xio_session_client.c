@@ -462,6 +462,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	struct xio_session		*session = connection->session;
 	struct xio_new_session_rsp	*rsp = &session->new_ses_rsp;
 	int				retval = 0;
+	struct xio_connection		*tmp_connection;
 
 	retval = xio_read_setup_rsp(connection, task, &action);
 
@@ -526,26 +527,24 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
 				  session);
 
-			/* re - initialize the redirected connection */
-			session->lead_connection = xio_connection_init(
+			/* clone temporary connection */
+			tmp_connection = xio_connection_init(
 				session,
 				session->lead_connection->ctx,
 				session->lead_connection->conn_idx,
 				session->lead_connection->cb_user_context);
 
-			xio_connection_set_conn(session->lead_connection,
+			xio_connection_set_conn(tmp_connection,
 						connection->conn);
+			connection->conn = NULL;
+			session->lead_connection = tmp_connection;
+
 			/* close the lead/redirected connection */
 
 			/* temporary disable teardown - on cached conns close
 			 * callback may jump immidatly and since there are no
 			 * connections. teardown may notified
 			 */
-			session->disable_teardown = 1;
-			xio_conn_close(connection->conn, &session->observer);
-			connection->conn = NULL;
-			session->disable_teardown = 0;
-
 			session->state = XIO_SESSION_STATE_ACCEPTED;
 			/* open new connections */
 			retval = xio_session_accept_connection(session);
@@ -553,6 +552,16 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				ERROR_LOG("failed to accept connection\n");
 				return -1;
 			}
+			TRACE_LOG("sending fin request. session:%p, " \
+				  "connection:%p\n",
+				  session->lead_connection->session,
+				  session->lead_connection);
+
+			/* temporay disable teardown */
+			session->disable_teardown = 1;
+			xio_disconnect_initial_connection(
+					session->lead_connection);
+
 			return 0;
 		}
 		break;
@@ -568,11 +577,10 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			ERROR_LOG("failed to redirect connection\n");
 			return -1;
 		}
-
 		/* close the lead connection */
-		xio_conn_close(session->lead_connection->conn,
-			       &session->observer);
-
+		session->disable_teardown = 1;
+		xio_disconnect_initial_connection(
+				session->lead_connection);
 		return 0;
 		break;
 	case XIO_ACTION_REJECT:
@@ -720,6 +728,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 				  session, conn);
 			return -1;
 		}
+		session->disable_teardown = 0;
 
 		/* introduce the connection to the session */
 		xio_connection_send_hello_req(connection);

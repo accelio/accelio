@@ -184,6 +184,7 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 	xio_session_notify_new_connection(task->session, connection);
 
 	connection->session->state = XIO_SESSION_STATE_ONLINE;
+	connection->session->disable_teardown = 0;
 
 	TRACE_LOG("session state is now ONLINE. session:%p\n",
 		  connection->session);
@@ -409,6 +410,8 @@ int xio_accept(struct xio_session *session,
 		 * ONLINE state when first "hello" message arrives
 		 */
 		session->state = XIO_SESSION_STATE_ACCEPTED;
+		/* temporary disable teardown */
+		session->disable_teardown = 1;
 		TRACE_LOG("session state is now ACCEPT. session:%p\n",
 			  session);
 	} else {
@@ -536,6 +539,8 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 int xio_on_fin_req_recv(struct xio_connection *connection,
 			struct xio_task *task)
 {
+	TRACE_LOG("fin request received. session:%p, connection:%p\n",
+		  connection->session, connection);
 	xio_ack_disconnect(connection, task);
 	xio_session_notify_connection_closed(connection->session, connection);
 

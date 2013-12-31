@@ -958,6 +958,25 @@ int xio_connection_release_fin(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_disconnect_initial_connection					     */
+/*---------------------------------------------------------------------------*/
+int xio_disconnect_initial_connection(struct xio_connection *connection)
+{
+	struct xio_msg *msg;
+
+	msg = xio_msg_list_first(&connection->one_way_msg_pool);
+	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+
+	msg->type		= XIO_FIN_REQ;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iovlen	= 0;
+	msg->out.data_iovlen	= 0;
+
+	/* we don't want to send all queued messages yet - send directly */
+	return xio_connection_send(connection, msg);
+}
+/*---------------------------------------------------------------------------*/
 /* xio_do_disconnect							     */
 /*---------------------------------------------------------------------------*/
 int xio_do_disconnect(struct xio_connection *connection)

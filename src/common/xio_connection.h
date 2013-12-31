@@ -135,6 +135,9 @@ int xio_do_disconnect(struct xio_connection *conn);
 int xio_ack_disconnect(struct xio_connection *conn,
 		       struct xio_task *task);
 
+int xio_disconnect_initial_connection(
+		struct xio_connection *connection);
+
 int xio_connection_flush_msgs(struct xio_connection *conn);
 
 int xio_connection_flush_tasks(struct xio_connection *connection);

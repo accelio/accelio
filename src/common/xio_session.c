@@ -311,13 +311,19 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 void xio_session_notify_connection_teardown(struct xio_session *session,
 					  struct xio_connection *connection)
 {
+	int notify;
+
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT,
 		.reason = XIO_E_SUCCESS,
 		.conn = connection,
 		.conn_user_context = connection->cb_user_context
 	};
-	if (session->ses_ops.on_session_event)
+
+	notify = (!session->disable_teardown  ||
+                  session->type != XIO_SESSION_CLIENT);
+
+	if (session->ses_ops.on_session_event && notify)
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
