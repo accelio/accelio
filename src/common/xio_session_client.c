@@ -540,6 +540,11 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			session->lead_connection = tmp_connection;
 
 			/* close the lead/redirected connection */
+			/* temporay disable teardown */
+			session->disable_teardown = 1;
+			xio_disconnect_initial_connection(
+					session->lead_connection);
+
 
 			/* temporary disable teardown - on cached conns close
 			 * callback may jump immidatly and since there are no
@@ -556,11 +561,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				  "connection:%p\n",
 				  session->lead_connection->session,
 				  session->lead_connection);
-
-			/* temporay disable teardown */
-			session->disable_teardown = 1;
-			xio_disconnect_initial_connection(
-					session->lead_connection);
 
 			return 0;
 		}
