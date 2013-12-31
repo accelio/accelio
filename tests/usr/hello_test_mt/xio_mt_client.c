@@ -398,7 +398,7 @@ int on_msg_error(struct xio_session *session,
 	struct thread_data  *tdata = cb_user_context;
 
 	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
-	       session, msg->request->sn, xio_strerror(error));
+	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
 
