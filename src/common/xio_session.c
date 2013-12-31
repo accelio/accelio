@@ -1181,8 +1181,9 @@ int xio_session_destroy(struct xio_session *session)
 	if (list_empty(&session->connections_list)) {
 		xio_session_release(session);
 	} else {
-		xio_set_error(EINVAL);
-		ERROR_LOG("xio_session_close failed: not empty\n");
+		xio_set_error(EBUSY);
+		ERROR_LOG("xio_session_close failed: " \
+			  "connections are still open\n");
 		return -1;
 	}
 
