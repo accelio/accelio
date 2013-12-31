@@ -35,11 +35,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*#include <asm/types.h> */
-#include <sys/socket.h>
-#include <sys/syscall.h>
-#include <linux/netlink.h>
-
 #include "xio_os.h"
 #include "libxio.h"
 #include "xio_observer.h"

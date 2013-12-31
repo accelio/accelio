@@ -2,7 +2,7 @@
 
 # additional include pathes necessary to compile the C programs
 AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
-AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -laio \
+AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -lpthread -laio \
 	     -L$(top_builddir)/src/usr/ 
 
 ###############################################################################
@@ -45,7 +45,7 @@ raio_server_SOURCES = raio_server.c		\
 raio_client_SOURCES = raio_client.c		\
 		      get_clock.c
 
-libraio_la_LDFLAGS = -lxio -lrdmacm -libverbs -laio -lrt \
+libraio_la_LDFLAGS = -lxio -lrdmacm -libverbs -laio -lrt -lpthread \
 	     	     -L$(top_builddir)/src/usr/ 
 
 #libraio_la_LDFLAGS = -shared -rdynamic	 	\

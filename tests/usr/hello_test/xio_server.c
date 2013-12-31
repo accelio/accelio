@@ -177,7 +177,8 @@ static int on_session_event(struct xio_session *session,
 		event_data->conn_user_context = cb_prv_data;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("last sent:%lu, last comp:%lu, delta:%lu\n",
+		printf("last sent:%"PRIu64", last comp:%"PRIu64", " \
+		       "delta:%"PRIu64"\n",
 		       last_sent,  last_comp, last_sent-last_comp);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:

@@ -44,6 +44,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <errno.h>
 #include <malloc.h>
@@ -57,9 +58,6 @@
 #include <pthread.h>
 #include <assert.h>
 #include <limits.h>
-//#ifndef __USE_GNU
-//#define __USE_GNU
-//#endif
 #include <sched.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -70,6 +68,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/timerfd.h>
+#include <sys/syscall.h>
 #include <arpa/inet.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -79,6 +78,7 @@
 #include <linux/atomic.h>
 #include <linux/kref.h>
 #include <linux/usr.h>
+#include <linux/netlink.h>
 
 #include "get_clock.h"
 

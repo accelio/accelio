@@ -205,13 +205,13 @@ static void raio_aio_complete_one(struct io_event *ep)
 		if (((long)ep->res) < 0) {
 			fprintf(stderr, "completion error: %s - ",
 				strerror(-ep->res));
-			fprintf(stderr, "fd:%d, buf:%p, count:%ld, " \
-				"offset:%ld\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%"PRIu64", " \
+				"offset:%"PRId64"\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 		} else  {
-			fprintf(stderr, "fd:%d, buf:%p, count:%ld, " \
-				"offset:%ld\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%"PRIu64", " \
+				"offset:%"PRId64"\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 			fprintf(stderr, "fd:%d missing bytes got %ld\n",

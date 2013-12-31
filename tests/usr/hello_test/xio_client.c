@@ -225,10 +225,9 @@ static int on_session_event(struct xio_session *session,
 		xio_disconnect(event_data->conn);
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("last sent:%lu, last recv:%lu, delta:%lu\n",
-		       (unsigned long)last_sent,
-		       (unsigned long)last_recv,
-		       (unsigned long)last_sent-last_recv);
+		printf("last sent:%"PRIu64", last recv:%"PRIu64", " \
+		       "delta:%"PRIu64"\n",
+		       last_sent, last_recv, last_sent-last_recv);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop, 0);  /* exit */

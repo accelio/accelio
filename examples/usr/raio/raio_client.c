@@ -310,7 +310,7 @@ int main(int argc, char *argv[])
 	tot_num = div_and_round_up(stbuf.st_size, block_size);
 	if (tot_num == 0) {
 		fprintf(stderr, "invalid file size %ld %d\n",
-			stbuf.st_size, block_size);
+			(unsigned long)stbuf.st_size, block_size);
 		goto close_file;
 	}
 
