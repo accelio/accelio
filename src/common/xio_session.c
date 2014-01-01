@@ -195,9 +195,10 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	dest_session_id = ntohl(tmp_hdr->dest_session_id);
 
 	observer = xio_conn_observer_lookup(task->conn, dest_session_id);
-	if (observer != NULL)
+	if (observer != NULL &&  observer->impl)
 		return observer->impl;
 
+	printf("***********************\n");
 	/* fall back to store - this is should only happen when new connection
 	 * message arrive to a portal on the server - just for the first
 	 * message
@@ -1183,6 +1184,7 @@ int xio_session_destroy(struct xio_session *session)
 	if (session == NULL)
 		return 0;
 
+	TRACE_LOG("session destroy:%p\n", session);
 	session->state = XIO_SESSION_STATE_CLOSING;
 	if (list_empty(&session->connections_list)) {
 		xio_session_release(session);

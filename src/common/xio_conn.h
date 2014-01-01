@@ -138,7 +138,7 @@ struct xio_conn {
 
 	int				cid;
 	enum xio_conn_state		state;
-	int				is_first_setup_req;
+	int				is_first_req;
 	xio_ctx_timer_handle_t		close_time_hndl;
 
 	struct list_head		observers_htbl;
@@ -295,7 +295,15 @@ static inline int xio_conn_get_proto(struct xio_conn *conn)
 /*---------------------------------------------------------------------------*/
 static inline void xio_conn_addref(struct xio_conn *conn)
 {
-	kref_get(&conn->kref);
+
+	if (conn->close_time_hndl) {
+		kref_init(&conn->kref);
+		xio_ctx_timer_del(conn->transport_hndl->ctx,
+				conn->close_time_hndl);
+		conn->close_time_hndl = NULL;
+	} else {
+		kref_get(&conn->kref);
+	}
 }
 
 /*---------------------------------------------------------------------------*/

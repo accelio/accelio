@@ -145,18 +145,13 @@ struct xio_observer *xio_conn_observer_lookup(struct xio_conn *conn,
 					      uint32_t id)
 {
 	struct xio_observers_htbl_node	*node;
-	static struct xio_observers_htbl_node *last_node /*= NULL */;
 
-	if (last_node && last_node->id == id)
-		return last_node->observer;
-
+	printf("*****************************************\n");
 	list_for_each_entry(node,
 			    &conn->observers_htbl,
 			    observers_htbl_node) {
-		if (node->id == id) {
-			last_node = node;
+		if (node->id == id)
 			return node->observer;
-		}
 	}
 
 	return NULL;
@@ -189,13 +184,8 @@ void xio_conn_unreg_observer(struct xio_conn *conn,
 static void xio_pre_put_task(struct xio_task *task)
 {
 	task->imsg.user_context		= 0;
-	task->imsg.in.header.iov_base	= NULL;
-	task->imsg.in.header.iov_len	= 0;
-	task->imsg.in.data_iovlen	= 0;
 	task->imsg.flags		= 0;
-	task->omsg			= NULL;
 	task->tlv_type			= 0xdead;
-	task->sender_task		= NULL;
 	task->omsg_flags		= 0;
 	task->state			= XIO_TASK_STATE_INIT;
 }
@@ -583,10 +573,10 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 		if (task->tlv_type == XIO_SESSION_SETUP_REQ) {
 			/* add reference count to opened connection that new
 			 * session is join in */
-			if (!conn->is_first_setup_req)
+			if (!conn->is_first_req)
 				xio_conn_addref(conn);
 			else
-				conn->is_first_setup_req = 0;
+				conn->is_first_req = 0;
 
 			/* always route "hello" to server */
 			xio_conn_notify_server(
@@ -595,6 +585,11 @@ static int xio_conn_on_recv_req(struct xio_conn *conn,
 					&conn_event_data);
 			return 0;
 		} else if (task->tlv_type == XIO_CONNECTION_HELLO_REQ) {
+			if (!conn->is_first_req)
+				xio_conn_addref(conn);
+			else
+				conn->is_first_req = 0;
+
 			/* always route "hello" to server */
 			xio_conn_notify_server(
 					conn,
@@ -895,6 +890,7 @@ static void xio_conn_release(void *data)
 	struct xio_conn *conn = data;
 
 	TRACE_LOG("physical connection close. conn:%p\n", conn);
+	xio_conns_store_remove(conn->cid);
 
 	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
 		conn->state = XIO_CONN_STATE_CLOSED;
@@ -913,6 +909,9 @@ static void xio_on_context_close(struct xio_conn *conn,
 				 struct xio_context *ctx)
 {
 	TRACE_LOG("xio_on_context_close. conn:%p, ctx:%p\n", conn, ctx);
+
+	/* remove the conn from table */
+	xio_conns_store_remove(conn->cid);
 
 	/* shut down the context and its decendent without waiting */
 	if (conn->transport->context_shutdown)
@@ -980,7 +979,7 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	conn->transport			= parent_conn->transport;
 	kref_init(&conn->kref);
 	conn->state			= XIO_CONN_STATE_OPEN;
-	conn->is_first_setup_req	= 1;
+	conn->is_first_req		= 1;
 
 	xio_conns_store_add(conn, &conn->cid);
 
@@ -1086,12 +1085,12 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
 
-	xio_conns_store_remove(conn->cid);
-
 	xio_conn_initial_pool_free(conn);
 
 	xio_conn_primary_free_tasks(conn);
 	xio_conn_primary_pool_free(conn);
+
+	xio_conns_store_remove(conn->cid);
 
 	if (conn->transport_hndl)
 		xio_context_unreg_observer(conn->transport_hndl->ctx,
@@ -1378,15 +1377,8 @@ struct xio_conn *xio_conn_open(
 						    observer);
 			xio_conn_hash_observer(conn, observer, oid);
 		}
+		xio_conn_addref(conn);
 
-		if (conn->close_time_hndl) {
-			kref_init(&conn->kref);
-			xio_ctx_timer_del(conn->transport_hndl->ctx,
-					  conn->close_time_hndl);
-			conn->close_time_hndl = NULL;
-		} else {
-			kref_get(&conn->kref);
-		}
 		TRACE_LOG("conn: [addref] conn:%p, refcnt:%d\n", conn,
 			  atomic_read(&conn->kref.refcount));
 
