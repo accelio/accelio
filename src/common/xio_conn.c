@@ -146,7 +146,6 @@ struct xio_observer *xio_conn_observer_lookup(struct xio_conn *conn,
 {
 	struct xio_observers_htbl_node	*node;
 
-	printf("*****************************************\n");
 	list_for_each_entry(node,
 			    &conn->observers_htbl,
 			    observers_htbl_node) {

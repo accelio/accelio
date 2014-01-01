@@ -198,7 +198,6 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	if (observer != NULL &&  observer->impl)
 		return observer->impl;
 
-	printf("***********************\n");
 	/* fall back to store - this is should only happen when new connection
 	 * message arrive to a portal on the server - just for the first
 	 * message
