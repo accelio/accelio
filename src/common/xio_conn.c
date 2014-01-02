@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies® BSD license
+ * directory of this source tree, or the Mellanox Technologies�� BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *      - Neither the name of the Mellanox Technologies�� nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -918,9 +918,9 @@ static void xio_on_context_close(struct xio_conn *conn,
 	/* remove the conn from table */
 	xio_conns_store_remove(conn->cid);
 
-	/* shut down the context and its decendent without waiting */
+	/* shut down the context and its dependent without waiting */
 	if (conn->transport->context_shutdown)
-		conn->transport->context_shutdown(conn->transport, ctx);
+		conn->transport->context_shutdown(conn->transport_hndl, ctx);
 
 	/* at that stage the conn->transport_hndl no longer exist */
 	conn->transport_hndl = NULL;
@@ -1603,7 +1603,14 @@ static void xio_conn_delayed_close(struct kref *kref)
 
 	TRACE_LOG("xio_conn_deleyed close. conn:%p, state:%d\n",
 		  conn, conn->state);
-	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
+
+	switch (conn->state) {
+	case XIO_CONN_STATE_LISTEN:
+		/* the listener conn, called from xio_unbind */
+	case XIO_CONN_STATE_DISCONNECTED:
+		xio_conn_release(conn);
+		break;
+	default:
 		retval = xio_ctx_timer_add(
 				conn->transport_hndl->ctx,
 				XIO_CONN_CLOSE_TIMEOUT, conn,
@@ -1611,8 +1618,7 @@ static void xio_conn_delayed_close(struct kref *kref)
 				&conn->close_time_hndl);
 		if (retval)
 			ERROR_LOG("xio_conn_delayed_close failed\n");
-	} else {
-		xio_conn_release(conn);
+		break;
 	}
 }
 

@@ -349,7 +349,7 @@ static void xio_cq_release(struct xio_cq *tcq, int delete_fd)
 
 	list_del(&tcq->cq_list_entry);
 
-	/* clean all redundent connections attached to this cq */
+	/* clean all redundant connections attached to this cq */
 	list_for_each_entry_safe(rdma_hndl, tmp_rdma_hndl, &tcq->trans_list,
 				 trans_list_entry) {
 		xio_rdma_flush_all_tasks(rdma_hndl);
@@ -372,7 +372,7 @@ static void xio_cq_release(struct xio_cq *tcq, int delete_fd)
 				  errno);
 	}
 
-	/*the event loop may be release by the time this fuction is called */
+	/* the event loop may be release by the time this function is called */
 	retval = ibv_destroy_cq(tcq->cq);
 	if (retval)
 		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
@@ -612,7 +612,7 @@ static void xio_cm_list_release()
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_context_shutdown						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_context_shutdown(struct xio_transport *transport,
+static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
 	struct xio_device	*dev;
@@ -877,7 +877,6 @@ static int xio_rdma_flush_task_list(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
@@ -913,7 +912,7 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 	if (!list_empty(&rdma_hndl->tx_ready_list)) {
 		TRACE_LOG("tx_ready_list not empty!\n");
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
-		/* for task that attched to senders with ref coount = 2 */
+		/* for task that attached to senders with ref coount = 2 */
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
 	}
 
@@ -924,6 +923,7 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_calc_pool_size						     */
 /*---------------------------------------------------------------------------*/
@@ -945,7 +945,6 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 		  rdma_hndl->num_tasks,
 		  rdma_hndl->membuf_sz);
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_alloc						     */
@@ -1468,7 +1467,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
-			DEBUG_LOG("conn:%p rdma_disconnect failed, %m\n",
+			DEBUG_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
 	}
 }
@@ -1781,7 +1780,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			rdma_hndl->state = XIO_STATE_CLOSED;
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
-				DEBUG_LOG("conn:%p rdma_disconnect failed, " \
+				DEBUG_LOG("handle:%p rdma_disconnect failed, " \
 					  "%m\n", rdma_hndl);
 		}  else if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
 			rdma_hndl->state = XIO_STATE_CLOSED;

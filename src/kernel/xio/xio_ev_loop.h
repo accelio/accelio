@@ -35,89 +35,66 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <linux/kernel.h>
-#include <linux/module.h>
+#ifndef XIO_EV_LOOP_H
+#define XIO_EV_LOOP_H
 
-#include "xio_os.h"
 #include "libxio.h"
-#include "xio_observer.h"
-#include "xio_common.h"
-#include "xio_sessions_store.h"
-#include "xio_conns_store.h"
-#include "xio_conn.h"
-#include "xio_context.h"
-
-MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
-MODULE_DESCRIPTION("XIO generic part "
-	   "v" DRV_VERSION " (" DRV_RELDATE ")");
-MODULE_LICENSE("Dual BSD/GPL");
 
 /*---------------------------------------------------------------------------*/
-/* xio_constructor							     */
+/* defines								     */
 /*---------------------------------------------------------------------------*/
 
-static int __init xio_init_module(void)
-{
-	sessions_store_construct();
-	conns_store_construct();
+#define XIO_EV_LOOP_WAKE	1
+#define XIO_EV_LOOP_STOP	(1 << 1)
+#define XIO_EV_LOOP_DOWN	(1 << 2)
 
-	return 0;
-}
+/*---------------------------------------------------------------------------*/
+/* structures								     */
+/*---------------------------------------------------------------------------*/
 
-static void __exit xio_cleanup_module(void)
-{
-}
+struct xio_ev_loop {
+	struct xio_context *ctx;
+	void *loop_object;
+	int  (*run)(void *loop_hndl);
+	void (*stop)(void *loop_hndl);
+	int  (*add_event)(void *loop_hndl, struct xio_ev_data *data);
+	unsigned long	flags;
+	unsigned long	states;
+	union {
+		struct {
+			union {
+				wait_queue_head_t wait;
+				struct tasklet_struct tasklet;
+			};
+		};
+		struct workqueue_struct *workqueue;
+	};
+	/* for thread, tasklet and for stopped workqueue  */
+	struct llist_head ev_llist;
+};
 
-module_init(xio_init_module);
-module_exit(xio_cleanup_module);
+/*---------------------------------------------------------------------------*/
+/* XIO default event loop API						     */
+/*									     */
+/* NoTE: xio provides default muxer implementation around epoll.	     */
+/* users are encouraged to utilize their own implementations and provides    */
+/* appropriate services to xio via the xio's context open interface	     */
+/*---------------------------------------------------------------------------*/
+/**
+ * initializes event loop handle
+ *
+ * @returns event loop handle or NULL upon error
+ */
+void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
+		       struct xio_loop_ops *loop);
 
-EXPORT_SYMBOL(xio_context_create);
-EXPORT_SYMBOL(xio_context_destroy);
+/**
+ * destroy the event loop
+ *
+ * @param[in] loop_hndl		Handle to event loop
+ */
+void xio_ev_loop_destroy(void *loop);
 
-EXPORT_SYMBOL(xio_context_reg_observer);
-EXPORT_SYMBOL(xio_context_unreg_observer);
 
-EXPORT_SYMBOL(xio_observable_reg_observer);
-EXPORT_SYMBOL(xio_observable_unreg_observer);
-EXPORT_SYMBOL(xio_observable_notify_observer);
-EXPORT_SYMBOL(xio_observable_notify_all_observers);
-EXPORT_SYMBOL(xio_observable_notify_any_observer);
-EXPORT_SYMBOL(xio_observable_unreg_all_observers);
-
-EXPORT_SYMBOL(xio_set_error);
-EXPORT_SYMBOL(xio_strerror);
-EXPORT_SYMBOL(xio_errno);
-
-EXPORT_SYMBOL(xio_reg_transport);
-EXPORT_SYMBOL(xio_unreg_transport);
-
-EXPORT_SYMBOL(memcpyv);
-EXPORT_SYMBOL(memclonev);
-
-EXPORT_SYMBOL(xio_context_add_event);
-EXPORT_SYMBOL(xio_context_stop_loop);
-EXPORT_SYMBOL(xio_context_run_loop);
-
-EXPORT_SYMBOL(xio_uri_to_ss);
-EXPORT_SYMBOL(xio_session_create);
-EXPORT_SYMBOL(xio_session_destroy);
-EXPORT_SYMBOL(xio_session_event_str);
-
-EXPORT_SYMBOL(xio_bind);
-EXPORT_SYMBOL(xio_accept);
-EXPORT_SYMBOL(xio_unbind);
-EXPORT_SYMBOL(xio_connect);
-EXPORT_SYMBOL(xio_disconnect);
-
-EXPORT_SYMBOL(xio_get_connection);
-EXPORT_SYMBOL(xio_connection_destroy);
-
-EXPORT_SYMBOL(xio_send_request);
-EXPORT_SYMBOL(xio_send_response);
-EXPORT_SYMBOL(xio_release_response);
-
-EXPORT_SYMBOL(xio_write_tlv);
-EXPORT_SYMBOL(xio_read_tlv);
-EXPORT_SYMBOL(xio_iov_length);
-EXPORT_SYMBOL(xio_iovex_length);
+#endif
 

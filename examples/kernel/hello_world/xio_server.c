@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies® BSD license
+ * directory of this source tree, or the Mellanox Technologies�� BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *      - Neither the name of the Mellanox Technologies�� nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -39,6 +39,13 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
+#include <asm/atomic.h>
+#else
+#include <linux/atomic.h>
+#endif
+#include <linux/completion.h>
 
 #include "libxio.h"
 
@@ -56,20 +63,37 @@ module_param_named(port, xio_argv[2], charp, 0);
 MODULE_PARM_DESC(port, "Port to receice request from");
 
 static struct task_struct *xio_main_th;
+static struct completion cleanup_complete;
 
 #define QUEUE_DEPTH		512
+#define PRINT_COUNTER		4000000
 
 /* server private data */
-struct hw_server_data {
+struct server_data {
 	struct xio_context	*ctx;
+	struct xio_session	*session;
 	struct xio_msg	rsp[QUEUE_DEPTH];	/* global message */
 };
+
+static struct server_data *g_server_data = 0;
+atomic_t module_state;
 
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
+	static int cnt = 0;
+
+	if (++cnt == PRINT_COUNTER) {
+		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
+		printk("message: [%llu] - %s\n",
+		       (req->sn + 1), (char *)req->in.header.iov_base);
+		cnt = 0;
+	}
+	req->in.header.iov_base	  = NULL;
+	req->in.header.iov_len	  = 0;
+	req->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -79,14 +103,25 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct hw_server_data *server_data = cb_user_context;
+	struct server_data *server_data = cb_user_context;
+
 	printk("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       xio_strerror(event_data->reason));
 
-	xio_session_close(session);
-	/* exit */
-	xio_ev_loop_stop(server_data->ctx);
+	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
+		break;
+	case XIO_SESSION_TEARDOWN_EVENT:
+		server_data->session = NULL;
+		xio_session_destroy(session);
+		if (atomic_read(&module_state) & 0x80)
+			xio_context_stop_loop(server_data->ctx); /* exit */
+		break;
+	default:
+		break;
+	};
 
 	return 0;
 }
@@ -98,7 +133,11 @@ static int on_new_session(struct xio_session *session,
 			struct xio_new_session_req *req,
 			void *cb_user_context)
 {
-	/* automaticly accept the request */
+	struct server_data *server_data = cb_user_context;
+
+	server_data->session = session;
+
+	/* Automatically accept the request */
 	xio_accept(session, NULL, 0, NULL, 0);
 
 	return 0;
@@ -112,7 +151,7 @@ static int on_request(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct hw_server_data *server_data = cb_user_context;
+	struct server_data *server_data = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
@@ -137,6 +176,34 @@ struct xio_session_ops server_ops = {
 	.on_msg_error			=  NULL
 };
 
+static void xio_module_down(void *data)
+{
+	struct server_data *server_data;
+	struct xio_connection *connection;
+	struct xio_session *session;
+
+	server_data = (struct server_data *) data;
+	if (!server_data->session)
+		goto stop_loop_now;
+
+	connection = xio_get_connection(server_data->session, server_data->ctx);
+	if (!connection)
+		goto destroy_session;
+
+	xio_connection_destroy(connection);
+	return;
+
+destroy_session:
+	/* in multi thread version on need to user reference count */
+	session = server_data->session;
+	server_data->session = NULL;
+	xio_session_destroy(session);
+
+stop_loop_now:
+	/* No session -> no XIO_SESSION_TEARDOWN_EVENT */
+	xio_context_stop_loop(server_data->ctx); /* exit */
+}
+
 /*---------------------------------------------------------------------------*/
 /* main									     */
 /*---------------------------------------------------------------------------*/
@@ -144,10 +211,12 @@ static int xio_server_main(void *data)
 {
 	char **argv = (char **) data;
 	struct xio_server	*server;	/* server portal */
-	struct hw_server_data	*server_data;
+	struct server_data	*server_data;
 	char			url[256];
 	struct xio_context	*ctx;
 	int			i;
+
+	atomic_add(2, &module_state);
 
 	server_data = kzalloc(sizeof(*server_data), GFP_KERNEL);
 	if (!server_data) {
@@ -156,7 +225,7 @@ static int xio_server_main(void *data)
 	}
 
 	/* create thread context for the server */
-	ctx = xio_ctx_open(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
+	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
 	if (!ctx) {
 		kfree(server_data);
 		printk("context open filed\n");
@@ -178,7 +247,10 @@ static int xio_server_main(void *data)
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, server_data);
 	if (server) {
 		printk("listen to %s\n", url);
-		xio_ev_loop_run(ctx);
+
+		g_server_data = server_data;
+		if (atomic_add_unless(&module_state, 4, 0x83))
+			xio_context_run_loop(ctx);
 
 		/* normal exit phase */
 		printk("exit signaled\n");
@@ -192,9 +264,11 @@ static int xio_server_main(void *data)
 		kfree(server_data->rsp[i].out.header.iov_base);
 
 	/* free the context */
-	xio_ctx_close(ctx);
+	xio_context_destroy(ctx);
 
 	kfree(server_data);
+
+	complete_and_exit(&cleanup_complete, 0);
 
 	return 0;
 }
@@ -206,17 +280,36 @@ static int __init xio_hello_init_module(void)
 		return -EINVAL;
 	}
 
+	atomic_set(&module_state, 1);
+	init_completion(&cleanup_complete);
+
 	xio_main_th = kthread_run(xio_server_main, xio_argv, "xio-hello-server");
-	if (IS_ERR(xio_main_th))
+	if (IS_ERR(xio_main_th)) {
+		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
+	}
 
 	return 0;
 }
 
 static void __exit xio_hello_cleanup_module(void)
 {
-	/* Need to gracefull stop the server */
-	kthread_stop(xio_main_th);
+	struct xio_ev_data down_event;
+	int state;
+
+	state = atomic_add_return(0x80, &module_state);
+
+	if (state & 4) {
+		/* thread is running, loop is still running */
+		memset(&down_event, 0, sizeof(down_event));
+		down_event.handler = xio_module_down;
+		down_event.data = (void *) g_server_data;
+		xio_context_add_event(g_server_data->ctx, &down_event);
+	}
+
+	/* wait for thread to terminate */
+	if (state & 2)
+		wait_for_completion(&cleanup_complete);
 }
 
 module_init(xio_hello_init_module);

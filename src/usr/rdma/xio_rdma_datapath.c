@@ -179,7 +179,7 @@ static int xio_rdma_write_sn(struct xio_task *task,
 	/* goto the first transport header*/
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 
-	/* jump over the first uint16_t */
+	/* jump over the first uint32_t */
 	xio_mbuf_inc(&task->mbuf, sizeof(uint32_t));
 
 	/* and set serial number */
@@ -581,7 +581,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 				ERROR_LOG("rdma_hndl:%p rdma_disconnect" \
 					  "failed, %m\n", rdma_hndl);
 		} else {
-			/* TODO: handle each error specificly */
+			/* TODO: handle each error specifically */
 			ERROR_LOG("ASSERT: program abort\n");
 			exit(0);
 		}
@@ -1078,7 +1078,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
 
-	/* point to trasport header */
+	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -1103,7 +1103,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			   sizeof(struct xio_req_hdr));
 
-	/* IN: requester expect small input writen via send */
+	/* IN: requester expect small input written via send */
 	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
 		sge.addr = 0;
 		sge.length = task->omsg->in.data_iov[i].iov_len;
@@ -1183,7 +1183,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	size_t				hdr_len;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	/* point to trasport header */
+	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -1262,7 +1262,7 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 {
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
 
-	/* point to trasport header */
+	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_rsp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -1297,7 +1297,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 {
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
 
-	/* point to trasport header */
+	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_rsp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -2175,7 +2175,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					omsg->status = XIO_E_SUCCESS;
 				}
 				if (omsg->in.data_iov[0].iov_base)  {
-					/* user porvided buffer so do copy */
+					/* user provided buffer so do copy */
 					omsg->in.data_iovlen = memcpyv(
 					  (struct xio_iovec *)omsg->in.data_iov,
 					  omsg->in.data_iovlen,
@@ -3083,7 +3083,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 		xio_rdma_read_setup_msg(rdma_hndl, task, &req);
 
-		/* current implementation is symatric */
+		/* current implementation is symmetric */
 		rsp->buffer_sz	= min(req.buffer_sz,
 				      rdma_hndl->max_send_buf_sz);
 		rsp->sq_depth	= min(req.sq_depth, rdma_hndl->rq_depth);

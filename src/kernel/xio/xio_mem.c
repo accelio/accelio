@@ -37,3 +37,6 @@
  */
 #include "xio_os.h"
 #include "xio_common.h"
+
+int disable_huge_pages  = 0;
+
