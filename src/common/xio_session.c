@@ -330,9 +330,9 @@ void xio_session_notify_connection_teardown(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_release							     */
+/* xio_session_pre_teardown						     */
 /*---------------------------------------------------------------------------*/
-static void xio_session_release(struct xio_session *session)
+static void xio_session_pre_teardown(struct xio_session *session)
 {
 	int i;
 
@@ -346,10 +346,20 @@ static void xio_session_release(struct xio_session *session)
 	kfree(session->portals_array);
 	kfree(session->user_context);
 	kfree(session->uri);
-	mutex_destroy(&session->lock);
-	kfree(session);
+	session->state = XIO_SESSION_STATE_CLOSED;
 
-	TRACE_LOG("session released\n");
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_post_teardown						     */
+/*---------------------------------------------------------------------------*/
+static void xio_session_post_teardown(struct xio_session *session)
+{
+	if (session->state == XIO_SESSION_STATE_CLOSED) {
+		TRACE_LOG("session %p released\n", session);
+		mutex_destroy(&session->lock);
+		kfree(session);
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -635,7 +645,6 @@ int xio_on_conn_closed(struct xio_session *session,
 		       union xio_conn_event_data *event_data)
 {
 	struct xio_connection		*connection;
-	int				teardown = 0;
 	int				reason;
 
 	DEBUG_LOG("session:%p - conn:%p close complete\n", session, conn);
@@ -661,34 +670,32 @@ int xio_on_conn_closed(struct xio_session *session,
 		xio_connection_close(session->lead_connection);
 		session->lead_connection = NULL;
 		TRACE_LOG("lead connection is closed\n");
-		spin_lock(&session->connections_list_lock);
-		teardown = (session->connections_nr == 0);
-		spin_unlock(&session->connections_list_lock);
 	} else if (session->redir_connection &&
 		   session->redir_connection->conn == conn) {
 		xio_connection_close(session->redir_connection);
 		session->redir_connection = NULL;
 		TRACE_LOG("redirected connection is closed\n");
-		spin_lock(&session->connections_list_lock);
-		teardown = (session->connections_nr == 0);
-		spin_unlock(&session->connections_list_lock);
 	} else {
 		connection = xio_session_find_connection(session, conn);
 		xio_connection_flush_tasks(connection);
-		spin_lock(&session->connections_list_lock);
-		teardown = (session->connections_nr == 1);
-		spin_unlock(&session->connections_list_lock);
 		xio_session_free_connection(connection);
 	}
 	if (session->disable_teardown)
 		return 0;
 
-	if (teardown && !session->lead_connection &&
+	mutex_lock(&session->lock);
+	if (session->state != XIO_SESSION_STATE_CLOSED &&
+	    !session->connections_nr && !session->lead_connection &&
 	    !session->redir_connection) {
+		session->in_notify = 1;
 		xio_session_notify_teardown(
 			session,
 			reason);
-	}
+		session->in_notify = 0;
+		mutex_unlock(&session->lock);
+		xio_session_post_teardown(session);
+	} else
+		mutex_unlock(&session->lock);
 
 	return 0;
 }
@@ -839,19 +846,6 @@ int xio_on_send_completion(struct xio_session *session,
 	int			retval = -1;
 
 	connection = task->connection;
-	/*
-	if (connection == NULL) {
-		connection = xio_session_assign_conn(session, conn);
-		if (connection == NULL) {
-			ERROR_LOG("failed to find connection conn:%p. " \
-					"dropping message type:0x%x\n",
-					conn,
-					task->tlv_type);
-			xio_tasks_pool_put(task);
-			return -1;
-		}
-	}
-	*/
 
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
@@ -1162,13 +1156,16 @@ int xio_session_disconnect(struct xio_session *session,
 			spin_unlock(&session->connections_list_lock);
 			xio_session_free_connection(connection);
 		} else {
-			teardown = list_empty(&session->connections_list);
+			teardown = (session->connections_nr == 0);
 		}
 		if (teardown && !session->lead_connection &&
 		    !session->redir_connection) {
+			session->in_notify = 1;
 			xio_session_notify_teardown(
 						session,
 						XIO_E_SESSION_DISCONECTED);
+			session->in_notify = 0;
+			xio_session_post_teardown(session);
 		}
 	}
 
@@ -1186,7 +1183,9 @@ int xio_session_destroy(struct xio_session *session)
 	TRACE_LOG("session destroy:%p\n", session);
 	session->state = XIO_SESSION_STATE_CLOSING;
 	if (list_empty(&session->connections_list)) {
-		xio_session_release(session);
+		xio_session_pre_teardown(session);
+		if (!session->in_notify)
+			xio_session_post_teardown(session);
 	} else {
 		xio_set_error(EBUSY);
 		ERROR_LOG("xio_session_close failed: " \

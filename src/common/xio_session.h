@@ -106,6 +106,8 @@ struct xio_session {
 	uint16_t			services_array_len;
 	uint16_t			last_opened_portal;
 	uint16_t			last_opened_service;
+	uint16_t			in_notify;
+	uint16_t			pad[3];
 
 	uint32_t			reject_reason;
 	struct mutex                    lock;	   /* lock open connection */
