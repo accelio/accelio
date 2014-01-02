@@ -470,12 +470,12 @@ static int xio_connection_xmit(struct xio_connection *connection)
 /* xio_connection_remove_in_flight					     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_remove_in_flight(struct xio_connection *connection,
-				    struct xio_msg *msg)
+				    struct xio_msg *msg, int is_req)
 {
 	if (!IS_APPLICATION_MSG(msg))
 		return 0;
 
-	if (IS_REQUEST(msg->type))
+	if (is_req)
 		xio_msg_list_remove(
 				&connection->in_flight_reqs_msgq, msg, pdata);
 	else
