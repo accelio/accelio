@@ -746,6 +746,10 @@ int xio_on_conn_error(struct xio_session *session,
 	ev_data.conn_user_context =
 		(connection) ? connection->cb_user_context : NULL;
 
+	/* disables the lead connection */
+	if (session->lead_connection && session->lead_connection == connection)
+		session->lead_connection = NULL;
+
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				the_session, &ev_data,
