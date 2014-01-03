@@ -129,9 +129,9 @@ struct xio_connection *xio_session_assign_conn(
 		if ((connection->ctx == conn->transport_hndl->ctx)  &&
 		    ((connection->conn == NULL) ||
 		     (connection->conn == conn))) {
-			xio_connection_set_conn(connection, conn);
 			/* remove old observer if exist */
 			spin_unlock(&session->connections_list_lock);
+			xio_connection_set_conn(connection, conn);
 			return connection;
 		}
 	}
