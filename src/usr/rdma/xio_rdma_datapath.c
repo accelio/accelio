@@ -2571,6 +2571,9 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		}
 		if (rlen  > llen) {
 			ERROR_LOG("application provided too small iovec\n");
+			ERROR_LOG("remote peer want to write %zd bytes while" \
+				  "local peer provided buffer size %zd bytes\n",
+				  rlen, llen);
 			ERROR_LOG("rdma read is ignored\n");
 			task->imsg.status = EINVAL;
 			return -1;
