@@ -698,10 +698,15 @@ int xio_on_conn_closed(struct xio_session *session,
 		return 0;
 
 	mutex_lock(&session->lock);
-	if (session->state != XIO_SESSION_STATE_CLOSED &&
+	if (session->state != XIO_SESSION_STATE_CLOSING &&
+	    session->state != XIO_SESSION_STATE_CLOSED &&
 	    !session->connections_nr && !session->lead_connection &&
 	    !session->redir_connection) {
 		session->in_notify = 1;
+		/* change the state to closing in case session is not
+		 * destroyed on the callback */
+		if (session->state == XIO_SESSION_STATE_ONLINE)
+			session->state = XIO_SESSION_STATE_CLOSING;
 		xio_session_notify_teardown(
 			session,
 			reason);
