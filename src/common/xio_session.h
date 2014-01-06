@@ -56,6 +56,7 @@ enum xio_session_state {
 	XIO_SESSION_STATE_REDIRECTED,
 	XIO_SESSION_STATE_ACCEPTED,
 	XIO_SESSION_STATE_REJECTED,
+	XIO_SESSION_STATE_REFUSED,
 	XIO_SESSION_STATE_CLOSING,
 	XIO_SESSION_STATE_CLOSED,
 };
@@ -209,6 +210,10 @@ void xio_session_notify_new_connection(struct xio_session *session,
 
 void xio_session_notify_connection_closed(struct xio_session *session,
 					  struct xio_connection *connection);
+
+void xio_session_notify_connection_disconnected(struct xio_session *session,
+					  struct xio_connection *connection,
+					  enum xio_status reason);
 
 int xio_session_notify_msg_error(struct xio_connection *connection,
 			         struct xio_msg *msg, enum xio_status result);

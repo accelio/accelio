@@ -485,10 +485,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			/* insert the connection into list */
 			xio_session_assign_conn(session, connection->conn);
-			if (connection == session->lead_connection)
-				session->lead_connection = NULL;
-			else
-				session->redir_connection = NULL;
+			session->lead_connection = NULL;
+			session->redir_connection = NULL;
+			session->disable_teardown = 0;
 
 			/* now try to send */
 			xio_connection_set_state(connection,
@@ -586,6 +585,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	case XIO_ACTION_REJECT:
 		session->state = XIO_SESSION_STATE_REJECTED;
 
+		session->lead_connection = NULL;
+
 		TRACE_LOG("session state is now REJECT. session:%p\n",
 			  session);
 
@@ -630,28 +631,23 @@ int xio_on_conn_refused(struct xio_session *session,
 			union xio_conn_event_data *event_data)
 {
 	struct xio_connection *connection, *tmp_connection;
-	struct xio_session_event_data ev_data = {
-		.event	=	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT,
-		.reason =	XIO_E_SESSION_REFUSED
-	};
+
+	/* enable the teardown */
+	session->disable_teardown  = 0;
+	session->lead_connection = NULL;
+	session->redir_connection = NULL;
 
 	if ((session->state == XIO_SESSION_STATE_CONNECT) ||
 	    (session->state == XIO_SESSION_STATE_REDIRECTED)) {
+		session->state = XIO_SESSION_STATE_REFUSED;
+
 		list_for_each_entry_safe(connection, tmp_connection,
 					 &session->connections_list,
 					 connections_list_entry) {
-			if (session->lead_connection == connection)
-				session->lead_connection = NULL;
-			else if (session->redir_connection == connection)
-				session->redir_connection = NULL;
-
-			ev_data.conn =  connection;
-			ev_data.conn_user_context = connection->cb_user_context;
-
-			if (session->ses_ops.on_session_event)
-				session->ses_ops.on_session_event(
-						session, &ev_data,
-						session->cb_user_context);
+			xio_session_notify_connection_disconnected(
+					session,
+					connection,
+					XIO_E_SESSION_REFUSED);
 		}
 	}
 
@@ -724,8 +720,8 @@ int xio_on_client_conn_established(struct xio_session *session,
 	case XIO_SESSION_STATE_ACCEPTED:
 		connection = xio_session_find_connection(session, conn);
 		if (connection == NULL) {
-			ERROR_LOG("failed to find connection session:%p, conn:%p\n",
-				  session, conn);
+			ERROR_LOG("failed to find connection session:%p," \
+				  "conn:%p\n", session, conn);
 			return -1;
 		}
 		session->disable_teardown = 0;

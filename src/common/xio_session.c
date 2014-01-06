@@ -306,6 +306,26 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_notify_connection_disconnected				     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_connection_disconnected(struct xio_session *session,
+					  struct xio_connection *connection,
+					  enum xio_status reason)
+{
+	struct xio_session_event_data  event = {
+		.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT,
+		.reason = reason,
+		.conn = connection,
+		.conn_user_context = connection->cb_user_context
+	};
+
+	if (session->ses_ops.on_session_event)
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_notify_connection_teardown				     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_connection_teardown(struct xio_session *session,
@@ -321,7 +341,7 @@ void xio_session_notify_connection_teardown(struct xio_session *session,
 	};
 
 	notify = (!session->disable_teardown  ||
-                  session->type != XIO_SESSION_CLIENT);
+		  session->type != XIO_SESSION_CLIENT);
 
 	if (session->ses_ops.on_session_event && notify)
 		session->ses_ops.on_session_event(
@@ -347,7 +367,6 @@ static void xio_session_pre_teardown(struct xio_session *session)
 	kfree(session->user_context);
 	kfree(session->uri);
 	session->state = XIO_SESSION_STATE_CLOSED;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -587,7 +606,6 @@ int xio_on_conn_disconnected(struct xio_session *session,
 			     union xio_conn_event_data *event_data)
 {
 	struct xio_connection		*connection, *tmp_connection;
-	struct xio_session_event_data	event;
 
 	if (session->lead_connection && session->lead_connection->conn == conn)
 		connection = session->lead_connection;
@@ -596,15 +614,9 @@ int xio_on_conn_disconnected(struct xio_session *session,
 
 	if (connection && connection->conn) {
 		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
-		event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
-		event.reason = XIO_E_SUCCESS;
-		event.conn = connection;
-		event.conn_user_context = connection->cb_user_context;
-
-		if (session->ses_ops.on_session_event)
-			session->ses_ops.on_session_event(
-					session, &event,
-					session->cb_user_context);
+		xio_session_notify_connection_disconnected(
+				session, connection,
+				XIO_E_SESSION_DISCONECTED);
 
 		if (session->type == XIO_SESSION_SERVER) {
 			xio_session_disconnect(session, connection);
@@ -620,17 +632,10 @@ int xio_on_conn_disconnected(struct xio_session *session,
 					 &session->connections_list,
 					 connections_list_entry) {
 			if (connection && !connection->conn) {
-				event.event =
-				     XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
-				event.reason =
-					XIO_E_SUCCESS;
-				event.conn = connection;
-				event.conn_user_context =
-					connection->cb_user_context;
-				if (session->ses_ops.on_session_event)
-					session->ses_ops.on_session_event(
-						session, &event,
-						session->cb_user_context);
+				xio_session_notify_connection_disconnected(
+						session,
+						connection,
+						XIO_E_SESSION_DISCONECTED);
 			}
 		}
 	}
@@ -655,6 +660,15 @@ int xio_on_conn_closed(struct xio_session *session,
 			reason = XIO_E_SESSION_DISCONECTED;
 		else
 			reason = XIO_E_SESSION_REFUSED;
+		break;
+	case XIO_SESSION_STATE_REJECTED:
+		reason = XIO_E_SESSION_REJECTED;
+		break;
+	case XIO_SESSION_STATE_REDIRECTED:
+		reason = XIO_E_SESSION_REDIRECTED;
+		break;
+	case XIO_SESSION_STATE_REFUSED:
+		reason = XIO_E_SESSION_REFUSED;
 		break;
 	default:
 		reason = XIO_E_SESSION_DISCONECTED;
@@ -694,9 +708,9 @@ int xio_on_conn_closed(struct xio_session *session,
 		session->in_notify = 0;
 		mutex_unlock(&session->lock);
 		xio_session_post_teardown(session);
-	} else
+	} else {
 		mutex_unlock(&session->lock);
-
+	}
 	return 0;
 }
 
