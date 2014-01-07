@@ -753,11 +753,9 @@ int xio_set_context_params(struct xio_context *ctx,
  * get context parameters
  *
  * @param[in] conn	The xio context handle
- * @param[in] params	The context paramters structure
  *
  */
-struct xio_context_params *xio_get_context_params(struct xio_context *ctx,
-					struct xio_context_params *params);
+struct xio_context_params *xio_get_context_params(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
 /* XIO session API                                                           */

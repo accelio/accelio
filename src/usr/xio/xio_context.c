@@ -399,8 +399,7 @@ int xio_set_context_params(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 /* xio_get_context_params						     */
 /*---------------------------------------------------------------------------*/
-struct xio_context_params *xio_get_context_params(struct xio_context *ctx,
-					struct xio_context_params *params)
+struct xio_context_params *xio_get_context_params(struct xio_context *ctx)
 {
 	return &ctx->params;
 }
