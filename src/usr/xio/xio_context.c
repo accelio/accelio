@@ -378,3 +378,29 @@ int xio_del_counter(struct xio_context *ctx, int counter)
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_set_context_params						     */
+/*---------------------------------------------------------------------------*/
+int xio_set_context_params(struct xio_context *ctx,
+			    struct xio_context_params *params)
+{
+	if (!ctx || !params) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+
+	ctx->params.user_context = params->user_context;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_context_params						     */
+/*---------------------------------------------------------------------------*/
+struct xio_context_params *xio_get_context_params(struct xio_context *ctx,
+					struct xio_context_params *params)
+{
+	return &ctx->params;
+}

@@ -299,6 +299,16 @@ struct xio_connection_params {
 };
 
 /**
+ * @struct xio_context_params
+ * @brief context parameters structure
+ */
+struct xio_context_params {
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< orientedcallbacks       */
+};
+
+/**
  * @struct xio_buf
  * @brief buffer structure
  */
@@ -728,6 +738,27 @@ struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
  */
 void xio_ctx_destroy(struct xio_context *ctx);
 
+/**
+ * set context parameters
+ *
+ * @param[in] conn	The xio context handle
+ * @param[in] params	The context paramters structure
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_set_context_params(struct xio_context *ctx,
+			    struct xio_context_params *params);
+
+/**
+ * get context parameters
+ *
+ * @param[in] conn	The xio context handle
+ * @param[in] params	The context paramters structure
+ *
+ */
+struct xio_context_params *xio_get_context_params(struct xio_context *ctx,
+					struct xio_context_params *params);
+
 /*---------------------------------------------------------------------------*/
 /* XIO session API                                                           */
 /*---------------------------------------------------------------------------*/
@@ -794,7 +825,7 @@ struct xio_connection *xio_connect(
 int xio_disconnect(struct xio_connection *conn);
 
 /**
- * set  connection parameters
+ * set connection parameters
  *
  * @param[in] conn	The xio connection handle
  * @param[in] params	The connection paramters structure
@@ -803,6 +834,15 @@ int xio_disconnect(struct xio_connection *conn);
  */
 int xio_set_connection_params(struct xio_connection *conn,
 			      struct xio_connection_params *params);
+
+/**
+ * get connection context
+ *
+ * @param[in] conn	The xio connection handle
+ *
+ * @returns connection's associated context
+ */
+struct xio_context *xio_get_connection_context(struct xio_connection *conn);
 
 /**
  * send request to responder

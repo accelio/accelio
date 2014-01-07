@@ -77,6 +77,7 @@ struct xio_context {
 	unsigned int			flags;
 	uint64_t			worker;
 	struct xio_statistics		stats;
+	struct xio_context_params	params;
 	struct xio_schedwork		*sched_work;
 
 	/* list of sessions using this connection */

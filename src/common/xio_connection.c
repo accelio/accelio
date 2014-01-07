@@ -51,6 +51,16 @@
 #define		IS_APPLICATION_MSG(msg) \
 		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_connection_context						     */
+/*---------------------------------------------------------------------------*/
+struct xio_context *xio_get_connection_context(
+					struct xio_connection *connection)
+{
+	return connection->ctx;
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_is_connection_online						     */
 /*---------------------------------------------------------------------------*/
