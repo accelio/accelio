@@ -517,9 +517,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 				kfree(rsp->user_context);
 				rsp->user_context = NULL;
-
-				xio_connection_xmit_msgs(connection);
 			}
+			/* start connection transmission */
+			xio_connection_xmit_msgs(connection);
 
 			return 0;
 		} else { /* reconnect to peer other session */
