@@ -1002,6 +1002,16 @@ int xio_do_disconnect(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 int xio_disconnect(struct xio_connection *connection)
 {
+	if (!connection || !connection->session) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("xio_disconnect failed %m\n");
+		return -1;
+	}
+	/* on server disconnections are initiated from  the transport */
+	if (connection->session->type == XIO_SESSION_SERVER &&
+	    connection->state  != XIO_CONNECTION_STATE_ONLINE)
+		return 0;
+
 	if (xio_is_connection_online(connection)) {
 		TRACE_LOG("send fin request. session:%p, connection:%p\n",
 			  connection->session, connection);
