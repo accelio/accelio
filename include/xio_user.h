@@ -67,21 +67,20 @@ extern "C" {
  */
 #define XIO_VERSION			0x0100
 
-
 /*---------------------------------------------------------------------------*/
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
 /**
- * @enum xio_log_leve
+ * @enum xio_log_level
  * @brief logging levels
  */
 enum xio_log_level {
-	XIO_LOG_LEVEL_FATAL,
-	XIO_LOG_LEVEL_ERROR,
-	XIO_LOG_LEVEL_WARN,
-	XIO_LOG_LEVEL_INFO,
-	XIO_LOG_LEVEL_DEBUG,
-	XIO_LOG_LEVEL_TRACE,
+	XIO_LOG_LEVEL_FATAL,		   /**< fatal logging level         */
+	XIO_LOG_LEVEL_ERROR,		   /**< error logging level         */
+	XIO_LOG_LEVEL_WARN,		   /**< warnings logging level      */
+	XIO_LOG_LEVEL_INFO,		   /**< informational logging level */
+	XIO_LOG_LEVEL_DEBUG,		   /**< debugging logging level     */
+	XIO_LOG_LEVEL_TRACE,		   /**< tracing logging level       */
 	XIO_LOG_LEVEL_LAST
 };
 
@@ -262,18 +261,36 @@ struct xio_mr;				     /* registered memory handle     */
 /*---------------------------------------------------------------------------*/
 /* typedefs								     */
 /*---------------------------------------------------------------------------*/
-/*
+/**
+ * @defgroup  callback_functions Callback function typedefs
+ *
+ * @brief typedefs defined in <libxio.h> for callback or handler functions
+ *	  passed as function parameters.
+ *
+ * @see xio_log_fn()
+ *
+ * @{ */
+
+/**
+ * Callback prototype for libxio log message handler.
  * The library user may wish to register their own logging function.
  * By default errors go to stderr.
  * Use xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_FN, NULL, 0)
  * to restore the default log fn.
+ *
+ *@param[in] file	file name from which the callback is called
+ *@param[in] line	the line number in the above file
+ *@param[in] function	name of the function in which the callback is called
+ *@param[in] level	message level (@ref xio_log_level)
+ *@param[in] fmt	printf() format string (as defined by ISO C11)
+ *
  */
 typedef void (*xio_log_fn)(const char *file, unsigned line,
 			   const char *function, unsigned level,
 			   const char *fmt, ...);
-#if 0
-	__attribute__((__format__(printf, 5, 6)));
-#endif
+
+/** @} */ /* group callback_functions */
+
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
@@ -295,7 +312,7 @@ struct xio_session_attr {
 struct xio_connection_params {
 	void			*user_context;  /**< private user context to */
 						/**< pass to connection      */
-						/**< orientedcallbacks       */
+						/**< oriented callbacks      */
 };
 
 /**
@@ -305,7 +322,7 @@ struct xio_connection_params {
 struct xio_context_params {
 	void			*user_context;  /**< private user context to */
 						/**< pass to connection      */
-						/**< orientedcallbacks       */
+						/**< oriented callbacks      */
 };
 
 /**
@@ -741,18 +758,18 @@ void xio_ctx_destroy(struct xio_context *ctx);
 /**
  * set context parameters
  *
- * @param[in] conn	The xio context handle
+ * @param[in] ctx	The xio context handle
  * @param[in] params	The context paramters structure
  *
  * @returns success (0), or a (negative) error value
  */
 int xio_set_context_params(struct xio_context *ctx,
-			    struct xio_context_params *params);
+			   struct xio_context_params *params);
 
 /**
  * get context parameters
  *
- * @param[in] conn	The xio context handle
+ * @param[in] ctx	The xio context handle
  *
  */
 struct xio_context_params *xio_get_context_params(struct xio_context *ctx);
@@ -867,7 +884,8 @@ int xio_cancel_request(struct xio_connection *conn,
 /**
  * responder cancelation response
  *
- * @param[in] req	the outstanding request to cancel.
+ * @param[in] req	the outstanding request to cancel
+ * @param[in] result	responder cancelation code
  *
  * @return success (0), or a (negative) error value
  */
@@ -1048,11 +1066,11 @@ int xio_send_response(struct xio_msg *rsp);
  *
  * @param[in] xio_obj	Pointer to xio object or NULL
  * @param[in] level	The level at which the option is
- *			defined (i.e, XIO_OPTLEVEL_RDMA)
+ *			defined (@ref xio_optlevel)
  * @param[in] optname	The option for which the value is to be set.
  *			The optname parameter must be a socket option
  *			defined within the specified level, or behavior
- *			is undefined
+ *			is undefined (@ref xio_optname)
  * @param[in] optval	A pointer to the buffer in which the value
  *			for the requested option is specified
  * @param[in] optlen	The size, in bytes, of the buffer pointed to by
@@ -1068,11 +1086,11 @@ int xio_set_opt(void *xio_obj, int level, int optname,
  *
  * @param[in] xio_obj	  Pointer to xio object or NULL
  * @param[in] level	  The level at which the option is
- *			  defined (i.e, XIO_OPTLEVEL_RDMA)
+ *			  defined (@ref xio_optlevel)
  * @param[in] optname	  The option for which the value is to be set.
  *			  The optname parameter must be a socket option
  *			  defined within the specified level, or behavior
- *			  is undefined
+ *			  is undefined (@ref xio_optname)
  * @param[in,out] optval  A pointer to the buffer in which the value
  *			  for the requested option is specified
  * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
@@ -1122,7 +1140,8 @@ int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
  * stop a running event loop main loop
  *
  * @param[in] loop		Pointer to event loop
- * @param[in] is_self_thread	lighter stop if called from within ev_loop callbacks
+ * @param[in] is_self_thread	lighter stop if called from within ev_loop
+ *				callbacks
  */
 void xio_ev_loop_stop(void *loop, int is_self_thread);
 

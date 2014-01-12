@@ -6,3 +6,7 @@ SUBDIRS = @subdirs@ @subdirs2@
 #ACLOCAL_AMFLAGS = -I m4
 
 EXTRA_DIST = autogen.sh
+
+dox:
+	doxygen
+
