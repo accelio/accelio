@@ -162,6 +162,7 @@ AC_SUBST([subdirs2])
 
 # files to generate via autotools (.am or .in source files)
 AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Doxyfile])
 AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
