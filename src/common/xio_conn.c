@@ -1376,7 +1376,13 @@ struct xio_conn *xio_conn_open(
 						    observer);
 			xio_conn_hash_observer(conn, observer, oid);
 		}
-		xio_conn_addref(conn);
+		if (conn->close_time_hndl) {
+			xio_ctx_timer_del(ctx, conn->close_time_hndl);
+			conn->close_time_hndl  = NULL;
+			kref_init(&conn->kref);
+		} else {
+			xio_conn_addref(conn);
+		}
 
 		TRACE_LOG("conn: [addref] conn:%p, refcnt:%d\n", conn,
 			  atomic_read(&conn->kref.refcount));
