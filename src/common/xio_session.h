@@ -75,6 +75,8 @@ struct xio_portal_node {
 };
 
 struct xio_session {
+	struct list_head		connections_list;
+
 	uint64_t			trans_sn; /* transaction sn */
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
@@ -82,7 +84,6 @@ struct xio_session {
 	uint32_t			connections_nr;
 
 	struct list_head		sessions_list_entry;
-	struct list_head		connections_list;
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
 
 	struct xio_session_ops		ses_ops;

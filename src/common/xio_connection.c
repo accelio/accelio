@@ -137,6 +137,7 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		INIT_LIST_HEAD(&connection->io_tasks_list);
 		INIT_LIST_HEAD(&connection->post_io_tasks_list);
 		INIT_LIST_HEAD(&connection->pre_send_list);
+		INIT_LIST_HEAD(&connection->error_list);
 
 		xio_msg_list_init(&connection->reqs_msgq);
 		xio_msg_list_init(&connection->rsps_msgq);
@@ -386,7 +387,27 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 			xio_tasks_pool_put(ptask);
 		}
 	}
+	if (!list_empty(&connection->error_list)) {
+		TRACE_LOG("error_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->error_list,
+					 tasks_list_entry) {
+			TRACE_LOG("error_list: task %p, " \
+				  "type 0x%x ltid:%d\n",
+				  ptask,
+				  ptask->tlv_type, ptask->ltid);
+			if (ptask->sender_task) {
+				/* the tx task is returend back to pool */
+				xio_tasks_pool_put(ptask->sender_task);
+				ptask->sender_task = NULL;
+			}
+			xio_tasks_pool_put(ptask);
+		}
+	}
 
+	/* never release these tasks as they are delivered to the user */
+	/* so don't pull the rug under his legs. */
+	/*
 	if (!list_empty(&connection->io_tasks_list)) {
 		TRACE_LOG("io_tasks_list not empty!\n");
 		list_for_each_entry_safe(ptask, pnext_task,
@@ -398,6 +419,7 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 				  ptask->tlv_type, ptask->ltid);
 		}
 	}
+	*/
 
 	return 0;
 }
@@ -599,6 +621,7 @@ int xio_send_response(struct xio_msg *msg)
 		     connection->state == XIO_CONNECTION_STATE_CLOSED ||
 		     connection->state == XIO_CONNECTION_STATE_DISCONNECTED)) {
 			xio_set_error(ESHUTDOWN);
+			xio_tasks_pool_put(task);
 			return -1;
 		}
 
@@ -620,6 +643,8 @@ int xio_send_response(struct xio_msg *msg)
 			return -1;
 		}
 
+		/* user return the task */
+		xio_tasks_pool_put(task);
 
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
@@ -790,7 +815,18 @@ int xio_connection_close(struct xio_connection *connection)
 void xio_connection_queue_io_task(struct xio_connection *connection,
 				    struct xio_task *task)
 {
+	/* save the task for the user */
+	xio_task_addref(task);
 	list_move_tail(&task->tasks_list_entry, &connection->io_tasks_list);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_queue_error_task					     */
+/*---------------------------------------------------------------------------*/
+void xio_connection_queue_error_task(struct xio_connection *connection,
+				    struct xio_task *task)
+{
+	list_move_tail(&task->tasks_list_entry, &connection->error_list);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -818,8 +854,6 @@ int xio_release_response(struct xio_msg *msg)
 	struct xio_msg		*pmsg = msg;
 
 
-
-
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
 		if (task == NULL) {
@@ -832,6 +866,9 @@ int xio_release_response(struct xio_msg *msg)
 			xio_set_error(EINVAL);
 			return -1;
 		}
+		/* user return the task refernce added in queue_io_task */
+		xio_tasks_pool_put(task);
+
 		connection = task->connection;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
@@ -869,6 +906,9 @@ int xio_release_msg(struct xio_msg *msg)
 			xio_set_error(EINVAL);
 			return -1;
 		}
+		/* user return the task */
+		xio_tasks_pool_put(task);
+
 
 		connection = task->connection;
 		list_move_tail(&task->tasks_list_entry,

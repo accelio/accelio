@@ -431,8 +431,13 @@ static int xio_on_req_recv(struct xio_connection *connection,
 
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
 		if (task->state == XIO_TASK_STATE_DELIVERED) {
+			/* asynchronous use case: sending the receipt */
 			xio_connection_send_read_receipt(connection, msg);
 		} else {
+			/* synchronous use case: receipt is piggybacked on the
+			 * response
+			 */
+
 			/* free the ref added in this function */
 			xio_tasks_pool_put(task);
 		}
@@ -491,16 +496,23 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
+
+		/* put reference for addref in queue_io_task */
+		xio_tasks_pool_put(task);
+
 		if (connection->ses_ops.on_msg_delivered)
 			connection->ses_ops.on_msg_delivered(
 				    connection->session,
 				    omsg,
 				    task->imsg.more_in_batch,
 				    connection->cb_user_context);
+
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
 	} else {
 		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
+			/* put reference for addref in queue_io_task */
+			xio_tasks_pool_put(task);
 			if (connection->ses_ops.on_msg_delivered) {
 				omsg->receipt_res = hdr.receipt_result;
 				connection->ses_ops.on_msg_delivered(
@@ -739,9 +751,10 @@ int xio_on_conn_message_error(struct xio_session *session,
 
 	if (IS_REQUEST(task->tlv_type))
 		xio_tasks_pool_put(task);
-	else
-		xio_connection_queue_io_task(task->connection, task);
-
+	else {
+		/* queue it until send response released */
+		xio_connection_queue_error_task(task->connection, task);
+	}
 	return 0;
 }
 

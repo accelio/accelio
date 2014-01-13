@@ -398,6 +398,7 @@ int xio_accept(struct xio_session *session,
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
 
+	xio_tasks_pool_put(task);
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
@@ -462,6 +463,8 @@ int xio_redirect(struct xio_session *session,
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
+	xio_tasks_pool_put(task);
+
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
@@ -503,6 +506,8 @@ int xio_reject(struct xio_session *session,
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
+
+	xio_tasks_pool_put(task);
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
