@@ -56,27 +56,23 @@ typedef void (*release_task_fn)(struct kref *kref);
 /*---------------------------------------------------------------------------*/
 struct xio_task {
 	struct list_head	tasks_list_entry;
-	struct kref		kref;
-	uint32_t		tlv_type;
-
-	void			*pool;
 	void			*dd_data;
-
 	struct xio_mbuf		mbuf;
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
-
 	struct xio_session	*session;
 	struct xio_conn		*conn;
 	struct xio_connection	*connection;
 
+	void			*pool;
 	release_task_fn		release;
 
 	enum xio_task_state	state;		/* task state enum	*/
-	uint32_t		is_control;
-
+	struct kref		kref;
 	uint64_t		magic;
 	uint64_t		stag;		/* session unique tag */
+	uint32_t		is_control;
+	uint32_t		tlv_type;
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
 	uint32_t		omsg_flags;
@@ -86,13 +82,10 @@ struct xio_task {
 };
 
 struct xio_tasks_pool {
-	struct kref		kref;
-	int			pad;
-	/* LIFO */
-	struct list_head	stack;
-
 	/* pool of tasks */
 	struct xio_task		**array;
+	/* LIFO */
+	struct list_head	stack;
 
 	/* max number of elements */
 	int			max;
@@ -107,27 +100,16 @@ struct xio_tasks_pool {
 static inline void xio_task_addref(
 			struct xio_task *t)
 {
-	struct xio_tasks_pool *pool = t->pool;
-
 	kref_get(&t->kref);
-	kref_get(&pool->kref);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_release						     */
+/* xio_tasks_pool_free						     */
 /*---------------------------------------------------------------------------*/
-void xio_tasks_pool_release(struct kref *kref);
+void xio_tasks_pool_free(struct xio_tasks_pool *q);
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_free							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_tasks_pool_free(struct xio_tasks_pool *q)
-{
-	kref_put(&q->kref, xio_tasks_pool_release);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_init							     */
+/* xio_tasks_pool_init						     */
 /*---------------------------------------------------------------------------*/
 struct xio_tasks_pool *xio_tasks_pool_init(int max,
 			int pool_dd_data_sz,
@@ -150,8 +132,6 @@ static inline struct xio_task *xio_tasks_pool_get(
 	list_del_init(&t->tasks_list_entry);
 	q->nr--;
 	kref_init(&t->kref);
-	kref_get(&q->kref);
-
 	t->tlv_type = 0xbeef;  /* poison the type */
 	return t;
 }
@@ -162,7 +142,6 @@ static inline struct xio_task *xio_tasks_pool_get(
 static inline void xio_tasks_pool_put(struct xio_task *task)
 {
 	kref_put(&task->kref, task->release);
-	xio_tasks_pool_free(task->pool);
 }
 
 /*---------------------------------------------------------------------------*/

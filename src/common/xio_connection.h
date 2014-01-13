@@ -73,7 +73,6 @@ struct xio_connection {
 	struct xio_msg			*msg_array;
 
 	struct list_head		io_tasks_list;
-	struct list_head		error_list;
 	struct list_head		post_io_tasks_list;
 	struct list_head		pre_send_list;
 	struct list_head		connections_list_entry;
@@ -106,10 +105,7 @@ int xio_connection_send(struct xio_connection *conn,
 int xio_connection_xmit_msgs(struct xio_connection *conn);
 
 void xio_connection_queue_io_task(struct xio_connection *connection,
-				  struct xio_task *task);
-
-void xio_connection_queue_error_task(struct xio_connection *connection,
-				     struct xio_task *task);
+				    struct xio_task *task);
 
 struct xio_task *xio_connection_find_io_task(struct xio_connection *conn,
 					     uint64_t msg_sn);

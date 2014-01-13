@@ -44,7 +44,7 @@
 #define XIO_TASK_MAGIC   0x58494f5f5441534b
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_init							     */
+/* xio_tasks_pool_init						     */
 /*---------------------------------------------------------------------------*/
 struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 					       int task_dd_data_sz,
@@ -96,19 +96,13 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 	q->nr = max;
 	q->pool_ops = pool_ops;
 
-	kref_init(&q->kref);
-
 	return q;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_release						     */
+/* xio_tasks_pool_free						     */
 /*---------------------------------------------------------------------------*/
-void xio_tasks_pool_release(struct kref *kref)
+void xio_tasks_pool_free(struct xio_tasks_pool *q)
 {
-	struct xio_tasks_pool *q = container_of(kref,
-						struct xio_tasks_pool, kref);
-
 	free_huge_pages(q->array[0]);
 }
-
