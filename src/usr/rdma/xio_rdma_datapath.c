@@ -618,19 +618,21 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 /* xio_rdma_rx_handler							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
-	      struct xio_task *task, int has_more)
+			       struct xio_task *task)
 {
-	int			retval;
-	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_task		*task1, *task2;
+	struct xio_rdma_task	*rdma_task;
 	int			must_send = 0;
-	struct xio_task		*task1;
-
+	int			retval;
 
 	/* prefetch next buffer */
-	task1 = list_first_entry_or_null(&task->tasks_list_entry,
+	task1 = list_first_entry(&task->tasks_list_entry,
 			 struct xio_task,  tasks_list_entry);
-	if (task1)
-		xio_prefetch(task1->mbuf.buf.head);
+	xio_prefetch(task1->mbuf.buf.head);
+	task2 = list_first_entry(&task1->tasks_list_entry,
+			 struct xio_task,  tasks_list_entry);
+	xio_prefetch(task2->mbuf.buf.head);
+
 
 	rdma_hndl->rqe_avail--;
 	rdma_hndl->sim_peer_credits--;
@@ -645,7 +647,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->io_list);
 
-	rdma_task->more_in_batch = has_more;
 
 	/* call recv completion  */
 	switch (task->tlv_type) {
@@ -678,8 +679,9 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* transmit ready packets */
 	if (rdma_hndl->tx_ready_tasks_num) {
+		rdma_task = task->dd_data;
 		must_send = (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD);
-		must_send |= (has_more == 0);
+		must_send |= (rdma_task->more_in_batch == 0);
 	}
 	/* resource are now available and rdma rd  requests are pending kick
 	 * them
@@ -861,7 +863,8 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
 
 	switch (wc->opcode) {
 	case IBV_WC_RECV:
-		xio_rdma_rx_handler(rdma_hndl, task, has_more);
+		rdma_task->more_in_batch = has_more;
+		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_SEND:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
@@ -1788,7 +1791,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (sge_len < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
-	if (++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->is_control) {
+	if (unlikely(++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->is_control)) {
 		/* avoid race between send completion and response arrival */
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
