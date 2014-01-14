@@ -1359,7 +1359,11 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("conn: [notification] - transport refused. " \
 			 "conn:%p, transport:%p\n", observer, sender);
-		xio_on_connection_disconnected(conn, ev_data);
+		conn->state = XIO_CONN_STATE_DISCONNECTED;
+		TRACE_LOG("conn state changed to disconnected\n");
+		xio_observable_notify_all_observers(&conn->observable,
+						    XIO_CONN_EVENT_REFUSED,
+						    &event_data);
 		break;
 	case XIO_TRANSPORT_ERROR:
 		DEBUG_LOG("conn: [notification] - transport error. " \
