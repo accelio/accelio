@@ -1320,7 +1320,7 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 	retval = rdma_resolve_route(rdma_hndl->cm_id, ROUTE_RESOLVE_TIMEOUT);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_resolve_route failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_resolve_route failed. (errno=%d %m)\n", errno);
 		xio_rdma_notify_observer_error(rdma_hndl, xio_errno());
 	}
 }
@@ -1365,7 +1365,7 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 	if (retval != 0) {
 		xio_set_error(ENOMEM);
 
-		ERROR_LOG("rdma_connect failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_connect failed. (errno=%d %m)\n", errno);
 		goto notify_err2;
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
@@ -1469,7 +1469,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
-			ERROR_LOG("conn:%p rdma_disconnect failed, %m\n",
+			DEBUG_LOG("conn:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
 	}
 }
@@ -1509,7 +1509,7 @@ static void on_cm_error(struct rdma_cm_event *ev,
 {
 	int	reason;
 
-	ERROR_LOG("rdma transport [error] %s, hndl:%p\n",
+	DEBUG_LOG("rdma transport [error] %s, hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
 	switch (ev->event) {
@@ -1782,7 +1782,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			rdma_hndl->state = XIO_STATE_CLOSED;
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
-				ERROR_LOG("conn:%p rdma_disconnect failed, " \
+				DEBUG_LOG("conn:%p rdma_disconnect failed, " \
 					  "%m\n", rdma_hndl);
 		}  else if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
 			rdma_hndl->state = XIO_STATE_CLOSED;
@@ -1841,7 +1841,7 @@ static int xio_rdma_accept(struct xio_transport_base *transport)
 	retval = rdma_accept(rdma_hndl->cm_id, &cm_params);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_accept failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_accept failed. (errno=%d %m)\n", errno);
 		return -1;
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
@@ -1865,7 +1865,7 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 	retval = rdma_reject(rdma_hndl->cm_id, NULL, 0);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
 		return -1;
 	}
 	TRACE_LOG("rdma transport: [reject] handle:%p\n", rdma_hndl);
@@ -1919,7 +1919,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 		retval = rdma_bind_addr(rdma_hndl->cm_id, &if_sa.sa);
 		if (retval) {
 			xio_set_error(errno);
-			ERROR_LOG("rdma_bind_addr failed. (errno=%d %m)\n",
+			DEBUG_LOG("rdma_bind_addr failed. (errno=%d %m)\n",
 				  errno);
 			goto exit2;
 		}
@@ -1929,7 +1929,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 			ADDR_RESOLVE_TIMEOUT);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("rdma_resolve_addr failed. (errno=%d %m)\n", errno);
+		DEBUG_LOG("rdma_resolve_addr failed. (errno=%d %m)\n", errno);
 		goto exit2;
 	}
 
