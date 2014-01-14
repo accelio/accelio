@@ -891,6 +891,12 @@ static void xio_conn_release(void *data)
 	TRACE_LOG("physical connection close. conn:%p\n", conn);
 	xio_conns_store_remove(conn->cid);
 
+	if (conn->close_time_hndl) {
+		xio_ctx_timer_del(conn->transport_hndl->ctx,
+				  conn->close_time_hndl);
+		conn->close_time_hndl  = NULL;
+	}
+
 	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
 		conn->state = XIO_CONN_STATE_CLOSED;
 		TRACE_LOG("conn state changed to closed\n");
@@ -1130,6 +1136,25 @@ static void xio_on_connection_established(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_connection_disconnected		                             */
+/*---------------------------------------------------------------------------*/
+static void xio_on_connection_disconnected(struct xio_conn *conn,
+				    union xio_transport_event_data *
+				    event_data)
+{
+	conn->state = XIO_CONN_STATE_DISCONNECTED;
+	TRACE_LOG("conn state changed to disconnected conn:%p\n", conn);
+
+	if (!xio_observable_is_empty(&conn->observable)) {
+		xio_observable_notify_all_observers(&conn->observable,
+			XIO_CONN_EVENT_DISCONNECTED,
+			&event_data);
+	} else {
+		xio_conn_release(conn);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_new_message				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_new_message(struct xio_conn *conn,
@@ -1324,11 +1349,7 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	case XIO_TRANSPORT_DISCONNECTED:
 		DEBUG_LOG("conn: [notification] - transport disconnected. "  \
 			 "conn:%p, transport:%p\n", observer, sender);
-		conn->state = XIO_CONN_STATE_DISCONNECTED;
-		TRACE_LOG("conn state changed to disconnected\n");
-		xio_observable_notify_all_observers(&conn->observable,
-						    XIO_CONN_EVENT_DISCONNECTED,
-						    &event_data);
+		xio_on_connection_disconnected(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_CLOSED:
 		DEBUG_LOG("conn: [notification] - transport closed. "  \
@@ -1338,11 +1359,7 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("conn: [notification] - transport refused. " \
 			 "conn:%p, transport:%p\n", observer, sender);
-		conn->state = XIO_CONN_STATE_DISCONNECTED;
-		TRACE_LOG("conn state changed to disconnected\n");
-		xio_observable_notify_all_observers(&conn->observable,
-						    XIO_CONN_EVENT_REFUSED,
-						    &event_data);
+		xio_on_connection_disconnected(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_ERROR:
 		DEBUG_LOG("conn: [notification] - transport error. " \
@@ -1580,6 +1597,8 @@ static void xio_conn_delayed_close(struct kref *kref)
 					     kref);
 	int		retval;
 
+	TRACE_LOG("xio_conn_deleyed close. conn:%p, state:%d\n",
+		  conn, conn->state);
 	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
 		retval = xio_ctx_timer_add(
 				conn->transport_hndl->ctx,

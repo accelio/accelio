@@ -115,4 +115,13 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 void xio_observable_unreg_all_observers(struct xio_observable *observable);
 
 
+/*---------------------------------------------------------------------------*/
+/* xio_observable_is_empty						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_observable_is_empty(struct xio_observable *observable)
+{
+	return list_empty(&observable->observers_list);
+}
+
+
 #endif /* XIO_OBSERVER_H */
