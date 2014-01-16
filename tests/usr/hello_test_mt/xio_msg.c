@@ -201,6 +201,9 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 int msg_api_free()
 {
+	if (g_data_mr)
+		xio_dereg_mr(&g_data_mr);
+
 	if (g_hdr) {
 		free(g_hdr);
 		g_hdr = NULL;
