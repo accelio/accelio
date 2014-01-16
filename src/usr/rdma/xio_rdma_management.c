@@ -935,7 +935,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 	 * also note that client holds the sent and recv tasks
 	 * simultanousely */
 
-	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
+	rdma_hndl->num_tasks = 8*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
