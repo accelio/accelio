@@ -57,6 +57,7 @@
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 static LIST_HEAD(mr_list);
+static spinlock_t mr_list_lock;
 
 
 /*---------------------------------------------------------------------------*/
@@ -157,7 +158,9 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		}
 	}
 
+	spin_lock(&mr_list_lock);
 	list_add(&tmr->mr_list_entry, &mr_list);
+	spin_unlock(&mr_list_lock);
 
 	return tmr;
 
@@ -199,11 +202,15 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 	struct xio_mr		*tmr = *p_tmr;
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval;
+	int			locked;
 
 
 
 	if (!list_empty(&tmr->dm_list)) {
+		locked = spin_try_lock(&mr_list_lock);
 		list_del(&tmr->mr_list_entry);
+		if (locked)
+			spin_unlock(&mr_list_lock);
 
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
@@ -308,6 +315,7 @@ int xio_free(struct xio_buf **buf)
 void xio_mr_list_init(void)
 {
 	INIT_LIST_HEAD(&mr_list);
+	spin_lock_init(&mr_list_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -317,9 +325,10 @@ int xio_mr_list_free(void)
 {
 	struct xio_mr		*tmr, *next;
 
-	list_for_each_entry_safe(tmr, next, &mr_list, mr_list_entry) {
+	spin_lock(&mr_list_lock);
+	list_for_each_entry_safe(tmr, next, &mr_list, mr_list_entry)
 		xio_dereg_mr(&tmr);
-	}
+	spin_unlock(&mr_list_lock);
 
 	return 0;
 }
