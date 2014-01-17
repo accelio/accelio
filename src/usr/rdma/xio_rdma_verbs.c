@@ -223,9 +223,9 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 			list_del(&tmr_elem->dm_list_entry);
 			free(tmr_elem);
 		}
+		free(tmr);
+		*p_tmr = NULL;
 	}
-	free(tmr);
-	*p_tmr = NULL;
 
 	return 0;
 }
@@ -323,14 +323,15 @@ void xio_mr_list_init(void)
 /*---------------------------------------------------------------------------*/
 int xio_mr_list_free(void)
 {
-	struct xio_mr		*tmr, *next;
+	struct xio_mr		*tmr;
 
 	spin_lock(&mr_list_lock);
-	list_for_each_entry_safe(tmr, next, &mr_list, mr_list_entry)
+	while (!list_empty(&mr_list)) {
+		tmr = list_first_entry(&mr_list, struct xio_mr, mr_list_entry);
 		xio_dereg_mr(&tmr);
+	}
 	spin_unlock(&mr_list_lock);
 
 	return 0;
 }
-
 
