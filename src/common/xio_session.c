@@ -331,8 +331,6 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 void xio_session_notify_connection_teardown(struct xio_session *session,
 					  struct xio_connection *connection)
 {
-	int notify;
-
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT,
 		.reason = XIO_E_SUCCESS,
@@ -340,10 +338,7 @@ void xio_session_notify_connection_teardown(struct xio_session *session,
 		.conn_user_context = connection->cb_user_context
 	};
 
-	notify = (!session->disable_teardown  ||
-		  session->type != XIO_SESSION_CLIENT);
-
-	if (session->ses_ops.on_session_event && notify)
+	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
@@ -372,7 +367,7 @@ static void xio_session_pre_teardown(struct xio_session *session)
 /*---------------------------------------------------------------------------*/
 /* xio_session_post_teardown						     */
 /*---------------------------------------------------------------------------*/
-static void xio_session_post_teardown(struct xio_session *session)
+void xio_session_post_teardown(struct xio_session *session)
 {
 	if (session->state == XIO_SESSION_STATE_CLOSED) {
 		TRACE_LOG("session %p released\n", session);
@@ -605,12 +600,19 @@ int xio_on_conn_disconnected(struct xio_session *session,
 			     struct xio_conn *conn,
 			     union xio_conn_event_data *event_data)
 {
-	struct xio_connection		*connection, *tmp_connection;
+	struct xio_connection *connection, *tmp_connection;
 
-	if (session->lead_connection && session->lead_connection->conn == conn)
+	if (session->lead_connection &&
+	    session->lead_connection->conn == conn)
 		connection = session->lead_connection;
-	else
+	else if (session->redir_connection &&
+		 session->redir_connection->conn == conn)
+		connection = session->redir_connection;
+	else {
+		spin_lock(&session->connections_list_lock);
 		connection = xio_session_find_connection(session, conn);
+		spin_unlock(&session->connections_list_lock);
+	}
 
 	if (connection && connection->conn) {
 		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
@@ -618,13 +620,11 @@ int xio_on_conn_disconnected(struct xio_session *session,
 				session, connection,
 				XIO_E_SESSION_DISCONECTED);
 
-		if (session->type == XIO_SESSION_SERVER) {
 			xio_session_disconnect(session, connection);
-			return 0;
-		}
 	} else {
 		xio_conn_close(conn, &session->observer);
 	}
+
 	if (session->type == XIO_SESSION_CLIENT) {
 		/* only on client */
 		/* also send disconnect to connections that do no have conn */
@@ -639,6 +639,7 @@ int xio_on_conn_disconnected(struct xio_session *session,
 			}
 		}
 	}
+
 	return 0;
 }
 
@@ -649,73 +650,11 @@ int xio_on_conn_closed(struct xio_session *session,
 		       struct xio_conn *conn,
 		       union xio_conn_event_data *event_data)
 {
-	struct xio_connection		*connection;
-	int				reason;
-
-	DEBUG_LOG("session:%p - conn:%p close complete\n", session, conn);
-
-	switch (session->state) {
-	case XIO_SESSION_STATE_ACCEPTED:
-		if (session->type == XIO_SESSION_SERVER)
-			reason = XIO_E_SESSION_DISCONECTED;
-		else
-			reason = XIO_E_SESSION_REFUSED;
-		break;
-	case XIO_SESSION_STATE_REJECTED:
-		reason = XIO_E_SESSION_REJECTED;
-		break;
-	case XIO_SESSION_STATE_REDIRECTED:
-		reason = XIO_E_SESSION_REDIRECTED;
-		break;
-	case XIO_SESSION_STATE_REFUSED:
-		reason = XIO_E_SESSION_REFUSED;
-		break;
-	default:
-		reason = XIO_E_SESSION_DISCONECTED;
-		break;
-	}
+	TRACE_LOG("session:%p - conn:%p close complete\n", session, conn);
 
 	/* no more notifications */
 	xio_conn_unreg_observer(conn, &session->observer);
 
-	/* leading connection */
-	if (session->lead_connection &&
-	    session->lead_connection->conn == conn) {
-		xio_connection_close(session->lead_connection);
-		session->lead_connection = NULL;
-		TRACE_LOG("lead connection is closed\n");
-	} else if (session->redir_connection &&
-		   session->redir_connection->conn == conn) {
-		xio_connection_close(session->redir_connection);
-		session->redir_connection = NULL;
-		TRACE_LOG("redirected connection is closed\n");
-	} else {
-		connection = xio_session_find_connection(session, conn);
-		xio_connection_flush_tasks(connection);
-		xio_session_free_connection(connection);
-	}
-	if (session->disable_teardown)
-		return 0;
-
-	mutex_lock(&session->lock);
-	if (session->state != XIO_SESSION_STATE_CLOSING &&
-	    session->state != XIO_SESSION_STATE_CLOSED &&
-	    !session->connections_nr && !session->lead_connection &&
-	    !session->redir_connection) {
-		session->in_notify = 1;
-		/* change the state to closing in case session is not
-		 * destroyed on the callback */
-		if (session->state == XIO_SESSION_STATE_ONLINE)
-			session->state = XIO_SESSION_STATE_CLOSING;
-		xio_session_notify_teardown(
-			session,
-			reason);
-		session->in_notify = 0;
-		mutex_unlock(&session->lock);
-		xio_session_post_teardown(session);
-	} else {
-		mutex_unlock(&session->lock);
-	}
 	return 0;
 }
 
@@ -758,21 +697,46 @@ int xio_on_conn_error(struct xio_session *session,
 
 	};
 	struct xio_session  *the_session = session;
+
 	struct xio_connection *connection =
 				xio_session_find_connection(session, conn);
 
-	ev_data.conn =  connection;
-	ev_data.conn_user_context =
-		(connection) ? connection->cb_user_context : NULL;
+	/* enable the teardown */
+	session->disable_teardown  = 0;
+	session->lead_connection = NULL;
+	session->redir_connection = NULL;
 
-	/* disables the lead connection */
-	if (session->lead_connection && session->lead_connection == connection)
-		session->lead_connection = NULL;
+	if ((session->state == XIO_SESSION_STATE_CONNECT) ||
+	    (session->state == XIO_SESSION_STATE_REDIRECTED)) {
+		session->state = XIO_SESSION_STATE_REFUSED;
+		while (!list_empty(&session->connections_list)) {
+			connection = list_first_entry(
+					&session->connections_list,
+					struct xio_connection,
+					connections_list_entry);
+			ev_data.conn =  connection;
+			ev_data.conn_user_context =
+				connection->cb_user_context;
 
-	if (session->ses_ops.on_session_event)
-		session->ses_ops.on_session_event(
-				the_session, &ev_data,
-				session->cb_user_context);
+			if (session->ses_ops.on_session_event)
+				session->ses_ops.on_session_event(
+						the_session, &ev_data,
+						session->cb_user_context);
+			connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
+			xio_session_disconnect(session, connection);
+		}
+	} else {
+		ev_data.conn =  connection;
+		ev_data.conn_user_context =
+			(connection) ? connection->cb_user_context : NULL;
+
+		if (session->ses_ops.on_session_event)
+			session->ses_ops.on_session_event(
+					the_session, &ev_data,
+					session->cb_user_context);
+		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
+		xio_session_disconnect(session, connection);
+	}
 
 	return 0;
 }
@@ -1154,8 +1118,6 @@ cleanup:
 int xio_session_disconnect(struct xio_session *session,
 			     struct xio_connection *connection)
 {
-	int teardown = 0;
-
 	/* prepare to disconnect */
 
 	/* flush all messages from in flight message queue to in queue */
@@ -1165,31 +1127,11 @@ int xio_session_disconnect(struct xio_session *session,
 	xio_connection_notify_msgs_flush(connection);
 
 	if ((connection->state == XIO_CONNECTION_STATE_CLOSED) ||
-	    (connection->state == XIO_CONNECTION_STATE_DISCONNECTED))
-		xio_session_notify_connection_teardown(session, connection);
-
-	/* remove the connection from the session's connections list */
-	if (connection->conn) {
-		xio_conn_close(connection->conn, &session->observer);
-	} else {
-		if ((connection->state == XIO_CONNECTION_STATE_DISCONNECTED) ||
-		    (connection->state == XIO_CONNECTION_STATE_CLOSED)) {
-			spin_lock(&session->connections_list_lock);
-			teardown = (session->connections_nr == 1);
-			spin_unlock(&session->connections_list_lock);
-			xio_session_free_connection(connection);
-		} else {
-			teardown = (session->connections_nr == 0);
-		}
-		if (teardown && !session->lead_connection &&
-		    !session->redir_connection) {
-			session->in_notify = 1;
-			xio_session_notify_teardown(
-						session,
-						XIO_E_SESSION_DISCONECTED);
-			session->in_notify = 0;
-			xio_session_post_teardown(session);
-		}
+	    (connection->state == XIO_CONNECTION_STATE_DISCONNECTED)) {
+		if (session->lead_connection == connection)
+			xio_connection_destroy(connection);
+		else
+		    xio_session_notify_connection_teardown(session, connection);
 	}
 
 	return 0;

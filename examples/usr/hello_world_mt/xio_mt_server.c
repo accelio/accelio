@@ -52,7 +52,7 @@ struct portals_vec {
 	const char		*vec[MAX_THREADS];
 };
 
-struct hw_thread_data {
+struct thread_data {
 	char			portal[64];
 	int			affinity;
 	int			cnt;
@@ -62,11 +62,11 @@ struct hw_thread_data {
 };
 
 /* server private data */
-struct hw_server_data {
-	struct hw_thread_data	tdata[MAX_THREADS];
+struct server_data {
+	struct thread_data	tdata[MAX_THREADS];
 };
 
-static struct portals_vec *portals_get(struct hw_server_data *server_data,
+static struct portals_vec *portals_get(struct server_data *server_data,
 				const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
@@ -92,17 +92,18 @@ static void portals_free(struct portals_vec *portals)
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
-static void process_request(struct hw_thread_data *tdata,
+static void process_request(struct thread_data *tdata,
 			    struct xio_msg *req)
 {
 	if (++tdata->cnt == HW_PRINT_COUNTER) {
 		if (req->in.header.iov_base)
-		  ((char *)(req->in.header.iov_base))[req->in.header.iov_len]
+			((char *)
+			 (req->in.header.iov_base))[req->in.header.iov_len]
 			  = 0;
 		printf("thread [%d] tid:%p - message: [%"PRIu64"] - %s\n",
-				tdata->affinity,
-				(void *)pthread_self(),
-				(req->sn + 1), (char *)req->in.header.iov_base);
+		       tdata->affinity,
+		       (void *)pthread_self(),
+		       (req->sn + 1), (char *)req->in.header.iov_base);
 		tdata->cnt = 0;
 	}
 	req->in.header.iov_base	  = NULL;
@@ -118,7 +119,7 @@ static int on_request(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct hw_thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
@@ -148,7 +149,7 @@ struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct hw_thread_data	*tdata = data;
+	struct thread_data	*tdata = data;
 	cpu_set_t		cpuset;
 	struct xio_context	*ctx;
 	struct xio_server	*server;
@@ -170,14 +171,15 @@ static void *portal_server_cb(void *data)
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
-	server = xio_bind(ctx, &portal_server_ops, tdata->portal, NULL, 0, tdata);
+	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
+			  NULL, 0, tdata);
 	if (server == NULL)
 		goto cleanup;
 
-	sprintf(str,"hello world header response from thread %d",
-	        tdata->affinity);
+	sprintf(str, "hello world header response from thread %d",
+		tdata->affinity);
 	/* create "hello world" message */
-	for (i = 0; i <QUEUE_DEPTH; i++) {
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		tdata->rsp[i].out.header.iov_base = strdup(str);
 		tdata->rsp[i].out.header.iov_len =
 			strlen(tdata->rsp[i].out.header.iov_base);
@@ -193,7 +195,7 @@ static void *portal_server_cb(void *data)
 	xio_unbind(server);
 
 	/* free the message */
-	for (i = 0; i <QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++)
 		free(tdata->rsp[i].out.header.iov_base);
 
 cleanup:
@@ -219,9 +221,8 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		break;
-	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -241,7 +242,7 @@ static int on_new_session(struct xio_session *session,
 			void *cb_user_context)
 {
 	struct portals_vec *portals;
-	struct hw_server_data *server_data = cb_user_context;
+	struct server_data *server_data = cb_user_context;
 
 	portals = portals_get(server_data, req->uri, req->user_context);
 
@@ -270,7 +271,7 @@ struct xio_session_ops  server_ops = {
 int main(int argc, char *argv[])
 {
 	struct xio_server	*server;	/* server portal */
-	struct hw_server_data	server_data;
+	struct server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
 	void			*loop;

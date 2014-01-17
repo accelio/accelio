@@ -285,11 +285,8 @@ static int on_session_event(struct xio_session *session,
 	struct raio_session_data  *session_data = cb_user_context;
 
 	switch (event_data->event) {
-	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
-		break;
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		session_data->disconnected = 1;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
@@ -473,9 +470,9 @@ cleanup1:
 		if (!session_data->disconnected) {
 			xio_ev_loop_run(session_data->loop);
 			xio_session_destroy(session_data->session);
-		}
-		else
+		} else {
 		     xio_session_destroy(session_data->session);
+		}
 		session_data->session = NULL;
 	}
 cleanup:
@@ -767,7 +764,8 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 			io_u->req.out.data_iov[0].iov_base = ios[i]->u.c.buf;
 			io_u->req.out.data_iov[0].iov_len = ios[i]->u.c.nbytes;
 			if (ios[i]->u.c.mr)
-				io_u->req.out.data_iov[0].mr = ios[i]->u.c.mr->omr;
+				io_u->req.out.data_iov[0].mr =
+					ios[i]->u.c.mr->omr;
 			else
 				io_u->req.out.data_iov[0].mr = NULL;
 			io_u->req.in.data_iovlen  = 0;
@@ -776,7 +774,8 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 			io_u->req.in.data_iov[0].iov_base = ios[i]->u.c.buf;
 			io_u->req.in.data_iov[0].iov_len = ios[i]->u.c.nbytes;
 			if (ios[i]->u.c.mr)
-				io_u->req.in.data_iov[0].mr = ios[i]->u.c.mr->omr;
+				io_u->req.in.data_iov[0].mr =
+					ios[i]->u.c.mr->omr;
 			else
 				io_u->req.in.data_iov[0].mr = NULL;
 			io_u->req.in.data_iovlen  = 1;

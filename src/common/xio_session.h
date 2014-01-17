@@ -218,5 +218,9 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 int xio_session_notify_msg_error(struct xio_connection *connection,
 			         struct xio_msg *msg, enum xio_status result);
 
+void xio_session_notify_teardown(struct xio_session *session, int reason);
+
+void xio_session_post_teardown(struct xio_session *session);
+
 #endif /*XIO_SESSION_H */
 

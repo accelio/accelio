@@ -486,7 +486,7 @@ static int xio_device_list_init()
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!ctx_list) {
 		xio_set_error(errno);
-		ERROR_LOG("Failed to get IB devices list");
+		ERROR_LOG("Failed to get IB devices list\n");
 		return -1;
 	}
 

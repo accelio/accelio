@@ -46,7 +46,7 @@
 #define MAX_THREADS		4
 #define HW_PRINT_COUNTER	400000
 
-struct hw_thread_data {
+struct thread_data {
 	int			cid;
 	int			affinity;
 	uint64_t		cnt;
@@ -60,14 +60,14 @@ struct hw_thread_data {
 
 
 /* private session data */
-struct hw_session_data {
+struct session_data {
 	struct xio_session	*session;
-	struct hw_thread_data	tdata[MAX_THREADS];
+	struct thread_data	tdata[MAX_THREADS];
 };
 
-static void *hw_worker_thread(void *data)
+static void *worker_thread(void *data)
 {
-	struct hw_thread_data	*tdata = data;
+	struct thread_data	*tdata = data;
 	cpu_set_t		cpuset;
 	char			str[128];
 
@@ -90,7 +90,7 @@ static void *hw_worker_thread(void *data)
 
 	/* create "hello world" message */
 	memset(&tdata->req, 0, sizeof(tdata->req));
-	sprintf(str,"hello world header request from thread %d",
+	sprintf(str, "hello world header request from thread %d",
 		tdata->affinity);
 	tdata->req.out.header.iov_base = strdup(str);
 	tdata->req.out.header.iov_len =
@@ -118,7 +118,7 @@ static void *hw_worker_thread(void *data)
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
 /*---------------------------------------------------------------------------*/
-static void process_response(struct hw_thread_data  *tdata,
+static void process_response(struct thread_data  *tdata,
 			     struct xio_msg *rsp)
 {
 	if (++tdata->cnt == HW_PRINT_COUNTER) {
@@ -141,7 +141,7 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct hw_session_data *session_data = cb_user_context;
+	struct session_data *session_data = cb_user_context;
 	int			i;
 
 	printf("%s. reason: %s\n",
@@ -149,9 +149,8 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
@@ -173,7 +172,7 @@ static int on_response(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct hw_thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = cb_user_context;
 
 	/* process the incoming message */
 	process_response(tdata, rsp);
@@ -204,7 +203,7 @@ int main(int argc, char *argv[])
 {
 	int			i;
 	char			url[256];
-	struct hw_session_data	session_data;
+	struct session_data	session_data;
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -231,7 +230,7 @@ int main(int argc, char *argv[])
 		/* all threads are working on the same session */
 		session_data.tdata[i].session	= session_data.session;
 		pthread_create(&session_data.tdata[i].thread_id, NULL,
-			       hw_worker_thread, &session_data.tdata[i]);
+			       worker_thread, &session_data.tdata[i]);
 	}
 
 	/* join the threads */

@@ -220,7 +220,8 @@ static void process_response(struct xio_msg *rsp)
 
 		data_len = txlen > rxlen ? txlen : rxlen;
 		data_len = data_len/1024;
-		print_counter = (data_len ? PRINT_COUNTER/data_len : PRINT_COUNTER);
+		print_counter = (data_len ?
+				 PRINT_COUNTER/data_len : PRINT_COUNTER);
 	}
 
 	if (++cnt == print_counter) {
@@ -280,6 +281,9 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
+		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
@@ -478,8 +482,12 @@ int on_msg_error(struct xio_session *session,
 		enum xio_status error, struct xio_msg  *msg,
 		void *cb_private_data)
 {
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	if (msg->type == XIO_MSG_TYPE_RSP)
+		printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+		       session, msg->request->sn, xio_strerror(error));
+	else
+		printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+		       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(pool, msg);
 

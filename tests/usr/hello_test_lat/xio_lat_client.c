@@ -213,26 +213,24 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop, 0);  /* exit */
+		if (pool) {
+			msg_pool_free(pool);
+			pool = NULL;
+		}
 		break;
 	default:
 		break;
 	};
 
-	if (pool) {
-		msg_pool_free(pool);
-		pool = NULL;
-	}
-
 	return 0;
 }
 /*---------------------------------------------------------------------------*/
-/* on_session_established`:						     */
+/* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
 			struct xio_new_session_rsp *rsp,

@@ -168,10 +168,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_TEARDOWN_EVENT:
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
+		break;
+		case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
-
 		break;
 	default:
 		break;

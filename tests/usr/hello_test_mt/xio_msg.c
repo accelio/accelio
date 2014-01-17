@@ -234,7 +234,6 @@ void msg_write(struct xio_msg *msg,
 	pmsg->data_iov[0].iov_len	= datalen;
 	pmsg->data_iov[0].mr		= g_data_mr;
 	pmsg->data_iovlen		= g_data ? 1 : 0;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -292,11 +291,16 @@ struct msg_pool *msg_pool_alloc(int max,
 		msg_pool->data = alloc_mem_buf(datalen, &msg_pool->shmid);
 		if (!msg_pool->data) {
 			fprintf(stderr, "Couldn't allocate data buffers\n");
-			free(buf);
-			exit(1);
+			msg_pool_free(msg_pool);
+			return NULL;
 		}
 		memset(msg_pool->data, 0, datalen);
 		msg_pool->mr = xio_reg_mr(msg_pool->data, datalen);
+		if (msg_pool->mr == NULL) {
+			fprintf(stderr, "failed to allocate mr\n");
+			msg_pool_free(msg_pool);
+			return NULL;
+		}
 	}
 
 	data = msg_pool->data;
@@ -369,7 +373,6 @@ inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg)
 {
-//	msg_reset(msg);
 	*--pool->stack_ptr = msg;
 }
 

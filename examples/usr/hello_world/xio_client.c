@@ -45,7 +45,7 @@
 #define HW_PRINT_COUNTER	4000000
 
 /* private session data */
-struct hw_session_data {
+struct session_data {
 	void			*loop;
 	struct xio_connection	*conn;
 	struct xio_msg		req[QUEUE_DEPTH];
@@ -76,16 +76,15 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct hw_session_data *session_data = cb_user_context;
+	struct session_data *session_data = cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -106,7 +105,7 @@ static int on_response(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct hw_session_data *session_data = cb_user_context;
+	struct session_data *session_data = cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	/* process the incoming message */
@@ -139,7 +138,7 @@ int main(int argc, char *argv[])
 	struct xio_session	*session;
 	char			url[256];
 	struct xio_context	*ctx;
-	struct hw_session_data	session_data;
+	struct session_data	session_data;
 	int			i = 0;
 
 	/* client session attributes */

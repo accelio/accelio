@@ -166,6 +166,8 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_prv_data)
 {
+	struct xio_connection_params cparams;
+
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       session, event_data->conn,
@@ -174,12 +176,17 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
 		/* assign connection private data */
-		event_data->conn_user_context = cb_prv_data;
+		cparams.user_context = cb_prv_data;
+		xio_set_connection_params(event_data->conn, &cparams);
+		break;
+	case XIO_SESSION_REJECT_EVENT:
+		xio_disconnect(event_data->conn);
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%"PRIu64", last comp:%"PRIu64", " \
 		       "delta:%"PRIu64"\n",
 		       last_sent,  last_comp, last_sent-last_comp);
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);

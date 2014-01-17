@@ -199,7 +199,8 @@ static void process_response(struct xio_msg *rsp)
 		first_time = 0;
 		data_len = txlen > rxlen ? txlen : rxlen;
 		data_len = data_len/1024;
-		print_counter = (data_len ? PRINT_COUNTER/data_len : PRINT_COUNTER);
+		print_counter = (data_len ?
+				 PRINT_COUNTER/data_len : PRINT_COUNTER);
 	}
 
 	if (++cnt == print_counter) {
@@ -236,21 +237,20 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop, 0);  /* exit */
+		if (pool) {
+			msg_pool_free(pool);
+			pool = NULL;
+		}
 		break;
 	default:
 		break;
 	};
 
-	if (pool) {
-		msg_pool_free(pool);
-		pool = NULL;
-	}
 
 	return 0;
 }

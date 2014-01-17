@@ -214,14 +214,14 @@ static int raio_handle_open(void *prv_session_data,
 
 
 reject:
-	 if (fd == -1) {
-		 struct raio_answer ans = {RAIO_CMD_OPEN, 0,
+	if (fd == -1) {
+		struct raio_answer ans = {RAIO_CMD_OPEN, 0,
 					   -1, errno};
-		 pack_u32((uint32_t *)&ans.ret_errno,
-			  pack_u32((uint32_t *)&ans.ret,
-			  pack_u32(&ans.data_len,
-			  pack_u32(&ans.command,
-			  pd->rsp_hdr))));
+		pack_u32((uint32_t *)&ans.ret_errno,
+			 pack_u32((uint32_t *)&ans.ret,
+			 pack_u32(&ans.data_len,
+			 pack_u32(&ans.command,
+			 pd->rsp_hdr))));
 		fprintf(stderr, "open %s failed %m\n", pathname);
 	 } else {
 		 unsigned overall_size = sizeof(fd);

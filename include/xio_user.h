@@ -840,6 +840,15 @@ struct xio_connection *xio_connect(
 int xio_disconnect(struct xio_connection *conn);
 
 /**
+ * free connection object
+ *
+ * @param[in] conn	The xio connection handle
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_connection_destroy(struct xio_connection *conn);
+
+/**
  * set connection parameters
  *
  * @param[in] conn	The xio connection handle

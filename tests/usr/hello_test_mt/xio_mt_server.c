@@ -354,7 +354,8 @@ static void *portal_server_cb(void *data)
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
-	server = xio_bind(ctx, &portal_server_ops, tdata->portal, NULL, 0, tdata);
+	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
+			  NULL, 0, tdata);
 	if (server == NULL)
 		goto cleanup;
 
@@ -402,6 +403,9 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
+		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
 		for (i = 0; i < server_data->tdata_nr; i++) {
@@ -621,7 +625,7 @@ int main(int argc, char *argv[])
 	server_data.loop	= xio_ev_loop_create();
 
 	/* create thread context for the client */
-	ctx	= xio_ctx_create(NULL, server_data.loop, test_config.poll_timeout);
+	ctx = xio_ctx_create(NULL, server_data.loop, test_config.poll_timeout);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
@@ -635,7 +639,8 @@ int main(int argc, char *argv[])
 	/* spawn portals */
 	port = test_config.server_port;
 	for (i = 0; i < server_data.tdata_nr; i++) {
-		server_data.tdata[i].affinity = ((test_config.cpu + i + 1)%max_cpus);
+		server_data.tdata[i].affinity =
+			((test_config.cpu + i)%max_cpus);
 		port++;
 		sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
 			test_config.server_addr, port);

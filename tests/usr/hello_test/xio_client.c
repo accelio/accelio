@@ -184,7 +184,8 @@ static void process_response(struct xio_msg *rsp)
 
 		data_len = txlen > rxlen ? txlen : rxlen;
 		data_len = data_len/1024;
-		print_counter = (data_len ? PRINT_COUNTER/data_len : PRINT_COUNTER);
+		print_counter = (data_len ?
+				 PRINT_COUNTER/data_len : PRINT_COUNTER);
 	}
 	if (++cnt == print_counter) {
 		char		timeb[40];
@@ -220,14 +221,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
-	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
-		xio_disconnect(event_data->conn);
-		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%"PRIu64", last recv:%"PRIu64", " \
 		       "delta:%"PRIu64"\n",
 		       last_sent, last_recv, last_sent-last_recv);
+
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_ev_loop_stop(loop, 0);  /* exit */
@@ -245,7 +244,7 @@ static int on_session_event(struct xio_session *session,
 	return 0;
 }
 /*---------------------------------------------------------------------------*/
-/* on_session_established`:						     */
+/* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
 			struct xio_new_session_rsp *rsp,
@@ -288,7 +287,6 @@ static int on_response(struct xio_session *session,
 
 	/* message is no longer needed */
 	xio_release_response(msg);
-
 
 	/* reset message */
 	msg->in.header.iov_base = NULL;

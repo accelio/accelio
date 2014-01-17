@@ -47,6 +47,7 @@ enum xio_connection_state {
 		XIO_CONNECTION_STATE_CLOSING,		/* user initiate */
 		XIO_CONNECTION_STATE_CLOSED,		/* user close */
 		XIO_CONNECTION_STATE_DISCONNECTED,	/* disconnect */
+		XIO_CONNECTION_STATE_ERROR,		/* error */
 };
 
 struct xio_connection {

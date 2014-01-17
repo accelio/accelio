@@ -241,37 +241,29 @@ cleanup:
 int xio_on_connection_rejected(struct xio_session *session,
 			       struct xio_connection *connection)
 {
-	struct xio_connection		*tmp_connection;
-
 	/* notify the upper layer */
-	struct xio_session_event_data  event = {
+	struct xio_session_event_data  ev_data = {
 		.event =		XIO_SESSION_REJECT_EVENT,
 		.reason =		session->reject_reason,
-		.conn =			connection,
-		.conn_user_context =
-			(connection) ? connection->cb_user_context : NULL,
 		.private_data =		session->new_ses_rsp.user_context,
 		.private_data_len =	session->new_ses_rsp.user_context_len
 	};
 
-	if (session->ses_ops.on_session_event)
-		session->ses_ops.on_session_event(
-				session, &event,
-				session->cb_user_context);
-
 	/* also send disconnect to connections that do no have conn */
-	list_for_each_entry_safe(connection, tmp_connection,
-				 &session->connections_list,
-				 connections_list_entry) {
-		if (connection && !connection->conn) {
-			event.conn	= connection;
-			event.conn_user_context =
-				connection->cb_user_context;
-			if (session->ses_ops.on_session_event)
-				session->ses_ops.on_session_event(
-						session, &event,
-						session->cb_user_context);
-		}
+	while (!list_empty(&session->connections_list)) {
+		connection = list_first_entry(&session->connections_list,
+				struct xio_connection,
+				connections_list_entry);
+		ev_data.conn =  connection;
+		ev_data.conn_user_context =
+			(connection) ? connection->cb_user_context : NULL;
+
+		if (session->ses_ops.on_session_event)
+			session->ses_ops.on_session_event(
+					session, &ev_data,
+					session->cb_user_context);
+		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
+		xio_session_disconnect(session, connection);
 	}
 
 	return 0;
@@ -611,6 +603,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 int xio_on_fin_rsp_recv(struct xio_connection *connection,
 			struct xio_task *task)
 {
+	TRACE_LOG("got fin response. session:%p, connection:%p\n",
+		  connection->session, connection);
+
 	xio_connection_release_fin(connection, task->sender_task->omsg);
 
 	/* recycle the task */
@@ -630,7 +625,7 @@ int xio_on_conn_refused(struct xio_session *session,
 			struct xio_conn *conn,
 			union xio_conn_event_data *event_data)
 {
-	struct xio_connection *connection, *tmp_connection;
+	struct xio_connection *connection;
 
 	/* enable the teardown */
 	session->disable_teardown  = 0;
@@ -641,13 +636,18 @@ int xio_on_conn_refused(struct xio_session *session,
 	    (session->state == XIO_SESSION_STATE_REDIRECTED)) {
 		session->state = XIO_SESSION_STATE_REFUSED;
 
-		list_for_each_entry_safe(connection, tmp_connection,
-					 &session->connections_list,
-					 connections_list_entry) {
+		while (!list_empty(&session->connections_list)) {
+			connection = list_first_entry(
+				&session->connections_list,
+				struct xio_connection,
+				connections_list_entry);
+			connection->state =
+				XIO_CONNECTION_STATE_DISCONNECTED;
 			xio_session_notify_connection_disconnected(
 					session,
 					connection,
 					XIO_E_SESSION_REFUSED);
+			xio_session_disconnect(session, connection);
 		}
 	}
 

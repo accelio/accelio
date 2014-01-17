@@ -52,9 +52,9 @@
 #define MAX_THREADS		6
 
 #ifndef SLIST_FOREACH_SAFE
-#define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = SLIST_FIRST((head));				\
-			(var) && ((tvar) = SLIST_NEXT((var), field), 1);	\
+#define	SLIST_FOREACH_SAFE(var, head, field, tvar)			 \
+	for ((var) = SLIST_FIRST((head));				 \
+			(var) && ((tvar) = SLIST_NEXT((var), field), 1); \
 			(var) = (tvar))
 #endif
 
@@ -149,7 +149,7 @@ static int on_response_comp(struct xio_session *session,
 	int				i = 0;
 
 	SLIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
-			  srv_ses_list, tmp_ses_data) {
+			   srv_ses_list, tmp_ses_data) {
 		if (ses_data->session == session) {
 			for (i = 0; i < MAX_THREADS; i++) {
 				if (ses_data->portal_data[i].tdata == tdata) {
@@ -179,7 +179,7 @@ static int on_request(struct xio_session *session,
 	int				i;
 
 	SLIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
-			  srv_ses_list, tmp_ses_data) {
+			   srv_ses_list, tmp_ses_data) {
 		if (ses_data->session == session) {
 			for (i = 0; i < MAX_THREADS; i++) {
 				if (ses_data->portal_data[i].tdata == tdata) {
@@ -277,34 +277,37 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_TEARDOWN_EVENT:
 		SLIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
-				srv_ses_list, tmp_ses_data) {
+				   srv_ses_list, tmp_ses_data) {
 			if (ses_data->session == session) {
 				for (i = 0; i < MAX_THREADS; i++) {
 					if (ses_data->portal_data[i].tdata) {
 						raio_handler_free_portal_data(
-								ses_data->portal_data[i].dd_data);
-						ses_data->portal_data[i].tdata = NULL;
-						server_data->last_reaped = i;
-						break;
+					   ses_data->portal_data[i].dd_data);
+					   ses_data->portal_data[i].tdata =
+						   NULL;
+					   server_data->last_reaped = i;
+					   break;
 					}
 				}
-				raio_handler_free_session_data(ses_data->dd_data);
+				raio_handler_free_session_data(
+						ses_data->dd_data);
 				SLIST_REMOVE(&server_data->ses_list,
-					     ses_data, raio_session_data, srv_ses_list);
+					     ses_data, raio_session_data,
+					     srv_ses_list);
 				free(ses_data);
 				break;
 			}
 		}
 		xio_session_destroy(session);
 		break;
-	case XIO_SESSION_NEW_CONNECTION_EVENT:
-	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	default:
 		printf("unexpected session event: session:%p, %s. reason: %s\n",
-				session,
-				xio_session_event_str(event_data->event),
-				xio_strerror(event_data->reason));
+		       session,
+		       xio_session_event_str(event_data->event),
+		       xio_strerror(event_data->reason));
 		break;
 	}
 
@@ -400,7 +403,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
 		server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
-		printf("[%d] affinity:%d/%d\n",i, server_data.tdata[i].affinity, max_cpus);
+		printf("[%d] affinity:%d/%d\n", i,
+		       server_data.tdata[i].affinity, max_cpus);
 		port += 1;
 		sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
 			argv[1], port);

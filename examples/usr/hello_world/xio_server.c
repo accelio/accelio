@@ -45,7 +45,7 @@
 #define PRINT_COUNTER		4000000
 
 /* server private data */
-struct hw_server_data {
+struct server_data {
 	struct xio_msg  rsp[QUEUE_DEPTH];	/* global message */
 };
 
@@ -59,13 +59,12 @@ static void process_request(struct xio_msg *req)
 	if (++cnt == PRINT_COUNTER) {
 		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
 		printf("message: [%"PRIu64"] - %s\n",
-				(req->sn + 1), (char *)req->in.header.iov_base);
+		       (req->sn + 1), (char *)req->in.header.iov_base);
 		cnt = 0;
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;
 	req->in.data_iovlen	  = 0;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -81,9 +80,8 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		break;
-	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -118,7 +116,7 @@ static int on_request(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct hw_server_data *server_data = cb_user_context;
+	struct server_data *server_data = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
@@ -149,7 +147,7 @@ struct xio_session_ops  server_ops = {
 int main(int argc, char *argv[])
 {
 	struct xio_server	*server;	/* server portal */
-	struct hw_server_data	server_data;
+	struct server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
 	void			*loop;
@@ -171,7 +169,7 @@ int main(int argc, char *argv[])
 
 	/* create "hello world" message */
 	memset(&server_data, 0, sizeof(server_data));
-	for (i = 0; i <QUEUE_DEPTH; i++) {
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		server_data.rsp[i].out.header.iov_base =
 			strdup("hello world header response");
 		server_data.rsp[i].out.header.iov_len =
@@ -194,7 +192,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* free the message */
-	for (i = 0; i <QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++)
 		free(server_data.rsp[i].out.header.iov_base);
 
 	/* free the context */
