@@ -90,7 +90,7 @@ static void register_backingstores(void)
 /*---------------------------------------------------------------------------*/
 /* raio_bs_init								     */
 /*---------------------------------------------------------------------------*/
-struct raio_bs *raio_bs_init(void *loop, const char *name)
+struct raio_bs *raio_bs_init(void *ctx, const char *name)
 {
 	struct raio_bs			*dev = NULL;
 	struct backingstore_template	*bst;
@@ -111,7 +111,7 @@ struct raio_bs *raio_bs_init(void *loop, const char *name)
 
 	dev->dd		= ((char *)dev) + sizeof(*dev);
 	dev->bst	= bst;
-	dev->loop	= loop;
+	dev->ctx	= ctx;
 
 	if (dev->bst->bs_init) {
 		int retval = dev->bst->bs_init(dev);

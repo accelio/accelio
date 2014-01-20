@@ -42,6 +42,7 @@
 #include "xio_context.h"
 #include "xio_schedwork.h"
 #include "get_clock.h"
+#include "xio_ev_loop.h"
 
 
 /*---------------------------------------------------------------------------*/
@@ -144,9 +145,8 @@ void xio_stats_handler(int fd, int events, void *data)
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_create                                                            */
 /*---------------------------------------------------------------------------*/
-struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
-		void *ev_loop,
-		int polling_timeout)
+struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
+				       int polling_timeout_us)
 {
 	struct xio_context		*ctx = NULL;
 	int				cpu;
@@ -169,20 +169,11 @@ struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
 		ERROR_LOG("calloc failed. %m\n");
 		return NULL;
 	}
-
-	if (loop_ops == NULL)  {
-		/* use default implementation */
-		ctx->loop_ops.ev_loop_add_cb = xio_ev_loop_add;
-		ctx->loop_ops.ev_loop_del_cb = xio_ev_loop_del;
-	} else {
-		ctx->loop_ops.ev_loop_add_cb = loop_ops->ev_loop_add_cb;
-		ctx->loop_ops.ev_loop_del_cb = loop_ops->ev_loop_del_cb;
-	}
-	ctx->ev_loop = ev_loop;
+	ctx->ev_loop		= xio_ev_loop_create();
 
 	ctx->cpuid		= cpu;
 	ctx->nodeid		= xio_get_nodeid(cpu);
-	ctx->polling_timeout	= polling_timeout;
+	ctx->polling_timeout	= polling_timeout_us;
 
 	ctx->worker = (uint64_t) pthread_self();
 
@@ -251,8 +242,8 @@ struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
 	DEBUG_LOG("netlink socket bind to port %u\n",
 		  nladdr.nl_pid);
 
-	ctx->loop_ops.ev_loop_add_cb(ev_loop, fd, XIO_POLLIN,
-				     xio_stats_handler, ctx);
+	xio_ev_loop_add(ctx->ev_loop, fd, XIO_POLLIN,
+			xio_stats_handler, ctx);
 
 	ctx->stats.hertz = get_cpu_mhz(0) * 1000000.0 + 0.5;
 	/* Init default counters' name */
@@ -275,9 +266,9 @@ cleanup1:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_destroy	                                                     */
+/* xio_context_destroy	                                                     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_destroy(struct xio_context *ctx)
+void xio_context_destroy(struct xio_context *ctx)
 {
 	int i;
 
@@ -287,7 +278,7 @@ void xio_ctx_destroy(struct xio_context *ctx)
 
 	if (ctx->netlink_sock) {
 		int fd = (int)(long) ctx->netlink_sock;
-		ctx->loop_ops.ev_loop_del_cb(ctx->ev_loop, fd);
+		xio_ev_loop_del(ctx->ev_loop, fd);
 		close(fd);
 		ctx->netlink_sock = NULL;
 	}
@@ -298,9 +289,10 @@ void xio_ctx_destroy(struct xio_context *ctx)
 
 	xio_schedwork_close(ctx->sched_work);
 
+	xio_ev_loop_destroy(&ctx->ev_loop);
 	free(ctx);
-	ctx = NULL;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_timer_add							     */
 /*---------------------------------------------------------------------------*/
@@ -380,9 +372,9 @@ int xio_del_counter(struct xio_context *ctx, int counter)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_set_context_params						     */
+/* xio_context_set_params						     */
 /*---------------------------------------------------------------------------*/
-int xio_set_context_params(struct xio_context *ctx,
+int xio_context_set_params(struct xio_context *ctx,
 			    struct xio_context_params *params)
 {
 	if (!ctx || !params) {
@@ -397,9 +389,60 @@ int xio_set_context_params(struct xio_context *ctx,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_get_context_params						     */
+/* xio_context_get_params						     */
 /*---------------------------------------------------------------------------*/
-struct xio_context_params *xio_get_context_params(struct xio_context *ctx)
+struct xio_context_params *xio_context_get_params(struct xio_context *ctx)
 {
 	return &ctx->params;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_get_poll_params						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_get_poll_params(struct xio_context *ctx,
+				struct xio_poll_params *poll_params)
+{
+	return xio_ev_loop_get_poll_params(ctx->ev_loop, poll_params);
+
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_add_ev_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_add_ev_handler(struct xio_context *ctx,
+			       int fd, int events,
+			       xio_ev_handler_t handler,
+			       void *data)
+{
+	return xio_ev_loop_add(ctx->ev_loop,
+			       fd, events, handler, data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_del_ev_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_del_ev_handler(struct xio_context *ctx,
+			       int fd)
+{
+	return xio_ev_loop_del(ctx->ev_loop, fd);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_run_loop							     */
+/*---------------------------------------------------------------------------*/
+int xio_context_run_loop(struct xio_context *ctx, int timeout_ms)
+{
+	if (timeout_ms == -1)
+		return	xio_ev_loop_run(ctx->ev_loop);
+	else
+		return	xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_stop_loop						     */
+/*---------------------------------------------------------------------------*/
+void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread)
+{
+	xio_ev_loop_stop(ctx->ev_loop, is_self_thread);
+}
+

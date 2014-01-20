@@ -150,7 +150,6 @@ int main(int argc, char *argv[])
 	struct server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
-	void			*loop;
 	int			i;
 
 	if (argc < 2) {
@@ -161,11 +160,8 @@ int main(int argc, char *argv[])
 	/* initialize library */
 	xio_init();
 
-	/* open default event loop */
-	loop	= xio_ev_loop_create();
-
 	/* create thread context for the client */
-	ctx	= xio_ctx_create(NULL, loop, 0);
+	ctx	= xio_context_create(NULL, 0);
 
 	/* create "hello world" message */
 	memset(&server_data, 0, sizeof(server_data));
@@ -182,7 +178,7 @@ int main(int argc, char *argv[])
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
 	if (server) {
 		printf("listen to %s\n", url);
-		xio_ev_loop_run(loop);
+		xio_context_run_loop(ctx, XIO_INFINITE);
 
 		/* normal exit phase */
 		fprintf(stdout, "exit signaled\n");
@@ -196,10 +192,7 @@ int main(int argc, char *argv[])
 		free(server_data.rsp[i].out.header.iov_base);
 
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 
 	return 0;
 }

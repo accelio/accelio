@@ -73,8 +73,7 @@ struct raio_thread_data {
 	int				affinity;
 	int				pad;
 	struct xio_msg			rsp;
-	void				*loop;
-
+	struct xio_context		*ctx;
 };
 
 struct raio_portal_data  {
@@ -217,7 +216,6 @@ static void *portal_server_cb(void *data)
 	struct raio_thread_data	*tdata = data;
 	cpu_set_t		cpuset;
 	pthread_t		thread;
-	struct xio_context	*ctx;
 	struct xio_server	*server;
 
 	/* set affinity to thread */
@@ -228,14 +226,11 @@ static void *portal_server_cb(void *data)
 
 	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 
-	/* open default event loop */
-	tdata->loop = xio_ev_loop_create();
-
 	/* create thread context for the client */
-	ctx = xio_ctx_create(NULL, tdata->loop, 0);
+	tdata->ctx = xio_context_create(NULL, 0);
 
 	/* bind a listener server to a portal/url */
-	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
+	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
 			  NULL, 0, tdata);
 	if (server == NULL) {
 		fprintf(stderr, "failed to bind server\n");
@@ -243,7 +238,7 @@ static void *portal_server_cb(void *data)
 	}
 
 	/* the default xio supplied main loop */
-	xio_ev_loop_run(tdata->loop);
+	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -253,10 +248,7 @@ static void *portal_server_cb(void *data)
 
 cleanup:
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&tdata->loop);
+	xio_context_destroy(tdata->ctx);
 
 	return NULL;
 }
@@ -338,7 +330,7 @@ static int on_new_session(struct xio_session *session,
 			raio_handler_init_portal_data(
 				ses_data->dd_data,
 				i,
-				ses_data->portal_data[i].tdata->loop);
+				ses_data->portal_data[i].tdata->ctx);
 	}
 	SLIST_INSERT_HEAD(&server_data->ses_list, ses_data, srv_ses_list);
 
@@ -370,7 +362,6 @@ int main(int argc, char *argv[])
 	struct raio_server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
-	void			*loop;
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 	int			curr_cpu;
@@ -384,11 +375,8 @@ int main(int argc, char *argv[])
 	server_data.last_reaped = -1;
 	SLIST_INIT(&server_data.ses_list);
 
-	/* open default event loop */
-	loop	= xio_ev_loop_create();
-
 	/* create thread context for the client */
-	ctx	= xio_ctx_create(NULL, loop, 0);
+	ctx	= xio_context_create(NULL, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
@@ -411,7 +399,7 @@ int main(int argc, char *argv[])
 		pthread_create(&server_data.thread_id[i], NULL,
 			       portal_server_cb, &server_data.tdata[i]);
 	}
-	xio_ev_loop_run(loop);
+	xio_context_run_loop(ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -424,10 +412,7 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 
 	return 0;
 }

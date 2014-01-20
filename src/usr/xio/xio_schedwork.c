@@ -163,10 +163,10 @@ struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx)
 	}
 
 	/* add to epoll */
-	retval = ctx->loop_ops.ev_loop_add_cb(
-			ctx->ev_loop,
+	retval = xio_context_add_ev_handler(
+			ctx,
 			sched_work->timer_fd,
-			XIO_POLLIN|XIO_POLLLT,
+			XIO_POLLIN,
 			xio_timed_action_handler,
 			sched_work);
 	if (retval) {
@@ -186,8 +186,8 @@ int xio_schedwork_close(struct xio_schedwork *sched_work)
 {
 	int retval;
 
-	retval = sched_work->ctx->loop_ops.ev_loop_del_cb(
-			sched_work->ctx->ev_loop,
+	retval = xio_context_del_ev_handler(
+			sched_work->ctx,
 			sched_work->timer_fd);
 	if (retval)
 		ERROR_LOG("ev_loop_del_cb failed. %m\n");

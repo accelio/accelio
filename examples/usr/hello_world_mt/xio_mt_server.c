@@ -57,7 +57,7 @@ struct thread_data {
 	int			affinity;
 	int			cnt;
 	struct xio_msg		rsp[QUEUE_DEPTH];
-	void			*loop;
+	struct xio_context	*ctx;
 	pthread_t		thread_id;
 };
 
@@ -151,7 +151,6 @@ static void *portal_server_cb(void *data)
 {
 	struct thread_data	*tdata = data;
 	cpu_set_t		cpuset;
-	struct xio_context	*ctx;
 	struct xio_server	*server;
 	char			str[128];
 	int			i;
@@ -163,15 +162,13 @@ static void *portal_server_cb(void *data)
 
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
-	/* open default event loop */
-	tdata->loop = xio_ev_loop_create();
 
 	/* create thread context for the client */
-	ctx = xio_ctx_create(NULL, tdata->loop, 0);
+	tdata->ctx = xio_context_create(NULL, 0);
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
-	server = xio_bind(ctx, &portal_server_ops, tdata->portal,
+	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
 			  NULL, 0, tdata);
 	if (server == NULL)
 		goto cleanup;
@@ -186,7 +183,7 @@ static void *portal_server_cb(void *data)
 	}
 
 	/* the default xio supplied main loop */
-	xio_ev_loop_run(tdata->loop);
+	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -200,10 +197,7 @@ static void *portal_server_cb(void *data)
 
 cleanup:
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&tdata->loop);
+	xio_context_destroy(tdata->ctx);
 
 	return NULL;
 }
@@ -274,18 +268,14 @@ int main(int argc, char *argv[])
 	struct server_data	server_data;
 	char			url[256];
 	struct xio_context	*ctx;
-	void			*loop;
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 
 
 	memset(&server_data, 0, sizeof(server_data));
 
-	/* open default event loop */
-	loop	= xio_ev_loop_create();
-
 	/* create thread context for the client */
-	ctx	= xio_ctx_create(NULL, loop, 0);
+	ctx	= xio_context_create(NULL, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
@@ -305,7 +295,7 @@ int main(int argc, char *argv[])
 			       portal_server_cb, &server_data.tdata[i]);
 	}
 
-	xio_ev_loop_run(loop);
+	xio_context_run_loop(ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -318,10 +308,7 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 
 	return 0;
 }

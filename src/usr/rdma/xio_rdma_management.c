@@ -50,6 +50,7 @@
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_ev_loop.h"
 
 
 /* default option values */
@@ -204,7 +205,7 @@ int xio_device_thread_add_device(struct xio_device *dev)
 	retval = xio_ev_loop_add(
 			dev_tdata.async_loop,
 			dev->verbs->async_fd,
-			XIO_POLLIN|XIO_POLLLT,
+			XIO_POLLIN,
 			xio_async_ev_handler,
 			dev);
 	if (retval != 0) {
@@ -275,10 +276,10 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 
 
 	/* add to epoll */
-	retval = ctx->loop_ops.ev_loop_add_cb(
-			ctx->ev_loop,
+	retval = xio_context_add_ev_handler(
+			ctx,
 			tcq->channel->fd,
-			XIO_POLLIN|XIO_POLLLT,
+			XIO_POLLIN,
 			xio_data_ev_handler,
 			tcq);
 	if (retval) {
@@ -322,8 +323,8 @@ cleanup5:
 	if (retval)
 		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
 cleanup4:
-	ctx->loop_ops.ev_loop_del_cb(
-			ctx->ev_loop,
+	xio_context_del_ev_handler(
+			ctx,
 			tcq->channel->fd);
 cleanup3:
 	retval = ibv_destroy_comp_channel(tcq->channel);
@@ -363,8 +364,8 @@ static void xio_cq_release(struct xio_cq *tcq, int delete_fd)
 				   tcq->cq_events_that_need_ack = 0;
 	}
 	if (delete_fd) {
-		retval = tcq->ctx->loop_ops.ev_loop_del_cb(
-				tcq->ctx->ev_loop,
+		retval = xio_context_del_ev_handler(
+				tcq->ctx,
 				tcq->channel->fd);
 		if (retval)
 			ERROR_LOG("ev_loop_del_cb failed. (errno=%d %m)\n",
@@ -588,9 +589,7 @@ static struct xio_rdma_mempool *xio_rdma_mempool_array_get(
 static void xio_cm_channel_release(struct xio_cm_channel *channel)
 {
 	list_del(&channel->channels_list_entry);
-	channel->ctx->loop_ops.ev_loop_del_cb(
-			channel->ctx->ev_loop,
-			channel->cm_channel->fd);
+	xio_context_del_ev_handler(channel->ctx, channel->cm_channel->fd);
 	rdma_destroy_event_channel(channel->cm_channel);
 
 	free(channel);
@@ -1655,10 +1654,10 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 	fcntl(channel->cm_channel->fd, F_SETFL,
 	      fcntl(channel->cm_channel->fd, F_GETFL, 0) | O_NONBLOCK);
 
-	retval = ctx->loop_ops.ev_loop_add_cb(
-			ctx->ev_loop,
+	retval = xio_context_add_ev_handler(
+			ctx,
 			channel->cm_channel->fd,
-			XIO_POLLIN | XIO_POLLLT,
+			XIO_POLLIN,
 			xio_connection_ev_handler,
 			channel->cm_channel);
 	if (retval != 0) {

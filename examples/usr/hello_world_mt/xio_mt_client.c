@@ -54,7 +54,6 @@ struct thread_data {
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
 	struct xio_msg		req;
-	void			*loop;
 	pthread_t		thread_id;
 };
 
@@ -78,11 +77,8 @@ static void *worker_thread(void *data)
 
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
-	/* open default event loop */
-	tdata->loop = xio_ev_loop_create();
-
 	/* create thread context for the client */
-	tdata->ctx = xio_ctx_create(NULL, tdata->loop, 0);
+	tdata->ctx = xio_context_create(NULL, 0);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
@@ -100,16 +96,13 @@ static void *worker_thread(void *data)
 	xio_send_request(tdata->conn, &tdata->req);
 
 	/* the default xio supplied main loop */
-	xio_ev_loop_run(tdata->loop);
+	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
 	/* free the context */
-	xio_ctx_destroy(tdata->ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&tdata->loop);
+	xio_context_destroy(tdata->ctx);
 
 	fprintf(stdout, "thread exit\n");
 	return NULL;
@@ -154,7 +147,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_ev_loop_stop(session_data->tdata[i].loop, 0);
+			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
 		break;
 	default:
 		break;
@@ -241,8 +234,6 @@ int main(int argc, char *argv[])
 	xio_session_destroy(session_data.session);
 
 cleanup:
-
-
 	return 0;
 }
 

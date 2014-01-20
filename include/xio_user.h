@@ -67,6 +67,12 @@ extern "C" {
  */
 #define XIO_VERSION			0x0100
 
+
+/**
+ * @def XIO_INFINITE
+ * @brief inifinite time flag for event loop
+ */
+#define XIO_INFINITE			-1
 /*---------------------------------------------------------------------------*/
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
@@ -182,10 +188,7 @@ enum xio_status {
 enum xio_ev_loop_events {
 	XIO_POLLIN			= 0x001,
 	XIO_POLLOUT			= 0x002,
-	XIO_POLLLT			= 0x004,  /**< level-triggered poll */
-						  /**< cancels the default  */
-						  /**< event loop behavior  */
-						  /**< edge -triggered	    */
+	XIO_POLLET			= 0x004,  /**< edge-triggered poll */
 	XIO_ONESHOT			= 0x008
 };
 
@@ -326,6 +329,14 @@ struct xio_context_params {
 };
 
 /**
+ * @struct xio_context_attr
+ * @brief context atributes structure
+ */
+struct xio_context_attr {
+	uint64_t		reserved;	/**< private context */
+};
+
+/**
  * @struct xio_buf
  * @brief buffer structure
  */
@@ -458,37 +469,20 @@ struct xio_new_session_rsp {
  */
 typedef void (*xio_ev_handler_t)(int fd, int events, void *data);
 
+
 /**
- * @struct xio_loop_ops
- * @brief user provided hooks for using external
- *        on the user's event handler (i.e. epoll, libevent etc)
+ * @struct xio_poll_params
+ * @brief  polling parameters to be used by external dispatcher
  */
-struct xio_loop_ops {
-	/**
-	 * function hook to add event handlers on dispatcher
-	 *
-	 * @param[in] loop	the dispatcher context
-	 * @param[in] fd	the file descriptor
-	 * @param[in] events	the event signaled as defined in
-	 *			enum xio_ev_loop_events
-	 * @param[in] handler	event handler that handles the event
-	 * @param[in] data	user private data
-	 *
-	 * @returns	success (0), or a (negative) error value
-	 */
-	int (*ev_loop_add_cb)(void *loop, int fd,
-			      int events,
-			      xio_ev_handler_t handler,
-			      void *data);
-	/**
-	 * function hook to delete event handlers from dispatcher
-	 *
-	 * @param[in] loop	the dispatcher context
-	 * @param[in] fd	the file descriptor
-	 *
-	 * @returns	success (0), or a (negative) error value
-	 */
-	int (*ev_loop_del_cb)(void *loop, int fd);
+struct xio_poll_params {
+
+	int			fd;	 /**< the descriptor	              */
+	int			events;	 /**< the types of signals as defined */
+	                                 /**< in enum xio_ev_loop_events      */
+	xio_ev_handler_t	handler; /**< event handler that handles the  */
+					 /**< event                           */
+	void			*data;	 /**< user private data provided to   */
+					 /**< the handler                     */
 };
 
 /**
@@ -737,15 +731,13 @@ void xio_shutdown(void);
 /**
  * creates xio context - a context object represent concurrency unit
  *
- * @param[in] loop_ops Structure of callbacks operations for this context
- * @param[in] ev_loop  Event loop handler
+ * @param[in] ctx_attr context attributes
  * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
  *
  * @returns xio context handle, or NULL upon error
  */
-struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
-				 void *ev_loop,
-				 int polling_timeout_us);
+struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
+				       int polling_timeout_us);
 
 /**
  * closes the xio context and free its resources
@@ -753,7 +745,69 @@ struct xio_context *xio_ctx_create(struct xio_loop_ops *loop_ops,
  * @param[in] ctx	Pointer to the xio context handle
  *
  */
-void xio_ctx_destroy(struct xio_context *ctx);
+void xio_context_destroy(struct xio_context *ctx);
+
+/**
+ * get context poll parameters to assign to external dispatcher
+ *
+ * @param[in] ctx	  The xio context handle
+ * @param[in] poll_params Structure with polling parameters
+ *			  to be added to external dispatcher
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_context_get_poll_params(struct xio_context *ctx,
+				struct xio_poll_params *poll_params);
+
+/**
+ * add external fd to be used by internal dispatcher
+ *
+ * @param[in] ctx	  The xio context handle
+ * @param[in] fd	the file descriptor
+ * @param[in] events	the event signaled as defined in
+ *			enum xio_ev_loop_events
+ * @param[in] handler	event handler that handles the event
+ * @param[in] data	user private data
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_context_add_ev_handler(struct xio_context *ctx,
+			       int fd, int events,
+			       xio_ev_handler_t handler,
+			       void *data);
+
+/**
+ * removes external fd from internal dispatcher
+ *
+ * @param[in] ctx	The xio context handle
+ * @param[in] fd	the file descriptor
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_context_del_ev_handler(struct xio_context *ctx,
+			       int fd);
+
+/**
+ * closes the xio context and free its resources
+ *
+ * @param[in] ctx		Pointer to the xio context handle
+ * @param[in] timeout_msec	The timeout argument specifies the minimum
+ *				number of milliseconds that
+ *				xio_context_loop_run will block
+ *				before exiting
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
+
+/**
+ * stops context's running event loop
+ *
+ * @param[in] loop		Pointer to event loop
+ * @param[in] is_self_thread	lighter stop if called from within event loop
+ *				callbacks
+ */
+void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread);
 
 /**
  * set context parameters
@@ -763,7 +817,7 @@ void xio_ctx_destroy(struct xio_context *ctx);
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_set_context_params(struct xio_context *ctx,
+int xio_context_set_params(struct xio_context *ctx,
 			   struct xio_context_params *params);
 
 /**
@@ -772,7 +826,7 @@ int xio_set_context_params(struct xio_context *ctx,
  * @param[in] ctx	The xio context handle
  *
  */
-struct xio_context_params *xio_get_context_params(struct xio_context *ctx);
+struct xio_context_params *xio_context_get_params(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
 /* XIO session API                                                           */
@@ -1109,84 +1163,6 @@ int xio_set_opt(void *xio_obj, int level, int optname,
  */
 int xio_get_opt(void *xio_obj, int level, int optname,
 		void *optval, int *optlen);
-
-/*---------------------------------------------------------------------------*/
-/* XIO default event loop API						     */
-/*									     */
-/* NoTE: xio provides default muxer implementation around epoll.	     */
-/* users are encouraged to utilize their own implementations and provides    */
-/* appropriate services to xio via the xio's context open interface	     */
-/*---------------------------------------------------------------------------*/
-/**
- * initializes event loop handle
- *
- * @returns event loop handle or NULL upon error
- */
-void *xio_ev_loop_create(void);
-
-/**
- * xio_ev_loop_run - event loop main loop
- *
- * @param[in] loop	Pointer to the event dispatcher
- *
- * @returns success (0), or a (negative) error value
- */
-int xio_ev_loop_run(void *loop);
-
-/**
- * event loop main loop with limited blocking duration
- *
- * @param[in] loop_hndl		Pointer to event loop
- * @param[in] timeout_msec	The timeout argument specifies the minimum
- *				number of milliseconds that xio_ev_loop_run
- *				will block before exiting
- *
- * @returns success (0), or a (negative) error value
- */
-int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
-
-/**
- * stop a running event loop main loop
- *
- * @param[in] loop		Pointer to event loop
- * @param[in] is_self_thread	lighter stop if called from within ev_loop
- *				callbacks
- */
-void xio_ev_loop_stop(void *loop, int is_self_thread);
-
-/**
- * destroy the event loop
- *
- * @param[in] loop		Pointer to event loop
- */
-void xio_ev_loop_destroy(void **loop);
-
-/**
- * add event handlers on dispatcher
- *
- * @param[in] loop	the dispatcher context
- * @param[in] fd	the file descriptor
- * @param[in] events	the event signaled as defined in
- *			enum xio_ev_loop_events
- * @param[in] handler	event handler that handles the event
- * @param[in] data	user private data
- *
- * @returns	success (0), or a (negative) error value
- */
-int xio_ev_loop_add(void *loop,
-		    int fd, int events,
-		    xio_ev_handler_t handler,
-		    void *data);
-
-/**
- * delete event handlers from dispatcher
- *
- * @param[in] loop	the dispatcher context
- * @param[in] fd	the file descriptor
- *
- * @returns	success (0), or a (negative) error value
- */
-int xio_ev_loop_del(void *loop, int fd);
 
 
 #ifdef __cplusplus

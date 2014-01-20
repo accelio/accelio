@@ -78,14 +78,13 @@ struct raio_io_u {
 
 struct raio_io_portal_data {
 	struct raio_bs			*bs_dev;
-	void				*loop;
 	int				iodepth;
 	int				io_nr;
 	int				io_u_free_nr;
 	int				pad;
 	struct raio_io_u		*io_us_free;
 	struct msg_pool			*rsp_pool;
-
+	struct xio_context		*ctx;
 	struct xio_msg			rsp;
 	char				rsp_hdr[512];
 
@@ -121,12 +120,12 @@ void *raio_handler_init_session_data(int portals_nr)
 /* raio_handler_init_portal_data				             */
 /*---------------------------------------------------------------------------*/
 void *raio_handler_init_portal_data(void *prv_session_data,
-				    int portal_nr, void *loop)
+				    int portal_nr, void *ctx)
 {
 	struct raio_io_session_data *sd = prv_session_data;
 	struct raio_io_portal_data *pd = &sd->pd[portal_nr];
 
-	pd->loop = loop;
+	pd->ctx = ctx;
 	pd->rsp.out.header.iov_base = pd->rsp_hdr;
 	pd->rsp.out.header.iov_len  = sizeof(pd->rsp_hdr);
 
@@ -407,9 +406,9 @@ static int raio_handle_setup(void *prv_session_data,
 	}
 
 	if (sd->is_null)
-		pd->bs_dev = raio_bs_init(pd->loop, "null");
+		pd->bs_dev = raio_bs_init(pd->ctx, "null");
 	else
-		pd->bs_dev = raio_bs_init(pd->loop, "aio");
+		pd->bs_dev = raio_bs_init(pd->ctx, "aio");
 
 	errno = -raio_bs_open(pd->bs_dev, fd);
 

@@ -51,7 +51,7 @@ struct backingstore_template {
 };
 
 struct raio_bs {
-	void				*loop;
+	void				*ctx;
 	int				fd;
 	int				reserved;
 	struct backingstore_template	*bst;
@@ -61,7 +61,7 @@ struct raio_bs {
 /*---------------------------------------------------------------------------*/
 /* raio_bs_init								     */
 /*---------------------------------------------------------------------------*/
-struct raio_bs *raio_bs_init(void *loop, const char *name);
+struct raio_bs *raio_bs_init(void *ctx, const char *name);
 
 /*---------------------------------------------------------------------------*/
 /* raio_bs_exit								     */

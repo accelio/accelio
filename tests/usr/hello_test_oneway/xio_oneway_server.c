@@ -75,7 +75,6 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static void			*loop;
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
 static struct xio_connection	*connection = NULL;
@@ -181,7 +180,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
-		xio_ev_loop_stop(loop, 0);
+		xio_context_stop_loop(ctx, 0);
 		break;
 	default:
 		break;
@@ -499,21 +498,12 @@ int main(int argc, char *argv[])
 	if (pool == NULL)
 		return -1;
 
-	/* initiate event loop dispatcher */
-	loop	= xio_ev_loop_create();
-	if (loop == NULL) {
-		error = xio_errno();
-		fprintf(stderr, "event loop creation failed. reason " \
-			"%d - (%s)\n", error, xio_strerror(error));
-		goto exit1;
-	}
-
-	ctx	= xio_ctx_create(NULL, loop, 0);
+	ctx	= xio_context_create(NULL, 0);
 	if (ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit2;
+		goto exit1;
 	}
 
 	/* create a url and bind to server */
@@ -526,7 +516,7 @@ int main(int argc, char *argv[])
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, NULL);
 	if (server) {
 		printf("listen to %s\n", url);
-		xio_ev_loop_run(loop);
+		xio_context_run_loop(ctx, XIO_INFINITE);
 
 		/* normal exit phase */
 		fprintf(stdout, "exit signaled\n");
@@ -535,9 +525,7 @@ int main(int argc, char *argv[])
 		xio_unbind(server);
 	}
 
-	xio_ctx_destroy(ctx);
-exit2:
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 
 exit1:
 	if (pool)

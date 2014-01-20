@@ -78,10 +78,10 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static void			*loop;
 static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
+static struct xio_context	*ctx;
 static uint64_t			last_sent;
 static uint64_t			last_recv;
 
@@ -229,7 +229,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_ev_loop_stop(loop, 0);  /* exit */
+		xio_context_stop_loop(ctx, XIO_INFINITE);  /* exit */
 		if (pool) {
 			msg_pool_free(pool);
 			pool = NULL;
@@ -486,7 +486,6 @@ int main(int argc, char *argv[])
 	int			error;
 	int			retval;
 	char			url[256];
-	struct xio_context	*ctx;
 	struct xio_msg		*msg;
 	int			i = 0;
 
@@ -508,24 +507,16 @@ int main(int argc, char *argv[])
 
 	xio_init();
 
-	loop = xio_ev_loop_create();
-	if (loop == NULL) {
-		error = xio_errno();
-		fprintf(stderr, "event loop creation failed. reason " \
-			"%d - (%s)\n", error, xio_strerror(error));
-		goto exit1;
-	}
+	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
+		return -1;
 
-	ctx = xio_ctx_create(NULL, loop, 0);
+	ctx = xio_context_create(NULL, 0);
 	if (ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit2;
+		goto exit1;
 	}
-
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
@@ -535,7 +526,7 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit3;
+		goto exit2;
 	}
 	/* connect the session  */
 	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
@@ -585,19 +576,19 @@ int main(int argc, char *argv[])
 	}
 
 	/* the default xio supplied main loop */
-	retval = xio_ev_loop_run(loop);
+	retval = xio_context_run_loop(ctx, XIO_INFINITE);
 	if (retval != 0) {
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit4;
+		goto exit3;
 	}
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
 
-exit4:
+exit3:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
@@ -605,10 +596,8 @@ exit4:
 			error, xio_strerror(error));
 	}
 
-exit3:
-	xio_ctx_destroy(ctx);
 exit2:
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 exit1:
 	msg_api_free();
 

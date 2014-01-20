@@ -37,6 +37,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./xio/xio_os.h				\
 			./xio/xio_tls.h				\
 			./xio/xio_timers_list.h			\
+			./xio/xio_ev_loop.h			\
 			./rdma/xio_rdma_mempool.h		\
 			./rdma/xio_rdma_transport.h		\
 			./rdma/xio_rdma_utils.h			\

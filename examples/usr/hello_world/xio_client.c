@@ -46,7 +46,7 @@
 
 /* private session data */
 struct session_data {
-	void			*loop;
+	struct xio_context	*ctx;
 	struct xio_connection	*conn;
 	struct xio_msg		req[QUEUE_DEPTH];
 };
@@ -88,7 +88,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_ev_loop_stop(session_data->loop, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
 		break;
 	default:
 		break;
@@ -137,7 +137,6 @@ int main(int argc, char *argv[])
 {
 	struct xio_session	*session;
 	char			url[256];
-	struct xio_context	*ctx;
 	struct session_data	session_data;
 	int			i = 0;
 
@@ -151,11 +150,9 @@ int main(int argc, char *argv[])
 	/* initialize library */
 	xio_init();
 
-	/* open default event loop */
-	session_data.loop = xio_ev_loop_create();
-
 	/* create thread context for the client */
-	ctx = xio_ctx_create(NULL, session_data.loop, 0);
+	session_data.ctx = xio_context_create(NULL, 0);
+
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
@@ -163,7 +160,8 @@ int main(int argc, char *argv[])
 				   &attr, url, 0, 0, &session_data);
 
 	/* connect the session  */
-	session_data.conn = xio_connect(session, ctx, 0, NULL, &session_data);
+	session_data.conn = xio_connect(session, session_data.ctx,
+					0, NULL, &session_data);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -177,8 +175,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < QUEUE_DEPTH; i++)
 		xio_send_request(session_data.conn, &session_data.req[i]);
 
-	/* the default xio supplied main loop */
-	xio_ev_loop_run(session_data.loop);
+	/* event dispatcher is now running */
+	xio_context_run_loop(session_data.ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -188,10 +186,7 @@ int main(int argc, char *argv[])
 		free(session_data.req[i].out.header.iov_base);
 
 	/* free the context */
-	xio_ctx_destroy(ctx);
-
-	/* destroy the default loop */
-	xio_ev_loop_destroy(&session_data.loop);
+	xio_context_destroy(session_data.ctx);
 
 	printf("good bye\n");
 	return 0;

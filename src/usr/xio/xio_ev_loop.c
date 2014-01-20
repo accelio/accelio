@@ -44,6 +44,7 @@
 #include <sys/epoll.h>
 
 #include <libxio.h>
+#include "xio_ev_loop.h"
 #include "xio_common.h"
 
 #ifndef ARRAY_SIZE
@@ -86,7 +87,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
 	/* default is edge triggered */
-	if (!(events & XIO_POLLLT))
+	if (events & XIO_POLLET)
 		ev.events |= EPOLLET;
 	if (events & XIO_ONESHOT)
 		ev.events |= EPOLLONESHOT;
@@ -190,7 +191,7 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
 	/* default is edge triggered */
-	if (!(events & XIO_POLLLT))
+	if (events & XIO_POLLET)
 		ev.events |= EPOLLET;
 	if (events & XIO_ONESHOT)
 		ev.events |= EPOLLONESHOT;
@@ -242,7 +243,7 @@ void *xio_ev_loop_create()
 	}
 	/* ADD & SET the wakeup fd and once application wants to arm
 	 * just MODify the already prepared eventfd to the epoll */
-	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLLT, NULL, NULL);
+	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLIN, NULL, NULL);
 	retval = eventfd_write(loop->wakeup_event, val);
 	if (retval != 0)
 		goto cleanup2;
@@ -351,11 +352,11 @@ inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 			   cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
 	xio_ev_loop_modify(loop, loop->wakeup_event,
-			   XIO_POLLIN | XIO_POLLLT | XIO_ONESHOT);
+			   XIO_POLLIN | XIO_ONESHOT);
 }
 
 /*---------------------------------------------------------------------------*/
-/* svc_loop_destroy                                                          */
+/* xio_ev_loop_destroy                                                       */
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_destroy(void **loop_hndl)
 {
@@ -380,5 +381,37 @@ void xio_ev_loop_destroy(void **loop_hndl)
 
 	free((*loop));
 	*loop = NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_handler							     */
+/*---------------------------------------------------------------------------*/
+static void xio_ev_loop_handler(int fd, int events, void *data)
+{
+	struct xio_ev_loop	*loop = data;
+
+	loop->stop_loop = 1;
+	xio_ev_loop_run_helper(loop, 0);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_get_poll_params                                               */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_get_poll_params(void *loop_hndl,
+				struct xio_poll_params *poll_params)
+{
+	struct xio_ev_loop	*loop = loop_hndl;
+
+	if (!loop_hndl || !poll_params) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
+
+	poll_params->fd		= loop->efd;
+	poll_params->events	= XIO_POLLIN;
+	poll_params->handler	= xio_ev_loop_handler;
+	poll_params->data	= loop_hndl;
+
+	return 0;
 }
 

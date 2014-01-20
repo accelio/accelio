@@ -73,10 +73,11 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static void			*loop;
 static struct msg_pool		*pool;
 static uint64_t			last_sent;
 static uint64_t			last_comp;
+static struct xio_context	*ctx;
+
 
 
 
@@ -450,8 +451,6 @@ int main(int argc, char *argv[])
 {
 	struct xio_server	*server;
 	char			url[256];
-	struct xio_context	*ctx;
-
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -462,8 +461,7 @@ int main(int argc, char *argv[])
 
 	xio_init();
 
-	loop	= xio_ev_loop_create();
-	ctx	= xio_ctx_create(NULL, loop, 0);
+	ctx	= xio_context_create(NULL, 0);
 
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
@@ -479,7 +477,7 @@ int main(int argc, char *argv[])
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, NULL);
 	if (server) {
 		printf("listen to %s\n", url);
-		xio_ev_loop_run(loop);
+		xio_context_run_loop(ctx, XIO_INFINITE);
 
 		/* normal exit phase */
 		fprintf(stdout, "exit signaled\n");
@@ -492,8 +490,7 @@ int main(int argc, char *argv[])
 		msg_pool_free(pool);
 	pool = NULL;
 
-	xio_ctx_destroy(ctx);
-	xio_ev_loop_destroy(&loop);
+	xio_context_destroy(ctx);
 
 	return 0;
 }

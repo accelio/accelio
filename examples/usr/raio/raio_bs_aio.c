@@ -317,7 +317,8 @@ static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 		goto close_ctx;
 	}
 
-	ret = xio_ev_loop_add(dev->loop, afd,
+	ret = xio_context_add_ev_handler(dev->ctx,
+		afd,
 		XIO_POLLIN,
 		raio_aio_get_completions, info);
 	if (ret)
@@ -381,7 +382,7 @@ static void raio_bs_aio_exit(struct raio_bs *dev)
 {
 	struct raio_bs_aio_info *info = dev->dd;
 
-	xio_ev_loop_del(dev->loop, info->evt_fd);
+	xio_context_del_ev_handler(dev->ctx, info->evt_fd);
 	close(info->evt_fd);
 	io_destroy(info->ctx);
 }
