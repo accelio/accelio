@@ -791,7 +791,7 @@ int xio_context_del_ev_handler(struct xio_context *ctx,
  * closes the xio context and free its resources
  *
  * @param[in] ctx		Pointer to the xio context handle
- * @param[in] timeout_msec	The timeout argument specifies the minimum
+ * @param[in] timeout_ms	The timeout argument specifies the minimum
  *				number of milliseconds that
  *				xio_context_loop_run will block
  *				before exiting
@@ -803,7 +803,7 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 /**
  * stops context's running event loop
  *
- * @param[in] loop		Pointer to event loop
+ * @param[in] ctx		Pointer to the xio context handle
  * @param[in] is_self_thread	lighter stop if called from within event loop
  *				callbacks
  */
