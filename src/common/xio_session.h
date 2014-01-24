@@ -64,16 +64,6 @@ enum xio_session_state {
 /*---------------------------------------------------------------------------*/
 /* structures				                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn_node {
-	struct xio_conn			*conn;
-	struct list_head		connections_list_entry;
-};
-
-struct xio_portal_node {
-	char				*portal;
-	struct list_head		portals_list_entry;
-};
-
 struct xio_session {
 	uint64_t			trans_sn; /* transaction sn */
 	uint32_t			session_id;
