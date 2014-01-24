@@ -243,7 +243,7 @@ void *xio_ev_loop_create()
 	}
 	/* ADD & SET the wakeup fd and once application wants to arm
 	 * just MODify the already prepared eventfd to the epoll */
-	xio_ev_loop_add(loop, loop->wakeup_event, XIO_POLLIN, NULL, NULL);
+	xio_ev_loop_add(loop, loop->wakeup_event, 0, NULL, NULL);
 	retval = eventfd_write(loop->wakeup_event, val);
 	if (retval != 0)
 		goto cleanup2;
