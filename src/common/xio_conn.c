@@ -1624,8 +1624,6 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 	TRACE_LOG("conn: [putref] ptr:%p, refcnt:%d\n", conn,
 		  atomic_read(&conn->kref.refcount));
 
-	kref_put(&conn->kref, xio_conn_delayed_close);
-
 	if (observer) {
 		xio_conn_notify_observer(
 				conn, observer,
@@ -1634,6 +1632,8 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 		xio_conn_unhash_observer(conn, observer);
 		xio_conn_unreg_observer(conn, observer);
 	}
+	kref_put(&conn->kref, xio_conn_delayed_close);
+
 }
 
 /*---------------------------------------------------------------------------*/
