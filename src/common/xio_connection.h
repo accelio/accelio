@@ -77,6 +77,7 @@ struct xio_connection {
 	struct list_head		post_io_tasks_list;
 	struct list_head		pre_send_list;
 	struct list_head		connections_list_entry;
+	struct list_head		ctx_list_entry;
 };
 
 struct xio_connection *xio_connection_init(

@@ -147,6 +147,7 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		xio_init_ow_msg_pool(connection);
 
 		kref_init(&connection->kref);
+		list_add_tail(&connection->ctx_list_entry, &ctx->ctx_list);
 
 		return connection;
 }
@@ -777,6 +778,8 @@ static void xio_connection_release(struct kref *kref)
 							 struct xio_connection,
 							 kref);
 	xio_free_ow_msg_pool(connection);
+	list_del(&connection->ctx_list_entry);
+
 	kfree(connection);
 }
 

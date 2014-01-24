@@ -78,6 +78,7 @@ struct xio_context {
 	struct xio_statistics		stats;
 	struct xio_context_params	params;
 	struct xio_schedwork		*sched_work;
+	struct list_head		ctx_list;  /* per context strorage */
 
 	/* list of sessions using this connection */
 	struct xio_observable		observable;

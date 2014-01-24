@@ -148,9 +148,9 @@ struct xio_connection *xio_session_find_connection(
 		struct xio_conn *conn)
 {
 	struct xio_connection		*connection;
+	struct xio_context		*ctx = conn->transport_hndl->ctx;
 
-	list_for_each_entry(connection, &session->connections_list,
-			    connections_list_entry) {
+	list_for_each_entry(connection, &ctx->ctx_list, ctx_list_entry) {
 		if (connection->conn == conn)
 			return connection;
 	}
@@ -167,9 +167,8 @@ struct xio_connection *xio_session_find_connection_by_ctx(
 {
 	struct xio_connection		*connection;
 
-	list_for_each_entry(connection, &session->connections_list,
-			    connections_list_entry) {
-		if (connection->ctx == ctx)
+	list_for_each_entry(connection, &ctx->ctx_list, ctx_list_entry) {
+		if (connection->session == session)
 			return connection;
 	}
 	return NULL;
@@ -749,9 +748,16 @@ int xio_on_new_message(struct xio_session *session,
 		       union xio_conn_event_data *event_data)
 {
 	struct xio_task		*task  = event_data->msg.task;
-	struct xio_connection	*connection;
+	struct xio_connection	*connection = NULL;
 	int			retval = -1;
 	int			tlv_type;
+
+
+
+	if (task->sender_task) {
+		session = task->sender_task->session;
+		connection = task->sender_task->connection;
+	}
 
 	if (session == NULL) {
 		session = xio_find_session(task);
@@ -761,20 +767,23 @@ int xio_on_new_message(struct xio_session *session,
 			return -1;
 		}
 	}
-	connection = xio_session_find_connection(session, conn);
+
 	if (connection == NULL) {
-		/* leading connection is refused */
-		if (session->lead_connection &&
-		    session->lead_connection->conn == conn) {
-			connection = session->lead_connection;
-		} else if (session->redir_connection &&
-			   session->redir_connection->conn == conn) {
-			/* redirected connection is refused */
-			connection = session->redir_connection;
-		} else {
-			ERROR_LOG("failed to find connection\n");
-			xio_tasks_pool_put(task);
-			return -1;
+		connection = xio_session_find_connection(session, conn);
+		if (connection == NULL) {
+			/* leading connection is refused */
+			if (session->lead_connection &&
+					session->lead_connection->conn == conn) {
+				connection = session->lead_connection;
+			} else if (session->redir_connection &&
+					session->redir_connection->conn == conn) {
+				/* redirected connection is refused */
+				connection = session->redir_connection;
+			} else {
+				ERROR_LOG("failed to find connection\n");
+				xio_tasks_pool_put(task);
+				return -1;
+			}
 		}
 	}
 

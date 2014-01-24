@@ -178,6 +178,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->worker = (uint64_t) pthread_self();
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
+	INIT_LIST_HEAD(&ctx->ctx_list);
 
 	ctx->sched_work = xio_schedwork_init(ctx);
 	if (!ctx->sched_work) {
