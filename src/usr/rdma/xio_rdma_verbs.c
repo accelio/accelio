@@ -202,18 +202,14 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 	struct xio_mr		*tmr = *p_tmr;
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval;
-	int			locked;
 
-
-
-	if (!list_empty(&tmr->dm_list)) {
-		locked = spin_try_lock(&mr_list_lock);
+	spin_lock(&mr_list_lock);
+	if (!list_empty(&mr_list)) {
 		list_del(&tmr->mr_list_entry);
-		if (locked)
-			spin_unlock(&mr_list_lock);
+		spin_unlock(&mr_list_lock);
 
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
-					 dm_list_entry) {
+				dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
 			if (retval != 0) {
 				xio_set_error(errno);
@@ -225,7 +221,9 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		}
 		free(tmr);
 		*p_tmr = NULL;
-	}
+	} else
+		spin_lock(&mr_list_lock);
+
 
 	return 0;
 }
@@ -325,12 +323,10 @@ int xio_mr_list_free(void)
 {
 	struct xio_mr		*tmr;
 
-	spin_lock(&mr_list_lock);
 	while (!list_empty(&mr_list)) {
 		tmr = list_first_entry(&mr_list, struct xio_mr, mr_list_entry);
 		xio_dereg_mr(&tmr);
 	}
-	spin_unlock(&mr_list_lock);
 
 	return 0;
 }
