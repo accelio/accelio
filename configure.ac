@@ -149,6 +149,7 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_bidi";
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
+	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 fi
 
 
@@ -175,6 +176,7 @@ AC_CONFIG_FILES([tests/usr/hello_test_mt/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
+AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 
 # generate the final Makefile etc.
 AC_OUTPUT
