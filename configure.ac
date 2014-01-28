@@ -13,6 +13,7 @@ AC_PROG_LIBTOOL
 
 # check for C compiler and the library compiler
 AC_PROG_CC
+AM_PROG_CC_C_O
 
 # automake initialisation (mandatory) and check for minimal automake API version 1.9
 AM_INIT_AUTOMAKE([1.11])

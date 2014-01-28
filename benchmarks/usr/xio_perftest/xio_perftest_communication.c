@@ -257,8 +257,6 @@ int establish_connection(struct perf_comm *comm)
 int ctx_xchg_data(struct perf_comm *comm,
 		  void *my_data, void *rem_data, int size)
 {
-	int retval = 0;
-
 	if (comm->control_ctx->failed)
 		return -1;
 
@@ -269,7 +267,7 @@ int ctx_xchg_data(struct perf_comm *comm,
 		comm->control_ctx->msg.in.header.iov_len	= 0;
 		comm->control_ctx->msg.in.data_iovlen		= 0;
 
-		retval = xio_send_request(comm->control_ctx->conn,
+		xio_send_request(comm->control_ctx->conn,
 				 &comm->control_ctx->msg);
 		xio_context_run_loop(comm->control_ctx->ctx, XIO_INFINITE);
 

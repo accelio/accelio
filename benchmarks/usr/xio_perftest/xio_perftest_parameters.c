@@ -190,7 +190,7 @@ static int force_dependencies(struct perf_parameters *user_param)
 	if (user_param->test_type == LAT) {
 		user_param->queue_depth = LAT_QUEUE_DEPTH;
 		if (user_param->poll_timeout == XIO_DEF_POLL_TIMEOUT) {
-			if (user_param->test_type == SERVER)
+			if (user_param->machine_type == SERVER)
 				user_param->poll_timeout =
 					SERVER_LAT_POLL_TIMEOUT;
 			else
@@ -200,7 +200,7 @@ static int force_dependencies(struct perf_parameters *user_param)
 	}
 	if (user_param->test_type == BW) {
 		if (user_param->poll_timeout == XIO_DEF_POLL_TIMEOUT) {
-			if (user_param->test_type == SERVER)
+			if (user_param->machine_type == SERVER)
 				user_param->poll_timeout =
 					SERVER_BW_POLL_TIMEOUT;
 			else
