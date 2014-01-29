@@ -29,11 +29,15 @@ AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
 AC_CHECK_HEADERS([numa.h],
 		 [mypj_found_numa_headers=yes; break;])
 
+AC_CHECK_HEADERS([libaio.h],
+		 [mypj_found_aio_headers=yes; break;])
+
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the infiniband header files])])
 AS_IF([test "x$mypj_found_numa_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the numactl-devel header files])])
-
+AS_IF([test "x$mypj_found_aio_headers" != "xyes"],
+      [AC_MSG_ERROR([Unable to find the libaio-devel header files])])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
