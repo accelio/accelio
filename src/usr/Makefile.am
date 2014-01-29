@@ -72,6 +72,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 
 # the sources to add to the library and to add to the source distribution
 libxio_la_SOURCES =	$(libxio_headers)		\
+			 $(top_srcdir)/version.c	\
 			./xio/xio_init.c		\
 			./xio/get_clock.c		\
 			./xio/xio_ev_loop.c		\
@@ -100,7 +101,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_conn.c		\
 			../common/xio_conns_store.c	\
 			../common/xio_transport.c	\
-			../common/xio_connection.c
+			../common/xio_connection.c	
 	
 				
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\

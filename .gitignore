@@ -27,3 +27,7 @@ xio_lat_client
 xio_lat_server
 xio_oneway_client
 xio_oneway_server
+xio_read_lat
+xio_read_bw
+version.c
+

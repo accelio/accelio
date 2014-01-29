@@ -157,6 +157,33 @@ fi
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 fi
 
+##########################################################################
+
+##########################################################################
+# add version.c uses strings to get GIT hash version
+##########################################################################
+if test -d "${GIT_DIR:-${ac_top_srcdir:-./}/.git}" ; then
+	GITHEAD=`git describe 2>/dev/null`
+	if test -z ${GITHEAD} ; then
+		GITHEAD=`git rev-parse HEAD`
+		echo "const char XIO_GIT_HEAD@<:@@:>@ = \"GIT_VERSION: $GITHEAD\";" \/\* for use with strings \*\/ >version.c
+		echo "const char XIO_GIT_HEAD_STRING@<:@@:>@ = \"$GITHEAD\";" >>version.c
+	fi
+	if test -n "`git diff-index -m --name-only HEAD`" ; then
+		GITHEAD=${GITHEAD}-dirty
+		echo "const char XIO_GIT_HEAD@<:@@:>@ = \"GIT_VERSION: $GITHEAD\";" \/\* for use with strings \*\/ >version.c
+		echo "const char XIO_GIT_HEAD_STRING@<:@@:>@ = \"$GITHEAD\";" >>version.c
+	fi
+else
+	GITHEAD=
+fi
+
+AC_MSG_CHECKING([for git head])
+AC_MSG_RESULT([$GITHEAD])
+AC_DEFINE_UNQUOTED([XIO_GITHEAD], ["$GITHEAD"], [Git commit used to build xio library])
+
+
+
 
 # distribute additional compiler and linker flags
 # --> set these variables instead of CFLAGS or LDFLAGS
