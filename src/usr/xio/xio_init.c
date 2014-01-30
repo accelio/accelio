@@ -48,41 +48,41 @@ int page_size;
 void xio_rdma_transport_constructor(void);
 void xio_rdma_transport_destructor(void);
 
+static pthread_once_t ctor_key_once = PTHREAD_ONCE_INIT;
+static pthread_once_t dtor_key_once = PTHREAD_ONCE_INIT;
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_dtor								     */
+/*---------------------------------------------------------------------------*/
+static void xio_ctor()
+{
+	page_size = sysconf(_SC_PAGESIZE);
+	xio_thread_data_construct();
+	sessions_store_construct();
+	conns_store_construct();
+	xio_rdma_transport_constructor();
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_dtor								     */
+/*---------------------------------------------------------------------------*/
+static void xio_dtor()
+{
+	xio_rdma_transport_destructor();
+	xio_thread_data_destruct();
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_constructor like module init					     */
 /*---------------------------------------------------------------------------*/
 __attribute__((constructor)) void xio_init(void)
 {
-	static atomic_t initialized;
-	static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-
-	if (! atomic_read(&initialized)) {
-		pthread_mutex_lock(&mtx);
-		if (!atomic_read(&initialized)) {
-			page_size = sysconf(_SC_PAGESIZE);
-			xio_thread_data_construct();
-			sessions_store_construct();
-			conns_store_construct();
-			xio_rdma_transport_constructor();
-			atomic_set(&initialized, 1);
-		}
-		pthread_mutex_unlock(&mtx);
-	}
+	pthread_once(&ctor_key_once, xio_ctor);
 }
 
 __attribute__((destructor)) void xio_shutdown(void)
 {
-	static atomic_t initialized;
-	static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-
-	if (! atomic_read(&initialized)) {
-		pthread_mutex_lock(&mtx);
-		if (!atomic_read(&initialized)) {
-			xio_rdma_transport_destructor();
-			xio_thread_data_destruct();
-			atomic_set(&initialized, 1);
-		}
-		pthread_mutex_unlock(&mtx);
-	}
+	pthread_once(&dtor_key_once, xio_dtor);
 }
 
