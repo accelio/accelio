@@ -147,6 +147,7 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		xio_init_ow_msg_pool(connection);
 
 		kref_init(&connection->kref);
+		kref_init(&connection->fin_kref);
 		list_add_tail(&connection->ctx_list_entry, &ctx->ctx_list);
 
 		return connection;
@@ -827,8 +828,6 @@ int xio_release_response(struct xio_msg *msg)
 	struct xio_msg		*pmsg = msg;
 
 
-
-
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
 		if (task == NULL) {
@@ -928,6 +927,8 @@ static int xio_send_fin_req(struct xio_connection *connection)
 	/* insert to the tail of the queue */
 	xio_msg_list_insert_tail(&connection->reqs_msgq, msg, pdata);
 
+	xio_connection_fin_addref(connection);
+
 	/* do not xmit until connection is assigned */
 	if (xio_is_connection_online(connection))
 		return xio_connection_xmit(connection);
@@ -958,9 +959,39 @@ static int xio_send_fin_rsp(struct xio_connection *connection,
 	/* insert to the tail of the queue */
 	xio_msg_list_insert_tail(&connection->rsps_msgq, msg, pdata);
 
-	/* do not xmit until connection is assigned */
-	if (connection->state == XIO_CONNECTION_STATE_ONLINE)
-		return xio_connection_xmit(connection);
+	/* status is not importent - just send */
+	return xio_connection_xmit(connection);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_fin_complete							     */
+/*---------------------------------------------------------------------------*/
+static void xio_fin_complete(struct kref *kref)
+{
+	struct xio_connection *connection = container_of(kref,
+					     struct xio_connection,
+					     fin_kref);
+
+	connection->state = XIO_CONNECTION_STATE_CLOSED;
+	xio_session_disconnect(connection->session, connection);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_fin_addref						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_fin_addref(struct xio_connection *connection)
+{
+	kref_get(&connection->fin_kref);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_fin_put						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_fin_put(struct xio_connection *connection)
+{
+	kref_put(&connection->fin_kref, xio_fin_complete);
 
 	return 0;
 }
@@ -995,18 +1026,10 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	TRACE_LOG("send fin request. session:%p, connection:%p\n",
 		  connection->session, connection);
 
+	xio_connection_fin_addref(connection);
+
 	/* we don't want to send all queued messages yet - send directly */
 	return xio_connection_send(connection, msg);
-}
-/*---------------------------------------------------------------------------*/
-/* xio_do_disconnect							     */
-/*---------------------------------------------------------------------------*/
-int xio_do_disconnect(struct xio_connection *connection)
-{
-	connection->state = XIO_CONNECTION_STATE_CLOSED;
-	xio_session_disconnect(connection->session, connection);
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1019,7 +1042,7 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("xio_disconnect failed %m\n");
 		return -1;
 	}
-	if (!xio_is_connection_online(connection))
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
 		return 0;
 
 	TRACE_LOG("send fin request. session:%p, connection:%p\n",
@@ -1038,12 +1061,10 @@ int xio_disconnect(struct xio_connection *connection)
 int xio_ack_disconnect(struct xio_connection *connection,
 		       struct xio_task *task)
 {
-	if (connection->state == XIO_CONNECTION_STATE_ONLINE) {
-		TRACE_LOG("send fin response. session:%p, connection:%p\n",
-			  connection->session, connection);
-		xio_send_fin_rsp(connection, task);
-		connection->state = XIO_CONNECTION_STATE_CLOSING;
-	}
+	TRACE_LOG("send fin response. session:%p, connection:%p\n",
+		  connection->session, connection);
+	xio_send_fin_rsp(connection, task);
+	connection->state = XIO_CONNECTION_STATE_CLOSING;
 
 	return 0;
 }
@@ -1309,4 +1330,5 @@ int xio_connection_destroy(struct xio_connection *connection)
 
 	return 0;
 }
+
 

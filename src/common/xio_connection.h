@@ -63,8 +63,10 @@ struct xio_connection {
 	int				conn_idx;
 	int				state;
 	int32_t				send_req_toggle;
+	int				pad;
 
 	struct kref			kref;
+	struct kref			fin_kref;
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
 	struct xio_msg_list		in_flight_reqs_msgq;
@@ -128,11 +130,12 @@ int xio_connection_release_read_receipt(struct xio_connection *conn,
 void xio_release_response_task(struct xio_task *task);
 
 
+int xio_connection_fin_addref(struct xio_connection *conn);
+
+int xio_connection_fin_put(struct xio_connection *conn);
+
 int xio_connection_release_fin(struct xio_connection *conn,
-			       struct xio_msg *msg);
-
-int xio_do_disconnect(struct xio_connection *conn);
-
+				   struct xio_msg *msg);
 
 int xio_ack_disconnect(struct xio_connection *conn,
 		       struct xio_task *task);
@@ -165,6 +168,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *conn,
 
 int xio_connection_release_hello(struct xio_connection *conn,
 				 struct xio_msg *msg);
+
 
 #endif /*XIO_CONNECTION_H */
 

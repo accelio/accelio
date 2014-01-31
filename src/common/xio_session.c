@@ -375,6 +375,86 @@ void xio_session_post_teardown(struct xio_session *session)
 	}
 }
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_fin_req_send_comp				                     */
+/*---------------------------------------------------------------------------*/
+int xio_on_fin_req_send_comp(struct xio_connection *connection,
+			struct xio_task *task)
+{
+	TRACE_LOG("got fin request send completion. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+
+	xio_connection_fin_put(connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_fin_rsp_recv				                             */
+/*---------------------------------------------------------------------------*/
+int xio_on_fin_rsp_recv(struct xio_connection *connection,
+			struct xio_task *task)
+{
+	TRACE_LOG("got fin response. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	xio_connection_release_fin(connection, task->sender_task->omsg);
+
+	/* recycle the task */
+	xio_tasks_pool_put(task->sender_task);
+	task->sender_task = NULL;
+	xio_tasks_pool_put(task);
+
+	xio_connection_fin_put(connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_fin_req_recv				                             */
+/*---------------------------------------------------------------------------*/
+int xio_on_fin_req_recv(struct xio_connection *connection,
+			struct xio_task *task)
+{
+	int notify;
+
+	TRACE_LOG("fin request received. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	/* if both peers issued fin requests simultanously */
+	if (connection->state == XIO_CONNECTION_STATE_CLOSING)
+		xio_connection_fin_addref(connection);
+
+	notify = (connection->state == XIO_CONNECTION_STATE_ONLINE);
+
+	xio_ack_disconnect(connection, task);
+	if (notify)
+		xio_session_notify_connection_closed(connection->session,
+						     connection);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_fin_rsp_send_comp						     */
+/*---------------------------------------------------------------------------*/
+int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
+			     struct xio_task *task)
+{
+	TRACE_LOG("fin response send completion received. "  \
+		  "session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	xio_connection_release_fin(connection, task->omsg);
+	xio_tasks_pool_put(task);
+
+	xio_connection_fin_put(connection);
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_req_recv				                             */
 /*---------------------------------------------------------------------------*/
@@ -856,7 +936,7 @@ int xio_on_send_completion(struct xio_session *session,
 		retval = xio_on_ow_req_send_comp(connection, task);
 		break;
 	case XIO_FIN_REQ:
-		retval = 0;
+		retval = xio_on_fin_req_send_comp(connection, task);
 		break;
 	case XIO_FIN_RSP:
 		retval = xio_on_fin_rsp_send_comp(connection, task);

@@ -597,26 +597,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	return -1;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_on_fin_rsp_recv				                             */
-/*---------------------------------------------------------------------------*/
-int xio_on_fin_rsp_recv(struct xio_connection *connection,
-			struct xio_task *task)
-{
-	TRACE_LOG("got fin response. session:%p, connection:%p\n",
-		  connection->session, connection);
-
-	xio_connection_release_fin(connection, task->sender_task->omsg);
-
-	/* recycle the task */
-	xio_tasks_pool_put(task->sender_task);
-	task->sender_task = NULL;
-	xio_tasks_pool_put(task);
-
-	xio_do_disconnect(connection);
-
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_conn_refused							     */

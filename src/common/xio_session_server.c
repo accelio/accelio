@@ -545,37 +545,6 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_fin_req_recv				                             */
-/*---------------------------------------------------------------------------*/
-int xio_on_fin_req_recv(struct xio_connection *connection,
-			struct xio_task *task)
-{
-	TRACE_LOG("fin request received. session:%p, connection:%p\n",
-		  connection->session, connection);
-	xio_ack_disconnect(connection, task);
-	xio_session_notify_connection_closed(connection->session, connection);
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_fin_rsp_send_comp						     */
-/*---------------------------------------------------------------------------*/
-int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
-			     struct xio_task *task)
-{
-	struct xio_session *session = connection->session;
-
-	xio_connection_release_fin(connection, task->omsg);
-	xio_tasks_pool_put(task);
-
-	connection->state = XIO_CONNECTION_STATE_CLOSED;
-	xio_session_disconnect(session, connection);
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_on_connection_hello_rsp_send_comp				     */
 /*---------------------------------------------------------------------------*/
 int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
