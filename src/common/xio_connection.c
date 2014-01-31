@@ -1252,6 +1252,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 	int			retval;
 	int			reason;
 	struct xio_session	*session;
+	int			destroy_session = 0;
 
 	if (connection == NULL) {
 		xio_set_error(EINVAL);
@@ -1301,7 +1302,15 @@ int xio_connection_destroy(struct xio_connection *connection)
 	    session->state != XIO_SESSION_STATE_CLOSED &&
 	    !session->connections_nr && !session->lead_connection &&
 	    !session->redir_connection) {
-		session->in_notify = 1;
+		if (session->state == XIO_SESSION_STATE_ONLINE)
+			session->state = XIO_SESSION_STATE_CLOSING;
+		destroy_session = 1;
+		mutex_unlock(&session->lock);
+	} else {
+		mutex_unlock(&session->lock);
+		return 0;
+	}
+	if (destroy_session) {
 		switch (session->state) {
 		case XIO_SESSION_STATE_ACCEPTED:
 			if (session->type == XIO_SESSION_SERVER)
@@ -1313,19 +1322,9 @@ int xio_connection_destroy(struct xio_connection *connection)
 			reason = XIO_E_SESSION_DISCONECTED;
 			break;
 		}
-
-		/* change the state to closing in case session is not
-		 * destroyed on the callback */
-		if (session->state == XIO_SESSION_STATE_ONLINE)
-			session->state = XIO_SESSION_STATE_CLOSING;
 		xio_session_notify_teardown(
 			session,
 			reason);
-		session->in_notify = 0;
-		mutex_unlock(&session->lock);
-		xio_session_post_teardown(session);
-	} else {
-		mutex_unlock(&session->lock);
 	}
 
 	return 0;
