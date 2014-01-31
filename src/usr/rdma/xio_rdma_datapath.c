@@ -2117,9 +2117,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		imsg->in.header.iov_base	= NULL;
 		imsg->in.header.iov_len		= 0;
 	}
-
 	omsg->status = rsp_hdr.status;
-	omsg->type =  task->tlv_type;
 
 	/* handle the headers */
 	if (omsg->in.header.iov_base) {

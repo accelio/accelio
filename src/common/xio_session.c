@@ -552,7 +552,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	task->connection = connection;
 
-	xio_connection_remove_in_flight(connection, omsg, 1);
+	xio_connection_remove_in_flight(connection, omsg);
+	omsg->type = task->tlv_type;
 
 	/* store the task in io queue */
 	xio_connection_queue_io_task(connection, task);
@@ -622,7 +623,7 @@ static int xio_on_rsp_send_comp(
 		struct xio_task *task)
 {
 	/* remove the message from in flight queue */
-	xio_connection_remove_in_flight(connection, task->omsg, 0);
+	xio_connection_remove_in_flight(connection, task->omsg);
 
 	/*
 	 * completion of receipt
