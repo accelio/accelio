@@ -92,6 +92,8 @@ static int xio_on_new_message(struct xio_server *server,
 {
 	struct xio_session		*session;
 	struct xio_connection		*connection;
+	struct xio_task			*task = event_data->msg.task;
+
 
 	struct xio_session_attr attr = {
 		&server->ops,
@@ -140,10 +142,11 @@ static int xio_on_new_message(struct xio_server *server,
 
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
-	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
-		struct xio_task	*task = event_data->msg.task;
 
-		/* find the old session */
+		task->session		= session;
+		task->connection	= connection;
+	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
+			/* find the old session */
 		session = xio_find_session(event_data->msg.task);
 		if (session == NULL) {
 			ERROR_LOG("server [new connection]: failed " \
