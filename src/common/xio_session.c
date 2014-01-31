@@ -151,7 +151,8 @@ struct xio_connection *xio_session_find_connection(
 	struct xio_context		*ctx = conn->transport_hndl->ctx;
 
 	list_for_each_entry(connection, &ctx->ctx_list, ctx_list_entry) {
-		if (connection->conn == conn)
+		if (connection->conn == conn &&
+		    connection->session == session)
 			return connection;
 	}
 
