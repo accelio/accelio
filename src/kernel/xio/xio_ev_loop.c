@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies® BSD license
+ * directory of this source tree, or the Mellanox Technologies�� BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *      - Neither the name of the Mellanox Technologies�� nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -49,6 +49,28 @@
 #include "xio_context.h"
 #include "xio_ev_loop.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+/**
+ * llist_reverse_order - reverse order of a llist chain
+ * @head:       first item of the list to be reversed
+ *
+ * Reverse the order of a chain of llist entries and return the
+ * new first entry.
+ */
+struct llist_node *llist_reverse_order(struct llist_node *head)
+{
+	struct llist_node *new_head = NULL;
+
+	while (head) {
+		struct llist_node *tmp = head;
+		head = head->next;
+		tmp->next = new_head;
+		new_head = tmp;
+	}
+
+	return new_head;
+}
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations	of private API					     */
@@ -253,10 +275,13 @@ static void priv_ev_loop_run_tasklet(unsigned long data)
 	struct xio_ev_data	*tev;
 	struct llist_node	*node;
 
-	while (!llist_empty(&loop->ev_llist)) {
-		node = llist_del_first(&loop->ev_llist);
-		tev = llist_entry(node, struct xio_ev_data, ev_llist);
-		tev->handler(tev->data);
+	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
+	       node = llist_reverse_order(node);
+	       while (node) {
+		       tev = llist_entry(node, struct xio_ev_data, ev_llist);
+		       node = llist_next(node);
+		       tev->handler(tev->data);
+	       }
 	}
 }
 
@@ -303,12 +328,16 @@ int priv_ev_loop_run(void *loop_hndl)
 		return 0;
 	case XIO_LOOP_WORKQUEUE:
 		/* were events added to list while in STOP state ? */
-		while (!llist_empty(&loop->ev_llist)) {
-			node = llist_del_first(&loop->ev_llist);
-			tev = llist_entry(node, struct xio_ev_data, ev_llist);
-			tev->work.func = priv_ev_loop_run_work;
-			queue_work_on(loop->ctx->cpuid, loop->workqueue,
-				      &tev->work);
+		while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
+		       node = llist_reverse_order(node);
+		       while (node) {
+			       tev = llist_entry(node, struct xio_ev_data,
+					         ev_llist);
+			       node = llist_next(node);
+			       tev->work.func = priv_ev_loop_run_work;
+			       queue_work_on(loop->ctx->cpuid, loop->workqueue,
+					     &tev->work);
+		       }
 		}
 		return 0;
 	default:
@@ -323,11 +352,15 @@ retry_wait:
 
 retry_dont_wait:
 
-	while (!llist_empty(&loop->ev_llist)) {
-		node = llist_del_first(&loop->ev_llist);
-		tev = llist_entry(node, struct xio_ev_data, ev_llist);
-		tev->handler(tev->data);
+	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
+	       node = llist_reverse_order(node);
+	       while (node) {
+		       tev = llist_entry(node, struct xio_ev_data, ev_llist);
+		       node = llist_next(node);
+		       tev->handler(tev->data);
+	       }
 	}
+
 	/* "race point" */
 	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
 
