@@ -180,8 +180,8 @@ static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
 			list_del(&r->mem_region_entry);
 
 			xio_dereg_mr(&r->omr);
-			free_huge_pages(r->buf);
-			free(r);
+			ufree_huge_pages(r->buf);
+			ufree(r);
 		}
 	}
 
@@ -214,7 +214,7 @@ static struct xio_mem_block* xio_rdma_mem_slot_resize(struct xio_mem_slot *slot,
 
 	region_alloc_sz = sizeof(*region) +
 		nr_blocks*sizeof(struct xio_mem_block);
-	buf = calloc(region_alloc_sz, sizeof(uint8_t));
+	buf = ucalloc(region_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
 
@@ -227,16 +227,16 @@ static struct xio_mem_block* xio_rdma_mem_slot_resize(struct xio_mem_slot *slot,
 	data_alloc_sz = nr_blocks*slot->mb_size;
 
 	/* alocate the buffers and register them */
-	region->buf = malloc_huge_pages(data_alloc_sz);
+	region->buf = umalloc_huge_pages(data_alloc_sz);
 	if (region->buf == NULL) {
-		free(buf);
+		ufree(buf);
 		return NULL;
 	}
 
 	region->omr = xio_reg_mr(region->buf, data_alloc_sz);
 	if (region->omr == NULL) {
-		free_huge_pages(region->buf);
-		free(buf);
+		ufree_huge_pages(region->buf);
+		ufree(buf);
 		return NULL;
 	}
 
@@ -289,7 +289,7 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 	for (i = 0; i < XIO_MEM_SLOTS_NR; i++)
 		xio_rdma_mem_slot_free(&p->slot[i]);
 
-	free(p);
+	ufree(p);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -301,7 +301,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 	int			i;
 	int			ret;
 
-	p = calloc(1, sizeof(struct xio_rdma_mempool));
+	p = ucalloc(1, sizeof(struct xio_rdma_mempool));
 	if (p == NULL)
 		return NULL;
 

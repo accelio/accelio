@@ -2,6 +2,8 @@
 #define _LINUX_SLAB_H
 
 #include <assert.h>
+#include <libxio.h>
+#include "xio_mem.h"
 
 #define ___GFP_WAIT	0x10u
 #define ___GFP_IO	0x40u
@@ -14,14 +16,14 @@ typedef unsigned gfp_t;
 
 static inline void kfree(const void *ptr)
 {
-	free((void *) ptr);
+	ufree((void *) ptr);
 }
 
 static inline void *kmalloc(size_t size, gfp_t flags)
 {
 	/* Make sure code transfered to kernel will work as expected */
 	assert(flags == GFP_KERNEL);
-	return malloc(size);
+	return umalloc(size);
 }
 
 /**
@@ -34,7 +36,7 @@ static inline void *kcalloc(size_t n, size_t size, gfp_t flags)
 {
 	/* Make sure code transfered to kernel will work as expected */
 	assert(flags == GFP_KERNEL);
-	return calloc(n, size);
+	return ucalloc(n, size);
 }
 
 #endif /* _LINUX_SLAB_H */

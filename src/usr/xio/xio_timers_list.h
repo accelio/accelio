@@ -159,7 +159,7 @@ static inline int xio_timers_list_add_absolute(
 {
 	struct xio_timers_list_timer *timer;
 
-	timer = (struct xio_timers_list_timer *)calloc(1,
+	timer = (struct xio_timers_list_timer *)ucalloc(1,
 					sizeof(struct xio_timers_list_timer));
 	if (timer == 0) {
 		errno = ENOMEM;
@@ -190,7 +190,7 @@ static inline int xio_timers_list_add_duration(
 {
 	struct xio_timers_list_timer *timer;
 
-	timer = (struct xio_timers_list_timer *)calloc(1,
+	timer = (struct xio_timers_list_timer *)ucalloc(1,
 					sizeof(struct xio_timers_list_timer));
 	if (timer == 0) {
 		errno = ENOMEM;
@@ -230,7 +230,7 @@ static inline void xio_timers_list_del(struct xio_timers_list *timers_list,
 		timers_list->timer_iter = timers_list->timer_iter->next;
 
 	list_del_init(&timer->list);
-	free(timer);
+	ufree(timer);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -283,7 +283,7 @@ static inline void xio_timers_list_post_dispatch(
 	struct xio_timers_list_timer *timer =
 			(struct xio_timers_list_timer *)timer_handle;
 
-	free(timer);
+	ufree(timer);
 }
 
 /*

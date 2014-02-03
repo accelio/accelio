@@ -241,17 +241,17 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		if (tcq->ctx == ctx)
 			return tcq;
 	}
-	tcq = calloc(1, sizeof(struct xio_cq));
+	tcq = ucalloc(1, sizeof(struct xio_cq));
 	if (tcq == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("ucalloc failed. %m\n");
 		goto cleanup;
 	}
 	tcq->ctx = ctx;
 
 	tcq->wc_array_len = MAX_CQE_PER_QP;
 	/* allocate device wc array */
-	tcq->wc_array = calloc(tcq->wc_array_len, sizeof(struct ibv_wc));
+	tcq->wc_array = ucalloc(tcq->wc_array_len, sizeof(struct ibv_wc));
 	if (tcq->wc_array == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("ev_loop_add failed. (errno=%d %m)\n", errno);
@@ -332,9 +332,9 @@ cleanup3:
 		ERROR_LOG("ibv_destroy_comp_channel failed. (errno=%d %m)\n",
 			  errno);
 cleanup2:
-	free(tcq->wc_array);
+	ufree(tcq->wc_array);
 cleanup1:
-	free(tcq);
+	ufree(tcq);
 cleanup:
 	return NULL;
 }
@@ -382,8 +382,8 @@ static void xio_cq_release(struct xio_cq *tcq, int delete_fd)
 		ERROR_LOG("ibv_destroy_comp_channel failed. (errno=%d %m)\n",
 			  errno);
 
-	free(tcq->wc_array);
-	free(tcq);
+	ufree(tcq->wc_array);
+	ufree(tcq);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -394,10 +394,10 @@ static struct xio_device *xio_device_init(struct ibv_context *ib_ctx)
 	struct xio_device	*dev;
 	int			retval;
 
-	dev = calloc(1, sizeof(*dev));
+	dev = ucalloc(1, sizeof(*dev));
 	if (dev == NULL) {
 		xio_set_error(errno);
-		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
+		ERROR_LOG("ucalloc failed. (errno=%d %m)\n", errno);
 		return NULL;
 	}
 	dev->verbs	= ib_ctx;
@@ -469,7 +469,7 @@ static void xio_device_release(struct xio_device *dev, int delete_fd)
 			  retval, strerror(retval));
 
 	list_del(&dev->dev_list_entry);
-	free(dev);
+	ufree(dev);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -534,7 +534,7 @@ static int xio_rdma_mempool_array_init()
 
 	/* free devices */
 	mempool_array_len = 0;
-	mempool_array = calloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
+	mempool_array = ucalloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
 	if (mempool_array == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
@@ -558,7 +558,7 @@ static void xio_rdma_mempool_array_release()
 			mempool_array[i] = NULL;
 		}
 	}
-	free(mempool_array);
+	ufree(mempool_array);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -592,7 +592,7 @@ static void xio_cm_channel_release(struct xio_cm_channel *channel)
 	xio_context_del_ev_handler(channel->ctx, channel->cm_channel->fd);
 	rdma_destroy_event_channel(channel->cm_channel);
 
-	free(channel);
+	ufree(channel);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -605,7 +605,7 @@ static void xio_cm_list_release()
 	list_for_each_entry_safe(channel, next, &cm_list, channels_list_entry) {
 		list_del(&channel->channels_list_entry);
 		rdma_destroy_event_channel(channel->cm_channel);
-		free(channel);
+		ufree(channel);
 	}
 }
 
@@ -961,10 +961,10 @@ static int xio_rdma_initial_pool_alloc(
 
 	rdma_pool->buf_size = CONN_SETUP_BUF_SIZE;
 	pool_size = rdma_pool->buf_size * max;
-	rdma_pool->data_pool = calloc(pool_size, sizeof(uint8_t));
+	rdma_pool->data_pool = ucalloc(pool_size, sizeof(uint8_t));
 	if (rdma_pool->data_pool == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("malloc conn_setup_data_pool sz: %u failed\n",
+		ERROR_LOG("ucalloc conn_setup_data_pool sz: %u failed\n",
 			  pool_size);
 		return -1;
 	}
@@ -973,7 +973,7 @@ static int xio_rdma_initial_pool_alloc(
 			pool_size, IBV_ACCESS_LOCAL_WRITE);
 	if (!rdma_pool->data_mr) {
 		xio_set_error(errno);
-		free(rdma_pool->data_pool);
+		ufree(rdma_pool->data_pool);
 		ERROR_LOG("ibv_reg_mr conn_setup pool failed, %m\n");
 		return -1;
 	}
@@ -1073,7 +1073,7 @@ static int xio_rdma_initial_pool_free(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
 	ibv_dereg_mr(rdma_pool->data_mr);
-	free(rdma_pool->data_pool);
+	ufree(rdma_pool->data_pool);
 
 	return 0;
 }
@@ -1142,7 +1142,7 @@ static int xio_rdma_primary_pool_alloc(
 	else
 #endif
 	{
-		rdma_pool->data_pool = malloc_huge_pages(rdma_hndl->alloc_sz);
+		rdma_pool->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
 		if (!rdma_pool->data_pool) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("malloc rdma pool sz:%zu failed\n",
@@ -1157,7 +1157,7 @@ static int xio_rdma_primary_pool_alloc(
 				IBV_ACCESS_LOCAL_WRITE);
 		if (!rdma_pool->data_mr) {
 			xio_set_error(errno);
-			free_huge_pages(rdma_pool->data_pool);
+			ufree_huge_pages(rdma_pool->data_pool);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
 		}
@@ -1302,9 +1302,9 @@ static void xio_rdma_post_close(struct xio_transport_base *transport)
 	if (rdma_hndl->cm_id)
 		rdma_destroy_id(rdma_hndl->cm_id);
 
-	free(rdma_hndl->base.portal_uri);
+	ufree(rdma_hndl->base.portal_uri);
 
-	free(rdma_hndl);
+	ufree(rdma_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1636,7 +1636,7 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 			return channel->cm_channel;
 	}
 
-	channel = calloc(1, sizeof(struct xio_cm_channel));
+	channel = ucalloc(1, sizeof(struct xio_cm_channel));
 	if (!channel) {
 		ERROR_LOG("rdma_create_event_channel failed " \
 				"(errno=%d %m)\n", errno);
@@ -1688,10 +1688,10 @@ static struct xio_transport_base *xio_rdma_open(
 
 
 	/*allocate rdma handl */
-	rdma_hndl = calloc(1, sizeof(struct xio_rdma_transport));
+	rdma_hndl = ucalloc(1, sizeof(struct xio_rdma_transport));
 	if (!rdma_hndl) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
 	}
 
@@ -1742,7 +1742,7 @@ static struct xio_transport_base *xio_rdma_open(
 	return (struct xio_transport_base *)rdma_hndl;
 
 cleanup:
-	free(rdma_hndl);
+	ufree(rdma_hndl);
 
 	return NULL;
 }
@@ -1892,7 +1892,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 	rdma_hndl->base.portal_uri = strdup(portal_uri);
 	if (rdma_hndl->base.portal_uri == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("ucalloc failed. %m\n");
 		goto exit1;
 	}
 	rdma_hndl->base.is_client = 1;
@@ -1937,7 +1937,7 @@ exit2:
 	rdma_destroy_id(rdma_hndl->cm_id);
 	rdma_hndl->cm_id = NULL;
 exit1:
-	free(rdma_hndl->base.portal_uri);
+	ufree(rdma_hndl->base.portal_uri);
 
 	return -1;
 }

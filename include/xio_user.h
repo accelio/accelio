@@ -136,6 +136,7 @@ enum xio_optname {
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
 
 	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
+	XIO_OPTNAME_MEM_ALLOCATOR         /**< set customed allocators hooks  */
 };
 
 /**
@@ -475,10 +476,9 @@ typedef void (*xio_ev_handler_t)(int fd, int events, void *data);
  * @brief  polling parameters to be used by external dispatcher
  */
 struct xio_poll_params {
-
 	int			fd;	 /**< the descriptor	              */
 	int			events;	 /**< the types of signals as defined */
-	                                 /**< in enum xio_ev_loop_events      */
+					 /**< in enum xio_ev_loop_events      */
 	xio_ev_handler_t	handler; /**< event handler that handles the  */
 					 /**< event                           */
 	void			*data;	 /**< user private data provided to   */
@@ -634,6 +634,68 @@ struct xio_session_ops {
 	 */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
 			void *conn_user_context);
+};
+
+/**
+ *  @struct xio_mem_allocator
+ *  @brief user provided customed allocator hook functions for library usage
+ */
+struct xio_mem_allocator {
+	void	*user_context;			/**< user specific context */
+
+	/**
+	 *  allocates block of memory
+	 *
+	 *  @param[in] size		        size in bytes to allocate
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 */
+	void * (*allocate)(size_t size, void *user_context);
+
+	/**
+	 *  allocates aligned block of memory and zero it content
+	 *
+	 *  @param[in] boundary			memory size will be a multiple
+	 *					of boundary, which must be a
+	 *					power of two and a multiple of
+	 *					sizeof(void *)
+	 *  @param[in] size			size in  bytes to allocate
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 */
+	void *  (*memalign)(size_t boundary, size_t size, void *user_context);
+
+	/**
+	 *  deallocates block of memory
+	 *
+	 *  @param[in] ptr			pointer to allocated block
+	 *  @param[in] user_context		user specific context
+	 *
+	 */
+	void   (*free)(void *ptr, void *user_context);
+
+	/**
+	 *  allocates block of memory using huge page
+	 *
+	 *  @param[in] size			block size to allocate
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 */
+	void * (*malloc_huge_pages)(size_t size, void *user_context);
+
+	/**
+	 *  deallocates block of memory previously allocated by
+	 *  malloc_huge_pages
+	 *
+	 *  @param[in] ptr			pointer to allocated block
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to block or NULL if allocate fails
+	 */
+	void   (*free_huge_pages)(void *ptr, void *user_context);
 };
 
 /*---------------------------------------------------------------------------*/

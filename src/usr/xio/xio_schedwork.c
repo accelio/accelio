@@ -146,9 +146,9 @@ struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx)
 	struct xio_schedwork	*sched_work;
 	int			retval;
 
-	sched_work = calloc(1, sizeof(*sched_work));
+	sched_work = ucalloc(1, sizeof(*sched_work));
 	if (sched_work == NULL) {
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
 	}
 
@@ -158,7 +158,7 @@ struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx)
 	sched_work->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 	if (sched_work->timer_fd < 0) {
 		ERROR_LOG("timerfd_create failed. %m\n");
-		free(sched_work);
+		ufree(sched_work);
 		return NULL;
 	}
 
@@ -172,7 +172,7 @@ struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx)
 	if (retval) {
 		ERROR_LOG("ev_loop_add_cb failed. %m\n");
 		close(sched_work->timer_fd);
-		free(sched_work);
+		ufree(sched_work);
 		return NULL;
 	}
 
@@ -195,7 +195,7 @@ int xio_schedwork_close(struct xio_schedwork *sched_work)
 
 	xio_timers_list_close(&sched_work->timers_list);
 	close(sched_work->timer_fd);
-	free(sched_work);
+	ufree(sched_work);
 
 	return retval;
 }

@@ -93,7 +93,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		ev.events |= EPOLLONESHOT;
 
 	if (fd != loop->wakeup_event) {
-		tev = calloc(1, sizeof(*tev));
+		tev = ucalloc(1, sizeof(*tev));
 		if (!tev) {
 			xio_set_error(errno);
 			ERROR_LOG("calloc failed, %m\n");
@@ -116,7 +116,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 			ERROR_LOG("epoll_ctl failed fd:%d,  %m\n", fd);
 		else
 			DEBUG_LOG("epoll_ctl already exists fd:%d,  %m\n", fd);
-		free(tev);
+		ufree(tev);
 	}
 
 	return err;
@@ -154,7 +154,7 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 			return -1;
 		}
 		list_del(&tev->events_list_entry);
-		free(tev);
+		ufree(tev);
 	}
 
 	ret = epoll_ctl(loop->efd, EPOLL_CTL_DEL, fd, NULL);
@@ -216,7 +216,7 @@ void *xio_ev_loop_create()
 	int			retval;
 	eventfd_t		val = 1;
 
-	loop = calloc(1, sizeof(struct xio_ev_loop));
+	loop = ucalloc(1, sizeof(struct xio_ev_loop));
 	if (loop == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
@@ -255,7 +255,7 @@ cleanup2:
 cleanup1:
 	close(loop->efd);
 cleanup:
-	free(loop);
+	ufree(loop);
 	return NULL;
 }
 
@@ -379,7 +379,7 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	close((*loop)->wakeup_event);
 	(*loop)->wakeup_event = -1;
 
-	free((*loop));
+	ufree((*loop));
 	*loop = NULL;
 }
 

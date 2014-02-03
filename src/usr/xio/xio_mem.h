@@ -38,10 +38,14 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
-extern int disable_huge_pages;
+#include "xio_common.h"
 
-void *malloc_huge_pages(size_t size);
-void free_huge_pages(void *ptr);
+extern int			disable_huge_pages;
+extern int			allocator_assigned;
+extern struct xio_mem_allocator *mem_allocator;
+
+extern void *malloc_huge_pages(size_t size);
+extern void free_huge_pages(void *ptr);
 
 static inline void xio_disable_huge_pages(int disable)
 {
@@ -49,6 +53,84 @@ static inline void xio_disable_huge_pages(int disable)
 		return;
 	disable_huge_pages = disable;
 }
+
+static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator)
+{
+	if (allocator_assigned) {
+//		xio_set_error(EPERM);
+		return -1;
+	}
+	memcpy(mem_allocator, allocator, sizeof(*allocator));
+	allocator_assigned	= 1;
+
+	return 0;
+}
+
+static inline void *ucalloc(size_t nmemb, size_t size)
+{
+	void *ptr;
+	if (allocator_assigned && mem_allocator->allocate) {
+		ptr = mem_allocator->allocate(nmemb*size, mem_allocator->user_context);
+		if (ptr)
+			memset(ptr, 0, nmemb*size);
+	} else {
+		ptr = calloc(nmemb, size);
+	}
+	return ptr;
+}
+
+static inline void *umalloc(size_t size)
+{
+	if (allocator_assigned && mem_allocator->allocate)
+		return mem_allocator->allocate(size, mem_allocator->user_context);
+	else
+		return malloc(size);
+}
+
+static inline void *umemalign(size_t boundary, size_t size)
+{
+	void *ptr;
+	if (allocator_assigned && mem_allocator->memalign) {
+		ptr = mem_allocator->memalign(boundary, size, mem_allocator->user_context);
+	} else {
+		if (posix_memalign(&ptr, boundary, size) != 0)
+			return NULL;
+	}
+	if (ptr)
+		memset(ptr, 0, size);
+	return ptr;
+}
+
+static inline void ufree(void *ptr)
+{
+	if (allocator_assigned && mem_allocator->free)
+		mem_allocator->free(ptr, mem_allocator->user_context);
+	else
+		free(ptr);
+}
+
+static inline void *umalloc_huge_pages(size_t size)
+{
+	void *ptr;
+	if (allocator_assigned && mem_allocator->malloc_huge_pages) {
+		ptr = mem_allocator->malloc_huge_pages(size, mem_allocator->user_context);
+		if (ptr)
+			memset(ptr, 0, size);
+	} else {
+		ptr = malloc_huge_pages(size);
+	}
+	return ptr;
+}
+
+
+static inline void ufree_huge_pages(void *ptr)
+{
+	if (allocator_assigned && mem_allocator->free_huge_pages)
+		mem_allocator->free_huge_pages(ptr, mem_allocator->user_context);
+	else
+		free_huge_pages(ptr);
+}
+
 
 #endif
 

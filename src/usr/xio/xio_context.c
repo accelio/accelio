@@ -163,7 +163,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	}
 
 	/* allocate new context */
-	ctx = calloc(1, sizeof(struct xio_context));
+	ctx = ucalloc(1, sizeof(struct xio_context));
 	if (ctx == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
@@ -262,7 +262,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 cleanup2:
 	close(fd);
 cleanup1:
-	free(ctx);
+	ufree(ctx);
 	return NULL;
 }
 
@@ -291,7 +291,7 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_schedwork_close(ctx->sched_work);
 
 	xio_ev_loop_destroy(&ctx->ev_loop);
-	free(ctx);
+	ufree(ctx);
 }
 
 /*---------------------------------------------------------------------------*/

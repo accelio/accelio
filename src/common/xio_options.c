@@ -65,6 +65,11 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	case XIO_OPTNAME_DISABLE_HUGETBL:
 		xio_disable_huge_pages(*((int *)optval));
 		return 0;
+	case XIO_OPTNAME_MEM_ALLOCATOR:
+		if (optlen == sizeof(struct xio_mem_allocator))
+			return xio_set_mem_allocator(
+					(struct xio_mem_allocator *)optval);
+		break;
 	default:
 		break;
 	}
