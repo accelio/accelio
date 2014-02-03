@@ -312,6 +312,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			ERROR_LOG("DMA map to device failed\n");
 			return -1;
 		}
+		rdma_task->txd.send_wr.num_sge = rdma_task->txd.mapped;
 
 		rdma_hndl->sn++;
 		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
@@ -446,7 +447,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 		rdma_task = task->dd_data;
 
 		/* map the receive address for dma
-		 * Note other sge fileds don't change
+		 * Note other sge fields don't change
 		 */
 
 		rxd = &rdma_task->rxd;
@@ -455,6 +456,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 			ERROR_LOG("DMA map from device failed\n");
 			return -1;
 		}
+		rxd->recv_wr.num_sge = rxd->mapped;
 
 		if (first_task == NULL)
 			first_task = task;
@@ -538,7 +540,7 @@ static int xio_rdma_wr_error_handler(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_handle_wc_error                                                       */
+/* xio_handle_task_error                                                     */
 /*---------------------------------------------------------------------------*/
 static void xio_handle_task_error(struct xio_task *task)
 {
@@ -574,18 +576,19 @@ static void xio_handle_task_error(struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 static void xio_handle_wc_error(struct ib_wc *wc)
 {
-	struct xio_task *task = ptr_from_int64(wc->wr_id);
+	struct xio_task			*task = NULL;
 	struct xio_rdma_task		*rdma_task = NULL;
 	struct xio_rdma_transport       *rdma_hndl = NULL;
 	int				retval;
 
-	if (task) {
+	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
+		task = ptr_from_int64(wc->wr_id);
 		rdma_task = (struct xio_rdma_task *) task->dd_data;
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
 
 	if (wc->status == IB_WC_WR_FLUSH_ERR) {
-		TRACE_LOG("conn:%p, rdma_task:%p, task:%p, "
+		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "
 			  "wr_id:0x%llx, "
 			  "err:%s, vendor_err:0x%x, "
 			   "ib_op:%x\n",
@@ -595,7 +598,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			   wc->vendor_err,
 			   rdma_task->ib_op);
 	} else  {
-		ERROR_LOG("conn:%p, rdma_task:%p, task:%p, "
+		ERROR_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "
 			  "wr_id:0x%llx, "
 			  "err:%s, vendor_err:0x%x,"
 			  "ib_op:0x%x\n",
@@ -1449,6 +1452,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct ib_device *ib_dev = rdma_hndl->dev->ib_dev;
 	struct ib_mr *mr = rdma_hndl->dev->mr; /* Need fix for FMR/FRWR */
+	uint8_t	read_num_sge, write_num_sge;
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1464,9 +1468,18 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
 	tmp_req_hdr->opcode	   = req_hdr->opcode;
 	tmp_req_hdr->recv_num_sge  = req_hdr->recv_num_sge;
-	tmp_req_hdr->read_num_sge  = req_hdr->read_num_sge;
-	tmp_req_hdr->write_num_sge = req_hdr->write_num_sge;
+	/* In case of FMR/FRWR the remote side will get one element */
+	if (rdma_task->read_sge.mem_reg.mem_h)
+		read_num_sge = 1;
+	else
+		read_num_sge  = req_hdr->read_num_sge;
+	if (rdma_task->write_sge.mem_reg.mem_h)
+		write_num_sge = 1;
+	else
+		write_num_sge = req_hdr->write_num_sge;
 
+	tmp_req_hdr->read_num_sge = read_num_sge;
+	tmp_req_hdr->write_num_sge = write_num_sge;
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_hdr_len);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_pad_len);
 	/*remain_data_len is not used		*/
@@ -1486,33 +1499,55 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		tmp_sge++;
 	}
 	/* IN: requester expect big input written rdma write */
-	for (i = 0;  i < req_hdr->read_num_sge; i++) {
-		sge.addr = ib_sg_dma_address(ib_dev,
-					     &rdma_task->read_sge.sgl[i]);
-		sge.length = ib_sg_dma_len(ib_dev,
-					   &rdma_task->read_sge.sgl[i]);
-		sge.stag = mr->rkey;
+	if (rdma_task->read_sge.mem_reg.mem_h) {
+		/* FMR/FRWR case */
+		sge.addr = rdma_task->read_sge.mem_reg.va;
+		sge.length = rdma_task->read_sge.mem_reg.len;
+		sge.stag = rdma_task->read_sge.mem_reg.rkey;
 		PACK_LLVAL(&sge, tmp_sge, addr);
 		PACK_LVAL(&sge, tmp_sge, length);
 		PACK_LVAL(&sge, tmp_sge, stag);
 		tmp_sge++;
+	} else {
+		for (i = 0;  i < req_hdr->read_num_sge; i++) {
+			sge.addr = ib_sg_dma_address(ib_dev,
+						     &rdma_task->read_sge.sgl[i]);
+			sge.length = ib_sg_dma_len(ib_dev,
+						   &rdma_task->read_sge.sgl[i]);
+			sge.stag = mr->rkey;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+		}
 	}
 	/* OUT: requester want to write data via rdma read */
-	for (i = 0;  i < req_hdr->write_num_sge; i++) {
-		sge.addr = ib_sg_dma_address(ib_dev,
-					     &rdma_task->write_sge.sgl[i]);
-		sge.length = ib_sg_dma_len(ib_dev,
-					   &rdma_task->write_sge.sgl[i]);
-		sge.stag = mr->rkey;
+	if (rdma_task->write_sge.mem_reg.mem_h) {
+		/* FMR/FRWR case */
+		sge.addr = rdma_task->write_sge.mem_reg.va;
+		sge.length = rdma_task->write_sge.mem_reg.len;
+		sge.stag = rdma_task->write_sge.mem_reg.rkey;
 		PACK_LLVAL(&sge, tmp_sge, addr);
 		PACK_LVAL(&sge, tmp_sge, length);
 		PACK_LVAL(&sge, tmp_sge, stag);
 		tmp_sge++;
+	} else {
+		for (i = 0;  i < req_hdr->write_num_sge; i++) {
+			sge.addr = ib_sg_dma_address(ib_dev,
+						     &rdma_task->write_sge.sgl[i]);
+			sge.length = ib_sg_dma_len(ib_dev,
+						   &rdma_task->write_sge.sgl[i]);
+			sge.stag = mr->rkey;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+		}
 	}
 	hdr_len	= sizeof(struct xio_req_hdr);
 	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
-					   req_hdr->read_num_sge +
-					   req_hdr->write_num_sge);
+					   read_num_sge +
+					   write_num_sge);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -1575,7 +1610,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 		UNPACK_LVAL(tmp_sge, &rdma_task->req_recv_sge[i], stag);
 		tmp_sge++;
 	}
-	rdma_task->req_recv_num_sge	= i;
+	rdma_task->req_recv_num_sge = req_hdr->recv_num_sge;
 
 	/* params for RDMA_WRITE */
 	for (i = 0; i < req_hdr->read_num_sge; i++) {
@@ -1691,7 +1726,6 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 				    uint32_t status)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct ib_device *ib_dev = rdma_hndl->dev->ib_dev;
 	struct xio_req_hdr	req_hdr;
 
 	if (!IS_REQUEST(task->tlv_type)) {
@@ -1715,11 +1749,11 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.write_num_sge	= rdma_task->write_num_sge;
 
 	if (rdma_task->read_num_sge > 0) {
-		xio_map_desc(ib_dev, &rdma_task->read_sge,
+		xio_map_desc(rdma_hndl, &rdma_task->read_sge,
 			     DMA_FROM_DEVICE);
 	}
 	if (rdma_task->write_num_sge > 0) {
-		xio_map_desc(ib_dev, &rdma_task->write_sge,
+		xio_map_desc(rdma_hndl, &rdma_task->write_sge,
 			     DMA_TO_DEVICE);
 	}
 
@@ -1759,6 +1793,7 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rsp_hdr	rsp_hdr;
+	uint64_t		xio_hdr_len;
 
 	if (!IS_RESPONSE(task->tlv_type)) {
 		ERROR_LOG("unknown message type\n");
@@ -1775,6 +1810,7 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	rsp_hdr.ulp_pad_len	= ulp_pad_len;
 	rsp_hdr.ulp_imm_len	= ulp_imm_len;
 	rsp_hdr.status		= status;
+
 	if (xio_rdma_write_rsp_header(rdma_hndl, task, &rsp_hdr) != 0)
 		goto cleanup;
 
@@ -1790,6 +1826,10 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	/* write the pad between header and data */
 	if (ulp_pad_len)
 		xio_mbuf_inc(&task->mbuf, ulp_pad_len);
+
+	/* reinit header sgl to proper size (size was updated )*/
+	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
+	xio_reinit_header(rdma_task, xio_hdr_len);
 
 	return 0;
 
@@ -1809,14 +1849,15 @@ static int xio_rdma_write_send_data(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	if (xio_vmsg_to_sgl(&task->omsg->out,
-			    &rdma_task->txd.sgl[1])) {
+			    &rdma_task->txd.sgl[1],
+			    &rdma_task->txd.nents)) {
 		xio_set_error(XIO_E_MSG_SIZE);
 		ERROR_LOG("xio_rdma_send_msg failed\n");
 		goto cleanup;
 	}
 
-	rdma_task->txd.nents = task->omsg->out.data_iovlen + 1;
-	rdma_task->txd.send_wr.num_sge = rdma_task->txd.nents;
+	/* Add one for the header */
+	rdma_task->txd.nents++;
 
 	return 0;
 
@@ -1875,15 +1916,25 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 		if (retval)
 			return -1;
 
+		/* reinit header sgl to proper size (size was updated )*/
+		xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
+		xio_reinit_header(rdma_task, xio_hdr_len);
+
 		/* if there is data, set it to buffer or directly to the sge */
 		if (ulp_out_imm_len) {
 			retval = xio_rdma_write_send_data(rdma_hndl, task);
 			if (retval)
 				return -1;
+		} else {
+			/* Only header */
+			rdma_task->txd.nents = 1;
 		}
 	} else {
 		/* the data is outgoing via SEND but the peer will do
-		 * RDMA_READ */
+		 * RDMA_READ
+		 */
+		/* Only header header in the SEND */
+		rdma_task->txd.nents = 1;
 
 		/* check for multiple iovecs for RDMA before FMR/FRWR */
 		if (vmsg->data_iovlen > 1) {
@@ -1894,22 +1945,26 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 		rdma_task->ib_op = XIO_IB_RDMA_READ;
 
 		/* user must provided buffers with length for RDMA READ */
-		if (xio_vmsg_to_sgl(vmsg, rdma_task->write_sge.sgl) < 0) {
+		if (xio_vmsg_to_sgl(vmsg, rdma_task->write_sge.sgl,
+				    &rdma_task->write_sge.nents) < 0) {
 			ERROR_LOG("xio_vmsg_to_sgl failed\n");
 			goto cleanup;
 		}
-		rdma_task->write_sge.nents = vmsg->data_iovlen;
-		rdma_task->write_num_sge   = vmsg->data_iovlen;
+		rdma_task->write_num_sge = rdma_task->write_sge.nents;
 
-		/* write xio header to the buffer */
-		retval = xio_rdma_prep_req_header(
-				rdma_hndl, task,
-				ulp_out_hdr_len, 0, 0, XIO_E_SUCCESS);
+		/* write XIO header to the buffer */
+		retval = xio_rdma_prep_req_header(rdma_hndl, task,
+						  ulp_out_hdr_len, 0, 0,
+						  XIO_E_SUCCESS);
 
 		if (retval) {
 			ERROR_LOG("Failed to write header\n");
 			goto cleanup;
 		}
+
+		/* reinit header sgl to proper size (size was updated )*/
+		xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
+		xio_reinit_header(rdma_task, xio_hdr_len);
 	}
 
 	return 0;
@@ -1945,12 +2000,12 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 			return -1;
 		}
 		/* user must provided buffers with length for RDMA WRITE */
-		if (xio_vmsg_to_sgl(vmsg, rdma_task->read_sge.sgl) < 0) {
-			ERROR_LOG("xio_vmsg_to_sge failed\n");
+		if (xio_vmsg_to_sgl(vmsg, rdma_task->read_sge.sgl,
+				    &rdma_task->read_sge.nents) < 0) {
+			ERROR_LOG("xio_vmsg_to_sgl failed\n");
 			goto cleanup;
 		}
-		rdma_task->read_sge.nents = vmsg->data_iovlen;
-		rdma_task->read_num_sge   = vmsg->data_iovlen;
+		rdma_task->read_num_sge = rdma_task->read_sge.nents;
 	}
 	return 0;
 
@@ -2299,7 +2354,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	void			*ulp_hdr;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	XIO_TO_RDMA_TASK(task, rdma_sender_task);
-	struct ib_device	*ib_dev = rdma_hndl->dev->ib_dev;
 
 	/* read the response header */
 	retval = xio_rdma_read_rsp_header(rdma_hndl, task, &rsp_hdr);
@@ -2368,7 +2422,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			/* This is a completion of RDMA READ can free
 			 * DMA mapping of send buffer (future FMR/FRWR)
 			 */
-			xio_unmap_desc(ib_dev,
+			xio_unmap_desc(rdma_hndl,
 				       &rdma_sender_task->write_sge,
 				       DMA_FROM_DEVICE);
 		}
@@ -2429,7 +2483,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		/* This is a completion of RDMA WRITE can free
 		 * DMA mapping of read buffer (future FMR/FRWR)
 		 */
-		xio_unmap_desc(ib_dev,
+		xio_unmap_desc(rdma_hndl,
 			       &rdma_sender_task->read_sge,
 			       DMA_TO_DEVICE);
 		imsg->in.data_iov[0].iov_base
@@ -2940,7 +2994,6 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
-	rdma_task->txd.send_wr.num_sge	= 1;
 
 	/* Map the send */
 	if (xio_map_work_req(rdma_hndl->dev->ib_dev, &rdma_task->txd,
@@ -2948,6 +3001,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("DMA map to device failed\n");
 		return -1;
 	}
+	rdma_task->txd.send_wr.num_sge = rdma_task->txd.mapped;
 
 	xio_task_addref(task);
 	rdma_hndl->reqs_in_flight_nr++;
@@ -2988,7 +3042,6 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 		rdma_task->txd.send_wr.send_flags |= IB_SEND_INLINE;
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
-	rdma_task->txd.send_wr.num_sge	= 1;
 
 	/* Map the send */
 	if (xio_map_work_req(rdma_hndl->dev->ib_dev, &rdma_task->txd,
@@ -2996,6 +3049,7 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("DMA map to device failed\n");
 		return -1;
 	}
+	rdma_task->txd.send_wr.num_sge = rdma_task->txd.mapped;
 
 	rdma_hndl->rsps_in_flight_nr++;
 
@@ -3156,7 +3210,6 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 	rdma_task->txd.send_wr.send_flags = IB_SEND_SIGNALED | IB_SEND_INLINE;
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
-	rdma_task->txd.send_wr.num_sge	= 1;
 
 	rdma_task->txd.nents = 1;
 	/* Map the send */
@@ -3165,6 +3218,7 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 		ERROR_LOG("DMA map to device failed\n");
 		return -1;
 	}
+	rdma_task->txd.send_wr.num_sge = rdma_task->txd.mapped;
 
 	rdma_hndl->rsps_in_flight_nr++;
 	list_add_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
@@ -3298,7 +3352,6 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	/* sge[0] length is fixed */
 	rdma_task->txd.send_wr.send_flags = IB_SEND_SIGNALED | IB_SEND_INLINE;
 	rdma_task->txd.send_wr.next	= NULL;
-	rdma_task->txd.send_wr.num_sge	= 1;
 
 	task->omsg = NULL;
 	kfree(omsg.out.header.iov_base);
@@ -3310,6 +3363,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("DMA map to device failed\n");
 		return -1;
 	}
+	rdma_task->txd.send_wr.num_sge = rdma_task->txd.mapped;
 
 	rdma_hndl->tx_ready_tasks_num++;
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->tx_ready_list);

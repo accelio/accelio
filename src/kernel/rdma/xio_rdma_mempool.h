@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies® BSD license
+ * directory of this source tree, or the Mellanox Technologies�� BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *      - Neither the name of the Mellanox Technologies�� nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -49,22 +49,12 @@ struct xio_mem_reg {
 	u32  rkey;
 	u64  va;
 	u64  len;
-	void *mem_h;
-	int  is_mr;
-};
-
-struct xio_regd_buf {
-	struct xio_mem_reg	reg;		/* memory registration info  */
-	void			*virt_addr;
-	struct xio_device	*dev;		/* dev->ib_dev for dma_unmap */
-	enum dma_data_direction direction;	/* direction for dma_unmap   */
-	size_t			data_size;
+	void *mem_h; /* it is void as it might be FMR or FRWR */
 };
 
 struct xio_rdma_mp_mem {
 	void		*addr;
 	size_t		length;
-	struct xio_mr	*mr;
 	void		*cache;
 };
 
@@ -75,7 +65,7 @@ struct xio_rdma_mem_desc {
 	u32			num_sge;
 	unsigned int		nents;
 	unsigned int		mapped;
-	struct xio_regd_buf	reg_buf;
+	struct xio_mem_reg	mem_reg;
 };
 
 #define XIO_CHUNKS_SIZE_NR	4

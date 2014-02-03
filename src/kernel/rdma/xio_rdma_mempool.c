@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies® BSD license
+ * directory of this source tree, or the Mellanox Technologies�� BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies® nor the names of its
+ *      - Neither the name of the Mellanox Technologies�� nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -137,7 +137,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 
 	INFO_LOG("mempool created(%p)\n", p);
 	return p;
- 
+
 cleanup:
 	xio_rdma_mempool_destroy(p);
 
@@ -170,7 +170,6 @@ int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 	int index;
 
 	mp_mem->addr = NULL;
-	mp_mem->mr = NULL;
 	mp_mem->cache = NULL;
 	mp_mem->length = 0;
 

@@ -77,6 +77,9 @@
 #ifndef PAGE_SIZE
 #define PAGE_SIZE			(1UL << PAGE_SHIFT)
 #endif
+#ifndef PAGE_MASK
+#define PAGE_MASK			(~(PAGE_SIZE-1))
+#endif
 
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
@@ -86,6 +89,8 @@
 		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
 
 #define xio_prefetch(p)		prefetch(p)
+
+#define XIO_FRWR_LI_WRID 0xffffffffffffffffULL
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -268,6 +273,12 @@ struct xio_page_vec {
 	int data_size;
 };
 
+enum xio_fast_reg {
+	XIO_FAST_MEM_NONE,
+	XIO_FAST_MEM_FRWR,
+	XIO_FAST_MEM_FMR
+};
+
 struct xio_fmr {
 	struct ib_fmr_pool	*pool;	   /* pool of IB FMRs         */
 	struct xio_page_vec	*page_vec; /* represents SG to fmr maps*
@@ -275,25 +286,29 @@ struct xio_fmr {
 };
 
 struct xio_frwr {
-	struct list_head	pool;
+	struct llist_head	pool;
+	struct llist_head	pool_ret;
 	int			pool_size;
 };
 
-struct xio_fastreg {
-	int	(*alloc_rdma_reg_res)(struct xio_device *dev, u32 cmds_max);
-	void	(*free_rdma_reg_res)(struct xio_device *dev);
-	int	(*reg_rdma_mem)(struct xio_task *xio_task,
+union xio_fastreg {
+	struct xio_fmr fmr;
+	struct xio_frwr frwr;
+};
+
+struct xio_fastreg_ops {
+	int	(*alloc_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
+	void	(*free_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
+	int	(*reg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
+				struct xio_rdma_mem_desc *desc,
 				enum dma_data_direction cmd_dir);
-	void	(*unreg_rdma_mem)(struct xio_task *xio_task,
+	void	(*unreg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
+				  struct xio_rdma_mem_desc *desc,
 				  enum dma_data_direction cmd_dir);
-	union {
-		struct xio_fmr fmr;
-		struct xio_frwr frwr;
-	};
 };
 
 struct xio_device {
-	struct xio_fastreg		fastreg;
+	struct xio_fastreg_ops		fastreg;
 	struct list_head		cq_list; /* list of all cq per device */
 	rwlock_t			cq_lock;
 	struct ib_device		*ib_dev;
@@ -319,6 +334,7 @@ struct xio_rdma_transport {
 	struct xio_device		*dev;
 	struct ib_qp			*qp;
 	struct xio_rdma_mempool		*rdma_mempool;
+	union xio_fastreg		fastreg;
 
 	struct list_head		trans_list_entry;
 
@@ -403,8 +419,8 @@ struct xio_rdma_transport {
 };
 
 /*
- * The next routines deal with comparing 16 bit unsigned ints
- * and worry about wraparound (automatic with unsigned arithmetic).
+ * The next routines deal with comparing 16 bit unsigned integers
+ * and worry about wrap-around (automatic with unsigned arithmetic).
  */
 
 static inline s16 before(u16 seq1, u16 seq2)
@@ -483,7 +499,8 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 
 /* Should create a xio_memory.h */
-void xio_unmap_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
+		    struct xio_rdma_mem_desc *desc,
 		    enum dma_data_direction direction);
 
 void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
@@ -492,10 +509,15 @@ void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 		     enum dma_data_direction direction);
 
-int xio_map_desc(struct ib_device *ib_dev, struct xio_rdma_mem_desc *desc,
+int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
+		 struct xio_rdma_mem_desc *desc,
 		 enum dma_data_direction direction);
 
-int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl);
+void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len);
+
+int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl, int *nents);
+
+int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops);
 
 void xio_cq_data_callback(struct ib_cq *cq, void *cq_context);
 

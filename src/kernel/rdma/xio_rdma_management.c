@@ -318,27 +318,20 @@ static struct xio_device *xio_device_init(struct ib_device *ib_dev, int port)
 		goto cleanup1;
 	}
 
+	/* FMR not yet supported */
 #if 0
 	/* Assign function handles  - based on FMR support */
 	if (ib_dev->alloc_fmr && ib_dev->dealloc_fmr &&
-	    ib_dev->map_phys_fmr && ib_dev->unmap_fmr) {
-		INFO_LOG("FMR supported, using FMR for registration\n");
-		dev->alloc_rdma_reg_res = xio_create_fmr_pool;
-		dev->free_rdma_reg_res = xio_free_fmr_pool;
-		dev->reg_rdma_mem = xio_reg_rdma_mem_fmr;
-		dev->unreg_rdma_mem = xio_unreg_mem_fmr;
-	} else if (dev->dev_attr.device_cap_flags &
-		   IB_DEVICE_MEM_MGT_EXTENSIONS) {
-		INFO_LOG("FRWR supported, using FRWR for registration\n");
-		dev->alloc_rdma_reg_res = xio_create_frwr_pool;
-		dev->free_rdma_reg_res = xio_free_frwr_pool;
-		dev->reg_rdma_mem = xio_reg_rdma_mem_frwr;
-		dev->unreg_rdma_mem = xio_unreg_mem_frwr;
-	} else {
-		ERROR_LOG("IB device does not support FMRs nor FRWRs, can't register memory\n");
-		goto cleanup1;
-	}
+	    ib_dev->map_phys_fmr && ib_dev->unmap_fmr)
 #endif
+
+	if (dev->device_attr.device_cap_flags & IB_DEVICE_MEM_MGT_EXTENSIONS) {
+		if (xio_fast_reg_init(XIO_FAST_MEM_FRWR, &dev->fastreg))
+			goto cleanup1;
+	} else {
+		if (xio_fast_reg_init(XIO_FAST_MEM_NONE, &dev->fastreg))
+			goto cleanup1;
+	}
 
 	dev->ib_dev = ib_dev;
 	dev->port_num = port;
@@ -695,6 +688,9 @@ static int xio_rdma_task_init(struct xio_task *task,
 	/* initialize the mbuf */
 	xio_mbuf_init(&task->mbuf, buf, size, 0);
 
+	sg_init_table(rdma_task->read_sge.sgl, XIO_MAX_IOV);
+	sg_init_table(rdma_task->write_sge.sgl, XIO_MAX_IOV);
+
 	return 0;
 }
 
@@ -1025,6 +1021,14 @@ static int xio_rdma_primary_pool_alloc(
 		return -1;
 	}
 
+	/* tasks may require fast registration for RDMA read and write */
+	if (rdma_hndl->dev->fastreg.alloc_rdma_reg_res(rdma_hndl)) {
+		kmem_cache_destroy(rdma_pool->data_pool);
+		xio_set_error(ENOMEM);
+		ERROR_LOG("fast reg init failed\n");
+		return -1;
+	}
+
 	DEBUG_LOG("pool buf:%p\n", rdma_pool->data_pool);
 
 	return 0;
@@ -1047,11 +1051,15 @@ static int xio_rdma_primary_pool_run(
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_primary_pool_free						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_free(
-		struct xio_transport_base *transport_hndl, void *pool_dd_data)
+static int xio_rdma_primary_pool_free(struct xio_transport_base *t_hndl,
+				      void *pool_dd_data)
 {
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)t_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
+
+	rdma_hndl->dev->fastreg.free_rdma_reg_res(rdma_hndl);
 
 	kmem_cache_destroy(rdma_pool->data_pool);
 
@@ -1076,16 +1084,16 @@ static int xio_rdma_primary_pool_uninit_task(void *pool_dd_data,
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_primary_pool_init_task					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_init_task(
-				struct xio_transport_base *transport_hndl,
-				void *pool_dd_data, struct xio_task *task)
+static int xio_rdma_primary_pool_init_task(struct xio_transport_base *t_hndl,
+					   void *pool_dd_data,
+					   struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
-		(struct xio_rdma_transport *)transport_hndl;
+		(struct xio_rdma_transport *)t_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
-	void *buf;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	void *buf;
 
 	rdma_task->ib_op = 0x200;
 
@@ -1500,7 +1508,7 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 {
 	struct xio_rdma_transport *rdma_hndl;
 
-	/*allocate rdma handl */
+	/* allocate rdma handle */
 	rdma_hndl = kzalloc(sizeof(struct xio_rdma_transport), GFP_KERNEL);
 	if (rdma_hndl == NULL) {
 		xio_set_error(ENOMEM);
