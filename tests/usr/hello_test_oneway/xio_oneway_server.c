@@ -180,7 +180,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
-		xio_context_stop_loop(ctx, 0);
+		//xio_context_stop_loop(ctx, 0);
 		break;
 	default:
 		break;

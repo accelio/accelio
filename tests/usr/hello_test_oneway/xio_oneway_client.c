@@ -59,6 +59,8 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_OUTSTANDING_REQS	50
+#define TEST_DISCONNECT		0
+#define DISCONNECT_NR		12000000
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define USECS_IN_SEC		1000000
@@ -74,13 +76,17 @@ struct xio_test_config {
 	uint32_t		conn_idx;
 };
 
+struct ow_test_params {
+	struct msg_pool		*pool;
+	struct xio_connection	*conn;
+	struct xio_context	*ctx;
+	int			nsent;
+	int			ncomp;
+};
+
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct msg_pool		*pool;
-static struct xio_connection	*conn;
-static struct xio_context	*ctx;
-
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
 	XIO_DEF_PORT,
@@ -253,6 +259,8 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
+	struct ow_test_params *ow_params = cb_user_context;
+
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       xio_strerror(event_data->reason));
@@ -262,7 +270,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ctx, 0);  /* exit */
+		xio_context_stop_loop(ow_params->ctx, 0);  /* exit */
 		break;
 	default:
 		break;
@@ -290,16 +298,27 @@ static int on_message_delivered(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
+	struct ow_test_params *ow_params = cb_user_context;
 	struct xio_msg *new_msg;
 
 	process_tx_message(msg);
+	ow_params->ncomp++;
 
 	/* can be safely returned to pool */
-	msg_pool_put(pool, msg);
+	msg_pool_put(ow_params->pool, msg);
 
+#if  TEST_DISCONNECT
+	if (ow_params->ncomp == DISCONNECT_NR) {
+		xio_disconnect(ow_params->conn);
+		return 0;
+	}
+
+	if (ow_params->nsent == DISCONNECT_NR)
+		return 0;
+#endif
 
 	/* peek message from the pool */
-	new_msg = msg_pool_get(pool);
+	new_msg = msg_pool_get(ow_params->pool);
 	if (new_msg == NULL) {
 		printf("pool is empty\n");
 		return 0;
@@ -317,15 +336,17 @@ static int on_message_delivered(struct xio_session *session,
 	 new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 
 	/* send it */
-	if (xio_send_msg(conn, new_msg) == -1) {
+	if (xio_send_msg(ow_params->conn, new_msg) == -1) {
 		if (xio_errno() != EAGAIN)
 			printf("**** [%p] Error - xio_send_msg " \
 					"failed. %s\n",
 					session,
 					xio_strerror(xio_errno()));
-		msg_pool_put(pool, new_msg);
+		msg_pool_put(ow_params->pool, new_msg);
 		return 0;
 	}
+	ow_params->nsent++;
+
 	return 0;
 }
 
@@ -356,21 +377,23 @@ static int on_server_message(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_private_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error, struct xio_msg  *msg,
+			void *cb_user_context)
 {
+	struct ow_test_params *ow_params = cb_user_context;
+
 	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
 
-	msg_pool_put(pool, msg);
+	msg_pool_put(ow_params->pool, msg);
 
 	return 0;
 }
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops ses_ops = {
+static struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  on_session_established,
 	.on_msg				=  on_server_message,
@@ -434,6 +457,8 @@ int parse_cmdline(struct xio_test_config *test_config,
 		};
 
 		static char *short_options = "c:p:n:w:i:vh";
+		optopt = 0;
+		opterr = 0;
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -510,6 +535,7 @@ static void print_test_config(
 int main(int argc, char *argv[])
 {
 	struct xio_session	*session;
+	struct ow_test_params	ow_params;
 	int			error;
 	int			retval;
 	char			url[256];
@@ -532,20 +558,24 @@ int main(int argc, char *argv[])
 	/* bind proccess to cpu */
 	set_cpu_affinity(test_config.cpu);
 
+	xio_init();
+
 	/* prepare buffers for this test */
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
 		return -1;
 
-	pool = msg_pool_alloc(MAX_POOL_SIZE,
-			      test_config.hdr_len, test_config.data_len,
-			      0, 0);
-	if (pool == NULL)
-		return -1;
+	memset(&ow_params, 0, sizeof(ow_params));
+
+	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
+					test_config.hdr_len, test_config.data_len,
+					0, 0);
+	if (ow_params.pool == NULL)
+		goto cleanup;
 
 
 	/* open xio context and assign a loop */
-	ctx = xio_context_create(NULL, 0);
-	if (ctx == NULL) {
+	ow_params.ctx = xio_context_create(NULL, 0);
+	if (ow_params.ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
@@ -556,7 +586,7 @@ int main(int argc, char *argv[])
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
 	session = xio_session_create(XIO_SESSION_CLIENT,
-				   &attr, url, 0, 0, NULL);
+				   &attr, url, 0, 0,  &ow_params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
@@ -564,8 +594,9 @@ int main(int argc, char *argv[])
 		goto exit3;
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
-	if (conn == NULL) {
+	ow_params.conn = xio_connect(session, ow_params.ctx,
+				     test_config.conn_idx, NULL, &ow_params);
+	if (ow_params.conn == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "connection creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
@@ -575,7 +606,7 @@ int main(int argc, char *argv[])
 	printf("**** starting ...\n");
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
 		/* pick message from the pool */
-		msg = msg_pool_get(pool);
+		msg = msg_pool_get(ow_params.pool);
 		if (msg == NULL)
 			break;
 
@@ -589,20 +620,21 @@ int main(int argc, char *argv[])
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 
 		/* send the message */
-		if (xio_send_msg(conn, msg) == -1) {
+		if (xio_send_msg(ow_params.conn, msg) == -1) {
 			printf("**** sent %d messages\n", i);
 			if (xio_errno() != EAGAIN)
 				printf("**** [%p] Error - xio_send_msg " \
 				       "failed. %s\n",
 					session,
 					xio_strerror(xio_errno()));
-			msg_pool_put(pool, msg);
+			msg_pool_put(ow_params.pool, msg);
 			return 0;
 		}
+		ow_params.nsent++;
 	}
 
 	/* the default xio supplied main loop */
-	retval = xio_context_run_loop(ctx, XIO_INFINITE);
+	retval = xio_context_run_loop(ow_params.ctx, XIO_INFINITE);
 	if (retval != 0) {
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
@@ -622,11 +654,14 @@ exit4:
 	}
 
 exit3:
-	xio_context_destroy(ctx);
+	xio_context_destroy(ow_params.ctx);
 exit1:
+	if (ow_params.pool)
+		msg_pool_free(ow_params.pool);
+cleanup:
+	msg_api_free();
 
-	if (pool)
-		msg_pool_free(pool);
+	xio_shutdown();
 
 	fprintf(stdout, "exit complete\n");
 

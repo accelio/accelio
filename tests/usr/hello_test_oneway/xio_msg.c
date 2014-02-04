@@ -196,6 +196,23 @@ cleanup:
 	return -1;
 }
 
+void msg_api_free()
+{
+	if (g_hdr) {
+		free(g_hdr);
+		g_hdr = NULL;
+	}
+	if (g_data_mr) {
+		xio_dereg_mr(&g_data_mr);
+		g_data_mr = NULL;
+	}
+	if (g_data) {
+		free_mem_buf(g_data, g_shmid);
+		g_data = NULL;
+	}
+
+}
+
 /*---------------------------------------------------------------------------*/
 /* msg_write								     */
 /*---------------------------------------------------------------------------*/
