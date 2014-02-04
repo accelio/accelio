@@ -220,7 +220,6 @@ static inline void xio_timers_list_del(struct xio_timers_list *timers_list,
 	struct xio_timers_list_timer *timer =
 				(struct xio_timers_list_timer *)timer_handle;
 
-	memset(timer->handle_addr, 0, sizeof(struct xio_timers_list_timer *));
 	/*
 	 * If the next timer after the currently expiring timer because
 	 * xio_timers_list_del is called from a timer handler, get to the next
