@@ -81,6 +81,7 @@ struct ow_test_params {
 	struct xio_connection	*connection;
 	char			*buf;
 	struct xio_mr		*mr;
+	struct msg_params	msg_params;
 	int			nsent;
 	int			ndelivered;
 };
@@ -225,7 +226,7 @@ static int on_new_session(struct xio_session *session,
 			break;
 
 		/* assign buffers to the message */
-		msg_write(msg,
+		msg_write(&ow_params->msg_params, msg,
 			  NULL, test_config.hdr_len,
 			  NULL, test_config.data_len);
 
@@ -301,7 +302,7 @@ static int on_message_delivered(struct xio_session *session,
 	new_msg->more_in_batch	= 0;
 
 	/* fill response */
-	msg_write(new_msg,
+	msg_write(&ow_params->msg_params, new_msg,
 		  NULL, test_config.hdr_len,
 		  NULL, test_config.data_len);
 
@@ -362,7 +363,7 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops server_ops = {
+static struct xio_session_ops server_ops = {
 	.on_session_event		=  on_session_event,
 	.on_new_session			=  on_new_session,
 	.on_msg_send_complete		=  NULL,
@@ -413,10 +414,8 @@ static void usage(const char *argv0, int status)
 int parse_cmdline(struct xio_test_config *test_config,
 		int argc, char **argv)
 {
-	while (1) {
-		int c;
-
-		static struct option const long_options[] = {
+	int c;
+	static struct option const long_options[] = {
 			{ .name = "core",	.has_arg = 1, .val = 'c'},
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
@@ -426,11 +425,12 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:svh";
-		optopt = 0;
-		opterr = 0;
+	static char *short_options = "c:p:n:w:svh";
+	optind = 0;
+	opterr = 0;
 
 
+	while (1) {
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
 		if (c == -1)
@@ -522,7 +522,8 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	/* prepare buffers for this test */
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 1) != 0)
+	if (msg_api_init(&ow_params.msg_params,
+			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
 	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
@@ -568,7 +569,7 @@ exit1:
 		ow_params.buf = NULL;
 	}
 cleanup:
-	msg_api_free();
+	msg_api_free(&ow_params.msg_params);
 
 	xio_shutdown();
 

@@ -91,6 +91,7 @@ struct ow_test_params {
 	struct xio_context	*ctx;
 	struct ow_test_stat	rx_stat;
 	struct ow_test_stat	tx_stat;
+	struct msg_params	msg_params;
 	int			nsent;
 	int			ndelivered;
 };
@@ -326,7 +327,7 @@ static int on_message_delivered(struct xio_session *session,
 	}
 
 	/* assign buffers to the message */
-	msg_write(new_msg,
+	msg_write(&ow_params->msg_params, new_msg,
 		  NULL, test_config.hdr_len,
 		  NULL, test_config.data_len);
 
@@ -562,17 +563,16 @@ int main(int argc, char *argv[])
 
 	xio_init();
 
-	/* prepare buffers for this test */
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
-
 	memset(&ow_params, 0, sizeof(ow_params));
 	ow_params.rx_stat.first_time = 1;
 	ow_params.tx_stat.first_time = 1;
 
-	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
-					test_config.hdr_len, test_config.data_len,
-					0, 0);
+	/* prepare buffers for this test */
+	if (msg_api_init(&ow_params.msg_params,
+			 test_config.hdr_len, test_config.data_len, 0) != 0)
+		return -1;
+
+	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
 	if (ow_params.pool == NULL)
 		goto cleanup;
 
@@ -615,7 +615,7 @@ int main(int argc, char *argv[])
 			break;
 
 		/* assign buffers to the message */
-		msg_write(msg,
+		msg_write(&ow_params.msg_params, msg,
 			  NULL, test_config.hdr_len,
 			  NULL, test_config.data_len);
 
@@ -663,7 +663,7 @@ exit1:
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
 cleanup:
-	msg_api_free();
+	msg_api_free(&ow_params.msg_params);
 
 	xio_shutdown();
 
