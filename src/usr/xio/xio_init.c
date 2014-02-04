@@ -78,11 +78,18 @@ static void xio_dtor()
 /*---------------------------------------------------------------------------*/
 __attribute__((constructor)) void xio_init(void)
 {
+	if (dtor_key_once != PTHREAD_ONCE_INIT) {
+		dtor_key_once = PTHREAD_ONCE_INIT;
+		ctor_key_once = PTHREAD_ONCE_INIT;
+	}
 	pthread_once(&ctor_key_once, xio_ctor);
 }
 
 __attribute__((destructor)) void xio_shutdown(void)
 {
+	if (ctor_key_once == PTHREAD_ONCE_INIT)
+		return;
+
 	pthread_once(&dtor_key_once, xio_dtor);
 }
 
