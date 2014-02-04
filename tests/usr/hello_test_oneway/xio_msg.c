@@ -230,7 +230,6 @@ void msg_write(struct xio_msg *msg,
 	pmsg->data_iov[0].iov_len	= datalen;
 	pmsg->data_iov[0].mr		= g_data_mr;
 	pmsg->data_iovlen		= g_data ? 1 : 0;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -338,20 +337,6 @@ struct msg_pool *msg_pool_alloc(int max,
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_reset								     */
-/*---------------------------------------------------------------------------*/
-inline void msg_reset(struct xio_msg *msg)
-{
-	msg->in.header.iov_len = 0;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-	msg->out.data_iovlen = 0;
-	msg->out.header.iov_len = 0;
-	msg->next = NULL;
-}
-
-
-/*---------------------------------------------------------------------------*/
 /* msg_pool_get								     */
 /*---------------------------------------------------------------------------*/
 inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
@@ -365,7 +350,6 @@ inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg)
 {
-//	msg_reset(msg);
 	*--pool->stack_ptr = msg;
 }
 
