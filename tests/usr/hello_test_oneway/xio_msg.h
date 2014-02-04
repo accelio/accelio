@@ -40,6 +40,13 @@
 
 #include "libxio.h"
 
+struct msg_params {
+		uint8_t		*g_hdr;
+		uint8_t		*g_data;
+		struct xio_mr	*g_data_mr;
+		int		g_shmid;
+		int		pad;
+};
 
 struct msg_pool {
 	/* pool of msgs */
@@ -63,13 +70,14 @@ struct msg_pool {
 /*---------------------------------------------------------------------------*/
 /* msg_api_init								     */
 /*---------------------------------------------------------------------------*/
-int msg_api_init(size_t hdrlen,
+int msg_api_init(struct msg_params *msg_params,
+		 size_t hdrlen,
 		 size_t datalen, int is_server);
 
 /*---------------------------------------------------------------------------*/
 /* msg_api_free								     */
 /*---------------------------------------------------------------------------*/
-void msg_api_free();
+void msg_api_free(struct msg_params *msg_params);
 
 /*---------------------------------------------------------------------------*/
 /* msg_alloc								     */
@@ -80,9 +88,10 @@ struct xio_msg *msg_alloc(size_t out_hdrlen, size_t out_datalen,
 /*---------------------------------------------------------------------------*/
 /* msg_write								     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct xio_msg *msg,
-		void *hdr, size_t hdrlen,
-		void *data, size_t datalen);
+void msg_write(struct msg_params *msg_params,
+	       struct xio_msg *msg,
+	       void *hdr, size_t hdrlen,
+	       void *data, size_t datalen);
 
 /*---------------------------------------------------------------------------*/
 /* msg_pool_alloc							     */
