@@ -65,7 +65,7 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
 
-void xio_stats_handler(int fd, int events, void *data)
+static void xio_stats_handler(int fd, int events, void *data)
 {
 	struct xio_context *ctx = (struct xio_context *)data;
 	unsigned char buf[NLMSG_SPACE(1024)];
