@@ -44,12 +44,17 @@
 #include "libxio.h"
 
 #define MAX_THREADS		4
-#define HW_PRINT_COUNTER	400000
+#define PRINT_COUNTER		400000
+#define TEST_DISCONNECT		0
+#define DISCONNECT_NR		3000000
+
 
 struct thread_data {
 	int			cid;
 	int			affinity;
 	uint64_t		cnt;
+	uint64_t		nsent;
+	uint64_t		nrecv;
 	struct xio_session	*session;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
@@ -64,6 +69,9 @@ struct session_data {
 	struct thread_data	tdata[MAX_THREADS];
 };
 
+/*---------------------------------------------------------------------------*/
+/* worker_thread							     */
+/*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
 	struct thread_data	*tdata = data;
@@ -94,12 +102,15 @@ static void *worker_thread(void *data)
 
 	/* send first message */
 	xio_send_request(tdata->conn, &tdata->req);
+	tdata->nsent++;
 
 	/* the default xio supplied main loop */
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
+
+	free(tdata->req.out.header.iov_base);
 
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
@@ -114,7 +125,7 @@ static void *worker_thread(void *data)
 static void process_response(struct thread_data  *tdata,
 			     struct xio_msg *rsp)
 {
-	if (++tdata->cnt == HW_PRINT_COUNTER) {
+	if (++tdata->cnt == PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
 		printf("thread [%d] - tid:%p  - message: [%"PRIu64"] - %s\n",
 		       tdata->affinity,
@@ -167,14 +178,28 @@ static int on_response(struct xio_session *session,
 {
 	struct thread_data  *tdata = cb_user_context;
 
+	tdata->nrecv++;
+
 	/* process the incoming message */
 	process_response(tdata, rsp);
 
 	/* acknowlege xio that response is no longer needed */
 	xio_release_response(rsp);
 
+#if  TEST_DISCONNECT
+	if (tdata->nrecv == DISCONNECT_NR) {
+		xio_disconnect(tdata->conn);
+		return 0;
+	}
+
+	if (tdata->nsent == DISCONNECT_NR)
+		return 0;
+#endif
+
+
 	/* resend the message */
 	xio_send_request(tdata->conn, &tdata->req);
+	tdata->nsent++;
 
 	return 0;
 }
@@ -182,7 +207,7 @@ static int on_response(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops ses_ops = {
+static struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  NULL,
 	.on_msg				=  on_response,
