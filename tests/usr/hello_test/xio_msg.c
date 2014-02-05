@@ -57,10 +57,6 @@
 	(size_t)((~(HUGE_PAGE_SZ - 1)) & ((x) + HUGE_PAGE_SZ - 1))
 
 
-static uint8_t *g_hdr;
-static uint8_t *g_data;
-static struct xio_mr *g_data_mr;
-static int g_shmid;
 
 /*---------------------------------------------------------------------------*/
 /* alloc_mem_buf	                                                     */
@@ -125,9 +121,9 @@ inline void free_mem_buf(uint8_t *pool_buf, int shmid)
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_api_init								     */
+/* msg_alloc								     */
 /*---------------------------------------------------------------------------*/
-int msg_api_init(size_t hdrlen, size_t datalen, int is_server)
+int msg_api_init(struct msg_params *msg_params, size_t hdrlen, size_t datalen, int is_server)
 {
 	int pagesize = sysconf(_SC_PAGESIZE);
 	const char	*req_hdr = "hello world request header";
@@ -138,22 +134,22 @@ int msg_api_init(size_t hdrlen, size_t datalen, int is_server)
 	int		len, i;
 	unsigned char	c;
 
-	g_hdr = NULL;
-	g_data = NULL;
+	msg_params->g_hdr = NULL;
+	msg_params->g_data = NULL;
 	if (hdrlen) {
-		g_hdr = memalign(pagesize, hdrlen);
-		if (!g_hdr)
+		msg_params->g_hdr = memalign(pagesize, hdrlen);
+		if (!msg_params->g_hdr)
 			goto cleanup;
 		ptr = (is_server) ? rsp_hdr : req_hdr;
 		len = strlen(ptr);
 		if (hdrlen < len)
 			len = hdrlen;
-		strncpy((char *)g_hdr, ptr, len);
-		g_hdr[len] = 0;
+		strncpy((char *)msg_params->g_hdr, ptr, len);
+		msg_params->g_hdr[len] = 0;
 		len++;
 
 		for (i = len, c = 65;  i < hdrlen; i++) {
-			g_hdr[i] = c;
+			msg_params->g_hdr[i] = c;
 			c++;
 			if (c > 122)
 				c = 65;
@@ -161,77 +157,75 @@ int msg_api_init(size_t hdrlen, size_t datalen, int is_server)
 	}
 	if (datalen) {
 		datalen = ALIGNHUGEPAGE(datalen);
-		g_data = alloc_mem_buf(datalen, &g_shmid);
-		if (!g_data)
+		msg_params->g_data = alloc_mem_buf(datalen, &msg_params->g_shmid);
+		if (!msg_params->g_data)
 			goto cleanup;
 		ptr = (is_server) ? rsp_data : req_data;
 		len = strlen(ptr);
 		if (datalen < len)
 			len = datalen;
-		strncpy((char *)g_data, ptr, len);
-		g_data[len] = 0;
+		strncpy((char *)msg_params->g_data, ptr, len);
+		msg_params->g_data[len] = 0;
 		len++;
 
 		for (i = len, c = 65;  i < datalen; i++) {
-			g_data[i] = c;
+			msg_params->g_data[i] = c;
 			c++;
 			if (c > 122)
 				c = 65;
 		}
-		g_data_mr = xio_reg_mr(g_data, datalen);
+		msg_params->g_data_mr = xio_reg_mr(msg_params->g_data, datalen);
 	}
 	return 0;
 
 cleanup:
-	if (g_hdr) {
-		free(g_hdr);
-		g_hdr = NULL;
+	if (msg_params->g_hdr) {
+		free(msg_params->g_hdr);
+		msg_params->g_hdr = NULL;
 	}
 
-	if (g_data) {
-		free_mem_buf(g_data, g_shmid);
-		g_data = NULL;
+	if (msg_params->g_data) {
+		free_mem_buf(msg_params->g_data, msg_params->g_shmid);
+		msg_params->g_data = NULL;
 	}
 
 	return -1;
 }
 
-/*---------------------------------------------------------------------------*/
-/* msg_api_free								     */
-/*---------------------------------------------------------------------------*/
-int msg_api_free()
+void msg_api_free(struct msg_params *msg_params)
 {
-	if (g_hdr) {
-		free(g_hdr);
-		g_hdr = NULL;
+	if (msg_params->g_hdr) {
+		free(msg_params->g_hdr);
+		msg_params->g_hdr = NULL;
 	}
-
-	if (g_data) {
-		free_mem_buf(g_data, g_shmid);
-		g_data = NULL;
+	if (msg_params->g_data_mr) {
+		xio_dereg_mr(&msg_params->g_data_mr);
+		msg_params->g_data_mr = NULL;
 	}
-
-	return 0;
+	if (msg_params->g_data) {
+		free_mem_buf(msg_params->g_data, msg_params->g_shmid);
+		msg_params->g_data = NULL;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
 /* msg_write								     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct xio_msg *msg,
-		void *hdr, size_t hdrlen,
-		void *data, size_t datalen)
+void msg_write(struct msg_params *msg_params,
+	       struct xio_msg *msg,
+	       void *hdr, size_t hdrlen,
+	       void *data, size_t datalen)
 {
 	struct xio_vmsg  *pmsg = &msg->out;
 
 	/* don't do the memcpy */
 	pmsg->header.iov_len		= hdrlen;
-	pmsg->header.iov_base		= g_hdr;
+	pmsg->header.iov_base		= msg_params->g_hdr;
 
-	pmsg->data_iov[0].iov_base	= g_data;
+	pmsg->data_iov[0].iov_base	= msg_params->g_data;
 	pmsg->data_iov[0].iov_len	= datalen;
-	pmsg->data_iov[0].mr		= g_data_mr;
-	pmsg->data_iovlen		= g_data ? 1 : 0;
-
+	pmsg->data_iov[0].mr		= msg_params->g_data_mr;
+	pmsg->data_iovlen		= msg_params->g_data ? 1 : 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -278,10 +272,12 @@ struct msg_pool *msg_pool_alloc(int max,
 	buf = buf + max * sizeof(struct xio_msg *);
 
 	/* header */
-	msg_pool->header = calloc(hdrlen, sizeof(uint8_t));
-	if (!buf) {
-		fprintf(stderr, "Couldn't allocate message pool\n");
-		exit(1);
+	if (hdrlen) {
+		msg_pool->header = calloc(hdrlen, sizeof(uint8_t));
+		if (!buf) {
+			fprintf(stderr, "Couldn't allocate message pool\n");
+			exit(1);
+		}
 	}
 	/* data */
 	if (datalen) {
@@ -339,20 +335,6 @@ struct msg_pool *msg_pool_alloc(int max,
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_reset								     */
-/*---------------------------------------------------------------------------*/
-inline void msg_reset(struct xio_msg *msg)
-{
-	msg->in.header.iov_len = 0;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-	msg->out.data_iovlen = 0;
-	msg->out.header.iov_len = 0;
-	msg->next = NULL;
-}
-
-
-/*---------------------------------------------------------------------------*/
 /* msg_pool_get								     */
 /*---------------------------------------------------------------------------*/
 inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
@@ -366,7 +348,6 @@ inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg)
 {
-//	msg_reset(msg);
 	*--pool->stack_ptr = msg;
 }
 
@@ -380,7 +361,8 @@ inline void msg_pool_free(struct msg_pool *pool)
 			xio_dereg_mr(&pool->mr);
 		if (pool->data)
 			free_mem_buf(pool->data, pool->shmid);
-		free(pool->header);
+		if (pool->header)
+			free(pool->header);
 		free(pool);
 	}
 }

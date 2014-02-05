@@ -189,7 +189,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
-		//xio_context_stop_loop(ctx, 0);
+		xio_context_stop_loop(ow_params->ctx, 0);
 		break;
 	default:
 		break;
@@ -338,7 +338,7 @@ int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* assign_data_in_buf							     */
 /*---------------------------------------------------------------------------*/
-int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct ow_test_params *ow_params = cb_user_context;
 	msg->in.data_iovlen = 1;
