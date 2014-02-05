@@ -44,7 +44,7 @@
 
 #define MAX_THREADS		4
 #define QUEUE_DEPTH		512
-#define HW_PRINT_COUNTER	1000000
+#define PRINT_COUNTER		1000000
 
 struct portals_vec {
 	int			vec_len;
@@ -63,6 +63,7 @@ struct thread_data {
 
 /* server private data */
 struct server_data {
+	struct xio_context	*ctx;
 	struct thread_data	tdata[MAX_THREADS];
 };
 
@@ -95,7 +96,7 @@ static void portals_free(struct portals_vec *portals)
 static void process_request(struct thread_data *tdata,
 			    struct xio_msg *req)
 {
-	if (++tdata->cnt == HW_PRINT_COUNTER) {
+	if (++tdata->cnt == PRINT_COUNTER) {
 		if (req->in.header.iov_base)
 			((char *)
 			 (req->in.header.iov_base))[req->in.header.iov_len]
@@ -209,6 +210,9 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
+	struct server_data *server_data = cb_user_context;
+	int		   i;
+
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       session, event_data->conn,
@@ -220,6 +224,9 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
+		for (i = 0; i < MAX_THREADS; i++)
+			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
+		xio_context_stop_loop(server_data->ctx, 0);
 		break;
 	default:
 		break;
@@ -251,7 +258,7 @@ static int on_new_session(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* asynchronous callbacks						     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops  server_ops = {
+static struct xio_session_ops  server_ops = {
 	.on_session_event		=  on_session_event,
 	.on_new_session			=  on_new_session,
 	.on_msg_send_complete		=  NULL,
@@ -267,20 +274,21 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;	/* server portal */
 	struct server_data	server_data;
 	char			url[256];
-	struct xio_context	*ctx;
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 
 
+	xio_init();
+
 	memset(&server_data, 0, sizeof(server_data));
 
 	/* create thread context for the client */
-	ctx	= xio_context_create(NULL, 0);
+	server_data.ctx	= xio_context_create(NULL, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
-	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
+	server = xio_bind(server_data.ctx, &server_ops, url, NULL, 0, &server_data);
 	if (server == NULL)
 		goto cleanup;
 
@@ -295,7 +303,7 @@ int main(int argc, char *argv[])
 			       portal_server_cb, &server_data.tdata[i]);
 	}
 
-	xio_context_run_loop(ctx, XIO_INFINITE);
+	xio_context_run_loop(server_data.ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -308,7 +316,9 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_context_destroy(ctx);
+	xio_context_destroy(server_data.ctx);
+
+	xio_shutdown();
 
 	return 0;
 }

@@ -205,6 +205,8 @@ int main(int argc, char *argv[])
 		0
 	};
 
+	xio_init();
+
 	memset(&session_data, 0, sizeof(session_data));
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
@@ -234,6 +236,8 @@ int main(int argc, char *argv[])
 	xio_session_destroy(session_data.session);
 
 cleanup:
+	xio_shutdown();
+
 	return 0;
 }
 

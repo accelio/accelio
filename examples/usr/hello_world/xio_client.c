@@ -123,7 +123,7 @@ static int on_response(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops ses_ops = {
+static struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  NULL,
 	.on_msg				=  on_response,
@@ -187,6 +187,8 @@ int main(int argc, char *argv[])
 
 	/* free the context */
 	xio_context_destroy(session_data.ctx);
+
+	xio_shutdown();
 
 	printf("good bye\n");
 	return 0;
