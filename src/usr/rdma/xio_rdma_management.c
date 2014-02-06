@@ -1200,7 +1200,7 @@ static int xio_rdma_primary_pool_free(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
 	ibv_dereg_mr(rdma_pool->data_mr);
-	free_huge_pages(rdma_pool->data_pool);
+	ufree_huge_pages(rdma_pool->data_pool);
 
 	return 0;
 }
