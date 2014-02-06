@@ -51,6 +51,14 @@ void xio_rdma_transport_destructor(void);
 static pthread_once_t ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t dtor_key_once = PTHREAD_ONCE_INIT;
 
+/*---------------------------------------------------------------------------*/
+/* xio_dtor								     */
+/*---------------------------------------------------------------------------*/
+static void xio_dtor()
+{
+	xio_rdma_transport_destructor();
+	xio_thread_data_destruct();
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
@@ -62,15 +70,8 @@ static void xio_ctor()
 	sessions_store_construct();
 	conns_store_construct();
 	xio_rdma_transport_constructor();
-}
 
-/*---------------------------------------------------------------------------*/
-/* xio_dtor								     */
-/*---------------------------------------------------------------------------*/
-static void xio_dtor()
-{
-	xio_rdma_transport_destructor();
-	xio_thread_data_destruct();
+	atexit(xio_dtor);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -87,9 +88,11 @@ __attribute__((constructor)) void xio_init(void)
 
 __attribute__((destructor)) void xio_shutdown(void)
 {
+#if 0
 	if (ctor_key_once == PTHREAD_ONCE_INIT)
 		return;
 
 	pthread_once(&dtor_key_once, xio_dtor);
+#endif
 }
 
