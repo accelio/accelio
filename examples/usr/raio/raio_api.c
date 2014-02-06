@@ -398,6 +398,8 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 		0
 	};
 
+	xio_init();
+
 	session_data = calloc(1, sizeof(*session_data));
 
 	session_data->cmd_req.out.header.iov_base =
@@ -536,6 +538,8 @@ cleanup:
 	}
 	/* free the context */
 	xio_context_destroy(session_data->ctx);
+
+	xio_shutdown();
 
 	free(session_data);
 

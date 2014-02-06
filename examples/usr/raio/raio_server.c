@@ -50,6 +50,7 @@
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
 #define MAX_THREADS		6
+#define SIMULATE_DESTROY	0
 
 #ifndef SLIST_FOREACH_SAFE
 #define	SLIST_FOREACH_SAFE(var, head, field, tvar)			 \
@@ -91,6 +92,7 @@ struct raio_session_data {
 
 /* server private data */
 struct raio_server_data {
+	struct xio_context		*ctx;
 	int				last_used;
 	int				last_reaped;
 
@@ -267,6 +269,9 @@ static int on_session_event(struct xio_session *session,
 
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		SLIST_FOREACH_SAFE(ses_data, &server_data->ses_list,
 				   srv_ses_list, tmp_ses_data) {
@@ -291,6 +296,11 @@ static int on_session_event(struct xio_session *session,
 			}
 		}
 		xio_session_destroy(session);
+#if SIMULATE_DESTROY
+		for (i = 0; i < MAX_THREADS; i++)
+			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
+		xio_context_stop_loop(server_data->ctx, 0);
+#endif
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
@@ -345,7 +355,7 @@ static int on_new_session(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* asynchronous callbacks						     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops  server_ops = {
+static struct xio_session_ops  server_ops = {
 	.on_session_event		=  on_session_event,
 	.on_new_session			=  on_new_session,
 	.on_msg_send_complete		=  NULL,
@@ -361,12 +371,12 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;	/* server portal */
 	struct raio_server_data	server_data;
 	char			url[256];
-	struct xio_context	*ctx;
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 	int			curr_cpu;
 	int			max_cpus;
 
+	xio_init();
 
 	curr_cpu = sched_getcpu();
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -376,12 +386,12 @@ int main(int argc, char *argv[])
 	SLIST_INIT(&server_data.ses_list);
 
 	/* create thread context for the client */
-	ctx	= xio_context_create(NULL, 0);
+	server_data.ctx	= xio_context_create(NULL, 0);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
-	server = xio_bind(ctx, &server_ops, url, NULL, 0, &server_data);
+	server = xio_bind(server_data.ctx, &server_ops, url, NULL, 0, &server_data);
 	if (server == NULL) {
 		fprintf(stderr, "failed to bind server\n");
 		goto cleanup;
@@ -399,7 +409,7 @@ int main(int argc, char *argv[])
 		pthread_create(&server_data.thread_id[i], NULL,
 			       portal_server_cb, &server_data.tdata[i]);
 	}
-	xio_context_run_loop(ctx, XIO_INFINITE);
+	xio_context_run_loop(server_data.ctx, XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -412,7 +422,9 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_context_destroy(ctx);
+	xio_context_destroy(server_data.ctx);
+
+	xio_shutdown();
 
 	return 0;
 }
