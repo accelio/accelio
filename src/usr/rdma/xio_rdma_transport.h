@@ -106,6 +106,7 @@ extern struct list_head		dev_list;
 /*---------------------------------------------------------------------------*/
 enum xio_transport_state {
 	XIO_STATE_INIT,
+	XIO_STATE_LISTEN,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
 	XIO_STATE_CLOSED,

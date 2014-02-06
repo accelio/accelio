@@ -889,7 +889,9 @@ static void xio_conn_release(void *data)
 	struct xio_conn *conn = data;
 
 	TRACE_LOG("physical connection close. conn:%p\n", conn);
-	xio_conns_store_remove(conn->cid);
+
+	if (!conn->is_listener)
+		xio_conns_store_remove(conn->cid);
 
 	if (conn->close_time_hndl) {
 		xio_ctx_timer_del(conn->transport_hndl->ctx,
@@ -1543,6 +1545,7 @@ int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
 			return -1;
 		}
 		conn->state = XIO_CONN_STATE_LISTEN;
+		conn->is_listener = 1;
 	}
 
 	return 0;

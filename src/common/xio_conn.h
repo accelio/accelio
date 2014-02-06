@@ -139,6 +139,8 @@ struct xio_conn {
 	int				cid;
 	enum xio_conn_state		state;
 	int				is_first_req;
+	int				is_listener;
+	int				pad;
 	xio_ctx_timer_handle_t		close_time_hndl;
 
 	struct list_head		observers_htbl;
