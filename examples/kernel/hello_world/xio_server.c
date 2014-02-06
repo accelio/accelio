@@ -60,7 +60,7 @@ module_param_named(ip, xio_argv[1], charp, 0);
 MODULE_PARM_DESC(ip, "IP of NIC to receice request from");
 
 module_param_named(port, xio_argv[2], charp, 0);
-MODULE_PARM_DESC(port, "Port to receice request from");
+MODULE_PARM_DESC(port, "Port to receive request from");
 
 static struct task_struct *xio_main_th;
 static struct completion cleanup_complete;
