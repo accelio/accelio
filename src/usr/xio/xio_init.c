@@ -50,14 +50,17 @@ void xio_rdma_transport_destructor(void);
 
 static pthread_once_t ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t dtor_key_once = PTHREAD_ONCE_INIT;
+static struct kref ini_kref;
 
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
 /*---------------------------------------------------------------------------*/
-static void xio_dtor()
+static void xio_dtor(struct kref *ref)
 {
 	xio_rdma_transport_destructor();
 	xio_thread_data_destruct();
+	ctor_key_once = PTHREAD_ONCE_INIT;
+	dtor_key_once = PTHREAD_ONCE_INIT;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -66,12 +69,11 @@ static void xio_dtor()
 static void xio_ctor()
 {
 	page_size = sysconf(_SC_PAGESIZE);
+	kref_init(&ini_kref);
 	xio_thread_data_construct();
 	sessions_store_construct();
 	conns_store_construct();
 	xio_rdma_transport_constructor();
-
-	atexit(xio_dtor);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -83,6 +85,9 @@ __attribute__((constructor)) void xio_init(void)
 		dtor_key_once = PTHREAD_ONCE_INIT;
 		ctor_key_once = PTHREAD_ONCE_INIT;
 	}
+	if (ctor_key_once != PTHREAD_ONCE_INIT)
+		kref_get(&ini_kref);
+
 	pthread_once(&ctor_key_once, xio_ctor);
 }
 
@@ -94,5 +99,9 @@ __attribute__((destructor)) void xio_shutdown(void)
 
 	pthread_once(&dtor_key_once, xio_dtor);
 #endif
+	if (ctor_key_once == PTHREAD_ONCE_INIT)
+		return;
+
+	kref_put(&ini_kref, xio_dtor);
 }
 
