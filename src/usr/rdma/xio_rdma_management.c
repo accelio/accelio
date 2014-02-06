@@ -1798,7 +1798,6 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			 break;
 		case XIO_STATE_CONNECTED:
 			 rdma_hndl->state = XIO_STATE_CLOSED;
-			 printf("DISCONNECT %p\n", rdma_hndl);
 			 retval = rdma_disconnect(rdma_hndl->cm_id);
 			 if (retval)
 				DEBUG_LOG("handle:%p rdma_disconnect failed, " \

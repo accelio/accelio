@@ -170,18 +170,20 @@ static void usage(const char *argv0)
 /*---------------------------------------------------------------------------*/
 int parse_cmdline(int argc, char **argv)
 {
+	static struct option const long_options[] = {
+		{ .name = "addr",	.has_arg = 1, .val = 'a'},
+		{ .name = "port",	.has_arg = 1, .val = 'p'},
+		{ .name = "file-path",	.has_arg = 1, .val = 'f'},
+		{ .name = "block-size",	.has_arg = 1, .val = 'b'},
+		{ .name = "loops",	.has_arg = 1, .val = 'l'},
+		{ .name = "help",	.has_arg = 0, .val = 'h'},
+		{0, 0, 0, 0},
+	};
+	optind = 0;
+	opterr = 0;
+
 	while (1) {
 		int c;
-
-		static struct option const long_options[] = {
-			{ .name = "addr",	.has_arg = 1, .val = 'a'},
-			{ .name = "port",	.has_arg = 1, .val = 'p'},
-			{ .name = "file-path",	.has_arg = 1, .val = 'f'},
-			{ .name = "block-size",	.has_arg = 1, .val = 'b'},
-			{ .name = "loops",	.has_arg = 1, .val = 'l'},
-			{ .name = "help",	.has_arg = 0, .val = 'h'},
-			{0, 0, 0, 0},
-		};
 
 		static char *short_options = "a:p:f:b:l:h";
 

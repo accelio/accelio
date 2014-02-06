@@ -177,7 +177,7 @@ static int on_request(struct xio_session *session,
 {
 	struct raio_thread_data		*tdata = cb_user_context;
 	struct raio_session_data	*ses_data, *tmp_ses_data;
-	int				i;
+	int				i, disconnect = 0;
 
 	SLIST_FOREACH_SAFE(ses_data, &tdata->server_data->ses_list,
 			   srv_ses_list, tmp_ses_data) {
@@ -185,10 +185,17 @@ static int on_request(struct xio_session *session,
 			for (i = 0; i < MAX_THREADS; i++) {
 				if (ses_data->portal_data[i].tdata == tdata) {
 					/* process request */
-					raio_handler_on_req(
+					disconnect = raio_handler_on_req(
 					      ses_data->dd_data,
 					      ses_data->portal_data[i].dd_data,
 					      req);
+					if (disconnect) {
+						struct xio_connection *conn = xio_get_connection(
+								session,
+								tdata->ctx);
+						xio_disconnect(conn);
+						disconnect = 0;
+					}
 					return 0;
 				}
 			}
@@ -203,7 +210,7 @@ static int on_request(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* asynchronous callbacks						     */
 /*---------------------------------------------------------------------------*/
-struct xio_session_ops  portal_server_ops = {
+static struct xio_session_ops  portal_server_ops = {
 	.on_session_event		=  NULL,
 	.on_new_session			=  NULL,
 	.on_msg_send_complete		=  on_response_comp,

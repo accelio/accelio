@@ -64,7 +64,7 @@ void	raio_handler_free_portal_data(void *prv_portal_data);
 /*---------------------------------------------------------------------------*/
 /* rai_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
-void	raio_handler_on_req(void *prv_session_data,
+int	raio_handler_on_req(void *prv_session_data,
 			    void *prv_portal_data,
 			    struct xio_msg *req);
 
