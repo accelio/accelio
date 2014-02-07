@@ -42,27 +42,33 @@
 #include "libxio.h"
 
 #define QUEUE_DEPTH		512
-#define HW_PRINT_COUNTER	4000000
+#define PRINT_COUNTER		4000000
+#define TEST_DISCONNECT		0
+#define DISCONNECT_NR		2000000
+
 
 /* private session data */
 struct session_data {
 	struct xio_context	*ctx;
 	struct xio_connection	*conn;
+	uint64_t		cnt;
+	uint64_t		nsent;
+	uint64_t		nrecv;
+	uint64_t		pad;
 	struct xio_msg		req[QUEUE_DEPTH];
 };
 
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
 /*---------------------------------------------------------------------------*/
-static void process_response(struct xio_msg *rsp)
+static void process_response(struct session_data *session_data,
+			     struct xio_msg *rsp)
 {
-	static uint64_t cnt;
-
-	if (++cnt == HW_PRINT_COUNTER) {
+	if (++session_data->cnt == PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
 		printf("message: [%"PRIu64"] - %s\n",
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
-		cnt = 0;
+		session_data->cnt = 0;
 	}
 	rsp->in.header.iov_base	  = NULL;
 	rsp->in.header.iov_len	  = 0;
@@ -108,14 +114,25 @@ static int on_response(struct xio_session *session,
 	struct session_data *session_data = cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
+	session_data->nrecv++;
 	/* process the incoming message */
-	process_response(rsp);
+	process_response(session_data, rsp);
 
 	/* acknowledge xio that response is no longer needed */
 	xio_release_response(rsp);
 
+#if  TEST_DISCONNECT
+	if (session_data->nrecv == DISCONNECT_NR) {
+		xio_disconnect(session_data->conn);
+		return 0;
+	}
+	if (session_data->nsent == DISCONNECT_NR)
+		return 0;
+#endif
+
 	/* resend the message */
 	xio_send_request(session_data->conn, &session_data->req[i]);
+	session_data->nsent++;
 
 	return 0;
 }
@@ -146,6 +163,7 @@ int main(int argc, char *argv[])
 		NULL,	  /* no need to pass the server private data */
 		0
 	};
+	memset(&session_data, 0, sizeof(session_data));
 
 	/* initialize library */
 	xio_init();
@@ -172,8 +190,10 @@ int main(int argc, char *argv[])
 			strlen(session_data.req[i].out.header.iov_base) + 1;
 	}
 	/* send first message */
-	for (i = 0; i < QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		xio_send_request(session_data.conn, &session_data.req[i]);
+		session_data.nsent++;
+	}
 
 	/* event dispatcher is now running */
 	xio_context_run_loop(session_data.ctx, XIO_INFINITE);

@@ -43,25 +43,29 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
+#define TEST_DISCONNECT		1
+#define DISCONNECT_NR		2000000
+
 
 /* server private data */
 struct server_data {
 	struct xio_context	*ctx;
+	uint64_t		nsent;
+	uint64_t		cnt;
 	struct xio_msg		rsp[QUEUE_DEPTH];	/* global message */
 };
 
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
-static void process_request(struct xio_msg *req)
+static void process_request(struct server_data *server_data, struct xio_msg *req)
 {
-	static int cnt = 0;
 
-	if (++cnt == PRINT_COUNTER) {
+	if (++server_data->cnt == PRINT_COUNTER) {
 		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
 		printf("message: [%"PRIu64"] - %s\n",
 		       (req->sn + 1), (char *)req->in.header.iov_base);
-		cnt = 0;
+		server_data->cnt = 0;
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;
@@ -124,13 +128,22 @@ static int on_request(struct xio_session *session,
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
-	process_request(req);
+	process_request(server_data, req);
 
 	/* attach request to response */
 	server_data->rsp[i].request = req;
 
 	xio_send_response(&server_data->rsp[i]);
+	server_data->nsent++;
 
+#if  TEST_DISCONNECT
+	if (server_data->nsent == DISCONNECT_NR) {
+		struct xio_connection *connection =
+			xio_get_connection(session, server_data->ctx);
+		xio_disconnect(connection);
+		return 0;
+	}
+#endif
 	return 0;
 }
 
@@ -197,8 +210,10 @@ int main(int argc, char *argv[])
 
 	/* free the context */
 	xio_context_destroy(server_data.ctx);
+
 	xio_shutdown();
 
 	return 0;
 }
+
 
