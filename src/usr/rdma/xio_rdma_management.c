@@ -1305,6 +1305,8 @@ static void xio_rdma_post_close(struct xio_transport_base *transport)
 	TRACE_LOG("rdma transport: [post close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
+	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
+
 	xio_release_qp(rdma_hndl);
 	if (rdma_hndl->cm_id)
 		rdma_destroy_id(rdma_hndl->cm_id);

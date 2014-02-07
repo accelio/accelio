@@ -82,6 +82,8 @@ static inline struct xio_thread_data *xio_thread_data_get(void)
 static void xio_thread_data_free(void *ptr)
 {
 	    ufree(ptr);
+	    pthread_setspecific(thread_data_key, NULL);
+	    pthread_key_delete(thread_data_key);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -100,6 +102,7 @@ void xio_thread_data_destruct(void)
 	/* for main thread only */
 	ufree(xio_thread_data_get());
 	pthread_setspecific(thread_data_key, NULL);
+	pthread_key_delete(thread_data_key);
 }
 
 /*---------------------------------------------------------------------------*/
