@@ -50,6 +50,7 @@
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
+#include "xio_rdma_utils.h"
 #include "xio_rdma_transport.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
@@ -1279,6 +1280,8 @@ notify_err1:
 static void on_cm_refused(struct rdma_cm_event *ev,
 			  struct xio_rdma_transport *rdma_hndl)
 {
+	TRACE_LOG("on_cm refused. reason:%s\n",
+		  xio_cm_rej_reason_str(ev->status));
 	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REFUSED, NULL);
 }
 

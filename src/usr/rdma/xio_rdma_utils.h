@@ -46,5 +46,8 @@ int xio_validate_rdma_op(
 			struct xio_sge *rsge, size_t rsize,
 			int op_size);
 
+const char *xio_cm_rej_reason_str(int reason);
+
+
 #endif /*XIO_RDMA_UTILS_H */
 

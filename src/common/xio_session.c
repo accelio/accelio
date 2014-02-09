@@ -326,6 +326,26 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_notify_connection_refused				     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_connection_refused(struct xio_session *session,
+					  struct xio_connection *connection,
+					  enum xio_status reason)
+{
+	struct xio_session_event_data  event = {
+		.event = XIO_SESSION_CONNECTION_REFUSED_EVENT,
+		.reason = reason,
+		.conn = connection,
+		.conn_user_context = connection->cb_user_context
+	};
+
+	if (session->ses_ops.on_session_event)
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_notify_connection_teardown				     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_connection_teardown(struct xio_session *session,
@@ -1221,8 +1241,9 @@ int xio_session_disconnect(struct xio_session *session,
 	    (connection->state == XIO_CONNECTION_STATE_DISCONNECTED)) {
 		if (session->lead_connection == connection)
 			xio_connection_destroy(connection);
-		else
+		else {
 		    xio_session_notify_connection_teardown(session, connection);
+		}
 	}
 
 	return 0;
@@ -1307,6 +1328,8 @@ const char *xio_session_event_str(enum xio_session_event event)
 		return "connection closed";
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 		return "connection disconnected";
+	case XIO_SESSION_CONNECTION_REFUSED_EVENT:
+		return "connection refused";
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		return "connection teardown";
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:

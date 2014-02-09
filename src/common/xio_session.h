@@ -205,6 +205,10 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 					  struct xio_connection *connection,
 					  enum xio_status reason);
 
+void xio_session_notify_connection_refused(struct xio_session *session,
+					  struct xio_connection *connection,
+					  enum xio_status reason);
+
 int xio_session_notify_msg_error(struct xio_connection *connection,
 			         struct xio_msg *msg, enum xio_status result);
 

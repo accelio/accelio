@@ -48,5 +48,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 int op_size);
 #endif
 
+const char *xio_cm_rej_reason_str(int reason);
+
 #endif /*XIO_RDMA_UTILS_H */
 

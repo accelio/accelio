@@ -50,6 +50,7 @@
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_rdma_utils.h"
 #include "xio_ev_loop.h"
 
 
@@ -1339,12 +1340,8 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
 	int				retval = 0;
-	struct rdma_conn_param		cm_params = {
-		.initiator_depth		= 1,
-		.responder_resources		= 1,
-		.rnr_retry_count		= 0, /* 7 - infinite retry */
-		.retry_count			= 0
-	};
+	struct rdma_conn_param		cm_params;
+
 
 	retval = xio_setup_qp(rdma_hndl);
 	if (retval != 0) {
@@ -1352,6 +1349,7 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 		goto notify_err1;
 	}
 
+	memset(&cm_params, 0 , sizeof(cm_params));
 	/*
 	 * When choosing the responder resources for a ULP, it is usually
 	 * best to use the maximum value of the HCA.  If the other side is
@@ -1447,6 +1445,8 @@ notify_err1:
 static void  on_cm_refused(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
+	TRACE_LOG("on_cm refused. reason:%s\n",
+		  xio_cm_rej_reason_str(ev->status));
 	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REFUSED, NULL);
 }
 
@@ -1826,13 +1826,9 @@ static int xio_rdma_accept(struct xio_transport_base *transport)
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;
 	int				retval;
-	struct rdma_conn_param		cm_params = {
-		.initiator_depth		= 1,
-		.responder_resources		= 1,
-		.rnr_retry_count		= 0, /* 7 - infinite retry */
-		.retry_count			= 0
-	};
+	struct rdma_conn_param		cm_params;
 
+	memset(&cm_params, 0, sizeof(cm_params));
 	/*
 	 * Limit the responder resources requested by the remote
 	 * to our capabilities.  Note that the kernel swaps
@@ -1949,7 +1945,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 	}
 
 	retval = rdma_resolve_addr(rdma_hndl->cm_id, NULL, &sa.sa,
-			ADDR_RESOLVE_TIMEOUT);
+				   ADDR_RESOLVE_TIMEOUT);
 	if (retval) {
 		xio_set_error(errno);
 		DEBUG_LOG("rdma_resolve_addr failed. (errno=%d %m)\n", errno);

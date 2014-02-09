@@ -623,10 +623,10 @@ int xio_on_conn_refused(struct xio_session *session,
 				connections_list_entry);
 			connection->state =
 				XIO_CONNECTION_STATE_DISCONNECTED;
-			xio_session_notify_connection_disconnected(
+			xio_session_notify_connection_refused(
 					session,
 					connection,
-					XIO_E_SESSION_REFUSED);
+					XIO_E_CONNECT_ERROR);
 			xio_session_disconnect(session, connection);
 		}
 	}
