@@ -130,6 +130,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	}
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
+	INIT_LIST_HEAD(&ctx->ctx_list);
 
 	switch (flags) {
 	case XIO_LOOP_USER_LOOP:
