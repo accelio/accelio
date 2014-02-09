@@ -137,10 +137,12 @@ AC_MSG_RESULT([$enable_kernel_module])
 
 if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/hello])
+	AC_CONFIG_SUBDIRS([src/kernel/rdma])
+	AC_CONFIG_SUBDIRS([src/kernel/xio])
 fi
 
 if test "$enable_kernel_module" != "no"; then
-	subdirs2="";
+	subdirs2="src/kernel";
 else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 examples/usr/hello_world";

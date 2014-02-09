@@ -38,19 +38,30 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
-void *malloc_huge_pages(size_t size);
-void free_huge_pages(void *ptr);
+#include "xio_common.h"
 
-extern int disable_huge_pages;
 
-void *malloc_huge_pages(size_t size);
-void free_huge_pages(void *ptr);
+extern int			disable_huge_pages;
+extern int			allocator_assigned;
+extern struct xio_mem_allocator *mem_allocator;
+
+extern void *malloc_huge_pages(size_t size);
+extern void free_huge_pages(void *ptr);
 
 static inline void xio_disable_huge_pages(int disable)
 {
 	if (disable_huge_pages)
 		return;
 	disable_huge_pages = disable;
+}
+
+static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator) {
+	if (allocator_assigned)
+		return -1;
+	memcpy(mem_allocator, allocator, sizeof(*allocator));
+	allocator_assigned	= 1;
+
+	return 0;
 }
 
 #endif
