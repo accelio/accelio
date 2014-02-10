@@ -941,6 +941,21 @@ static int xio_rdma_initial_pool_free(struct xio_transport_base *transport_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_initial_pool_uninit_task					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_initial_pool_uninit_task(void *pool_dd_data,
+					     struct xio_task *task)
+{
+	struct xio_rdma_tasks_pool *rdma_pool =
+		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	kmem_cache_free(rdma_pool->data_pool, rdma_task->buf);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_init_task					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_init_task(
@@ -984,6 +999,7 @@ static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 	.pool_alloc		= xio_rdma_initial_pool_alloc,
 	.pool_free		= xio_rdma_initial_pool_free,
 	.pool_init_item		= xio_rdma_initial_pool_init_task,
+	.pool_uninit_item	= xio_rdma_initial_pool_uninit_task,
 	.pool_run		= xio_rdma_initial_pool_run
 };
 
@@ -1043,6 +1059,21 @@ static int xio_rdma_primary_pool_free(
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_primary_pool_uninit_task					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_primary_pool_uninit_task(void *pool_dd_data,
+					     struct xio_task *task)
+{
+	struct xio_rdma_tasks_pool *rdma_pool =
+		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	kmem_cache_free(rdma_pool->data_pool, rdma_task->buf);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_primary_pool_init_task					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_init_task(
@@ -1094,6 +1125,7 @@ static struct xio_tasks_pool_ops primary_tasks_pool_ops = {
 	.pool_alloc		= xio_rdma_primary_pool_alloc,
 	.pool_free		= xio_rdma_primary_pool_free,
 	.pool_init_item		= xio_rdma_primary_pool_init_task,
+	.pool_uninit_item	= xio_rdma_primary_pool_uninit_task,
 	.pool_run		= xio_rdma_primary_pool_run,
 	.pre_put		= xio_rdma_task_pre_put,
 };

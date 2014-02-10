@@ -132,6 +132,7 @@ struct xio_tasks_pool_ops {
 				void *pool_dd_data);
 	int	(*pool_init_item)(struct xio_transport_base *trans_hndl,
 				void *pool_dd_data, struct xio_task *task);
+	int	(*pool_uninit_item)(void *pool_dd_data, struct xio_task *task);
 	int	(*pool_run)(struct xio_transport_base *trans_hndl);
 
 	int	(*pre_put)(struct xio_transport_base *trans_hndl,
