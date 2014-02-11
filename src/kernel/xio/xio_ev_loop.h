@@ -47,6 +47,7 @@
 #define XIO_EV_LOOP_WAKE	1
 #define XIO_EV_LOOP_STOP	(1 << 1)
 #define XIO_EV_LOOP_DOWN	(1 << 2)
+#define XIO_EV_LOOP_SCHED	(1 << 3)
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */

@@ -221,6 +221,44 @@ static int priv_ev_add_thread(void *loop_hndl, struct xio_ev_data *event)
 	return 0;
 }
 
+static void priv_ipi(void *loop_hndl)
+{
+	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
+
+	/* csd can be reused */
+	clear_bit(XIO_EV_LOOP_SCHED, &loop->states);
+
+	/* don't wake up */
+	if (test_bit(XIO_EV_LOOP_STOP, &loop->states))
+		return;
+
+	tasklet_schedule(&loop->tasklet);
+}
+
+/*---------------------------------------------------------------------------*/
+/* priv_kick_tasklet							     */
+/*---------------------------------------------------------------------------*/
+static void priv_kick_tasklet(void *loop_hndl)
+{
+	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
+
+	/* If EQ related interrupt was not assigned to the requested core,
+	 * or if a event from another context is sent (e.g. module down event)
+	 * and since tasklet runs on the core that schedule it IPI must be used
+	 */
+	if (likely(loop->ctx->cpuid == smp_processor_id())) {
+		tasklet_schedule(&loop->tasklet);
+		return;
+	}
+
+	/* check if csd in use */
+	if (test_and_set_bit(XIO_EV_LOOP_SCHED, &loop->states))
+		return;
+
+	/* can't use __smp_call_function_single it is GPL exported */
+	smp_call_function_single(loop->ctx->cpuid, priv_ipi, loop_hndl, 0);
+}
+
 /*---------------------------------------------------------------------------*/
 /* priv_ev_add_tasklet							     */
 /*---------------------------------------------------------------------------*/
@@ -238,7 +276,7 @@ static int priv_ev_add_tasklet(void *loop_hndl, struct xio_ev_data *event)
 	if (test_bit(XIO_EV_LOOP_STOP, &loop->states))
 		return 0;
 
-	tasklet_schedule(&loop->tasklet);
+	priv_kick_tasklet(loop_hndl);
 
 	return 0;
 }
@@ -276,12 +314,12 @@ static void priv_ev_loop_run_tasklet(unsigned long data)
 	struct llist_node	*node;
 
 	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-	       node = llist_reverse_order(node);
-	       while (node) {
-		       tev = llist_entry(node, struct xio_ev_data, ev_llist);
-		       node = llist_next(node);
-		       tev->handler(tev->data);
-	       }
+		node = llist_reverse_order(node);
+		while (node) {
+			tev = llist_entry(node, struct xio_ev_data, ev_llist);
+			node = llist_next(node);
+			tev->handler(tev->data);
+		}
 	}
 }
 
@@ -321,23 +359,22 @@ int priv_ev_loop_run(void *loop_hndl)
 		}
 		break;
 	case XIO_LOOP_TASKLET:
-		/* TODO tasklet affinity!!! */
 		/* were events added to list while in STOP state ? */
 		if (!llist_empty(&loop->ev_llist))
-			tasklet_schedule(&loop->tasklet);
+			priv_kick_tasklet(loop_hndl);
 		return 0;
 	case XIO_LOOP_WORKQUEUE:
 		/* were events added to list while in STOP state ? */
 		while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-		       node = llist_reverse_order(node);
-		       while (node) {
-			       tev = llist_entry(node, struct xio_ev_data,
-					         ev_llist);
-			       node = llist_next(node);
-			       tev->work.func = priv_ev_loop_run_work;
-			       queue_work_on(loop->ctx->cpuid, loop->workqueue,
-					     &tev->work);
-		       }
+			node = llist_reverse_order(node);
+			while (node) {
+				tev = llist_entry(node, struct xio_ev_data,
+						  ev_llist);
+				node = llist_next(node);
+				tev->work.func = priv_ev_loop_run_work;
+				queue_work_on(loop->ctx->cpuid, loop->workqueue,
+					      &tev->work);
+			}
 		}
 		return 0;
 	default:
@@ -353,12 +390,12 @@ retry_wait:
 retry_dont_wait:
 
 	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-	       node = llist_reverse_order(node);
-	       while (node) {
-		       tev = llist_entry(node, struct xio_ev_data, ev_llist);
-		       node = llist_next(node);
-		       tev->handler(tev->data);
-	       }
+		node = llist_reverse_order(node);
+		while (node) {
+			tev = llist_entry(node, struct xio_ev_data, ev_llist);
+			node = llist_next(node);
+			tev->handler(tev->data);
+		}
 	}
 
 	/* "race point" */
