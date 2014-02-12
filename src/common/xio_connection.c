@@ -603,7 +603,8 @@ int xio_send_response(struct xio_msg *msg)
 		vmsg	   = &msg->out;
 
 		if (task->imsg.sn != msg->request->sn) {
-			ERROR_LOG("match not found: request sn:%lu, response sn:%lu\n",
+			ERROR_LOG("match not found: request sn:%llu, " \
+				  "response sn:%llu\n",
 				  task->imsg.sn, msg->request->sn);
 			xio_set_error(EINVAL);
 			return -1;
