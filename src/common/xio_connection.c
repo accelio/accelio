@@ -602,6 +602,13 @@ int xio_send_response(struct xio_msg *msg)
 		stats	   = &connection->ctx->stats;
 		vmsg	   = &msg->out;
 
+		if (task->imsg.sn != msg->request->sn) {
+			ERROR_LOG("match not found: request sn:%lu, response sn:%lu\n",
+				  task->imsg.sn, msg->request->sn);
+			xio_set_error(EINVAL);
+			return -1;
+		}
+
 		if (unlikely(
 		     connection->state == XIO_CONNECTION_STATE_CLOSING ||
 		     connection->state == XIO_CONNECTION_STATE_CLOSED ||
