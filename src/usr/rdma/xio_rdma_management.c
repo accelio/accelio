@@ -1484,7 +1484,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 
 /*
  * Handle RDMA_CM_EVENT_TIMEWAIT_EXIT which is expected to be the last
- * event during the lifecycle of a connection, when it had been shut down
+ * event during the life cycle of a connection, when it had been shut down
  * and the network has cleared from the remaining in-flight messages.
 */
 /*---------------------------------------------------------------------------*/
@@ -1846,7 +1846,7 @@ static int xio_rdma_accept(struct xio_transport_base *transport)
 
 	/*
 	 * Note: if this side of the connection is never going to
-	 * use RDMA read opreations, then initiator_depth can be set
+	 * use RDMA read operations, then initiator_depth can be set
 	 * to 0 here.
 	 */
 	if (rdma_hndl->client_initiator_depth >
@@ -2125,12 +2125,12 @@ static int xio_set_cpu_latency()
 	fd = open("/dev/cpu_dma_latency", O_WRONLY);
 	if (fd < 0) {
 		ERROR_LOG(
-		 "open /dev/cpu_dma_latency %m - need root permisions\n");
+		 "open /dev/cpu_dma_latency %m - need root permissions\n");
 		return -1;
 	}
 	if (write(fd, &latency, sizeof(latency)) != sizeof(latency)) {
 		ERROR_LOG(
-		 "write to /dev/cpu_dma_latency %m - need root permisions\n");
+		 "write to /dev/cpu_dma_latency %m - need root permissions\n");
 		return -1;
 	}
 	return -1;
@@ -2165,7 +2165,7 @@ static int xio_rdma_transport_init(struct xio_transport *transport)
 		goto cleanup;
 	}
 
-	/* storage for all memory registerations */
+	/* storage for all memory registrations */
 	xio_mr_list_init();
 
 	xio_rdma_mempool_array_init();
@@ -2188,7 +2188,7 @@ static void xio_rdma_transport_release(struct xio_transport *transport)
 
 	xio_rdma_mempool_array_release();
 
-	/* free all redundent registered memory */
+	/* free all redundant registered memory */
 	xio_mr_list_free();
 
 	xio_device_thread_stop();
