@@ -154,6 +154,10 @@ struct xio_transport {
 
 	struct xio_transport_msg_validators_cls	validators_cls;
 
+	/* transport ctor/dtor called right after registration */
+	void	(*ctor)(void);
+	void	(*dtor)(void);
+
 	/* transport initialization */
 	int	(*init)(struct xio_transport *self);
 	void	(*release)(struct xio_transport *self);

@@ -69,14 +69,15 @@ static int				mempool_array_len;
 static spinlock_t			mngmt_lock;
 static pthread_rwlock_t			dev_lock;
 static pthread_rwlock_t			cm_lock;
-static int				transport_init;
+static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
+static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
+struct xio_transport			xio_rdma_transport;
 
 
 LIST_HEAD(dev_list);
 static LIST_HEAD(cm_list);
 
 static struct xio_dev_tdata		dev_tdata;
-double g_mhz;
 
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
@@ -2137,16 +2138,17 @@ static int xio_set_cpu_latency()
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_init						     */
+/* xio_rdma_init							     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_transport_init(struct xio_transport *transport)
+static void xio_rdma_init()
 {
-	int		retval = 0;
+	int			retval = 0;
 
-	spin_lock(&mngmt_lock);
+	INIT_LIST_HEAD(&cm_list);
 
-	if (transport_init)
-		goto cleanup;
+	spin_lock_init(&mngmt_lock);
+	pthread_rwlock_init(&dev_lock, NULL);
+	pthread_rwlock_init(&cm_lock, NULL);
 
 	/* set cpu latency until process is down */
 	xio_set_cpu_latency();
@@ -2154,38 +2156,36 @@ static int xio_rdma_transport_init(struct xio_transport *transport)
 	retval = xio_device_thread_init();
 	if (retval != 0) {
 		ERROR_LOG("Failed to initialize devices thread\n");
-		retval = -1;
-		goto cleanup;
+		return;
 	}
 
 	retval = xio_device_list_init();
 	if (retval != 0) {
 		ERROR_LOG("Failed to initialize device list\n");
-		retval = -1;
-		goto cleanup;
+		return;
 	}
 
 	/* storage for all memory registrations */
 	xio_mr_list_init();
 
 	xio_rdma_mempool_array_init();
-
-
-	transport_init  = 1;
-
-cleanup:
-	spin_unlock(&mngmt_lock);
-
-	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_release		                                     */
+/* xio_rdma_transport_init						     */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_transport_release(struct xio_transport *transport)
+static int xio_rdma_transport_init(struct xio_transport *transport)
 {
-	spin_lock(&mngmt_lock);
+	pthread_once(&ctor_key_once, xio_rdma_init);
 
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_release							     */
+/*---------------------------------------------------------------------------*/
+static void xio_rdma_release()
+{
 	xio_rdma_mempool_array_release();
 
 	/* free all redundant registered memory */
@@ -2198,8 +2198,21 @@ static void xio_rdma_transport_release(struct xio_transport *transport)
 
 	xio_cm_list_release();
 
-	spin_unlock(&mngmt_lock);
+	pthread_rwlock_destroy(&dev_lock);
+	pthread_rwlock_destroy(&cm_lock);
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_release		                                     */
+/*---------------------------------------------------------------------------*/
+static void xio_rdma_transport_release(struct xio_transport *transport)
+{
+	if (ctor_key_once == PTHREAD_ONCE_INIT)
+		return;
+
+	pthread_once(&dtor_key_once, xio_rdma_release);
+}
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_is_valid_in_req							     */
@@ -2265,7 +2278,7 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	return 1;
 }
 
-/* task pools managment */
+/* task pools management */
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_get_pools_ops						     */
 /*---------------------------------------------------------------------------*/
@@ -2293,10 +2306,44 @@ static void xio_rdma_set_pools_cls(struct xio_transport_base *trans_hndl,
 		rdma_hndl->primary_pool_cls = *primary_pool_cls;
 }
 
-static struct xio_transport xio_rdma_transport = {
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_constructor					     */
+/*---------------------------------------------------------------------------*/
+void xio_rdma_transport_constructor(void)
+{
+	int			retval;
+	/* struct xio_transport	*transport = &xio_rdma_transport; */
+
+	/* Mellanox OFED's User Manual */
+	/*
+	setenv("MLX_QP_ALLOC_TYPE","PREFER_CONTIG", 1);
+	setenv("MLX_CQ_ALLOC_TYPE","ALL", 1);
+	setenv("MLX_MR_ALLOC_TYPE","ALL", 1);
+	*/
+	if (0) {
+		setenv("RDMAV_FORK_SAFE", "YES", 1);
+		setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
+		retval = ibv_fork_init();
+		if (retval)
+			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
+				  retval, strerror(retval));
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_destructor					     */
+/*---------------------------------------------------------------------------*/
+void xio_rdma_transport_destructor(void)
+{
+}
+
+struct xio_transport xio_rdma_transport = {
 	.name			= "rdma",
+	.ctor			= xio_rdma_transport_constructor,
+	.dtor			= xio_rdma_transport_destructor,
 	.init			= xio_rdma_transport_init,
-	.release		= NULL,
+	.release		= xio_rdma_transport_release,
 	.context_shutdown	= xio_rdma_context_shutdown,
 	.open			= xio_rdma_open,
 	.connect		= xio_rdma_connect,
@@ -2318,57 +2365,4 @@ static struct xio_transport xio_rdma_transport = {
 	.validators_cls.is_valid_in_req  = xio_rdma_is_valid_in_req,
 	.validators_cls.is_valid_out_msg = xio_rdma_is_valid_out_msg,
 };
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_constructor					     */
-/*---------------------------------------------------------------------------*/
-void xio_rdma_transport_constructor(void)
-{
-	int			retval;
-	struct xio_transport	*transport = &xio_rdma_transport;
-
-	transport_init = 0;
-	/* Mellanox OFED's User Manual */
-	/*
-	setenv("MLX_QP_ALLOC_TYPE","PREFER_CONTIG", 1);
-	setenv("MLX_CQ_ALLOC_TYPE","ALL", 1);
-	setenv("MLX_MR_ALLOC_TYPE","ALL", 1);
-	*/
-	if (0) {
-		setenv("RDMAV_FORK_SAFE", "YES", 1);
-		setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
-		retval = ibv_fork_init();
-		if (retval)
-			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
-				  retval, strerror(retval));
-	}
-	g_mhz = get_cpu_mhz(0);
-
-	/* register the transport */
-	xio_reg_transport(transport);
-
-	INIT_LIST_HEAD(&cm_list);
-
-	spin_lock_init(&mngmt_lock);
-	pthread_rwlock_init(&dev_lock, NULL);
-	pthread_rwlock_init(&cm_lock, NULL);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_destructor					     */
-/*---------------------------------------------------------------------------*/
-void xio_rdma_transport_destructor(void)
-{
-	struct xio_transport	*transport = &xio_rdma_transport;
-
-	/* release the transport */
-	if (transport_init)
-		xio_rdma_transport_release(transport);
-
-	xio_unreg_transport(transport);
-	pthread_rwlock_destroy(&dev_lock);
-	pthread_rwlock_destroy(&cm_lock);
-
-	transport_init = 0;
-}
 

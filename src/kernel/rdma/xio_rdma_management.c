@@ -1962,6 +1962,8 @@ static void xio_rdma_set_pools_cls(struct xio_transport_base *trans_hndl,
 
 static struct xio_transport xio_rdma_transport = {
 	.name			= "rdma",
+	.ctor			= NULL,
+	.dtor			= NULL,
 	.init			= xio_rdma_transport_init,
 	.release		= NULL,
 	.context_shutdown	= xio_rdma_context_shutdown,

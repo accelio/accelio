@@ -42,11 +42,20 @@
 #include "xio_tls.h"
 #include "xio_sessions_store.h"
 #include "xio_conns_store.h"
+#include "xio_observer.h"
+#include "xio_transport.h"
 
-int page_size;
+int	page_size;
+double	g_mhz;
 
-void xio_rdma_transport_constructor(void);
-void xio_rdma_transport_destructor(void);
+extern struct xio_transport xio_rdma_transport;
+
+struct xio_transport  *transport_tbl[] = {
+	&xio_rdma_transport
+};
+
+size_t transport_tbl_sz = (sizeof(transport_tbl) / sizeof(transport_tbl[0]));
+
 
 static pthread_once_t ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t dtor_key_once = PTHREAD_ONCE_INIT;
@@ -57,7 +66,17 @@ static struct kref ini_kref;
 /*---------------------------------------------------------------------------*/
 static void xio_dtor()
 {
-	xio_rdma_transport_destructor();
+	size_t i;
+
+	for(i = 0; i < transport_tbl_sz; i++) {
+		if (transport_tbl[i]->release)
+			transport_tbl[i]->release(transport_tbl[i]);
+
+		if (transport_tbl[i]->dtor)
+			transport_tbl[i]->dtor();
+
+		xio_unreg_transport(transport_tbl[i]);
+	}
 	xio_thread_data_destruct();
 	ctor_key_once = PTHREAD_ONCE_INIT;
 }
@@ -75,12 +94,22 @@ static void xio_dref(struct kref *ref)
 /*---------------------------------------------------------------------------*/
 static void xio_ctor()
 {
+	size_t i;
+
 	page_size = sysconf(_SC_PAGESIZE);
+	g_mhz = get_cpu_mhz(0);
 	kref_init(&ini_kref);
 	xio_thread_data_construct();
 	sessions_store_construct();
 	conns_store_construct();
-	xio_rdma_transport_constructor();
+
+	for(i = 0; i < transport_tbl_sz; i++) {
+		xio_reg_transport(transport_tbl[i]);
+
+		if (transport_tbl[i]->ctor)
+			transport_tbl[i]->ctor();
+	}
+
 	dtor_key_once = PTHREAD_ONCE_INIT;
 }
 
