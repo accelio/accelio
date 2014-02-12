@@ -13,6 +13,8 @@ aclocal.m4
 m4/*
 .libs
 libtool
+ltmain.sh
+compile
 config.guess
 config.sub
 xio_mt_client
@@ -30,4 +32,4 @@ xio_oneway_server
 xio_read_lat
 xio_read_bw
 version.c
-
+Doxyfile
