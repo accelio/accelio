@@ -2334,7 +2334,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	omsg->status = rsp_hdr.status;
-	omsg->type =  task->tlv_type;
 
 	if (omsg->in.header.iov_base) {
 		/* copy header to user buffers */
