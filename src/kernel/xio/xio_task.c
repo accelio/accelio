@@ -40,6 +40,8 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_task.h"
+#include "xio_observer.h"
+#include "xio_transport.h"
 
 #include <linux/mm.h>
 #include <linux/vmalloc.h>

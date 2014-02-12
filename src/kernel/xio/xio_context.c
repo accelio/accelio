@@ -100,8 +100,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 
 	xio_read_logging_level();
 
-	cpu = get_cpu();
-	put_cpu();
+	cpu = smp_processor_id();
 	if (cpu == -1)
 		goto cleanup0;
 
@@ -113,10 +112,8 @@ struct xio_context *xio_context_create(unsigned int flags,
 		goto cleanup0;
 	}
 
-	if (cpu_hint < 0) {
-		cpu_hint = get_cpu();
-		put_cpu();
-	}
+	if (cpu_hint < 0)
+		cpu_hint = cpu;
 
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;

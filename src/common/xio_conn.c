@@ -660,6 +660,26 @@ static int xio_conn_on_send_msg_comp(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
+/* 	xio_pool_items_uninit						     */
+/*---------------------------------------------------------------------------*/
+static void xio_pool_items_uninit(struct xio_tasks_pool *tasks_pool,
+				  struct xio_tasks_pool_ops *pool_ops)
+{
+	int i;
+
+	if (!pool_ops->pool_uninit_item)
+		return;
+
+	for (i = 0; i < tasks_pool->max; i++) {
+		if (tasks_pool->array[i]) {
+			pool_ops->pool_uninit_item(tasks_pool->dd_data,
+						   tasks_pool->array[i]);
+			tasks_pool->array[i] = NULL;
+		}
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_conn_initial_pool_setup						     */
 /*---------------------------------------------------------------------------*/
 static int xio_conn_initial_pool_setup(struct xio_conn *conn)
@@ -739,6 +759,7 @@ static int xio_conn_initial_pool_setup(struct xio_conn *conn)
 	return 0;
 
 cleanup:
+	xio_pool_items_uninit(conn->initial_tasks_pool, conn->initial_pool_ops);
 	/* pool_free was checked above and it is not NULL */
 	conn->initial_pool_ops->pool_free(conn->transport_hndl,
 					  conn->initial_tasks_pool->dd_data);
@@ -758,6 +779,8 @@ static int xio_conn_initial_pool_free(struct xio_conn *conn)
 
 	if (conn->initial_tasks_pool == NULL)
 		return 0;
+
+	xio_pool_items_uninit(conn->initial_tasks_pool, conn->initial_pool_ops);
 
 	if (conn->initial_pool_ops->pool_free) {
 		retval = conn->initial_pool_ops->pool_free(conn->transport_hndl,
@@ -849,6 +872,7 @@ static int xio_conn_primary_pool_setup(struct xio_conn *conn)
 	return 0;
 
 cleanup:
+	xio_pool_items_uninit(conn->primary_tasks_pool, conn->primary_pool_ops);
 	/* pool_free was checked above and it is not NULL */
 	conn->primary_pool_ops->pool_free(conn->transport_hndl,
 					  conn->primary_tasks_pool->dd_data);
@@ -869,6 +893,8 @@ static int xio_conn_primary_pool_free(struct xio_conn *conn)
 
 	if (conn->primary_tasks_pool == NULL)
 		return 0;
+
+	xio_pool_items_uninit(conn->primary_tasks_pool, conn->primary_pool_ops);
 
 	if (conn->primary_pool_ops->pool_free) {
 		retval = conn->primary_pool_ops->pool_free(conn->transport_hndl,
