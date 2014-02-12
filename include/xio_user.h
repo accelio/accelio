@@ -367,6 +367,7 @@ struct xio_iovec_ex {
 	size_t			iov_len;	/**< base length  */
 	struct xio_mr		*mr;		/**< rdma specific memory */
 						/**< region		  */
+	void			*user_context;	/**< private user data    */
 };
 
 /**
