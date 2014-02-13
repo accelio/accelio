@@ -136,8 +136,8 @@ AC_ARG_ENABLE(kernel-module,
 AC_MSG_RESULT([$enable_kernel_module])
 
 if test "$enable_kernel_module" != "no"; then
-	AC_CONFIG_SUBDIRS([src/kernel/rdma])
 	AC_CONFIG_SUBDIRS([src/kernel/xio])
+	AC_CONFIG_SUBDIRS([src/kernel/rdma])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
 fi
 
@@ -213,6 +213,7 @@ AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
+AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
 
 # generate the final Makefile etc.
 AC_OUTPUT
