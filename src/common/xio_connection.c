@@ -1198,6 +1198,22 @@ int xio_set_connection_params(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_get_connection_params						     */
+/*---------------------------------------------------------------------------*/
+int xio_get_connection_params(struct xio_connection *connection,
+			      struct xio_connection_params *params)
+{
+	if (!connection || !params) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+	params->user_context = connection->cb_user_context;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_connection_send_hello_req					     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_send_hello_req(struct xio_connection *connection)

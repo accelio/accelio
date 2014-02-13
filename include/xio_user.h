@@ -978,6 +978,17 @@ int xio_set_connection_params(struct xio_connection *conn,
 			      struct xio_connection_params *params);
 
 /**
+ * get connection parameters
+ *
+ * @param[in] conn	The xio connection handle
+ * @param[in] params	The connection paramters structure
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_get_connection_params(struct xio_connection *conn,
+			      struct xio_connection_params *params);
+
+/**
  * get connection context
  *
  * @param[in] conn	The xio connection handle
