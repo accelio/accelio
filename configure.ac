@@ -139,6 +139,7 @@ if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/xio])
 	AC_CONFIG_SUBDIRS([src/kernel/rdma])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
+	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
 fi
 
 if test "$enable_kernel_module" != "no"; then
