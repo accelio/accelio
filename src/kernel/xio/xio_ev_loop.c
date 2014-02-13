@@ -241,15 +241,19 @@ static void priv_ipi(void *loop_hndl)
 static void priv_kick_tasklet(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
+	int cpu;
 
 	/* If EQ related interrupt was not assigned to the requested core,
 	 * or if a event from another context is sent (e.g. module down event)
 	 * and since tasklet runs on the core that schedule it IPI must be used
 	 */
-	if (likely(loop->ctx->cpuid == smp_processor_id())) {
+	cpu = get_cpu();
+	if (likely(loop->ctx->cpuid == cpu)) {
 		tasklet_schedule(&loop->tasklet);
+		put_cpu();
 		return;
 	}
+	put_cpu();
 
 	/* check if csd in use */
 	if (test_and_set_bit(XIO_EV_LOOP_SCHED, &loop->states))
@@ -341,6 +345,7 @@ int priv_ev_loop_run(void *loop_hndl)
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct xio_ev_data	*tev;
 	struct llist_node	*node;
+	int cpu;
 
 	clear_bit(XIO_EV_LOOP_STOP, &loop->states);
 
@@ -351,9 +356,11 @@ int priv_ev_loop_run(void *loop_hndl)
 				  (void *) loop->ctx->worker, get_current());
 			goto cleanup0;
 		}
-		if (loop->ctx->cpuid != smp_processor_id()) {
+		/* no need to disable preemption */
+		cpu = raw_smp_processor_id();
+		if (loop->ctx->cpuid != cpu) {
 			TRACE_LOG("worker on core(%d) scheduled to(%d).\n",
-				  smp_processor_id(), loop->ctx->cpuid);
+				  cpu, loop->ctx->cpuid);
 			set_cpus_allowed_ptr(get_current(),
 					     cpumask_of(loop->ctx->cpuid));
 		}

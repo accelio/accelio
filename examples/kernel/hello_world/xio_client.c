@@ -50,7 +50,7 @@
 #include "libxio.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
-MODULE_DESCRIPTION("XIO hello server "
+MODULE_DESCRIPTION("XIO hello client "
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -286,7 +286,7 @@ static int __init xio_hello_init_module(void)
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
 
-	xio_main_th = kthread_run(xio_client_main, xio_argv, "xio-hello-clinet");
+	xio_main_th = kthread_run(xio_client_main, xio_argv, "xio-hello-client");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);

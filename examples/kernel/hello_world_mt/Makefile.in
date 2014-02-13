@@ -1,0 +1,57 @@
+# Makefile.in for kernel module
+
+SHELL = /bin/sh
+INSTALL = @INSTALL@
+mkdir_p = mkdir -p
+VERSION = @PACKAGE_VERSION@
+
+DISTFILES = Makefile.in configure.ac configure ../install-sh \
+	libxio.h\
+	xio_mt_client.c xio_mt_server.c
+
+xiomoduledir = @kmoduledir@/drivers/infiniband/ulp/xio
+
+xiomodule := xio.ko
+
+all: all-@ENABLE_XIO_MODULE@
+install: install-@ENABLE_XIO_MODULE@
+uninstall: uninstall-@ENABLE_XIO_MODULE@
+
+all-n:
+install-n:
+uninstall-n:
+
+all-y: all-spec
+
+install-y: all
+	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
+	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	-/sbin/depmod -a
+
+uninstall-y:
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	-/sbin/depmod -a
+
+clean:
+	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o
+
+distclean: clean
+	rm -f Makefile
+	rm -f config.h config.log config.status config.cache
+	rm -rf .tmp_versions
+
+maintainer-clean: distclean
+
+distdir: $(DISTFILES)
+	cp -p $(DISTFILES) $(distdir)
+
+
+ccflags-y += -I$(SUBDIRS)/../../../include
+obj-m := server_mt.o client_mt.o
+server_mt-objs := xio_mt_server.o
+client_mt-objs := xio_mt_client.o
+
+XIOSYMS=`pwd`/../../../src/kernel/xio/Module.symvers
+
+all-spec:
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=$(XIOSYMS) @KERNELMAKE_PARAMS@ modules
