@@ -100,7 +100,9 @@ struct xio_context *xio_context_create(unsigned int flags,
 
 	xio_read_logging_level();
 
-	cpu = smp_processor_id();
+	/* no need to disable preemption */
+	cpu = raw_smp_processor_id();
+
 	if (cpu == -1)
 		goto cleanup0;
 
@@ -150,7 +152,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		goto cleanup2;
 
 	ctx->stats.hertz = HZ;
-	/* Init default counters' name */
+	/* Initialize default counters' name */
 	ctx->stats.name[XIO_STAT_TX_MSG]   = kstrdup("TX_MSG", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_RX_MSG]   = kstrdup("RX_MSG", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_TX_BYTES] = kstrdup("TX_BYTES", GFP_KERNEL);
@@ -230,7 +232,7 @@ int xio_ctx_timer_del(struct xio_context *ctx,
 	retval = xio_schedwork_del(ctx->sched_work, timer_handle);
 	if (retval) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("xio_schedwork_add failed.\n");
+		ERROR_LOG("xio_schedwork_del failed.\n");
 	}
 
 	return retval;
