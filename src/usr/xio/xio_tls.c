@@ -40,6 +40,7 @@
 #include "xio_tls.h"
 
 
+#if 0
 /*---------------------------------------------------------------------------*/
 /* struct	                                                             */
 /*---------------------------------------------------------------------------*/
@@ -51,6 +52,7 @@ struct xio_thread_data {
 /* globals	                                                             */
 /*---------------------------------------------------------------------------*/
 static pthread_key_t thread_data_key;
+static pthread_once_t key_once = PTHREAD_ONCE_INIT;
 
 static inline struct xio_thread_data *xio_thread_data_get(void);
 
@@ -59,21 +61,19 @@ static inline struct xio_thread_data *xio_thread_data_get(void);
 /*---------------------------------------------------------------------------*/
 static struct xio_thread_data *xio_thread_data_init(void)
 {
+	int	retval;
 	struct xio_thread_data *td = ucalloc(1, sizeof(*td));
-	/* it ok for NULL */
-	pthread_setspecific(thread_data_key, td);
+	if (td == NULL) {
+		ERROR_LOG("FATAL ERROR: can't create TLS value\n");
+	}
+
+	/* it not ok for NULL */
+	retval = pthread_setspecific(thread_data_key, td);
+	if (retval)
+		ERROR_LOG("FATAL ERROR: pthread_setspecific failed. %d %p %d\n",
+			  retval, td, thread_data_key);
 
 	return td;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_thread_data_get	                                                     */
-/*---------------------------------------------------------------------------*/
-static inline struct xio_thread_data *xio_thread_data_get(void)
-{
-	struct xio_thread_data	*td = pthread_getspecific(thread_data_key);
-
-	return td != NULL ? td : xio_thread_data_init();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -82,7 +82,6 @@ static inline struct xio_thread_data *xio_thread_data_get(void)
 static void xio_thread_data_free(void *ptr)
 {
 	    ufree(ptr);
-	    pthread_setspecific(thread_data_key, NULL);
 	    pthread_key_delete(thread_data_key);
 }
 
@@ -91,7 +90,12 @@ static void xio_thread_data_free(void *ptr)
 /*---------------------------------------------------------------------------*/
 void xio_thread_data_construct(void)
 {
-      pthread_key_create(&thread_data_key, xio_thread_data_free);
+      int retval;
+      retval = pthread_key_create(&thread_data_key, xio_thread_data_free);
+      if (retval)
+		ERROR_LOG("FATAL ERROR: pthread_key_create failed. %d\n",
+			  retval);
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -101,12 +105,30 @@ void xio_thread_data_destruct(void)
 {
 	/* for main thread only */
 	ufree(xio_thread_data_get());
-	pthread_setspecific(thread_data_key, NULL);
 	pthread_key_delete(thread_data_key);
 }
 
 /*---------------------------------------------------------------------------*/
-/* debuging facilities							     */
+/* xio_thread_data_get	                                                     */
+/*---------------------------------------------------------------------------*/
+static inline struct xio_thread_data *xio_thread_data_get(void)
+{
+
+	struct xio_thread_data	*td;
+	pthread_once(&key_once, xio_thread_data_construct);
+
+	td = pthread_getspecific(thread_data_key);
+	if (td  == NULL) {
+		xio_thread_data_init();
+		td = pthread_getspecific(thread_data_key);
+		if (td == NULL)
+			ERROR_LOG("FATAL ERROR: can't create TLS\n");
+	}
+	return td;
+}
+
+/*---------------------------------------------------------------------------*/
+/* debugging facilities							     */
 /*---------------------------------------------------------------------------*/
 void xio_set_error(int errnum) { xio_thread_data_get()->_xio_errno = errnum; }
 
@@ -115,4 +137,37 @@ void xio_set_error(int errnum) { xio_thread_data_get()->_xio_errno = errnum; }
 /*---------------------------------------------------------------------------*/
 int xio_errno(void) { return xio_thread_data_get()->_xio_errno; }
 
+#endif
+
+
+/*---------------------------------------------------------------------------*/
+/* global tls	                                                             */
+/*---------------------------------------------------------------------------*/
+static __thread int _xio_errno;
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_thread_data_destruct						     */
+/*---------------------------------------------------------------------------*/
+void xio_thread_data_destruct(void)
+{
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_thread_data_construct						     */
+/*---------------------------------------------------------------------------*/
+void xio_thread_data_construct(void)
+{
+}
+
+/*---------------------------------------------------------------------------*/
+/* debugging facilities							     */
+/*---------------------------------------------------------------------------*/
+void xio_set_error(int errnum) { _xio_errno = errnum; }
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_errno								     */
+/*---------------------------------------------------------------------------*/
+int xio_errno(void) { return _xio_errno; }
 
