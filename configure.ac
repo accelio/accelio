@@ -143,7 +143,7 @@ if test "$enable_kernel_module" != "no"; then
 fi
 
 if test "$enable_kernel_module" != "no"; then
-	subdirs2="src/kernel";
+	subdirs2="src/kernel/xio";
 else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 examples/usr/hello_world";
