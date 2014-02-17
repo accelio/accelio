@@ -86,6 +86,7 @@ struct thread_data {
 	void __rcu		*ctx; /* RCU doesn't like incomplete types */
 	int			cnt;
 	u16			port;
+	struct xio_ev_data down_event;
 };
 
 /* server private data */
@@ -97,6 +98,8 @@ struct server_data {
 	void __rcu 		*session; /* RCU doesn't like incomplete types */
 	struct xio_msg *rsp; /* global message */
 	char	base_portal[64];
+	struct xio_ev_data down_event;
+	struct kref	kref;
 	spinlock_t lock;
 	unsigned long	flags;
 	u16	port;
@@ -214,6 +217,7 @@ int on_session_event(struct xio_session *session,
 		xio_session_destroy(session);
 		if (!test_bit(MODULE_DOWN, &sdata->flags))
 			break;
+		/* Module is going down stop loops */
 		spin_lock(&sdata->lock);
 		for (i = 0; i < MAX_THREADS; i++) {
 			tdata = sdata->tdata[i];
@@ -366,7 +370,7 @@ cleanup0:
 		printk("Last thread finished");
 		wake_up_interruptible(&cleanup_complete.wq);
 	} else {
-		printk("Wait for additional %d threads", QUEUE_DEPTH - i);
+		printk("Wait for additional %d threads", i);
 	}
 
 	return 0;
@@ -382,6 +386,19 @@ static void free_tdata(struct server_data *sdata)
 			sdata->tdata[i] = NULL;
 		}
 	}
+}
+
+static void free_sdata(struct kref *kref)
+{
+	struct server_data *sdata;
+
+	sdata = container_of(kref, struct server_data, kref);
+
+	free_tdata(sdata);
+
+	kfree(sdata);
+
+	complete_and_exit(&main_complete, 0);
 }
 
 static int init_threads(struct server_data *sdata)
@@ -430,7 +447,7 @@ cleanup1:
 	}
 
 cleanup0:
-	free_tdata(sdata);
+	/* free_tdata will be called form free_sdata */
 
 	return -1;
 }
@@ -468,6 +485,7 @@ int xio_server_main(void *data)
 
 	sdata->port = port;
 	spin_lock_init(&sdata->lock);
+	kref_init(&sdata->kref);
 
 	/* create thread context for the server */
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
@@ -517,8 +535,6 @@ int xio_server_main(void *data)
 	/* normal exit phase */
 	printk("exit signaled\n");
 
-	free_tdata(sdata);
-
 cleanup3:
 	/* free the server */
 	xio_unbind(server);
@@ -528,7 +544,9 @@ cleanup2:
 	xio_context_destroy(ctx);
 
 cleanup1:
-	kfree(sdata);
+	kref_put(&sdata->kref, free_sdata);
+	/* complete_and exit should be called from free_sdata */
+	return ret;
 
 cleanup0:
 	complete_and_exit(&main_complete, 0);
@@ -590,16 +608,22 @@ void xio_server_down(void *data)
 	sdata = (struct server_data *) data;
 
 	/* This routine is called on this context so it must be non null */
-	ctx = rcu_dereference(sdata->ctx);
+	rcu_read_lock();
 	session = rcu_dereference(sdata->session);
-	if (!session)
+	if (!session) {
+		rcu_read_unlock();
 		goto stop_loop_now;
+	}
 	rcu_read_unlock();
+
+	/* Need to wait for all connections to terminate, that is
+	 * XIO_SESSION_TEARDOWN_EVENT
+	 */
+	kref_put(&sdata->kref, free_sdata);
 
 	return;
 
 stop_loop_now:
-	rcu_read_unlock();
 	/* there is no session */
 	spin_lock(&sdata->lock);
 	ctx = rcu_dereference_protected(sdata->ctx,
@@ -613,23 +637,23 @@ stop_loop_now:
 	} else {
 		spin_unlock(&sdata->lock);
 	}
+
+	kref_put(&sdata->kref, free_sdata);
 }
 
 void down_threads(struct server_data *sdata)
 {
 	struct thread_data *tdata;
-	struct xio_ev_data down_events[MAX_THREADS+1];
 	struct xio_ev_data *down_event;
 	void *ctx;
 	int i;
 
 	set_bit(MODULE_DOWN, &sdata->flags);
 
-	memset(&down_events, 0, sizeof(down_events));
-	down_event = down_events;
 	/* down the portals threads */
 	for (i = 0; i < MAX_THREADS; i++) {
 		tdata = sdata->tdata[i];
+		down_event = &tdata->down_event;
 		down_event->handler = xio_thread_down;
 		down_event->data = (void *) tdata;
 		rcu_read_lock();
@@ -637,17 +661,24 @@ void down_threads(struct server_data *sdata)
 		if (ctx)
 			xio_context_add_event(ctx, down_event);
 		rcu_read_unlock();
-		down_event++;
 	}
 
 	/* down the server thread */
+	down_event = &sdata->down_event;
 	down_event->handler = xio_server_down;
 	down_event->data = (void *) sdata;
 	rcu_read_lock();
 	ctx = rcu_dereference(sdata->ctx);
-	if (ctx)
+	if (ctx) {
 		xio_context_add_event(ctx, down_event);
-	rcu_read_unlock();
+		rcu_read_unlock();
+	} else {
+		rcu_read_unlock();
+		/* xio_server_down will not be called and thus will
+		 * not call kref_put
+		 */
+		kref_put(&sdata->kref, free_sdata);
+	}
 }
 
 /* Module stuff */
@@ -675,11 +706,19 @@ ssize_t add_url_store(struct kobject *kobj,
 	sprintf(xio_ip, "%d.%d.%d.%d", d1, d2, d3, d4);
 	sprintf(xio_port, "%d", p);
 
+	/* re-arm completion */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+	INIT_COMPLETION(main_complete);
+#else
+	reinit_completion(&main_complete);
+#endif
+
 	th = kthread_run(xio_server_main, xio_argv, xio_argv[0]);
 	if (IS_ERR(th)) {
 		ret = PTR_ERR(th);
 		printk("Couldn't create new session ret=%d\n", ret);
-		return -EINVAL;
+		complete(&main_complete);
+		return ret;
 	}
 
 	return count;
@@ -707,8 +746,10 @@ ssize_t stop_store(struct kobject *kobj,
 	struct server_data *sdata;
 	rcu_read_lock();
 	sdata = rcu_dereference(g_server_data);
-	if (sdata)
+	if (sdata) {
+		kref_get(&sdata->kref);
 		down_threads(sdata);
+	}
 	rcu_read_unlock();
 
 	xio_ip[0] = '\0';
@@ -763,6 +804,9 @@ int __init xio_hello_init_module(void)
 	RCU_INIT_POINTER(g_server_data, NULL);
 	init_completion(&main_complete);
 
+	/* we need to be able to unload before start */
+	complete(&main_complete);
+
 	xio_ip[0] = '\0';
 	xio_port[0] = '\0';
 
@@ -775,7 +819,6 @@ int __init xio_hello_init_module(void)
 	return 0;
 
 cleanup0:
-	complete(&main_complete);
 	return -1;
 }
 
@@ -787,8 +830,10 @@ void __exit xio_hello_cleanup_module(void)
 
 	rcu_read_lock();
 	sdata = rcu_dereference(g_server_data);
-	if (sdata)
+	if (sdata) {
+		kref_get(&sdata->kref);
 		down_threads(sdata);
+	}
 	rcu_read_unlock();
 
 	/* wait for main thread to terminate */
