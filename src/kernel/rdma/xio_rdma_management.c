@@ -1336,8 +1336,9 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 
 	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
-	if (rdma_hndl->state == XIO_STATE_CONNECTED) {
-		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+	if (rdma_hndl->state == XIO_STATE_CONNECTED ||
+	    rdma_hndl->state == XIO_STATE_LISTEN) {
+		ERROR_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
@@ -1579,21 +1580,32 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 
 	if (was == 1) {
 		/* now it is zero */
-		DEBUG_LOG("xio_rdma close [close] handle:%p, qp:%p\n",
+		DEBUG_LOG("xio_rmda_close: [close] handle:%p, qp:%p\n",
 			  rdma_hndl, rdma_hndl->qp);
 
-		if (rdma_hndl->state == XIO_STATE_CONNECTED) {
+		switch (rdma_hndl->state) {
+		case XIO_STATE_LISTEN:
+			rdma_hndl->state = XIO_STATE_CLOSED;
+			xio_rdma_post_close(
+				(struct xio_transport_base *)rdma_hndl);
+			break;
+		case XIO_STATE_CONNECTED:
 			rdma_hndl->state = XIO_STATE_CLOSED;
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
-				ERROR_LOG("handle:%p rdma_disconnect failed, " \
+				DEBUG_LOG("handle:%p rdma_disconnect failed, " \
 					  "%d\n", rdma_hndl, retval);
-		}  else  {
+			 break;
+		case XIO_STATE_DISCONNECTED:
+			rdma_hndl->state = XIO_STATE_CLOSED;
+			break;
+		default:
 			xio_rdma_notify_observer(rdma_hndl,
 						 XIO_TRANSPORT_CLOSED,
 						 NULL);
 			rdma_hndl->state = XIO_STATE_DESTROYED;
-		}
+			break;
+		};
 	}
 }
 
@@ -1799,6 +1811,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	if (src_port)
 		*src_port = sport;
 
+	rdma_hndl->state = XIO_STATE_LISTEN;
 	DEBUG_LOG("listen on [%s] src_port:%d\n", portal_uri, sport);
 
 	return 0;
