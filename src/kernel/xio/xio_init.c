@@ -111,6 +111,9 @@ EXPORT_SYMBOL(xio_disconnect);
 
 EXPORT_SYMBOL(xio_get_connection);
 EXPORT_SYMBOL(xio_connection_destroy);
+EXPORT_SYMBOL(xio_get_connection_params);
+EXPORT_SYMBOL(xio_set_connection_params);
+EXPORT_SYMBOL(xio_get_connection_context);
 
 EXPORT_SYMBOL(xio_send_request);
 EXPORT_SYMBOL(xio_send_response);
