@@ -1810,7 +1810,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 						 NULL);
 			 rdma_hndl->state = XIO_STATE_DESTROYED;
 			 break;
-		};
+		}
 	}
 }
 

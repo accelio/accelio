@@ -172,7 +172,7 @@ int xio_schedwork_add(struct xio_schedwork *sched_work,
 	/* queue the work */
 	if (!queue_delayed_work_on(ctx->cpuid, sched_work->workqueue,
 	                           &xdwork->dwork, delay_jiffies)) {
-		ERROR_LOG("work allready queued?.\n");
+		ERROR_LOG("work already queued?.\n");
 		return -1;
 	}
 

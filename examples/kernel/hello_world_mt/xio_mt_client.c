@@ -78,6 +78,7 @@ struct thread_data {
 	struct session_data *sdata;
 	void __rcu *ctx; /* RCU doesn't like incomplete types */
 	void __rcu *connection; /* RCU doesn't like incomplete types */
+	struct xio_ev_data down_event;
 	struct xio_msg *req;
 	int		cnt;
 	u16		port;
@@ -120,7 +121,7 @@ static int on_session_event(struct xio_session *session,
 	struct session_data *sdata;
 	struct thread_data *tdata;
 	struct xio_context *tctx[MAX_THREADS];
-	struct xio_connection *connection;
+	struct xio_connection_params params;
 	int i;
 
 	sdata = (struct session_data *) cb_user_context;
@@ -131,16 +132,10 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_get_connection_params(event_data->conn, &params);
+		tdata = (struct thread_data *) params.user_context;
 		spin_lock(&sdata->lock);
-		for (i = 0; i < MAX_THREADS; i++) {
-			tdata = sdata->tdata[i];
-			connection = rcu_dereference_protected(tdata->connection,
-					lockdep_is_held(&sdata->lock));
-			if (connection == event_data->conn) {
-				rcu_assign_pointer(tdata->connection, NULL);
-				break;
-			}
-		}
+		rcu_assign_pointer(tdata->connection, NULL);
 		spin_unlock(&sdata->lock);
 		synchronize_rcu();
 		xio_connection_destroy(event_data->conn);
@@ -181,7 +176,9 @@ static int on_response(struct xio_session *session,
 		       void *cb_user_context)
 {
 	struct thread_data *tdata;
+	struct xio_connection *connection;
 	int i;
+	int ret = 0;
 
 	tdata = (struct thread_data *) cb_user_context;
 	i = rsp->request->sn % QUEUE_DEPTH;
@@ -193,7 +190,13 @@ static int on_response(struct xio_session *session,
 	xio_release_response(rsp);
 
 	/* re-send the message */
-	xio_send_request(tdata->connection, &tdata->req[i]);
+	rcu_read_lock();
+	connection = rcu_dereference(tdata->connection);
+	if (connection)
+		xio_send_request(connection, &tdata->req[i]);
+	else
+		ret = -1;
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -312,7 +315,7 @@ static int xio_client_thread(void *data)
 
 	/* messages are actually queued until the loop runs */
 	for (i = 0; i < QUEUE_DEPTH; i++)
-		xio_send_request(tdata->connection, &tdata->req[i]);
+		xio_send_request(connection, &tdata->req[i]);
 
 	/* the default XIO supplied main loop */
 	xio_context_run_loop(ctx);
@@ -343,7 +346,7 @@ cleanup0:
 		printk("Last thread finished");
 		wake_up_interruptible(&cleanup_complete.wq);
 	} else {
-		printk("Wait for additional %d threads", QUEUE_DEPTH - i);
+		printk("Wait for additional %d threads", i);
 	}
 
 	return 0;
@@ -365,7 +368,7 @@ static void free_tdata(struct session_data *sdata)
 static int init_threads(struct session_data *sdata)
 {
 	char name[32];
-	int i, j, cpu, online;;
+	int i, j, cpu, online;
 
 	online = num_online_cpus();
 
@@ -499,15 +502,13 @@ cleanup0:
 static void down_threads(struct session_data *sdata)
 {
 	struct thread_data *tdata;
-	struct xio_ev_data down_events[MAX_THREADS];
 	struct xio_ev_data *down_event;
 	void *ctx;
 	int i;
 
-	memset(&down_events, 0, sizeof(down_events));
-	down_event = down_events;
 	for (i = 0; i < MAX_THREADS; i++) {
 		tdata = sdata->tdata[i];
+		down_event = &tdata->down_event;
 		down_event->handler = xio_thread_down;
 		down_event->data = (void *) tdata;
 		rcu_read_lock();
@@ -515,7 +516,6 @@ static void down_threads(struct session_data *sdata)
 		if (ctx)
 			xio_context_add_event(ctx, down_event);
 		rcu_read_unlock();
-		down_event++;
 	}
 }
 
@@ -544,11 +544,18 @@ ssize_t add_url_store(struct kobject *kobj,
 	sprintf(xio_ip, "%d.%d.%d.%d", d1, d2, d3, d4);
 	sprintf(xio_port, "%d", p);
 
+	/* re-arm completion */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+	INIT_COMPLETION(main_complete);
+#else
+	reinit_completion(&main_complete);
+#endif
 	th = kthread_run(xio_client_main, xio_argv, xio_argv[0]);
 	if (IS_ERR(th)) {
 		ret = PTR_ERR(th);
 		printk("Couldn't create new session ret=%d\n", ret);
-		return -EINVAL;
+		complete(&main_complete);
+		return ret;
 	}
 
 	return count;
@@ -633,6 +640,9 @@ static int __init xio_hello_init_module(void)
 	RCU_INIT_POINTER(g_session_data, NULL);
 	init_completion(&main_complete);
 
+	/* we need to be able to unload before start */
+	complete(&main_complete);
+
 	xio_ip[0] = '\0';
 	xio_port[0] = '\0';
 
@@ -645,7 +655,6 @@ static int __init xio_hello_init_module(void)
 	return 0;
 
 cleanup0:
-	complete(&main_complete);
 	return ret;
 }
 
