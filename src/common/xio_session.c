@@ -471,7 +471,8 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 	xio_connection_release_fin(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	xio_connection_fin_put(connection);
+	/* do not do the fin put. let the client disconnect */
+	/* xio_connection_fin_put(connection); */
 
 	return 0;
 }
