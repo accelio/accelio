@@ -517,6 +517,7 @@ exit:
 
 	return retval;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_device_list_release						     */
 /*---------------------------------------------------------------------------*/
@@ -531,7 +532,6 @@ static void xio_device_list_release(int del_fd)
 		xio_device_release(dev, del_fd);
 	}
 	pthread_rwlock_unlock(&dev_lock);
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -629,7 +629,6 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 	struct xio_device	*dev;
 	struct xio_cq		*tcq, *next;
 	struct xio_cm_channel	*channel = NULL;
-	int			found = 0;
 
 	pthread_rwlock_wrlock(&dev_lock);
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
@@ -645,18 +644,14 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 
 
 	/* find the channel and release it */
-	pthread_rwlock_rdlock(&cm_lock);
+	pthread_rwlock_wrlock(&cm_lock);
 	list_for_each_entry(channel, &cm_list, channels_list_entry) {
 		if (channel->ctx == ctx) {
-			found = 1;
+			xio_cm_channel_release(channel);
 			break;
 		}
 	}
 	pthread_rwlock_unlock(&cm_lock);
-
-	/* find the channel and release it */
-	if (found)
-		xio_cm_channel_release(channel);
 
 	return 0;
 }
@@ -1156,7 +1151,7 @@ static int xio_rdma_primary_pool_alloc(
 	if (!rdma_pool->data_pool) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("malloc rdma pool sz:%zu failed\n",
-				rdma_hndl->alloc_sz);
+			  rdma_hndl->alloc_sz);
 		return -1;
 	}
 
@@ -1446,7 +1441,7 @@ notify_err1:
 static void  on_cm_refused(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
-	TRACE_LOG("on_cm refused. reason:%s\n",
+	ERROR_LOG("on_cm refused. reason:%s\n",
 		  xio_cm_rej_reason_str(ev->status));
 	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REFUSED, NULL);
 }
@@ -2336,6 +2331,8 @@ void xio_rdma_transport_constructor(void)
 /*---------------------------------------------------------------------------*/
 void xio_rdma_transport_destructor(void)
 {
+	ctor_key_once = PTHREAD_ONCE_INIT;
+	dtor_key_once = PTHREAD_ONCE_INIT;
 }
 
 struct xio_transport xio_rdma_transport = {
