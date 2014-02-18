@@ -54,11 +54,13 @@ struct params {
 };
 
 struct program_vars {
-	char		threads_num[8];
+	char		client_threads_num[8];
+	char		server_threads_num[8];
 	char		client_dlen[8];
 	char		server_dlen[8];
 	char		queue_depth[8];
 	unsigned long	seed;
+	unsigned long	test_num;
 };
 
 
@@ -85,13 +87,22 @@ void rand_params(struct program_vars *vars)
 
 
 	time((time_t *)&vars->seed);
+	/*
+	vars->test_num = 1;
+	vars->seed = 1392726232;
+	*/
 	srandom(vars->seed);
+
+	do {
+		var = random() % 10;
+	} while (var == 0);
+	sprintf(vars->server_threads_num, "%d", var);
 
 	/* threads number [1,24] */
 	do {
-		var = random() % 8;
+		var = random() % 10;
 	} while (var == 0);
-	sprintf(vars->threads_num, "%d", var);
+	sprintf(vars->client_threads_num, "%d", var);
 	threads_num = var;
 
 	max_qdepth = (threads_num > 2) ? 100 : 300;
@@ -102,7 +113,10 @@ void rand_params(struct program_vars *vars)
 	} while (var == 0);
 	sprintf(vars->queue_depth, "%d", var);
 
-	max_dlen = (threads_num > 3) ? 262144 : 524288;
+	if (vars->test_num%2)
+		max_dlen = (threads_num > 3) ? 262144 : 524288;
+	else
+		max_dlen = 10000;
 
 	/* client_dlen [0,1048576] */
 	var = random() % max_dlen;
@@ -120,8 +134,9 @@ int main(int argc, char *argv[])
 		argv[0],
 		argv[1],	/* address */
 		argv[2],	/* port	   */
-		"\0",		/* threads num */
 		"\0",		/* queue depth */
+		"\0",		/* client_threads num */
+		"\0",		/* server threads num */
 		"\0",		/* client dlen */
 		"\0",		/* server dlen */
 		"\0"
@@ -137,16 +152,19 @@ int main(int argc, char *argv[])
 start:
 	rand_params(&vars);
 
-	argvv[3] = vars.threads_num;
-	argvv[4] = vars.queue_depth;
-	argvv[5] = vars.client_dlen;
-	argvv[6] = vars.server_dlen;
+	argvv[3] = vars.queue_depth;
+	argvv[4] = vars.client_threads_num;
+	argvv[5] = vars.server_threads_num;
+	argvv[6] = vars.client_dlen;
+	argvv[7] = vars.server_dlen;
 
-	fprintf(stderr, "seed:%lu, threads num:%s, queue_depth:%s, "\
-			"client_dlen:%s, server_dlen:%s [start]\n",
+	fprintf(stderr, "seed:%lu, queue_depth:%s, client threads:%s, " \
+			"server threads:%s, client_dlen:%s, " \
+			"server_dlen:%s [start]\n",
 			vars.seed,
-			vars.threads_num,
 			vars.queue_depth,
+			vars.client_threads_num,
+			vars.server_threads_num,
 			vars.client_dlen,
 			vars.server_dlen);
 
@@ -157,13 +175,17 @@ start:
 	pthread_join(stid, NULL);
 	pthread_join(ctid, NULL);
 
-	fprintf(stderr, "seed:%lu, threads num:%s, queue_depth:%s, " \
-			"client_dlen:%s, server_dlen:%s [pass]\n",
+	fprintf(stderr, "seed:%lu, queue_depth:%s, client threads:%s, " \
+			"server threads:%s, client_dlen:%s, " \
+			"server_dlen:%s [pass]\n",
 			vars.seed,
-			vars.threads_num,
 			vars.queue_depth,
+			vars.client_threads_num,
+			vars.server_threads_num,
 			vars.client_dlen,
 			vars.server_dlen);
+
+	vars.test_num++;
 
 	goto start;
 

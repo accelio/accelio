@@ -58,7 +58,7 @@ struct obj_pool {
 
 	/* max number of elements */
 	int		max;
-	int		pad;
+	int		nr;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -66,6 +66,9 @@ struct obj_pool {
 /*---------------------------------------------------------------------------*/
 static inline void *obj_pool_get(struct obj_pool *q)
 {
+	if (q->stack_ptr != q->stack_end)
+		q->nr--;
+
 	return (q->stack_ptr != q->stack_end) ?
 		*q->stack_ptr++ : NULL;
 }
@@ -75,6 +78,7 @@ static inline void *obj_pool_get(struct obj_pool *q)
 /*---------------------------------------------------------------------------*/
 static inline void obj_pool_put(struct obj_pool *q, void *t)
 {
+	q->nr++;
 	*--q->stack_ptr = t;
 }
 
@@ -132,6 +136,7 @@ static inline struct obj_pool *obj_pool_init(int max, size_t size,
 	q->stack_ptr = q->stack;
 	q->stack_end = (q->stack_ptr + max);
 	q->max = max;
+	q->nr = max;
 
 	return q;
 }

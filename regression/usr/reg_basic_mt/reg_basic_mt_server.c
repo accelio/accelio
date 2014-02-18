@@ -47,7 +47,7 @@
 #define PRINT_COUNTER		1000000
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		6000000
-#define EXTRA_QDEPTH		64
+#define EXTRA_QDEPTH		128
 
 struct portals_vec {
 	int			vec_len;
@@ -77,6 +77,7 @@ struct server_data {
 	int			queue_depth;
 	int			client_dlen;
 	int			server_dlen;
+	pthread_barrier_t	barr;
 	struct thread_data	*tdata;
 };
 
@@ -292,7 +293,7 @@ static void *portal_server_cb(void *data)
 
 	if (tdata->server_data->client_dlen)
 		tdata->in_iobuf_pool = obj_pool_init(
-				tdata->server_data->queue_depth,
+				tdata->server_data->queue_depth + EXTRA_QDEPTH,
 				sizeof(struct xio_buf *),
 				tdata, in_iobuf_obj_init);
 
@@ -308,6 +309,8 @@ static void *portal_server_cb(void *data)
 			  NULL, 0, tdata);
 	if (server == NULL)
 		goto cleanup;
+
+	pthread_barrier_wait(&tdata->server_data->barr);
 
 	/* the default xio supplied main loop */
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
@@ -405,22 +408,23 @@ int server_main(int argc, char *argv[])
 	struct server_data	*server_data;
 	char			url[256];
 	int			i;
-	uint16_t		port		= atoi(argv[2]);
-	uint16_t		threads_num	= atoi(argv[3]);
-	int			queue_depth     = atoi(argv[4]);
-	int			client_dlen     = atoll(argv[5]);
-	int			server_dlen     = atoll(argv[6]);
-
+	uint16_t		port			= atoi(argv[2]);
+	int			queue_depth		= atoi(argv[3]);
+	/*uint16_t		client_threads_num	= atoi(argv[4]);*/
+	uint16_t		server_threads_num	= atoi(argv[5]);
+	int			client_dlen		= atoi(argv[6]);
+	int			server_dlen		= atoi(argv[7]);
 
 	server_data = calloc(1, sizeof(*server_data));
 	if (!server_data)
 		return -1;
 
-	server_data->tdata = calloc(threads_num, sizeof(*server_data->tdata));
+	server_data->tdata = calloc(server_threads_num,
+				    sizeof(*server_data->tdata));
 	if (!server_data->tdata)
 		return -1;
 
-	server_data->threads_num = threads_num;
+	server_data->threads_num = server_threads_num;
 	server_data->queue_depth = queue_depth;
 	server_data->client_dlen = client_dlen;
 	server_data->server_dlen = server_dlen;
@@ -438,6 +442,10 @@ int server_main(int argc, char *argv[])
 	if (server == NULL)
 		goto cleanup;
 
+	/* initialize thread synchronization barrier */
+	pthread_barrier_init(&server_data->barr, NULL,
+			     server_data->threads_num + 1);
+
 	/* spawn portals */
 	for (i = 0; i < server_data->threads_num; i++) {
 		server_data->tdata[i].server_data	= server_data;
@@ -450,6 +458,9 @@ int server_main(int argc, char *argv[])
 		pthread_create(&server_data->tdata[i].thread_id, NULL,
 			       portal_server_cb, &server_data->tdata[i]);
 	}
+
+	pthread_barrier_wait(&server_data->barr);
+
 	xio_context_run_loop(server_data->ctx, XIO_INFINITE);
 
 	/* normal exit phase */

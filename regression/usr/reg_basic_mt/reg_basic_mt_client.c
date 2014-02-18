@@ -72,6 +72,7 @@ struct session_data {
 	int			queue_depth;
 	int			client_dlen;
 	int			server_dlen;
+	pthread_barrier_t	barr;
 	struct thread_data	*tdata;
 };
 
@@ -140,6 +141,7 @@ static void msg_obj_init(void *user_context, void *obj)
 	req->out.header.iov_len		  = 0;
 }
 
+pthread_barrier_t barr;
 
 /*---------------------------------------------------------------------------*/
 /* worker_thread							     */
@@ -150,6 +152,7 @@ static void *worker_thread(void *data)
 	struct xio_msg		*req;
 	cpu_set_t		cpuset;
 	int			i;
+	int			qdepth_per_thread;
 
 	/* set affinity to thread */
 
@@ -157,6 +160,11 @@ static void *worker_thread(void *data)
 	CPU_SET(tdata->affinity, &cpuset);
 
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
+
+	qdepth_per_thread =
+	    tdata->session_data->queue_depth/tdata->session_data->threads_num;
+	if (!qdepth_per_thread)
+		qdepth_per_thread = 1;
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, 0);
@@ -167,26 +175,29 @@ static void *worker_thread(void *data)
 
 	if (tdata->session_data->client_dlen)
 		tdata->out_iobuf_pool = obj_pool_init(
-				tdata->session_data->queue_depth,
+				qdepth_per_thread,
 				sizeof(struct xio_buf *),
 				tdata, out_iobuf_obj_init);
 
 	if (tdata->session_data->server_dlen)
 		tdata->in_iobuf_pool = obj_pool_init(
-				tdata->session_data->queue_depth,
+				qdepth_per_thread,
 				sizeof(struct xio_buf *),
 				tdata, in_iobuf_obj_init);
 
-	tdata->req_pool = obj_pool_init(tdata->session_data->queue_depth,
+	tdata->req_pool = obj_pool_init(qdepth_per_thread,
 					sizeof(struct xio_msg),
 					tdata, msg_obj_init);
 
 	/* send first messages */
-	for (i = 0; i < tdata->session_data->queue_depth; i++) {
+	for (i = 0; i < qdepth_per_thread; i++) {
 		req = obj_pool_get(tdata->req_pool);
 		xio_send_request(tdata->conn, req);
 		tdata->nsent++;
 	}
+	/* sync threads */
+	pthread_barrier_wait(&tdata->session_data->barr);
+
 	/* the default xio supplied main loop */
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
@@ -251,7 +262,7 @@ static int on_response(struct xio_session *session,
 	struct xio_buf		**in_iobuf;
 	tdata->nrecv++;
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(rsp);
 
 #if  TEST_DISCONNECT
@@ -319,10 +330,11 @@ int client_main(int argc, char *argv[])
 	int			i;
 	char			url[256];
 	struct session_data	session_data;
-	uint16_t		threads_num	= atoi(argv[3]);
-	int			queue_depth     = atoi(argv[4]);
-	int			client_dlen	= atoi(argv[5]);
-	int			server_dlen	= atoi(argv[6]);
+	int			queue_depth		= atoi(argv[3]);
+	uint16_t		client_threads_num	= atoi(argv[4]);
+	/*uint16_t		server_threads_num	= atoi(argv[5]);*/
+	int			client_dlen		= atoi(argv[6]);
+	int			server_dlen		= atoi(argv[7]);
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -333,11 +345,12 @@ int client_main(int argc, char *argv[])
 
 	memset(&session_data, 0, sizeof(session_data));
 
-	session_data.tdata = calloc(threads_num, sizeof(*session_data.tdata));
+	session_data.tdata = calloc(client_threads_num,
+				    sizeof(*session_data.tdata));
 	if (!session_data.tdata)
 		return -1;
 
-	session_data.threads_num = threads_num;
+	session_data.threads_num = client_threads_num;
 	session_data.client_dlen = client_dlen;
 	session_data.server_dlen = server_dlen;
 	session_data.queue_depth = queue_depth;
@@ -352,6 +365,10 @@ int client_main(int argc, char *argv[])
 
 	if (session_data.session == NULL)
 		goto cleanup;
+
+	/* initialize thread synchronization barrier */
+	pthread_barrier_init(&session_data.barr, NULL,
+			     session_data.threads_num);
 
 	/* spawn threads to handle connection */
 	for (i = 0; i < session_data.threads_num; i++) {
