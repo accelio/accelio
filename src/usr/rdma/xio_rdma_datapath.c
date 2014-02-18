@@ -134,13 +134,13 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 	struct ibv_send_wr	*bad_wr;
 	int			retval, nr_posted;
 
-
+	/*
 	TRACE_LOG("num_sge:%d, len1:%d, len2:%d, send_flags:%d\n",
 		  xio_send->send_wr.num_sge,
 		  xio_send->send_wr.sg_list[0].length,
 		  xio_send->send_wr.sg_list[1].length,
 		  xio_send->send_wr.send_flags);
-
+	*/
 
 	retval = ibv_post_send(rdma_hndl->qp, &xio_send->send_wr, &bad_wr);
 	if (likely(!retval)) {
@@ -229,12 +229,12 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	tx_window = tx_window_sz(rdma_hndl);
 	window = min(rdma_hndl->peer_credits, tx_window);
 	window = min(window, rdma_hndl->sqe_avail);
-
+	/*
 	TRACE_LOG("XMIT: tx_window:%d, peer_credits:%d, sqe_avail:%d\n",
 		  tx_window,
 		  rdma_hndl->peer_credits,
 		  rdma_hndl->sqe_avail);
-
+	*/
 	if (window == 0) {
 		xio_set_error(EAGAIN);
 		return -1;
@@ -1789,7 +1789,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (sge_len < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
-	if (unlikely(++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD || task->is_control)) {
+	if (unlikely(++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD ||
+		     task->is_control)) {
 		/* avoid race between send completion and response arrival */
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
@@ -1990,7 +1991,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_hndl->kick_rdma_rd) {
 		retval = xio_xmit_rdma_rd(rdma_hndl);
 		if (retval) {
-			retval = xio_errno() ;
+			retval = xio_errno();
 			if (retval != EAGAIN) {
 				ERROR_LOG("xio_xmit_rdma_rd failed. %s\n",
 					  xio_strerror(retval));
