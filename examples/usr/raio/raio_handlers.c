@@ -594,8 +594,14 @@ static int raio_handle_submit(void *prv_session_data,
 	io_u->iocmd.fd			= iocb.raio_fildes;
 	io_u->iocmd.op			= iocb.raio_lio_opcode;
 	io_u->iocmd.bcount		= iocb.u.c.nbytes;
-	io_u->iocmd.buf			= io_u->rsp->out.data_iov[0].iov_base;
-	io_u->iocmd.mr			= io_u->rsp->out.data_iov[0].mr;
+
+	if ( io_u->iocmd.op == RAIO_CMD_PWRITE) {
+		io_u->iocmd.buf			= req->in.data_iov[0].iov_base;
+		io_u->iocmd.mr			= req->in.data_iov[0].mr;
+	} else {
+		io_u->iocmd.buf			= io_u->rsp->out.data_iov[0].iov_base;
+		io_u->iocmd.mr			= io_u->rsp->out.data_iov[0].mr;
+	}
 	io_u->iocmd.fsize		= sd->fsize;
 	io_u->iocmd.offset		= iocb.u.c.offset;
 	io_u->iocmd.is_last_in_batch    = is_last_in_batch;
