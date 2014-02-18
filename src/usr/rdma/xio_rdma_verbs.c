@@ -119,8 +119,10 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		init_transport = 0;
 	}
 
-	if (list_empty(&dev_list))
+	if (list_empty(&dev_list)) {
+		ERROR_LOG("dev_list is empty\n");
 		goto cleanup3;
+	}
 
 	tmr = ucalloc(1, sizeof(*tmr));
 	if (tmr == NULL) {
@@ -209,7 +211,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		spin_unlock(&mr_list_lock);
 
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
-				dm_list_entry) {
+					 dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
 			if (retval != 0) {
 				xio_set_error(errno);
@@ -221,9 +223,9 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		}
 		ufree(tmr);
 		*p_tmr = NULL;
-	} else
+	} else {
 		spin_lock(&mr_list_lock);
-
+	}
 
 	return 0;
 }
@@ -252,10 +254,11 @@ struct xio_buf *xio_alloc(size_t length)
 	}
 	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
 
-	if (dev && !(dev->device_attr.device_cap_flags & IBV_DEVICE_MR_ALLOCATE)) {
+	if (dev && !(dev->device_attr.device_cap_flags &
+		     IBV_DEVICE_MR_ALLOCATE)) {
 		real_size = ALIGN(length, page_size);
 		buf->addr = umemalign(page_size, real_size);
-		if (buf->addr) {
+		if (!buf->addr) {
 			ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
 			goto cleanup;
 		}
@@ -267,7 +270,10 @@ struct xio_buf *xio_alloc(size_t length)
 
 	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
 	if (!buf->mr) {
-		ERROR_LOG("xio_reg_mr_ex failed\n");
+		ERROR_LOG("xio_reg_mr_ex failed. " \
+			 "addr:%p, length:%d, access:0x%x\n",
+			  buf->addr, length, access);
+
 		goto cleanup1;
 	}
 	buf->mr->addr_alloced = alloced;
