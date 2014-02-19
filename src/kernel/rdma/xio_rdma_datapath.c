@@ -1816,6 +1816,7 @@ static int xio_rdma_write_send_data(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	rdma_task->txd.nents = task->omsg->out.data_iovlen + 1;
+	rdma_task->txd.send_wr.num_sge = rdma_task->txd.nents;
 
 	return 0;
 
