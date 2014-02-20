@@ -184,10 +184,17 @@ int main(int argc, char *argv[])
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		memset(&session_data.req[i], 0, sizeof(session_data.req[i]));
+		/* header */
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
 		session_data.req[i].out.header.iov_len =
 			strlen(session_data.req[i].out.header.iov_base) + 1;
+		/* iovec[0]*/
+		session_data.req[i].out.data_iov[0].iov_base =
+			strdup("hello world iovec request");
+		session_data.req[i].out.data_iov[0].iov_len =
+			strlen(session_data.req[i].out.data_iov[0].iov_base);
+		session_data.req[i].out.data_iovlen = 1;
 	}
 	/* send first message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -202,8 +209,10 @@ int main(int argc, char *argv[])
 	fprintf(stdout, "exit signaled\n");
 
 	/* free the message */
-	for (i = 0; i < QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(session_data.req[i].out.header.iov_base);
+		free(session_data.req[i].out.data_iov[0].iov_base);
+	}
 
 	/* free the context */
 	xio_context_destroy(session_data.ctx);

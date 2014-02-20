@@ -43,7 +43,7 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define TEST_DISCONNECT		1
+#define TEST_DISCONNECT		0
 #define DISCONNECT_NR		2000000
 
 
@@ -60,11 +60,41 @@ struct server_data {
 /*---------------------------------------------------------------------------*/
 static void process_request(struct server_data *server_data, struct xio_msg *req)
 {
+	char *str, tmp;
+	int len, i;
 
+	/* note all data is packed together so in order to print each
+	 * part on its own NULL character is temporarily stuffed
+	 * before the print and the original character is restored after
+	 * the printf
+	 */
 	if (++server_data->cnt == PRINT_COUNTER) {
-		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
-		printf("message: [%"PRIu64"] - %s\n",
-		       (req->sn + 1), (char *)req->in.header.iov_base);
+		str = (char *) req->in.header.iov_base;
+		len = req->in.header.iov_len;
+		if (str) {
+			if (((unsigned) len) > 64)
+				len = 64;
+			tmp = str[len];
+			str[len] = '\0';
+			printf("message header : [%"PRIu64"] - %s\n",
+			       (req->sn + 1), str);
+			str[len] = tmp;
+
+		}
+		for (i = 0; i < req->in.data_iovlen; i++) {
+			str = (char *) req->in.data_iov[i].iov_base;
+			len = req->in.data_iov[i].iov_len;
+			if (str) {
+				if (((unsigned) len) > 64)
+					len = 64;
+				tmp = str[len];
+				str[len] = '\0';
+				printf("message data: [%"PRIu64"][%d][%d] - %s\n",
+				       (req->sn + 1), i, len, str);
+				str[len] = tmp;
+			}
+
+		}
 		server_data->cnt = 0;
 	}
 	req->in.header.iov_base	  = NULL;

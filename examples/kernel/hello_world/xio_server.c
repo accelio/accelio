@@ -72,6 +72,7 @@ static struct completion cleanup_complete;
 struct server_data {
 	struct xio_context	*ctx;
 	struct xio_session	*session;
+	uint64_t		cnt;
 	struct xio_msg	rsp[QUEUE_DEPTH];	/* global message */
 };
 
@@ -83,13 +84,42 @@ atomic_t module_state;
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt = 0;
+	char *str, tmp;
+	int len, i;
 
-	if (++cnt == PRINT_COUNTER) {
-		((char *)(req->in.header.iov_base))[req->in.header.iov_len] = 0;
-		printk("message: [%llu] - %s\n",
-		       (req->sn + 1), (char *)req->in.header.iov_base);
-		cnt = 0;
+	/* note all data is packed together so in order to print each
+	 * part on its own NULL character is temporarily stuffed
+	 * before the print and the original character is restored after
+	 * the printf
+	 */
+	if (++g_server_data->cnt == PRINT_COUNTER) {
+		str = (char *) req->in.header.iov_base;
+		len = req->in.header.iov_len;
+		if (str) {
+			if (((unsigned) len) > 64)
+				len = 64;
+			tmp = str[len];
+			str[len] = '\0';
+			printk("message header : [%llu] - %s\n",
+			       (req->sn + 1), str);
+			str[len] = tmp;
+
+		}
+		for (i = 0; i < req->in.data_iovlen; i++) {
+			str = (char *) req->in.data_iov[i].iov_base;
+			len = req->in.data_iov[i].iov_len;
+			if (str) {
+				if (((unsigned) len) > 64)
+					len = 64;
+				tmp = str[len];
+				str[len] = '\0';
+				printk("message data: [%llu][%d][%d] - %s\n",
+				       (req->sn + 1), i, len, str);
+				str[len] = tmp;
+			}
+
+		}
+		g_server_data->cnt = 0;
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;

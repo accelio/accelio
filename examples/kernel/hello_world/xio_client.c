@@ -242,11 +242,19 @@ static int xio_client_main(void *data)
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		memset(&session_data->req[i], 0, sizeof(session_data->req[i]));
+		/* header */
 		session_data->req[i].out.header.iov_base =
 			kstrdup("hello world header request", GFP_KERNEL);
 		session_data->req[i].out.header.iov_len =
 			strlen(session_data->req[i].out.header.iov_base);
+		/* iovec[0]*/
+		session_data->req[i].out.data_iov[0].iov_base =
+			kstrdup("hello world iovec request", GFP_KERNEL);
+		session_data->req[i].out.data_iov[0].iov_len =
+			strlen(session_data->req[i].out.data_iov[0].iov_base);
+		session_data->req[i].out.data_iovlen = 1;
 	}
+
 	/* send first message */
 	for (i = 0; i < QUEUE_DEPTH; i++)
 		xio_send_request(session_data->connection, &session_data->req[i]);
@@ -261,8 +269,10 @@ static int xio_client_main(void *data)
 	printk("exit signaled\n");
 
 	/* free the message */
-	for (i = 0; i < QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(session_data->req[i].out.header.iov_base);
+		kfree(session_data->req[i].out.data_iov[0].iov_base);
+	}
 
 	/* free the context */
 	xio_context_destroy(ctx);
