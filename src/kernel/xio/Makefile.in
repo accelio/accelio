@@ -25,7 +25,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_observer.c \
 	../../common/xio_utils.c \
 
-xiomoduledir = @kmoduledir@/drivers/infiniband/ulp/xio
+xiomoduledir = @kmoduledir@/extra/net/xio
 
 xiomodule := xio.ko
 
@@ -39,9 +39,15 @@ uninstall-n:
 
 all-y: all-spec
 
+SUBDIRS ?=`pwd`
+
 install-y: all
 	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
+	$(mkdir_p) /opt/xio/include
 	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/libxio.h /opt/xio/include
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_kernel.h /opt/xio/include
+	$(INSTALL) -m 644 Module.symvers /opt/xio/include
 	-/sbin/depmod -a
 
 uninstall-y:
