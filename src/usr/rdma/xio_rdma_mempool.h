@@ -51,22 +51,34 @@ struct xio_rdma_mp_mem {
 	void		*cache;
 };
 
-/* create mempool with default allocators */
+#define XIO_MEM_SLOTS_NR	4
+
+#define XIO_16K_BLOCK_SZ	(16*1024)
+#define XIO_16K_MIN_NR		0
+#define XIO_16K_MAX_NR		1024
+#define XIO_16K_ALLOC_NR	128
+
+#define XIO_64K_BLOCK_SZ	(64*1024)
+#define XIO_64K_MIN_NR		0
+#define XIO_64K_MAX_NR		1024
+#define XIO_64K_ALLOC_NR	128
+
+#define XIO_256K_BLOCK_SZ	(256*1024)
+#define XIO_256K_MIN_NR		0
+#define XIO_256K_MAX_NR		1024
+#define XIO_256K_ALLOC_NR	128
+
+#define XIO_1M_BLOCK_SZ		(1024*1024)
+#define XIO_1M_MIN_NR		0
+#define XIO_1M_MAX_NR		1024
+#define XIO_1M_ALLOC_NR		128
+
+
 struct xio_rdma_mempool *xio_rdma_mempool_create(void);
-
-/* create mempool with NO (!) allocators */
-struct xio_rdma_mempool *xio_rdma_mempool_create_ex(void);
-
-/* add an allocator to current set (setup only) */
-int xio_rdma_mempool_add_allocator(struct xio_rdma_mempool *mpool,
-				   size_t size, size_t min, size_t max,
-				   size_t alloc_quantum_nr);
-
-
 void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
 
 int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
-			   size_t length, struct xio_rdma_mp_mem *mp_mem);
+			     size_t length, struct xio_rdma_mp_mem *mp_mem);
 void xio_rdma_mempool_free(struct xio_rdma_mp_mem *mp_mem);
 
 
