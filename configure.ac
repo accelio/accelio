@@ -181,6 +181,7 @@ if test -d "${GIT_DIR:-${ac_top_srcdir:-./}/.git}" ; then
 	fi
 else
 	GITHEAD=
+	echo "const char XIO_GIT_HEAD@<:@@:>@ = \"GIT_VERSION: $GITHEAD\";" \/\* for use with strings \*\/ >version.c
 fi
 
 AC_MSG_CHECKING([for git head])
