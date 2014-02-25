@@ -528,10 +528,12 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 	DEBUG_LOG("task recycled\n");
 
 	if (connection->session->state == XIO_SESSION_STATE_REJECTED) {
+		/*
 		xio_session_notify_connection_disconnected(
 				connection->session,
 				connection, XIO_E_SESSION_REJECTED);
 		xio_disconnect(connection);
+		*/
 	} else if (connection->session->state == XIO_SESSION_STATE_REDIRECTED) {
 		xio_session_notify_connection_disconnected(
 				connection->session,
