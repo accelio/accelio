@@ -241,7 +241,7 @@ cleanup:
 int xio_on_connection_rejected(struct xio_session *session,
 			       struct xio_connection *connection)
 {
-	struct xio_connection *pconnection, tmp_connection;
+	struct xio_connection *pconnection, *tmp_connection;
 
 	/* notify the upper layer */
 	struct xio_session_event_data  ev_data = {
@@ -252,7 +252,7 @@ int xio_on_connection_rejected(struct xio_session *session,
 	};
 
 	/* also send disconnect to connections that do no have conn */
-	list_for_each_entry(pconnection, tmp_connection,
+	list_for_each_entry_safe(pconnection, tmp_connection,
 			    &session->connections_list,
 			    connections_list_entry) {
 		ev_data.conn =  pconnection;
