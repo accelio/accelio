@@ -241,6 +241,8 @@ cleanup:
 int xio_on_connection_rejected(struct xio_session *session,
 			       struct xio_connection *connection)
 {
+	struct xio_connection *pconnection, tmp_connection;
+
 	/* notify the upper layer */
 	struct xio_session_event_data  ev_data = {
 		.event =		XIO_SESSION_REJECT_EVENT,
@@ -250,20 +252,20 @@ int xio_on_connection_rejected(struct xio_session *session,
 	};
 
 	/* also send disconnect to connections that do no have conn */
-	while (!list_empty(&session->connections_list)) {
-		connection = list_first_entry(&session->connections_list,
-				struct xio_connection,
-				connections_list_entry);
-		ev_data.conn =  connection;
+	list_for_each_entry(pconnection, tmp_connection,
+			    &session->connections_list,
+			    connections_list_entry) {
+		ev_data.conn =  pconnection;
 		ev_data.conn_user_context =
-			(connection) ? connection->cb_user_context : NULL;
+			(pconnection) ? pconnection->cb_user_context : NULL;
 
 		if (session->ses_ops.on_session_event)
 			session->ses_ops.on_session_event(
 					session, &ev_data,
 					session->cb_user_context);
-		connection->state = XIO_CONNECTION_STATE_DISCONNECTED;
-		xio_session_disconnect(session, connection);
+		session->disable_teardown = 0;
+		pconnection->state = XIO_CONNECTION_STATE_CLOSED;
+		xio_disconnect_initial_connection(pconnection);
 	}
 
 	return 0;
