@@ -95,7 +95,7 @@ struct raio_io_portal_data {
 struct raio_io_session_data {
 	int				fd;
 	int				is_null;
-	int				iothreads;
+	int				portals_nr;
 	int				pad;
 	uint64_t			fsize;
 
@@ -110,7 +110,8 @@ void *raio_handler_init_session_data(int portals_nr)
 	struct raio_io_session_data *sd;
 	sd = calloc(1, sizeof(*sd));
 
-	sd->pd = calloc(portals_nr, sizeof(*sd->pd));
+	sd->pd		= calloc(portals_nr, sizeof(*sd->pd));
+	sd->portals_nr	= portals_nr;
 
 	sd->fd = -1;
 
@@ -379,9 +380,12 @@ static int raio_handle_setup(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	int				fd, j;
+	int				fd, i, j;
+	uint32_t			iodepth;
 	struct raio_io_session_data	*sd = prv_session_data;
 	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*cpd;
+
 
 	if (3*sizeof(int) != cmd->data_len) {
 		errno = EINVAL;
@@ -389,30 +393,35 @@ static int raio_handle_setup(void *prv_session_data,
 		goto reject;
 	}
 
-	unpack_u32((uint32_t *)&pd->iodepth,
-	unpack_u32((uint32_t *)&fd,
-		    cmd_data));
+	unpack_u32(&iodepth,
+		   unpack_u32((uint32_t *)&fd,
+		   cmd_data));
 
-	pd->io_u_free_nr = pd->iodepth + EXTRA_MSGS;
-	pd->io_us_free = calloc(pd->io_u_free_nr, sizeof(struct raio_io_u));
-	pd->rsp_pool = msg_pool_create(512, MAXBLOCKSIZE, pd->io_u_free_nr);
+	for (i = 0; i < sd->portals_nr; i++) {
+		cpd = &sd->pd[i];
+		cpd->iodepth = iodepth;
+		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
+		cpd->io_us_free = calloc(cpd->io_u_free_nr, sizeof(struct raio_io_u));
+		cpd->rsp_pool = msg_pool_create(512, MAXBLOCKSIZE, cpd->io_u_free_nr);
+		TAILQ_INIT(&cpd->io_u_free_list);
 
-	TAILQ_INIT(&pd->io_u_free_list);
+		/* register each io_u in the free list */
+		for (j = 0; j < cpd->io_u_free_nr; j++) {
+			cpd->io_us_free[j].rsp = msg_pool_get(cpd->rsp_pool);
+			TAILQ_INSERT_TAIL(&cpd->io_u_free_list,
+					  &cpd->io_us_free[j],
+					  io_u_list);
+		}
 
-	/* register each io_u in the free list */
-	for (j = 0; j < pd->io_u_free_nr; j++) {
-		pd->io_us_free[j].rsp = msg_pool_get(pd->rsp_pool);
-		TAILQ_INSERT_TAIL(&pd->io_u_free_list,
-				  &pd->io_us_free[j],
-				  io_u_list);
+		if (sd->is_null)
+			cpd->bs_dev = raio_bs_init(cpd->ctx, "null");
+		else
+			cpd->bs_dev = raio_bs_init(cpd->ctx, "aio");
+
+		errno = -raio_bs_open(cpd->bs_dev, fd);
+		if (errno)
+			break;
 	}
-
-	if (sd->is_null)
-		pd->bs_dev = raio_bs_init(pd->ctx, "null");
-	else
-		pd->bs_dev = raio_bs_init(pd->ctx, "aio");
-
-	errno = -raio_bs_open(pd->bs_dev, fd);
 
 reject:
 	if (errno) {
