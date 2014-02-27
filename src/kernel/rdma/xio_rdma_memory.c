@@ -442,7 +442,7 @@ void xio_unreg_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 		return;
 
 	reg->mem_h = NULL;
-	llist_add(&fdesc->llist_entry, &rdma_hndl->fastreg.frwr.pool);
+	llist_add(&fdesc->llist_entry, &rdma_hndl->fastreg.frwr.pool_ret);
 }
 
 static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
