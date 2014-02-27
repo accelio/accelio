@@ -1939,12 +1939,6 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 		/* Only header header in the SEND */
 		rdma_task->txd.nents = 1;
 
-		/* check for multiple iovecs for RDMA before FMR/FRWR */
-		if (vmsg->data_iovlen > 1) {
-			ERROR_LOG("iovec with len > 1 is not supported\n");
-			return -1;
-		}
-
 		rdma_task->ib_op = XIO_IB_RDMA_READ;
 
 		/* user must provided buffers with length for RDMA READ */
@@ -1997,11 +1991,6 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 	} else  {
-		/* check for multiple iovecs for RDMA before FMR/FRWR */
-		if (vmsg->data_iovlen > 1) {
-			ERROR_LOG("iovec with len > 1 is not supported\n");
-			return -1;
-		}
 		/* user must provided buffers with length for RDMA WRITE */
 		if (xio_vmsg_to_sgl(vmsg, rdma_task->read_sge.sgl,
 				    &rdma_task->read_sge.nents) < 0) {
