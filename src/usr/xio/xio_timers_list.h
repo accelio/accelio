@@ -50,14 +50,19 @@
 
 #define xio_timer_handle_t void *
 
+static int64_t timers_list_hertz;
+
 
 struct xio_timers_list {
 	struct list_head		timer_head;
-	struct list_head		*timer_iter;
+	pthread_spinlock_t		lock;
+	int				pad;
 };
 
 struct xio_timers_list_timer {
 	struct list_head		list;
+	uint64_t			time;
+	uint64_t			duration;
 	uint64_t			expire_time;
 	int				is_absolute_timer;
 	int				pad;
@@ -66,13 +71,7 @@ struct xio_timers_list_timer {
 	xio_timer_handle_t		handle_addr;
 };
 
-/*---------------------------------------------------------------------------*/
-/* xio_timers_list_init							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_timers_list_init(struct xio_timers_list *timers_list)
-{
-	INIT_LIST_HEAD(&timers_list->timer_head);
-}
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_ns_from_epoch					     */
@@ -101,6 +100,7 @@ static inline uint64_t xio_timers_list_ns_current_get(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	ns_monotonic = (ts.tv_sec*XIO_NS_IN_SEC) + (uint64_t)ts.tv_nsec;
+
 	return ns_monotonic;
 }
 
@@ -121,6 +121,17 @@ static inline uint64_t xio_timers_list_ns_monotonic_freq(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_timers_list_init							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_timers_list_init(struct xio_timers_list *timers_list)
+{
+	INIT_LIST_HEAD(&timers_list->timer_head);
+	timers_list_hertz = xio_timers_list_ns_monotonic_freq();
+	pthread_spin_init(&timers_list->lock,
+			  PTHREAD_PROCESS_PRIVATE);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_timers_list_add							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_add(struct xio_timers_list *timers_list,
@@ -130,21 +141,21 @@ static inline void xio_timers_list_add(struct xio_timers_list *timers_list,
 	struct xio_timers_list_timer	*timer_from_list;
 	int				found = 0;
 
-	for (timer_list = timers_list->timer_head.next;
-	     timer_list != &timers_list->timer_head;
-	     timer_list = timer_list->next) {
+	pthread_spin_lock(&timers_list->lock);
+	list_for_each(timer_list, &timers_list->timer_head) {
 		timer_from_list = list_entry(timer_list,
 					     struct xio_timers_list_timer,
 					     list);
 
 		if (timer_from_list->expire_time > timer->expire_time) {
-			list_add(&timer->list, timer_list->prev);
+			list_add_tail(&timer->list, timer_list);
 			found = 1;
 			break; /* for timer iteration */
 		}
 	}
 	if (found == 0)
-		list_add(&timer->list, timers_list->timer_head.prev);
+		list_add_tail(&timer->list, &timers_list->timer_head);
+	pthread_spin_unlock(&timers_list->lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -188,7 +199,7 @@ static inline int xio_timers_list_add_duration(
 			uint64_t ns_duration,
 			xio_timer_handle_t *handle)
 {
-	struct xio_timers_list_timer *timer;
+	struct xio_timers_list_timer	*timer;
 
 	timer = (struct xio_timers_list_timer *)ucalloc(1,
 					sizeof(struct xio_timers_list_timer));
@@ -196,9 +207,9 @@ static inline int xio_timers_list_add_duration(
 		errno = ENOMEM;
 		return -1;
 	}
-
-	timer->expire_time	 = xio_timers_list_ns_current_get() +
-				   ns_duration;
+	timer->time		 = xio_timers_list_ns_current_get();
+	timer->duration		 = ns_duration;
+	timer->expire_time	 = timer->time + ns_duration;
 	timer->is_absolute_timer = 0;
 	timer->data		 = data;
 	timer->timer_fn		 = timer_fn;
@@ -220,16 +231,11 @@ static inline void xio_timers_list_del(struct xio_timers_list *timers_list,
 	struct xio_timers_list_timer *timer =
 				(struct xio_timers_list_timer *)timer_handle;
 
-	/*
-	 * If the next timer after the currently expiring timer because
-	 * xio_timers_list_del is called from a timer handler, get to the next
-	 * timer
-	 */
-	if (timers_list->timer_iter == &timer->list)
-		timers_list->timer_iter = timers_list->timer_iter->next;
 
+	pthread_spin_lock(&timers_list->lock);
 	list_del_init(&timer->list);
 	ufree(timer);
+	pthread_spin_unlock(&timers_list->lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -239,12 +245,18 @@ static inline void xio_timers_list_close(struct xio_timers_list *timers_list)
 {
 	struct xio_timers_list_timer	*timer_list, *next_timer_list;
 
+	pthread_spin_lock(&timers_list->lock);
 	list_for_each_entry_safe(timer_list, next_timer_list,
 				 &timers_list->timer_head,
 				 list) {
-		xio_timers_list_del(timers_list, timer_list);
+		list_del_init(&timer_list->list);
+		ufree(timer_list);
 	}
+	pthread_spin_unlock(&timers_list->lock);
+
+	pthread_spin_destroy(&timers_list->lock);
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_expire_time						     */
 /*---------------------------------------------------------------------------*/
@@ -269,6 +281,7 @@ static inline void xio_timers_list_pre_dispatch(
 			(struct xio_timers_list_timer *)timer_handle;
 
 	memset(timer->handle_addr, 0, sizeof(struct timerlist_timer *));
+
 	list_del_init(&timer->list);
 }
 
@@ -282,7 +295,9 @@ static inline void xio_timers_list_post_dispatch(
 	struct xio_timers_list_timer *timer =
 			(struct xio_timers_list_timer *)timer_handle;
 
+	pthread_spin_lock(&timers_list->lock);
 	ufree(timer);
+	pthread_spin_unlock(&timers_list->lock);
 }
 
 /*
@@ -292,25 +307,27 @@ static inline void xio_timers_list_post_dispatch(
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_ns_duration_to_expire				     */
 /*---------------------------------------------------------------------------*/
-static inline uint64_t xio_timerlist_ns_duration_to_expire(
+static inline int64_t xio_timerlist_ns_duration_to_expire(
 			struct xio_timers_list *timers_list)
 {
 	struct xio_timers_list_timer	*timer_from_list;
-	uint64_t			current_time;
-	uint64_t			ns_duration_to_expire;
-	static uint64_t			hz = -1;
+	volatile int64_t		current_time;
+	volatile int64_t		ns_duration_to_expire;
 
 	/*
 	 * empty list, no expire
 	 */
-	if (timers_list->timer_head.next == &timers_list->timer_head)
+	pthread_spin_lock(&timers_list->lock);
+	if (list_empty(&timers_list->timer_head)) {
+		pthread_spin_unlock(&timers_list->lock);
 		return -1;
+	}
 
-	if (hz == -1)
-		hz = xio_timers_list_ns_monotonic_freq();
+	timer_from_list = list_first_entry(
+			&timers_list->timer_head,
+			struct xio_timers_list_timer, list);
 
-	timer_from_list = list_entry(timers_list->timer_head.next,
-		struct xio_timers_list_timer, list);
+	pthread_spin_unlock(&timers_list->lock);
 
 	if (timer_from_list->is_absolute_timer)
 		current_time = xio_timers_list_ns_from_epoch();
@@ -324,7 +341,8 @@ static inline uint64_t xio_timerlist_ns_duration_to_expire(
 		return 0;
 
 	ns_duration_to_expire =
-		(timer_from_list->expire_time - current_time);
+		(timer_from_list->expire_time - current_time) +
+			(XIO_NS_IN_SEC/timers_list_hertz);
 
 	return ns_duration_to_expire;
 }
@@ -338,6 +356,8 @@ static inline uint64_t xio_timerlist_ns_duration_to_expire(
 static inline void xio_timers_list_expire(struct xio_timers_list *timers_list)
 {
 	struct xio_timers_list_timer	*timer_from_list;
+	struct list_head		*pos;
+	struct list_head		*next;
 	uint64_t			current_time_from_epoch;
 	uint64_t			current_monotonic_time;
 	uint64_t			current_time;
@@ -346,19 +366,16 @@ static inline void xio_timers_list_expire(struct xio_timers_list *timers_list)
 	current_time		= xio_timers_list_ns_from_epoch();
 	current_time_from_epoch = current_time;
 
-	for (timers_list->timer_iter = timers_list->timer_head.next;
-		timers_list->timer_iter != &timers_list->timer_head;) {
-		timer_from_list = list_entry(timers_list->timer_iter,
-			struct xio_timers_list_timer, list);
+	list_for_each_safe(pos, next, &timers_list->timer_head) {
+		timer_from_list = list_entry(pos,
+					     struct xio_timers_list_timer,
+					     list);
 
 		current_time = (timer_from_list->is_absolute_timer ?
 				current_time_from_epoch :
 				current_monotonic_time);
 
-		if (timer_from_list->expire_time < current_time) {
-			timers_list->timer_iter =
-					timers_list->timer_iter->next;
-
+		if (timer_from_list->expire_time <= current_time) {
 			xio_timers_list_pre_dispatch(timers_list,
 						     timer_from_list);
 
@@ -370,7 +387,6 @@ static inline void xio_timers_list_expire(struct xio_timers_list *timers_list)
 			break; /* for timer iteration */
 		}
 	}
-	timers_list->timer_iter = 0;
 }
 
 #endif /* XIO_TIMERS_LIST_H */

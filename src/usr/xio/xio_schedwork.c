@@ -70,14 +70,14 @@ struct xio_schedwork {
  * For negative values only the tv_sec field is negative !
  */
 static void set_normalized_timespec(struct timespec *ts,
-				    time_t sec, long nsec)
+				    time_t sec, int64_t nsec)
 {
-	while (nsec >= XIO_NS_IN_SEC ) {
+	while (nsec >= XIO_NS_IN_SEC) {
 		nsec -= XIO_NS_IN_SEC;
 		++sec;
 	}
 	while (nsec < 0) {
-		nsec += XIO_NS_IN_SEC ;
+		nsec += XIO_NS_IN_SEC;
 		--sec;
 	}
 	ts->tv_sec = sec;
@@ -89,9 +89,9 @@ static void set_normalized_timespec(struct timespec *ts,
 /*---------------------------------------------------------------------------*/
 static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
 {
-	struct itimerspec new_t = { {0,0},{0,0}};
+	struct itimerspec new_t = { {0, 0}, {0, 0} };
 	int		  err;
-	uint64_t	  ns_to_expire;
+	int64_t		  ns_to_expire;
 
 	ns_to_expire =
 		xio_timerlist_ns_duration_to_expire(
@@ -100,18 +100,13 @@ static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
 	if (ns_to_expire == -1 && !sched_work->armed_timer)
 		return 0;
 
-	if (ns_to_expire == -1)
+	if (ns_to_expire == -1) {
 		new_t.it_value.tv_nsec = 0;
-	else if (ns_to_expire == 0)
+	} else if (ns_to_expire < 1) {
 		new_t.it_value.tv_nsec = 1;
-	else {
-		new_t.it_value.tv_nsec = ns_to_expire;
-
+	} else {
 		set_normalized_timespec(&new_t.it_value,
-				   new_t.it_value.tv_sec,
-				   new_t.it_value.tv_nsec);
-
-
+					0, ns_to_expire);
 	}
 
 	/* rearm the timer */
@@ -121,7 +116,10 @@ static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
 		return -1;
 	}
 
-	sched_work->armed_timer = 1;
+	if (ns_to_expire == -1)
+		sched_work->armed_timer = 0;
+	else
+		sched_work->armed_timer = 1;
 
 	return 0;
 }
@@ -132,7 +130,7 @@ static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
 static void xio_timed_action_handler(int fd, int events, void *user_context)
 {
 	struct xio_schedwork	*sched_work = user_context;
-	uint64_t		exp;
+	int64_t			exp;
 	ssize_t			s;
 
 	/* consume the timer data in fd */
@@ -207,8 +205,11 @@ int xio_schedwork_close(struct xio_schedwork *sched_work)
 	if (retval)
 		ERROR_LOG("ev_loop_del_cb failed. %m\n");
 
-
 	xio_timers_list_close(&sched_work->timers_list);
+	retval = xio_schedwork_rearm(sched_work);
+	if (retval)
+		ERROR_LOG("xio_schedwork_rearm failed. %m\n");
+
 	close(sched_work->timer_fd);
 	ufree(sched_work);
 
