@@ -544,15 +544,20 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 	io_u->rsp->out.header.iov_len = sizeof(struct raio_answer) +
 					2*sizeof(uint32_t);
 
-	if (iocmd->res != iocmd->bcount) {
-		if (iocmd->res < iocmd->bcount) {
-			io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+	if ( io_u->iocmd.op == RAIO_CMD_PREAD) {
+		if (iocmd->res != iocmd->bcount) {
+			if (iocmd->res < iocmd->bcount) {
+				io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+			} else {
+				io_u->rsp->out.data_iovlen	   = 0;
+				io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+			}
 		} else {
-			io_u->rsp->out.data_iovlen	   = 0;
-			io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+			io_u->rsp->out.data_iov[0].iov_len = iocmd->bcount;
 		}
 	} else {
-		io_u->rsp->out.data_iov[0].iov_len = iocmd->bcount;
+		io_u->rsp->out.data_iov[0].iov_len = 0;
+		io_u->rsp->out.data_iovlen = 0;
 	}
 
 	xio_send_response(io_u->rsp);
