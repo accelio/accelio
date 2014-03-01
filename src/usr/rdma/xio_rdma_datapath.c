@@ -554,15 +554,17 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			   ibv_wc_status_str(wc->status),
 			   wc->vendor_err);
 	} else  {
-		ERROR_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "  \
+		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, task:%p, "  \
 			  "wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x\n",
+			  rdma_hndl->base.is_client ? "client" : "server",
+			  rdma_hndl->state,
 			  rdma_hndl, rdma_task, task,
 			  wc->wr_id,
 			  ibv_wc_status_str(wc->status),
 			  wc->vendor_err);
 
-		ERROR_LOG("byte_len=%u, immdata=%u, qp_num=0x%x, src_qp=%u\n",
+		ERROR_LOG("byte_len=%u, immdata=%u, qp_num=0x%x, src_qp=0x%x\n",
 			  wc->byte_len, wc->imm_data, wc->qp_num, wc->src_qp);
 	}
 
@@ -1789,6 +1791,12 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (sge_len < rdma_hndl->max_inline_data)
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
+
+	if(IS_FIN(task->tlv_type)) {
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
+		must_send = 1;
+	}
+
 	if (unlikely(++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD ||
 		     task->is_control)) {
 		/* avoid race between send completion and response arrival */
@@ -1977,10 +1985,14 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		rdma_hndl->tx_ready_tasks_num++;
 	}
 
+	if(IS_FIN(task->tlv_type)) {
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
+		must_send = 1;
+	}
+
 	/* transmit only if  available */
 	if (task->omsg->more_in_batch == 0) {
 		must_send = 1;
-
 	} else {
 		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
 			must_send = 1;
@@ -3263,7 +3275,7 @@ static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  rdma_hndl->exp_sn, nop.sn);
 
-	/* the rx task is returend back to pool */
+	/* the rx task is returned back to pool */
 	xio_tasks_pool_put(task);
 
 	return 0;
