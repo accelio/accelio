@@ -2082,7 +2082,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		rdma_task->txd.send_wr.send_flags |= IB_SEND_INLINE;
 
 	if(IS_FIN(task->tlv_type)) {
-		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
+		rdma_task->txd.send_wr.send_flags |= IB_SEND_FENCE;
 		must_send = 1;
 	}
 
@@ -2278,7 +2278,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	if(IS_FIN(task->tlv_type)) {
-		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
+		rdma_task->txd.send_wr.send_flags |= IB_SEND_FENCE;
 		must_send = 1;
 	}
 

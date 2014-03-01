@@ -151,6 +151,7 @@ enum xio_session_event {
 	XIO_SESSION_REJECT_EVENT,		  /**< session reject event   */
 	XIO_SESSION_TEARDOWN_EVENT,		  /**< session teardown event */
 	XIO_SESSION_NEW_CONNECTION_EVENT,	  /**< new connection event   */
+	XIO_SESSION_CONNECTION_ESTABLISHED_EVENT, /**< connection established */
 	XIO_SESSION_CONNECTION_TEARDOWN_EVENT,	  /**< connection teardown event*/
 	XIO_SESSION_CONNECTION_CLOSED_EVENT,	  /**< connection closed event*/
 	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT, /**< disconnection event   */
