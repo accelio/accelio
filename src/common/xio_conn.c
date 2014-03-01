@@ -914,7 +914,8 @@ static void xio_conn_release(void *data)
 {
 	struct xio_conn *conn = data;
 
-	TRACE_LOG("physical connection close. conn:%p\n", conn);
+	TRACE_LOG("physical connection close. conn:%p rdma_hndl:%p\n",
+		  conn, conn->transport_hndl);
 
 	if (!conn->is_listener)
 		xio_conns_store_remove(conn->cid);
@@ -1345,8 +1346,10 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 		xio_on_send_completion(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_ASSIGN_IN_BUF:
+/*
 		DEBUG_LOG("conn: [notification] - assign in buffer. " \
 			 "conn:%p, transport:%p\n", observer, sender);
+*/
 		xio_on_assign_in_buf(conn, ev_data);
 		break;
 	case XIO_TRANSPORT_MESSAGE_ERROR:
