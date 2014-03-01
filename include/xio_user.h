@@ -70,7 +70,7 @@ extern "C" {
 
 /**
  * @def XIO_INFINITE
- * @brief inifinite time flag for event loop
+ * @brief infinite time flag for event loop
  */
 #define XIO_INFINITE			-1
 /*---------------------------------------------------------------------------*/
@@ -92,7 +92,7 @@ enum xio_log_level {
 
 /**
  * @enum xio_session_type
- * @brief session's type defintion
+ * @brief session's type definition
  */
 enum xio_session_type {
 	XIO_SESSION_CLIENT, /**< represents the active side that initiate    */
@@ -209,6 +209,7 @@ enum xio_session_event {
 	XIO_SESSION_REJECT_EVENT,		  /**< session reject event   */
 	XIO_SESSION_TEARDOWN_EVENT,		  /**< session teardown event */
 	XIO_SESSION_NEW_CONNECTION_EVENT,	  /**< new connection event   */
+	XIO_SESSION_CONNECTION_ESTABLISHED_EVENT, /**< connection established */
 	XIO_SESSION_CONNECTION_TEARDOWN_EVENT,	  /**< connection teardown event*/
 	XIO_SESSION_CONNECTION_CLOSED_EVENT,	  /**< connection closed event*/
 	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT, /**< disconnection event   */
@@ -234,9 +235,9 @@ enum xio_receipt_result {
 	XIO_READ_RECEIPT_REJECT,
 };
 
-/** message request refered type  */
+/** message request referred type  */
 #define XIO_REQUEST			2
-/** message response refered type */
+/** message response referred type */
 #define XIO_RESPONSE			4
 
 /** general message family type   */
@@ -301,7 +302,7 @@ typedef void (*xio_log_fn)(const char *file, unsigned line,
 /*---------------------------------------------------------------------------*/
 /**
  * @struct xio_session_attr
- * @brief sesssion attributes
+ * @brief session attributes
  */
 struct xio_session_attr {
 	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
@@ -332,7 +333,7 @@ struct xio_context_params {
 
 /**
  * @struct xio_context_attr
- * @brief context atributes structure
+ * @brief context attributes structure
  */
 struct xio_context_attr {
 	uint64_t		reserved;	/**< private context */
@@ -372,7 +373,7 @@ struct xio_iovec_ex {
 
 /**
  * @struct xio_msg_pdata
- * @brief message private data structure used internaly by the library
+ * @brief message private data structure used internally by the library
  */
 struct xio_msg_pdata {
 	struct xio_msg		*next;          /**< internal library usage   */
@@ -426,7 +427,7 @@ struct xio_msg {
 
 /**
  * @struct xio_session_event_data
- * @brief  session enent callback parmaters
+ * @brief  session event callback parameters
  */
 struct xio_session_event_data {
 	struct xio_connection	*conn;		    /**< connection object   */
@@ -454,7 +455,7 @@ struct xio_new_session_req {
 
 /**
  * @struct xio_new_session_rsp
- * @brief  new session response messsage
+ * @brief  new session response message
  */
 struct xio_new_session_rsp {
 	void			*user_context;	 /**< server private data    */
@@ -596,7 +597,7 @@ struct xio_session_ops {
 			void *conn_user_context);
 
 	/**
-	 * requester's message cancelation notification
+	 * requester's message cancellation notification
 	 *
 	 *  @param[in] session			the session
 	 *  @param[in] result			the result code
@@ -612,10 +613,10 @@ struct xio_session_ops {
 			void *conn_user_context);
 
 	/**
-	 * responder's message cancelation notification
+	 * responder's message cancellation notification
 	 *
 	 *  @param[in] session			the session
-	 *  @param[in] req			the reuest to cancel
+	 *  @param[in] req			the request to cancel
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
@@ -640,7 +641,7 @@ struct xio_session_ops {
 
 /**
  *  @struct xio_mem_allocator
- *  @brief user provided customed allocator hook functions for library usage
+ *  @brief user provided costumed allocator hook functions for library usage
  */
 struct xio_mem_allocator {
 	void	*user_context;			/**< user specific context */
@@ -737,7 +738,7 @@ struct xio_buf *xio_alloc(size_t len);
 /**
  * free and unregister registered memory region
  *
- * @param[in] buf	Pointer to the alloced buffer
+ * @param[in] buf	Pointer to the allocated buffer
  *
  * @returns success (0), or a (negative) error value
  */
@@ -877,7 +878,7 @@ void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread);
  * set context parameters
  *
  * @param[in] ctx	The xio context handle
- * @param[in] params	The context paramters structure
+ * @param[in] params	The context parameters structure
  *
  * @returns success (0), or a (negative) error value
  */
@@ -970,7 +971,7 @@ int xio_connection_destroy(struct xio_connection *conn);
  * set connection parameters
  *
  * @param[in] conn	The xio connection handle
- * @param[in] params	The connection paramters structure
+ * @param[in] params	The connection parameters structure
  *
  * @returns success (0), or a (negative) error value
  */
@@ -981,7 +982,7 @@ int xio_set_connection_params(struct xio_connection *conn,
  * get connection parameters
  *
  * @param[in] conn	The xio connection handle
- * @param[in] params	The connection paramters structure
+ * @param[in] params	The connection parameters structure
  *
  * @returns success (0), or a (negative) error value
  */
@@ -1020,10 +1021,10 @@ int xio_send_request(struct xio_connection *conn,
 int xio_cancel_request(struct xio_connection *conn,
 		       struct xio_msg *req);
 /**
- * responder cancelation response
+ * responder cancellation response
  *
  * @param[in] req	the outstanding request to cancel
- * @param[in] result	responder cancelation code
+ * @param[in] result	responder cancellation code
  *
  * @return success (0), or a (negative) error value
  */
@@ -1068,7 +1069,7 @@ int xio_release_msg(struct xio_msg *msg);
 
 /**
  * attempts to read at least min_nr events and up to nr events
- * from the completion queue assiociated with connection conn
+ * from the completion queue associated with connection conn
  *
  *
  * @param[in] conn	The xio connection handle
