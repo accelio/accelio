@@ -246,6 +246,7 @@ static int on_session_event(struct xio_session *session,
 
 		xio_connection_destroy(event_data->conn);
 		break;
+	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_context_stop_loop(test_params->ctx, XIO_INFINITE);  /* exit */
 		break;

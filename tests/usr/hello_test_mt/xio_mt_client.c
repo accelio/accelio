@@ -326,7 +326,6 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
-	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:
 		break;
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
@@ -335,6 +334,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
 		break;
+	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
 			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
@@ -411,11 +411,23 @@ int on_msg_error(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* on_session_established						     */
+/*---------------------------------------------------------------------------*/
+static int on_session_established(struct xio_session *session,
+			struct xio_new_session_rsp *rsp,
+			void *cb_user_context)
+{
+	printf("**** [%p] session established\n", session);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
 struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
-	.on_session_established		=  NULL,
+	.on_session_established		=  on_session_established,
 	.on_msg_delivered		=  NULL,
 	.on_msg				=  on_response,
 	.on_msg_error			=  on_msg_error
