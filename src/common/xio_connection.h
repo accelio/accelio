@@ -43,12 +43,30 @@
 
 enum xio_connection_state {
 		XIO_CONNECTION_STATE_INIT,
+		XIO_CONNECTION_STATE_ESTABLISHED,
 		XIO_CONNECTION_STATE_ONLINE,
-		XIO_CONNECTION_STATE_CLOSING,		/* user initiate */
+		XIO_CONNECTION_STATE_FIN_WAIT_1,	/* tcp state machine */
+		XIO_CONNECTION_STATE_FIN_WAIT_2,	/* tcp state machine */
+		XIO_CONNECTION_STATE_CLOSING,		/* tcp state machine */
+		XIO_CONNECTION_STATE_TIME_WAIT,		/* tcp state machine */
+		XIO_CONNECTION_STATE_CLOSE_WAIT,	/* tcp state machine */
+		XIO_CONNECTION_STATE_LAST_ACK,		/* tcp state machine */
 		XIO_CONNECTION_STATE_CLOSED,		/* user close */
 		XIO_CONNECTION_STATE_DISCONNECTED,	/* disconnect */
 		XIO_CONNECTION_STATE_ERROR,		/* error */
+		XIO_CONNECTION_STATE_INVALID
 };
+
+#define		SEND_ACK	0x0001
+#define		SEND_FIN	0x0002
+
+
+struct xio_transition {
+	int				valid;
+	enum xio_connection_state	next_state;
+	int				send_flags;
+};
+
 
 struct xio_connection {
 	struct xio_conn			*conn;
@@ -63,10 +81,10 @@ struct xio_connection {
 	int				conn_idx;
 	int				state;
 	int32_t				send_req_toggle;
-	int				pad;
+	int				disable_notify;
+	int				close_reason;
 
 	struct kref			kref;
-	struct kref			fin_kref;
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
 	struct xio_msg_list		in_flight_reqs_msgq;
@@ -74,6 +92,8 @@ struct xio_connection {
 
 	struct xio_msg_list		one_way_msg_pool;
 	struct xio_msg			*msg_array;
+	xio_ctx_timer_handle_t		hello_time_hndl;
+	xio_ctx_timer_handle_t		fin_time_hndl;
 
 	struct list_head		io_tasks_list;
 	struct list_head		post_io_tasks_list;
@@ -121,6 +141,10 @@ static inline void xio_connection_set_state(
 	conn->state = state;
 }
 
+struct xio_transition *xio_connection_next_transit(
+					enum xio_connection_state state,
+					int fin_ack);
+
 int xio_connection_send_read_receipt(struct xio_connection *conn,
 			      struct xio_msg *msg);
 
@@ -137,11 +161,18 @@ int xio_connection_fin_put(struct xio_connection *conn);
 int xio_connection_release_fin(struct xio_connection *conn,
 				   struct xio_msg *msg);
 
-int xio_ack_disconnect(struct xio_connection *conn,
-		       struct xio_task *task);
+int xio_send_fin_ack(struct xio_connection *conn,
+		     struct xio_task *task);
 
 int xio_disconnect_initial_connection(
 		struct xio_connection *connection);
+
+int xio_connection_disconnected(struct xio_connection *connection);
+
+int xio_connection_refused(struct xio_connection *connection);
+
+int xio_connection_error_event(struct xio_connection *connection,
+			       enum xio_status reason);
 
 int xio_connection_flush_msgs(struct xio_connection *conn);
 
@@ -169,6 +200,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *conn,
 int xio_connection_release_hello(struct xio_connection *conn,
 				 struct xio_msg *msg);
 
+char *xio_connection_state_str(enum xio_connection_state state);
 
 #endif /*XIO_CONNECTION_H */
 

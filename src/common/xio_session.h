@@ -129,10 +129,6 @@ static inline uint64_t xio_session_get_sn(
 	return __sync_fetch_and_add(&session->trans_sn, 1);
 }
 
-int xio_session_disconnect(
-		struct xio_session  *session,
-		struct xio_connection  *connection);
-
 struct xio_session *xio_find_session(
 		struct xio_task *task);
 
@@ -198,6 +194,9 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 void xio_session_notify_new_connection(struct xio_session *session,
 				       struct xio_connection *connection);
 
+void xio_session_notify_connection_established(struct xio_session *session,
+					  struct xio_connection *connection);
+
 void xio_session_notify_connection_closed(struct xio_session *session,
 					  struct xio_connection *connection);
 
@@ -206,13 +205,22 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 					  enum xio_status reason);
 
 void xio_session_notify_connection_refused(struct xio_session *session,
-					  struct xio_connection *connection,
-					  enum xio_status reason);
+					   struct xio_connection *connection,
+					   enum xio_status reason);
+
+void xio_session_notify_connection_error(struct xio_session *session,
+					 struct xio_connection *connection,
+					 enum xio_status reason);
+
+void xio_session_notify_connection_teardown(struct xio_session *session,
+				       struct xio_connection *connection);
 
 int xio_session_notify_msg_error(struct xio_connection *connection,
-			         struct xio_msg *msg, enum xio_status result);
+				 struct xio_msg *msg, enum xio_status result);
 
 void xio_session_notify_teardown(struct xio_session *session, int reason);
+
+void xio_session_notify_rejected(struct xio_session *session);
 
 void xio_session_post_teardown(struct xio_session *session);
 

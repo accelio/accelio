@@ -179,9 +179,9 @@ cleanup:
 int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 				     struct xio_task *task)
 {
-	xio_connection_send_hello_rsp(connection, task);
-
 	xio_session_notify_new_connection(task->session, connection);
+
+	xio_connection_send_hello_rsp(connection, task);
 
 	connection->session->state = XIO_SESSION_STATE_ONLINE;
 	connection->session->disable_teardown = 0;
@@ -211,7 +211,7 @@ struct xio_msg *xio_session_write_accept_rsp(
 	uint16_t		len, i, str_len, tot_len;
 
 
-	/* calclate length */
+	/* calculate length */
 	tot_len = 3*sizeof(uint16_t) + sizeof(uint32_t);
 	for (i = 0; i < portals_array_len; i++)
 		tot_len += strlen(portals_array[i]) + sizeof(uint16_t);
@@ -500,9 +500,10 @@ int xio_reject(struct xio_session *session,
 	msg->request = session->setup_req;
 	msg->type    = XIO_SESSION_SETUP_RSP;
 
-
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
+
+	task->connection->close_reason = XIO_E_SESSION_REJECTED;
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
@@ -519,6 +520,10 @@ int xio_reject(struct xio_session *session,
 int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 			       struct xio_task *task)
 {
+	TRACE_LOG("got session setup response comp. session:%p, " \
+		  "connection:%p\n",
+		  connection->session, connection);
+
 	kfree(task->omsg);
 
 	/* recycle the task */
@@ -527,21 +532,17 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 	/* time to set new callback */
 	DEBUG_LOG("task recycled\n");
 
-	if (connection->session->state == XIO_SESSION_STATE_REJECTED) {
-		/*
-		xio_session_notify_connection_disconnected(
-				connection->session,
-				connection, XIO_E_SESSION_REJECTED);
+	switch (connection->session->state) {
+	case XIO_SESSION_STATE_ACCEPTED:
+	case XIO_SESSION_STATE_REJECTED:
+	case XIO_SESSION_STATE_REDIRECTED:
 		xio_disconnect(connection);
-		*/
-	} else if (connection->session->state == XIO_SESSION_STATE_REDIRECTED) {
-		xio_session_notify_connection_disconnected(
-				connection->session,
-				connection, XIO_E_SESSION_REDIRECTED);
-		xio_disconnect(connection);
-	} else
+		break;
+	default:
 		/* try to transmit now */
 		xio_connection_xmit_msgs(connection);
+		break;
+	}
 
 	return 0;
 }
