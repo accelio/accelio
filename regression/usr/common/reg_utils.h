@@ -39,6 +39,7 @@
 #define REG_UTILS_H
 
 #include <stdio.h>
+#include <sys/queue.h>
 
 /* Set to true to enable all debugging. */
 extern char  REG_DEBUG;
@@ -52,6 +53,14 @@ extern char  REG_DEBUG;
 #define ERROR(...) {						\
 	fprintf(stderr, __VA_ARGS__);				\
 }
+
+#ifndef TAILQ_FOREACH_SAFE
+# define TAILQ_FOREACH_SAFE(var, tvar, head, field)			 \
+	for ((var) = TAILQ_FIRST((head));                                \
+			(var) && ((tvar) = TAILQ_NEXT((var), field), 1); \
+			(var) = (tvar))
+#endif
+
 
 #endif
 

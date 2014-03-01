@@ -78,7 +78,11 @@ static inline void *obj_pool_get(struct obj_pool *q)
 /*---------------------------------------------------------------------------*/
 static inline void obj_pool_put(struct obj_pool *q, void *t)
 {
-	q->nr++;
+	if (++q->nr > q->max) {
+		fprintf(stderr, "queue overrun\n");
+		abort();
+	}
+
 	*--q->stack_ptr = t;
 }
 

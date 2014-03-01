@@ -46,7 +46,6 @@ extern int server_main(int argc, char *argv[]);
 
 char  REG_DEBUG = 0;
 
-
 struct params {
 	int	argc;
 	int	pad;
@@ -59,6 +58,8 @@ struct program_vars {
 	char		client_dlen[8];
 	char		server_dlen[8];
 	char		queue_depth[8];
+	char		client_disconnect_nr[8];
+	char		server_disconnect_nr[8];
 	unsigned long	seed;
 	unsigned long	test_num;
 };
@@ -85,11 +86,10 @@ void rand_params(struct program_vars *vars)
 	int max_qdepth;
 	int threads_num;
 
-
 	time((time_t *)&vars->seed);
 	/*
 	vars->test_num = 1;
-	vars->seed = 1392726232;
+	vars->seed = 1393651986;
 	*/
 	srandom(vars->seed);
 
@@ -125,8 +125,19 @@ void rand_params(struct program_vars *vars)
 	/* server_dlen [0,1048576] */
 	var = random() % max_dlen;
 	sprintf(vars->server_dlen, "%d", var);
-}
 
+	/* client_disconnect_nr [1, 25000] */
+	do {
+		var = random() % 25000;
+	} while (var == 0);
+	sprintf(vars->client_disconnect_nr, "%d", var);
+
+	/* server_disconnect_nr [1, 25000] */
+	do {
+		var = random() % 25000;
+	} while (var == 0);
+	sprintf(vars->server_disconnect_nr, "%d", var);
+}
 
 int main(int argc, char *argv[])
 {
@@ -139,6 +150,8 @@ int main(int argc, char *argv[])
 		"\0",		/* server threads num */
 		"\0",		/* client dlen */
 		"\0",		/* server dlen */
+		"\0",		/* client disconnect nr */
+		"\0",		/* server disconnect nr */
 		"\0"
 	};
 
@@ -157,33 +170,41 @@ start:
 	argvv[5] = vars.server_threads_num;
 	argvv[6] = vars.client_dlen;
 	argvv[7] = vars.server_dlen;
+	argvv[8] = vars.client_disconnect_nr;
+	argvv[9] = vars.server_disconnect_nr;
+
 
 	fprintf(stderr, "seed:%lu, queue_depth:%s, client threads:%s, " \
-			"server threads:%s, client_dlen:%s, " \
-			"server_dlen:%s [start]\n",
+			"server threads:%s, client_dlen:%s, "		\
+			"server_dlen:%s, client_disc_nr:%s, "		\
+			"server_disc_nr:%s [start]\n",
 			vars.seed,
 			vars.queue_depth,
 			vars.client_threads_num,
 			vars.server_threads_num,
 			vars.client_dlen,
-			vars.server_dlen);
+			vars.server_dlen,
+			vars.client_disconnect_nr,
+			vars.server_disconnect_nr);
 
 	pthread_create(&stid, NULL, server_thread, &params);
-	sleep(1);
 	pthread_create(&ctid, NULL, client_thread, &params);
 
 	pthread_join(stid, NULL);
 	pthread_join(ctid, NULL);
 
 	fprintf(stderr, "seed:%lu, queue_depth:%s, client threads:%s, " \
-			"server threads:%s, client_dlen:%s, " \
-			"server_dlen:%s [pass]\n",
+			"server threads:%s, client_dlen:%s, "		\
+			"server_dlen:%s, client_disc_nr:%s, "		\
+			"server_disc_nr:%s [pass]\n",
 			vars.seed,
 			vars.queue_depth,
 			vars.client_threads_num,
 			vars.server_threads_num,
 			vars.client_dlen,
-			vars.server_dlen);
+			vars.server_dlen,
+			vars.client_disconnect_nr,
+			vars.server_disconnect_nr);
 
 	vars.test_num++;
 
