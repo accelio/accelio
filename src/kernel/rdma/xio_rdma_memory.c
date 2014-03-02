@@ -107,12 +107,12 @@ static struct llist_node *llist_reverse_order(struct llist_node *head)
 #endif
 
 struct fast_reg_descriptor {
-        struct llist_node                llist_entry;
-        /* For fast registration - FRWR */
-        struct ib_mr                     *data_mr;
-        struct ib_fast_reg_page_list     *data_frpl;
-        /* Valid for fast registration flag */
-        int                              valid;
+	struct llist_node		llist_entry;
+	/* For fast registration - FRWR */
+	struct ib_mr			*data_mr;
+	struct ib_fast_reg_page_list	*data_frpl;
+	/* Valid for fast registration flag */
+	int				valid;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -256,46 +256,46 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
                               struct ib_device *ibdev, u64 *pages,
                               int *offset, int *data_size)
 {
-        struct scatterlist *sg, *sgl = mdesc->sgl;
-        u64 start_addr, end_addr, page, chunk_start = 0;
-        unsigned long total_sz = 0;
-        unsigned int dma_len;
-        int i, new_chunk, cur_page, last_ent = mdesc->nents - 1;
+	struct scatterlist *sg, *sgl = mdesc->sgl;
+	u64 start_addr, end_addr, page, chunk_start = 0;
+	unsigned long total_sz = 0;
+	unsigned int dma_len;
+	int i, new_chunk, cur_page, last_ent = mdesc->nents - 1;
 
-        /* compute the offset of first element */
-        *offset = (u64) sgl[0].offset & ~PAGE_MASK;
+	/* compute the offset of first element */
+	*offset = (u64) sgl[0].offset & ~PAGE_MASK;
 
-        new_chunk = 1;
-        cur_page  = 0;
-        for_each_sg(sgl, sg, mdesc->nents, i) {
-                start_addr = ib_sg_dma_address(ibdev, sg);
-                if (new_chunk)
-                        chunk_start = start_addr;
-                dma_len = ib_sg_dma_len(ibdev, sg);
-                end_addr = start_addr + dma_len;
-                total_sz += dma_len;
+	new_chunk = 1;
+	cur_page  = 0;
+	for_each_sg(sgl, sg, mdesc->nents, i) {
+		start_addr = ib_sg_dma_address(ibdev, sg);
+		if (new_chunk)
+			chunk_start = start_addr;
+		dma_len = ib_sg_dma_len(ibdev, sg);
+		end_addr = start_addr + dma_len;
+		total_sz += dma_len;
 
-                /* collect page fragments until aligned or end of SG list */
-                if (!IS_PAGE_ALIGNED(end_addr) && i < last_ent) {
-                        new_chunk = 0;
-                        continue;
-                }
-                new_chunk = 1;
+		/* collect page fragments until aligned or end of SG list */
+		if (!IS_PAGE_ALIGNED(end_addr) && i < last_ent) {
+			new_chunk = 0;
+			continue;
+		}
+		new_chunk = 1;
 
-                /* address of the first page in the contiguous chunk;
-                   masking relevant for the very first SG entry,
-                   which might be unaligned */
-                page = chunk_start & PAGE_MASK;
-                do {
-                        pages[cur_page++] = page;
-                        page += PAGE_SIZE;
-                } while (page < end_addr);
-        }
+		/* address of the first page in the contiguous chunk;
+		   masking relevant for the very first SG entry,
+		   which might be unaligned */
+		page = chunk_start & PAGE_MASK;
+		do {
+			pages[cur_page++] = page;
+			page += PAGE_SIZE;
+		} while (page < end_addr);
+	}
 
-        *data_size = total_sz;
-        DEBUG_LOG("page_vec->data_size:%d cur_page %d\n",
+	*data_size = total_sz;
+	DEBUG_LOG("page_vec->data_size:%d cur_page %d\n",
 		  *data_size, cur_page);
-        return cur_page;
+	return cur_page;
 }
 
 /**
@@ -307,40 +307,41 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
 static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
 		                    struct ib_device *ibdev)
 {
-        struct scatterlist *sgl, *sg, *next_sg = NULL;
-        u64 start_addr, end_addr;
-        int i, ret_len, start_check = 0;
+	struct scatterlist *sgl, *sg, *next_sg = NULL;
+	u64 start_addr, end_addr;
+	int i, ret_len, start_check = 0;
 
-        if (mdesc->nents == 1)
-                return 1;
+	if (mdesc->nents == 1)
+		return 1;
 
-        sgl = mdesc->sgl;
-        start_addr  = ib_sg_dma_address(ibdev, sgl);
+	sgl = mdesc->sgl;
+	start_addr  = ib_sg_dma_address(ibdev, sgl);
 
-        for_each_sg(sgl, sg, mdesc->nents, i) {
-                if (start_check && !IS_PAGE_ALIGNED(start_addr))
-                        break;
+	for_each_sg(sgl, sg, mdesc->nents, i) {
+		if (start_check && !IS_PAGE_ALIGNED(start_addr))
+			break;
 
-                next_sg = sg_next(sg);
-                if (!next_sg)
-                        break;
+		next_sg = sg_next(sg);
+		if (!next_sg)
+			break;
 
-                end_addr    = start_addr + ib_sg_dma_len(ibdev, sg);
-                start_addr  = ib_sg_dma_address(ibdev, next_sg);
+		end_addr   = start_addr + ib_sg_dma_len(ibdev, sg);
+		start_addr = ib_sg_dma_address(ibdev, next_sg);
 
-                if (end_addr == start_addr) {
-                        start_check = 0;
-                        continue;
-                } else
-                        start_check = 1;
+		if (end_addr == start_addr) {
+			start_check = 0;
+			continue;
+		} else {
+			start_check = 1;
+		}
 
-                if (!IS_PAGE_ALIGNED(end_addr))
-                        break;
-        }
-        ret_len = (next_sg) ? i : i+1;
-        DEBUG_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
-			ret_len, mdesc->nents, mdesc);
-        return ret_len;
+		if (!IS_PAGE_ALIGNED(end_addr))
+			break;
+	}
+	ret_len = (next_sg) ? i : i+1;
+	DEBUG_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
+		  ret_len, mdesc->nents, mdesc);
+	return ret_len;
 }
 
 /**
@@ -379,7 +380,7 @@ void xio_free_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 
 	if (i < frwr->pool_size)
 		WARN_LOG("pool still has %d regions registered\n",
-			  frwr->pool_size - i);
+			 frwr->pool_size - i);
 }
 
 /**
@@ -554,7 +555,7 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 
 	fdesc = get_fdesc(rdma_hndl);
 	if (!fdesc) {
-		ERROR_LOG("pool is emptry!\n");
+		ERROR_LOG("pool is empty!\n");
 		err = -ENOMEM;
 		goto err_reg;
 	}
@@ -570,7 +571,7 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	err = xio_fast_reg_mr(fdesc, rdma_hndl, &mdesc->mem_reg,
-			       offset, data_size, page_list_len);
+			      offset, data_size, page_list_len);
 	if (err)
 		goto err_reg;
 

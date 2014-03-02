@@ -677,10 +677,10 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* prefetch next buffer */
 	task1 = list_first_entry(&task->tasks_list_entry,
-			 	 struct xio_task,  tasks_list_entry);
+				 struct xio_task, tasks_list_entry);
 	xio_prefetch(task1->mbuf.buf.head);
 	task2 = list_first_entry(&task1->tasks_list_entry,
-			 	 struct xio_task,  tasks_list_entry);
+				 struct xio_task, tasks_list_entry);
 	xio_prefetch(task2->mbuf.buf.head);
 
 	rdma_hndl->rqe_avail--;

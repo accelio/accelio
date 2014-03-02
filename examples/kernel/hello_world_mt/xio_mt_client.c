@@ -145,7 +145,6 @@ static int on_session_event(struct xio_session *session,
 		rcu_assign_pointer(sdata->session, NULL);
 		spin_unlock(&sdata->lock);
 		synchronize_rcu();
-		xio_session_destroy(session);
 		spin_lock(&sdata->lock);
 		for (i = 0; i < MAX_THREADS; i++) {
 			tdata = sdata->tdata[i];
