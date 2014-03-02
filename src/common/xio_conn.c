@@ -1008,7 +1008,7 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	xio_context_reg_observer(transport_hndl->ctx, &conn->ctx_observer);
 
 
-	/* add the conection to temporary list */
+	/* add the connection to temporary list */
 	conn->transport_hndl		= transport_hndl;
 	conn->transport			= parent_conn->transport;
 	kref_init(&conn->kref);
@@ -1017,13 +1017,13 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 
 	xio_conns_store_add(conn, &conn->cid);
 
-	/* add  the new cnnnection as oberver to transport */
+	/* add  the new connection as observer to transport */
 	if (conn->transport->reg_observer) {
 		conn->transport->reg_observer(conn->transport_hndl,
 					      &conn->trans_observer);
 	} else {
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
-		return NULL;
+		goto cleanup;
 	}
 
 	if (conn->transport->get_pools_setup_ops) {
@@ -1032,7 +1032,7 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 						     &conn->primary_pool_ops);
 	} else {
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
-		return NULL;
+		goto cleanup;
 	}
 
 	retval = xio_conn_initial_pool_setup(conn);
@@ -1047,7 +1047,7 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	return conn;
 
 cleanup:
-	kfree(conn);
+	xio_on_conn_closed(conn, NULL);
 	return NULL;
 }
 
@@ -1490,8 +1490,7 @@ struct xio_conn *xio_conn_open(
 					       &conn->trans_observer);
 	if (conn->transport_hndl == NULL) {
 		ERROR_LOG("transport open failed\n");
-		kfree(conn);
-		return NULL;
+		goto cleanup;
 	}
 	conn->transport	= transport;
 	kref_init(&conn->kref);
@@ -1503,7 +1502,7 @@ struct xio_conn *xio_conn_open(
 						     &conn->primary_pool_ops);
 	} else {
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
-		return NULL;
+		goto cleanup;
 	}
 
 	xio_conns_store_add(conn, &conn->cid);
@@ -1512,6 +1511,10 @@ struct xio_conn *xio_conn_open(
 		  conn->transport_hndl);
 
 	return conn;
+cleanup:
+	xio_on_conn_closed(conn, NULL);
+
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
