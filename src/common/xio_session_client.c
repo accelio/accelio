@@ -529,8 +529,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	switch (action) {
 	case XIO_ACTION_ACCEPT:
 		if (session->portals_array == NULL)  {
-			ERROR_LOG("ACCEPT111\n");
-
 			xio_connection_set_state(
 					connection,
 					XIO_CONNECTION_STATE_ESTABLISHED);
@@ -545,7 +543,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			session->redir_connection = NULL;
 			session->disable_teardown = 0;
 
-			ERROR_LOG("ACCEPT %d\n", session->connections_nr);
 			if (session->connections_nr > 1) {
 				session->state = XIO_SESSION_STATE_ACCEPTED;
 
