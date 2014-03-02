@@ -2021,7 +2021,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	int			must_send = 0;
 	size_t			sge_len;
 
-	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >=
+	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
 	    rdma_hndl->max_tx_ready_tasks_num) {
 		xio_set_error(EAGAIN);
 		return -1;
