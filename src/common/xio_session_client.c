@@ -173,9 +173,9 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 
 			/* send one message to pass sending to the
 			 * right thread */
-			spin_lock(&session->connections_list_lock);
 			kfree(session->new_ses_rsp.user_context);
 
+			spin_lock(&session->connections_list_lock);
 			list_for_each_entry(tmp_connection,
 					    &session->connections_list,
 					    connections_list_entry) {
@@ -183,11 +183,11 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 				xio_connection_set_state(
 						tmp_connection,
 						XIO_CONNECTION_STATE_ONLINE);
-				xio_ctx_timer_add(
+				xio_ctx_add_work(
 						tmp_connection->ctx,
-						0, tmp_connection,
+						tmp_connection,
 						xio_xmit_messages,
-						&tmp_connection->hello_time_hndl);
+						&tmp_connection->hello_work);
 			}
 			spin_unlock(&session->connections_list_lock);
 		}

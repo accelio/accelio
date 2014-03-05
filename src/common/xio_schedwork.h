@@ -35,39 +35,70 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_SCHEDWORK_H
-#define XIO_SCHEDWORK_H
+#ifndef XIO_WORKQUEUE_H
+#define XIO_WORKQUEUE_H
+
+#include "xio_schedwork_priv.h"
 
 /* opaque type */
-struct xio_schedwork;
+struct xio_workqueue;
 struct xio_context;
 
-#define xio_schedwork_handle_t  void *
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_create							     */
+/*---------------------------------------------------------------------------*/
+struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_init							     */
+/* xio_workqueue_destroy						     */
 /*---------------------------------------------------------------------------*/
-struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx);
+int xio_workqueue_destroy(struct xio_workqueue *work_queue);
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_close							     */
+/* xio_workqueue_add_delayed_work					     */
 /*---------------------------------------------------------------------------*/
-int xio_schedwork_close(struct xio_schedwork *sched_work);
+int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
+				   int msec_duration, void *data,
+				   void (*function)(void *data),
+				   xio_delayed_work_handle_t *work);
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_add							     */
+/* xio_workqueue_del_delayed_work					     */
 /*---------------------------------------------------------------------------*/
-int xio_schedwork_add(struct xio_schedwork *sched_work,
-		      int msec_duration, void *data,
-		      void (*timer_fn)(void *data),
-		      xio_schedwork_handle_t *handle_out);
-
-/*---------------------------------------------------------------------------*/
-/* xio_schedwork_del							     */
-/*---------------------------------------------------------------------------*/
-int xio_schedwork_del(struct xio_schedwork *sched_work,
-		      xio_schedwork_handle_t timer_handle);
+int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
+				   xio_delayed_work_handle_t *work);
 
 
-#endif /* XIO_SCHEDWORK_H */
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_add_work						     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_add_work(struct xio_workqueue *work_queue,
+			   void *data,
+			   void (*function)(void *data),
+			   xio_work_handle_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_work						     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_del_work(struct xio_workqueue *work_queue,
+			   xio_work_handle_t *work);
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_work_pending							     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_work_pending(xio_work_handle_t *work)
+{
+	return work->flags & XIO_WORK_PENDING;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_delayed_work_pending						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_delayed_work_pending(xio_delayed_work_handle_t *dwork)
+{
+	return dwork->work.flags & XIO_WORK_PENDING;
+}
+
+#endif /* XIO_WORKQUEUE_H */
 

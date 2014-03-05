@@ -38,7 +38,10 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
-#define xio_ctx_timer_handle_t	void *
+#include <xio_schedwork.h>
+
+#define xio_ctx_work_t  xio_work_handle_t
+#define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
@@ -77,7 +80,7 @@ struct xio_context {
 	uint64_t			worker;
 	struct xio_statistics		stats;
 	struct xio_context_params	params;
-	struct xio_schedwork		*sched_work;
+	struct xio_workqueue		*workqueue;
 	struct list_head		ctx_list;  /* per context storage */
 
 	/* list of sessions using this connection */
@@ -123,18 +126,32 @@ static inline void xio_stat_inc(struct xio_statistics *stats, int counter)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_add							     */
+/* xio_ctx_add_delayed_work						     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_add(struct xio_context *ctx,
-		      int msec_duration, void *data,
-		      void (*timer_fn)(void *data),
-		      xio_ctx_timer_handle_t *handle_out);
+int xio_ctx_add_delayed_work(struct xio_context *ctx,
+			     int msec_duration, void *data,
+			     void (*timer_fn)(void *data),
+			     xio_ctx_delayed_work_t *work);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_del							     */
+/* xio_ctx_del_delayed_work					             */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_del(struct xio_context *ctx,
-		      xio_ctx_timer_handle_t timer_handle);
+int xio_ctx_del_delayed_work(struct xio_context *ctx,
+			     xio_ctx_delayed_work_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_add_work							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_add_work(struct xio_context *ctx,
+			     void *data,
+			     void (*function)(void *data),
+			     xio_ctx_work_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_del_delayed_work					             */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_del_work(struct xio_context *ctx,
+		     xio_ctx_work_t *work);
 
 
 #endif /*XIO_CONTEXT_H */

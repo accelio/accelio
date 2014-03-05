@@ -39,7 +39,7 @@
 #define XIO_TIMERS_LIST_H
 
 #include "xio_os.h"
-
+#include "xio_schedwork_priv.h"
 
 #define XIO_MS_IN_SEC   1000ULL
 #define XIO_US_IN_SEC   1000000ULL
@@ -47,46 +47,39 @@
 #define XIO_US_IN_MSEC  1000ULL
 #define XIO_NS_IN_MSEC  1000000ULL
 #define XIO_NS_IN_USEC  1000ULL
+#define SAFE_LIST	0;
 
 #define xio_timer_handle_t void *
 
-static int64_t timers_list_hertz;
-
 
 struct xio_timers_list {
-	struct list_head		timer_head;
+	struct list_head		timers_head;
+#ifdef SAFE_LIST
 	pthread_spinlock_t		lock;
 	int				pad;
+#endif
 };
 
-struct xio_timers_list_timer {
-	struct list_head		list;
-	uint64_t			time;
-	uint64_t			duration;
-	uint64_t			expire_time;
-	int				is_absolute_timer;
-	int				pad;
-	void				(*timer_fn)(void *data);
-	void				*data;
-	xio_timer_handle_t		handle_addr;
+enum timers_list_rc {
+	TIMERS_LIST_RC_ERROR			= -1,
+	TIMERS_LIST_RC_OK			=  0,
+	TIMERS_LIST_RC_EMPTY			=  1,
+	TIMERS_LIST_RC_BECAME_FIRST_ENTRY	=  2,
+	TIMERS_LIST_RC_NOT_EMPTY		=  3,
 };
 
-
-
-/*---------------------------------------------------------------------------*/
-/* xio_timers_list_ns_from_epoch					     */
-/*---------------------------------------------------------------------------*/
-static inline uint64_t xio_timers_list_ns_from_epoch(void)
+static inline void xio_timers_list_lock(struct xio_timers_list *timers_list)
 {
-	uint64_t	ns_from_epoch;
-	struct timeval	time_from_epoch;
+#ifdef SAFE_LIST
+	pthread_spin_lock(&timers_list->lock);
+#endif
+}
 
-	gettimeofday(&time_from_epoch, 0);
-
-	ns_from_epoch = ((time_from_epoch.tv_sec * XIO_NS_IN_SEC) +
-			 (time_from_epoch.tv_usec * XIO_NS_IN_USEC));
-
-	return ns_from_epoch;
+static inline void xio_timers_list_unlock(struct xio_timers_list *timers_list)
+{
+#ifdef SAFE_LIST
+	pthread_spin_unlock(&timers_list->lock);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -105,169 +98,120 @@ static inline uint64_t xio_timers_list_ns_current_get(void)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_timers_list_ns_monotonic_freq					     */
-/*---------------------------------------------------------------------------*/
-static inline uint64_t xio_timers_list_ns_monotonic_freq(void)
-{
-	uint64_t	ns_monotonic_freq;
-	struct timespec ts;
-
-	clock_getres(CLOCK_MONOTONIC, &ts);
-
-	ns_monotonic_freq = XIO_NS_IN_SEC/((ts.tv_sec * XIO_NS_IN_SEC) +
-			    ts.tv_nsec);
-
-	return ns_monotonic_freq;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_timers_list_init							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_init(struct xio_timers_list *timers_list)
 {
-	INIT_LIST_HEAD(&timers_list->timer_head);
-	timers_list_hertz = xio_timers_list_ns_monotonic_freq();
+	INIT_LIST_HEAD(&timers_list->timers_head);
+#ifdef SAFE_LIST
 	pthread_spin_init(&timers_list->lock,
 			  PTHREAD_PROCESS_PRIVATE);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_add							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_timers_list_add(struct xio_timers_list *timers_list,
-				       struct xio_timers_list_timer *timer)
+static inline enum timers_list_rc xio_timers_list_add(
+				       struct xio_timers_list *timers_list,
+				       struct xio_timers_list_entry *tentry)
 {
-	struct list_head		*timer_list = NULL;
-	struct xio_timers_list_timer	*timer_from_list;
+	struct list_head		*timer_list, *tmp_timer_list;
+	struct xio_timers_list_entry	*tentry_from_list;
 	int				found = 0;
+	enum timers_list_rc		retval = TIMERS_LIST_RC_OK;
 
-	pthread_spin_lock(&timers_list->lock);
-	list_for_each(timer_list, &timers_list->timer_head) {
-		timer_from_list = list_entry(timer_list,
-					     struct xio_timers_list_timer,
-					     list);
 
-		if (timer_from_list->expire_time > timer->expire_time) {
-			list_add_tail(&timer->list, timer_list);
+	list_for_each_safe(timer_list, tmp_timer_list,
+			   &timers_list->timers_head) {
+		tentry_from_list = list_entry(timer_list,
+					      struct xio_timers_list_entry,
+					      entry);
+
+		if (tentry->expires < tentry_from_list->expires) {
+			list_add_tail(&tentry->entry, &tentry_from_list->entry);
 			found = 1;
 			break; /* for timer iteration */
 		}
 	}
 	if (found == 0)
-		list_add_tail(&timer->list, &timers_list->timer_head);
-	pthread_spin_unlock(&timers_list->lock);
-}
+		list_add_tail(&tentry->entry, &timers_list->timers_head);
 
-/*---------------------------------------------------------------------------*/
-/* xio_timers_list_add_absolute						     */
-/*---------------------------------------------------------------------------*/
-static inline int xio_timers_list_add_absolute(
-			struct xio_timers_list *timers_list,
-			void (*timer_fn) (void *data),
-			void *data,
-			uint64_t ns_from_epoch,
-			xio_timer_handle_t *handle)
-{
-	struct xio_timers_list_timer *timer;
+	if (list_first_entry(&timers_list->timers_head,
+			     struct xio_timers_list_entry, entry) == tentry)
+		retval = TIMERS_LIST_RC_BECAME_FIRST_ENTRY;
 
-	timer = (struct xio_timers_list_timer *)ucalloc(1,
-					sizeof(struct xio_timers_list_timer));
-	if (timer == 0) {
-		errno = ENOMEM;
-		return -1;
-	}
-
-	timer->expire_time		= ns_from_epoch;
-	timer->is_absolute_timer	= 1;
-	timer->data			= data;
-	timer->timer_fn			= timer_fn;
-	timer->handle_addr		= handle;
-	xio_timers_list_add(timers_list, timer);
-
-	*handle = timer;
-
-	return 0;
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_add_duration						     */
 /*---------------------------------------------------------------------------*/
-static inline int xio_timers_list_add_duration(
+static inline enum timers_list_rc xio_timers_list_add_duration(
 			struct xio_timers_list *timers_list,
-			void (*timer_fn) (void *data),
-			void *data,
 			uint64_t ns_duration,
-			xio_timer_handle_t *handle)
+			struct xio_timers_list_entry *tentry)
 {
-	struct xio_timers_list_timer	*timer;
+	tentry->expires			=
+		(xio_timers_list_ns_current_get() + ns_duration);
 
-	timer = (struct xio_timers_list_timer *)ucalloc(1,
-					sizeof(struct xio_timers_list_timer));
-	if (timer == 0) {
-		errno = ENOMEM;
-		return -1;
-	}
-	timer->time		 = xio_timers_list_ns_current_get();
-	timer->duration		 = ns_duration;
-	timer->expire_time	 = timer->time + ns_duration;
-	timer->is_absolute_timer = 0;
-	timer->data		 = data;
-	timer->timer_fn		 = timer_fn;
-	timer->handle_addr	 = handle;
-
-	xio_timers_list_add(timers_list, timer);
-
-	*handle = timer;
-
-	return 0;
+	return xio_timers_list_add(timers_list, tentry);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_del							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_timers_list_del(struct xio_timers_list *timers_list,
-				       xio_timer_handle_t timer_handle)
+static inline enum timers_list_rc xio_timers_list_del(
+				       struct xio_timers_list *timers_list,
+				       struct xio_timers_list_entry *tentry)
 {
-	struct xio_timers_list_timer *timer =
-				(struct xio_timers_list_timer *)timer_handle;
+	enum timers_list_rc	      retval = TIMERS_LIST_RC_OK;
 
+	if (list_empty(&timers_list->timers_head)) {
+		retval = TIMERS_LIST_RC_EMPTY;
+		goto unlock;
+	}
 
-	pthread_spin_lock(&timers_list->lock);
-	list_del_init(&timer->list);
-	ufree(timer);
-	pthread_spin_unlock(&timers_list->lock);
+	list_del_init(&tentry->entry);
+
+	if (list_empty(&timers_list->timers_head))
+		retval = TIMERS_LIST_RC_EMPTY;
+	else
+		retval = TIMERS_LIST_RC_NOT_EMPTY;
+unlock:
+	return retval;
 }
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_close						     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_close(struct xio_timers_list *timers_list)
 {
-	struct xio_timers_list_timer	*timer_list, *next_timer_list;
+	struct xio_timers_list_entry	*tentry;
 
-	pthread_spin_lock(&timers_list->lock);
-	list_for_each_entry_safe(timer_list, next_timer_list,
-				 &timers_list->timer_head,
-				 list) {
-		list_del_init(&timer_list->list);
-		ufree(timer_list);
+	xio_timers_list_lock(timers_list);
+	while (!list_empty(&timers_list->timers_head)) {
+		tentry = list_first_entry(
+			&timers_list->timers_head,
+			struct xio_timers_list_entry, entry);
+		list_del_init(&tentry->entry);
 	}
-	pthread_spin_unlock(&timers_list->lock);
+	xio_timers_list_unlock(timers_list);
 
+#ifdef SAFE_LIST
 	pthread_spin_destroy(&timers_list->lock);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_timers_list_expire_time						     */
+/* xio_timers_list_expires						     */
 /*---------------------------------------------------------------------------*/
-static inline uint64_t xio_timers_list_expire_time(
+static inline uint64_t xio_timers_list_expires(
 			struct xio_timers_list *timers_list,
-			xio_timer_handle_t timer_handle)
+			struct xio_timers_list_entry *tentry)
 {
-	struct xio_timers_list_timer *timer =
-			(struct xio_timers_list_timer *)timer_handle;
-
-	return timer->expire_time;
+	return tentry->expires;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -275,14 +219,9 @@ static inline uint64_t xio_timers_list_expire_time(
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_pre_dispatch(
 			struct xio_timers_list *timers_list,
-			xio_timer_handle_t timer_handle)
+			struct xio_timers_list_entry *tentry)
 {
-	struct xio_timers_list_timer *timer =
-			(struct xio_timers_list_timer *)timer_handle;
-
-	memset(timer->handle_addr, 0, sizeof(struct timerlist_timer *));
-
-	list_del_init(&timer->list);
+	list_del_init(&tentry->entry);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -290,14 +229,8 @@ static inline void xio_timers_list_pre_dispatch(
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_post_dispatch(
 			struct xio_timers_list *timers_list,
-			xio_timer_handle_t timer_handle)
+			struct xio_timers_list_entry *tentry)
 {
-	struct xio_timers_list_timer *timer =
-			(struct xio_timers_list_timer *)timer_handle;
-
-	pthread_spin_lock(&timers_list->lock);
-	ufree(timer);
-	pthread_spin_unlock(&timers_list->lock);
 }
 
 /*
@@ -310,39 +243,29 @@ static inline void xio_timers_list_post_dispatch(
 static inline int64_t xio_timerlist_ns_duration_to_expire(
 			struct xio_timers_list *timers_list)
 {
-	struct xio_timers_list_timer	*timer_from_list;
-	volatile int64_t		current_time;
-	volatile int64_t		ns_duration_to_expire;
+	struct xio_timers_list_entry	*tentry;
+	int64_t				current_time;
+	int64_t				ns_duration_to_expire;
 
 	/*
 	 * empty list, no expire
 	 */
-	pthread_spin_lock(&timers_list->lock);
-	if (list_empty(&timers_list->timer_head)) {
-		pthread_spin_unlock(&timers_list->lock);
+	if (list_empty(&timers_list->timers_head))
 		return -1;
-	}
 
-	timer_from_list = list_first_entry(
-			&timers_list->timer_head,
-			struct xio_timers_list_timer, list);
+	tentry = list_first_entry(
+			&timers_list->timers_head,
+			struct xio_timers_list_entry, entry);
 
-	pthread_spin_unlock(&timers_list->lock);
-
-	if (timer_from_list->is_absolute_timer)
-		current_time = xio_timers_list_ns_from_epoch();
-	else
-		current_time = xio_timers_list_ns_current_get();
+	current_time = xio_timers_list_ns_current_get();
 
 	/*
 	 * timer at head of list is expired, zero ns required
 	 */
-	if (timer_from_list->expire_time < current_time)
+	if (tentry->expires <= current_time)
 		return 0;
 
-	ns_duration_to_expire =
-		(timer_from_list->expire_time - current_time) +
-			(XIO_NS_IN_SEC/timers_list_hertz);
+	ns_duration_to_expire = (tentry->expires - current_time);
 
 	return ns_duration_to_expire;
 }
@@ -355,39 +278,46 @@ static inline int64_t xio_timerlist_ns_duration_to_expire(
 /*---------------------------------------------------------------------------*/
 static inline void xio_timers_list_expire(struct xio_timers_list *timers_list)
 {
-	struct xio_timers_list_timer	*timer_from_list;
-	struct list_head		*pos;
-	struct list_head		*next;
-	uint64_t			current_time_from_epoch;
-	uint64_t			current_monotonic_time;
+	struct xio_timers_list_entry	*tentry;
 	uint64_t			current_time;
+	xio_delayed_work_handle_t	*dwork;
+	xio_work_handle_t		*work;
 
-	current_monotonic_time	= xio_timers_list_ns_current_get();
-	current_time		= xio_timers_list_ns_from_epoch();
-	current_time_from_epoch = current_time;
+	xio_timers_list_lock(timers_list);
+	while (!list_empty(&timers_list->timers_head)) {
+		tentry = list_first_entry(&timers_list->timers_head,
+			     struct xio_timers_list_entry, entry);
 
-	list_for_each_safe(pos, next, &timers_list->timer_head) {
-		timer_from_list = list_entry(pos,
-					     struct xio_timers_list_timer,
-					     list);
+		current_time = xio_timers_list_ns_current_get();
 
-		current_time = (timer_from_list->is_absolute_timer ?
-				current_time_from_epoch :
-				current_monotonic_time);
-
-		if (timer_from_list->expire_time <= current_time) {
+		if (tentry->expires <= current_time) {
 			xio_timers_list_pre_dispatch(timers_list,
-						     timer_from_list);
+						     tentry);
 
-			timer_from_list->timer_fn(timer_from_list->data);
+			xio_timers_list_unlock(timers_list);
+			dwork = container_of(tentry,
+					     xio_delayed_work_handle_t,
+					     timer);
+			work = &dwork->work;
+			work->flags &= ~XIO_WORK_PENDING;
+
+			work->function(work->data);
 
 			xio_timers_list_post_dispatch(timers_list,
-						      timer_from_list);
+						      tentry);
+			xio_timers_list_lock(timers_list);
 		} else {
 			break; /* for timer iteration */
 		}
 	}
+	xio_timers_list_unlock(timers_list);
 }
+
+static inline int xio_timers_list_is_empty(struct xio_timers_list *timers_list)
+{
+	return list_empty(&timers_list->timers_head);
+}
+
 
 #endif /* XIO_TIMERS_LIST_H */
 
