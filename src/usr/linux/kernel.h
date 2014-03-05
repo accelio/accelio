@@ -52,6 +52,13 @@ extern const char hex_asc[];
 
 #endif
 
+#define __MUTEX_INITIALIZER(lockname)				\
+		{						\
+			.lock = PTHREAD_MUTEX_INITIALIZER	\
+		}						\
+
+#define DEFINE_MUTEX(mutexname) \
+	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
 
 struct mutex {
 	pthread_mutex_t lock;
