@@ -56,10 +56,8 @@ struct xio_transport  *transport_tbl[] = {
 
 size_t transport_tbl_sz = (sizeof(transport_tbl) / sizeof(transport_tbl[0]));
 
-
-static pthread_once_t ctor_key_once = PTHREAD_ONCE_INIT;
-static pthread_once_t dtor_key_once = PTHREAD_ONCE_INIT;
-static struct kref ini_kref;
+static volatile int32_t	ini_refcnt = 0;
+static DEFINE_MUTEX(ini_mutex);
 
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
@@ -68,7 +66,7 @@ static void xio_dtor()
 {
 	size_t i;
 
-	for(i = 0; i < transport_tbl_sz; i++) {
+	for (i = 0; i < transport_tbl_sz; i++) {
 		if (transport_tbl[i]->release)
 			transport_tbl[i]->release(transport_tbl[i]);
 
@@ -78,15 +76,6 @@ static void xio_dtor()
 		xio_unreg_transport(transport_tbl[i]);
 	}
 	xio_thread_data_destruct();
-	ctor_key_once = PTHREAD_ONCE_INIT;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_dref								     */
-/*---------------------------------------------------------------------------*/
-static void xio_dref(struct kref *ref)
-{
-	pthread_once(&dtor_key_once, xio_dtor);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -98,19 +87,16 @@ static void xio_ctor()
 
 	page_size = sysconf(_SC_PAGESIZE);
 	g_mhz = get_cpu_mhz(0);
-	kref_init(&ini_kref);
 	xio_thread_data_construct();
 	sessions_store_construct();
 	conns_store_construct();
 
-	for(i = 0; i < transport_tbl_sz; i++) {
+	for (i = 0; i < transport_tbl_sz; i++) {
 		xio_reg_transport(transport_tbl[i]);
 
 		if (transport_tbl[i]->ctor)
 			transport_tbl[i]->ctor();
 	}
-
-	dtor_key_once = PTHREAD_ONCE_INIT;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -118,17 +104,23 @@ static void xio_ctor()
 /*---------------------------------------------------------------------------*/
 __attribute__((constructor)) void xio_init(void)
 {
-	if (ctor_key_once != PTHREAD_ONCE_INIT)
-		kref_get(&ini_kref);
-
-	pthread_once(&ctor_key_once, xio_ctor);
+	mutex_lock(&ini_mutex);
+	if (++ini_refcnt == 1)
+		xio_ctor();
+	mutex_unlock(&ini_mutex);
 }
 
-__attribute__((destructor))   void xio_shutdown(void)
+__attribute__((destructor))  void xio_shutdown(void)
 {
-	if (ctor_key_once == PTHREAD_ONCE_INIT)
+	mutex_lock(&ini_mutex);
+	if (ini_refcnt <= 0) {
+		ERROR_LOG("reference count < 0\n");
+		abort();
+		mutex_unlock(&ini_mutex);
 		return;
-
-	kref_put(&ini_kref, xio_dref);
+	}
+	if (--ini_refcnt == 0)
+		xio_dtor();
+	mutex_unlock(&ini_mutex);
 }
 
