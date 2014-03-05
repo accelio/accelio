@@ -50,52 +50,55 @@
 #define EXTRA_QDEPTH		128
 
 struct portals_vec {
-	int			vec_len;
-	int			pad;
-	const char		**vec;
+	int				vec_len;
+	int				pad;
+	const char			**vec;
 };
 
 struct  connection_entry {
-	struct xio_connection			*connection;
-	int					disconnected;
-	int					pad;
-	TAILQ_ENTRY(connection_entry)		conns_list_entry;
+	struct xio_connection		*connection;
+	int				disconnected;
+	int				pad;
+	TAILQ_ENTRY(connection_entry)	conns_list_entry;
 };
 
 struct session_entry {
-	struct xio_session			*session;
-	TAILQ_HEAD(, connection_entry)		conns_list;
-	TAILQ_ENTRY(session_entry)		sessions_list_entry;
+	struct xio_session		*session;
+	TAILQ_HEAD(, connection_entry)	conns_list;
+	TAILQ_ENTRY(session_entry)	sessions_list_entry;
 };
 
 struct thread_data {
-	char			portal[64];
-	int			affinity;
-	int			pad;
-	struct obj_pool		*rsp_pool;
-	struct obj_pool		*in_iobuf_pool;
-	struct obj_pool		*out_iobuf_pool;
-	struct xio_context	*ctx;
-	struct server_data	*server_data;
-	pthread_t		thread_id;
+	char				portal[64];
+	int				affinity;
+	int				pad;
+	struct obj_pool			*rsp_pool;
+	struct obj_pool			*in_iobuf_pool;
+	struct obj_pool			*out_iobuf_pool;
+	struct xio_context		*ctx;
+	struct server_data		*server_data;
+	pthread_t			thread_id;
 };
 
 /* server private data */
 struct server_data {
-	struct xio_context	*ctx;
-	int			threads_num;
-	int			queue_depth;
-	int			client_dlen;
-	int			server_dlen;
-	int			disconnect_nr;
-	volatile int		nsent;
-	int			disconnect;
-	pthread_spinlock_t	lock;
+	struct xio_context		*ctx;
+	int				threads_num;
+	int				queue_depth;
+	int				client_dlen;
+	int				server_dlen;
+	int				disconnect_nr;
+	volatile int			nsent;
+	int				disconnect;
+	pthread_spinlock_t		lock;
 	TAILQ_HEAD(, session_entry)	sessions_list;
-	pthread_barrier_t	barr;
-	struct thread_data	*tdata;
+	pthread_barrier_t		barr;
+	struct thread_data		*tdata;
 };
 
+/*---------------------------------------------------------------------------*/
+/* portals_get								     */
+/*---------------------------------------------------------------------------*/
 static struct portals_vec *portals_get(struct server_data *server_data,
 				const char *uri, void *user_context)
 {
@@ -112,6 +115,9 @@ static struct portals_vec *portals_get(struct server_data *server_data,
 	return portals;
 }
 
+/*---------------------------------------------------------------------------*/
+/* portals_free								     */
+/*---------------------------------------------------------------------------*/
 static void portals_free(struct portals_vec *portals)
 {
 	int			i;
@@ -122,6 +128,9 @@ static void portals_free(struct portals_vec *portals)
 	free(portals);
 }
 
+/*---------------------------------------------------------------------------*/
+/* out_iobuf_obj_init							     */
+/*---------------------------------------------------------------------------*/
 static void out_iobuf_obj_init(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -130,6 +139,9 @@ static void out_iobuf_obj_init(void *user_context, void *obj)
 	*iobuf = xio_alloc(tdata->server_data->server_dlen);
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_request callback							     */
+/*---------------------------------------------------------------------------*/
 static void in_iobuf_obj_init(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -138,6 +150,9 @@ static void in_iobuf_obj_init(void *user_context, void *obj)
 	*iobuf = xio_alloc(tdata->server_data->client_dlen);
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_request callback							     */
+/*---------------------------------------------------------------------------*/
 static void iobuf_obj_free(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -145,27 +160,14 @@ static void iobuf_obj_free(void *user_context, void *obj)
 	xio_free(iobuf);
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_request callback							     */
+/*---------------------------------------------------------------------------*/
 static void msg_obj_init(void *user_context, void *obj)
 {
-	struct xio_msg		*rsp	= obj;
-	struct xio_buf		**iobuf;
-	struct thread_data	*tdata	= user_context;
+	struct xio_msg *rsp = obj;
 
-	if (tdata->server_data->server_dlen) {
-		iobuf = obj_pool_get(tdata->out_iobuf_pool);
-
-		rsp->out.data_iov[0].iov_base	= (*iobuf)->addr;
-		rsp->out.data_iov[0].iov_len	= (*iobuf)->length;
-		rsp->out.data_iov[0].mr		= (*iobuf)->mr;
-		rsp->out.data_iov[0].user_context = iobuf;
-		rsp->out.data_iovlen		= 1;
-	} else {
-		rsp->out.data_iov[0].iov_base	= NULL;
-		rsp->out.data_iov[0].iov_len	= 0;
-		rsp->out.data_iov[0].mr		= NULL;
-		rsp->out.data_iov[0].user_context = NULL;
-		rsp->out.data_iovlen		= 1;
-	}
+	rsp->out.data_iovlen		= 0;
 	rsp->out.header.iov_len		= 0;
 	rsp->in.data_iovlen		= 0;
 	rsp->in.header.iov_len		= 0;
@@ -196,15 +198,26 @@ static int on_request(struct xio_session *session,
 
 	rsp->in.header.iov_len		= 0;
 	rsp->in.data_iovlen		= 0;
-	rsp->out.header.iov_len		= 0;
-	rsp->out.data_iov[0].iov_len	= tdata->server_data->server_dlen;
-	rsp->out.data_iovlen		=
-				tdata->server_data->server_dlen ? 1 : 0;
+
+	if (tdata->server_data->server_dlen) {
+		iobuf = obj_pool_get(tdata->out_iobuf_pool);
+
+		rsp->out.data_iov[0].iov_base	= (*iobuf)->addr;
+		rsp->out.data_iov[0].iov_len	=
+				tdata->server_data->server_dlen;
+		rsp->out.data_iov[0].mr		= (*iobuf)->mr;
+		rsp->out.data_iov[0].user_context = iobuf;
+		rsp->out.data_iovlen		= 1;
+	} else {
+		rsp->out.data_iovlen		= 0;
+	}
+	rsp->out.header.iov_len	= 0;
 
 	xio_send_response(rsp);
 
 	pthread_spin_lock(&tdata->server_data->lock);
 	tdata->server_data->nsent++;
+
 #if  TEST_DISCONNECT
 	if (tdata->server_data->nsent == tdata->server_data->disconnect_nr) {
 		struct session_entry *session_entry,
@@ -221,12 +234,14 @@ static int on_request(struct xio_session *session,
 						   &session_entry->conns_list,
 						   conns_list_entry) {
 					if (!connection_entry->disconnected) {
-					    connection_entry->disconnected = 1;
-					    DEBUG("server disconnect. " \
+						connection_entry->disconnected
+									   = 1;
+						DEBUG(
+						  "server disconnect. " \
 						  "session:%p, connection:%p\n",
 						  session,
 						  connection_entry->connection);
-					    xio_disconnect(
+						xio_disconnect(
 						  connection_entry->connection);
 					}
 				}
@@ -248,15 +263,13 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct thread_data	*tdata = cb_user_context;
 	struct xio_buf		**iobuf;
 
-
 	iobuf = obj_pool_get(tdata->in_iobuf_pool);
 
-	msg->in.data_iovlen = 1;
-
-	msg->in.data_iov[0].iov_base	= (*iobuf)->addr;
-	msg->in.data_iov[0].iov_len	= (*iobuf)->length;
-	msg->in.data_iov[0].mr		= (*iobuf)->mr;
-	msg->in.data_iov[0].user_context = iobuf;
+	msg->in.data_iovlen			= 1;
+	msg->in.data_iov[0].iov_base		= (*iobuf)->addr;
+	msg->in.data_iov[0].iov_len		= (*iobuf)->length;
+	msg->in.data_iov[0].mr			= (*iobuf)->mr;
+	msg->in.data_iov[0].user_context	= iobuf;
 
 	return 0;
 }
@@ -270,6 +283,17 @@ static int on_send_rsp_complete(struct xio_session *session,
 {
 	struct thread_data	*tdata = cb_prv_data;
 
+	if (tdata->server_data->server_dlen) {
+		obj_pool_put(tdata->out_iobuf_pool,
+			     rsp->out.data_iov[0].user_context);
+
+		rsp->out.data_iov[0].iov_base		= NULL;
+		rsp->out.data_iov[0].iov_len		= 0;
+		rsp->out.data_iov[0].mr			= NULL;
+		rsp->out.data_iov[0].user_context	= NULL;
+	}
+	rsp->out.data_iovlen				= 0;
+
 	/* can be safely freed */
 	obj_pool_put(tdata->rsp_pool, rsp);
 
@@ -280,12 +304,23 @@ static int on_send_rsp_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
+		enum xio_status error, struct xio_msg  *rsp,
 		void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
-	obj_pool_put(tdata->rsp_pool, msg);
+	if (tdata->server_data->server_dlen) {
+		obj_pool_put(tdata->out_iobuf_pool,
+			     rsp->out.data_iov[0].user_context);
+
+		rsp->out.data_iov[0].iov_base		= NULL;
+		rsp->out.data_iov[0].iov_len		= 0;
+		rsp->out.data_iov[0].mr			= NULL;
+		rsp->out.data_iov[0].user_context	= NULL;
+	}
+	rsp->out.data_iovlen				= 0;
+
+	obj_pool_put(tdata->rsp_pool, rsp);
 
 	return 0;
 }
@@ -303,7 +338,7 @@ static struct xio_session_ops  portal_server_ops = {
 };
 
 /*---------------------------------------------------------------------------*/
-/* worker thread callback						     */
+/* portal_server_cb							     */
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
@@ -372,6 +407,9 @@ cleanup:
 	return NULL;
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_new_connection							     */
+/*---------------------------------------------------------------------------*/
 static int on_new_connection(struct xio_session *session,
 			     struct xio_connection *connection,
 			     void *cb_user_context)
@@ -397,6 +435,9 @@ static int on_new_connection(struct xio_session *session,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_connection_teardown						     */
+/*---------------------------------------------------------------------------*/
 static int on_connection_teardown(struct xio_session *session,
 				  struct xio_connection *connection,
 				  void *cb_user_context)
@@ -436,6 +477,9 @@ static int on_connection_teardown(struct xio_session *session,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* on_session_teardown							     */
+/*---------------------------------------------------------------------------*/
 static int on_session_teardown(struct xio_session *session,
 			       void *cb_user_context)
 {

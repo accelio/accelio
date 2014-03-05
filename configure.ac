@@ -160,6 +160,7 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
+	subdirs2="$subdirs2 regression/usr/reg_basic_mt";
 fi
 
 ##########################################################################

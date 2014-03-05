@@ -84,7 +84,8 @@ void rand_params(struct program_vars *vars)
 	int var;
 	int max_dlen;
 	int max_qdepth;
-	int threads_num;
+	int client_threads_num;
+	int server_threads_num;
 
 	time((time_t *)&vars->seed);
 	/*
@@ -97,15 +98,16 @@ void rand_params(struct program_vars *vars)
 		var = random() % 10;
 	} while (var == 0);
 	sprintf(vars->server_threads_num, "%d", var);
+	server_threads_num = var;
 
 	/* threads number [1,24] */
 	do {
 		var = random() % 10;
 	} while (var == 0);
-	sprintf(vars->client_threads_num, "%d", var);
-	threads_num = var;
+	client_threads_num = var;
+	sprintf(vars->client_threads_num, "%d", client_threads_num);
 
-	max_qdepth = (threads_num > 2) ? 100 : 300;
+	max_qdepth = (client_threads_num > 2) ? 100 : 300;
 
 	/* queue_depth [1,300] */
 	do {
@@ -113,8 +115,8 @@ void rand_params(struct program_vars *vars)
 	} while (var == 0);
 	sprintf(vars->queue_depth, "%d", var);
 
-	if (vars->test_num%2)
-		max_dlen = (threads_num > 3) ? 262144 : 524288;
+	if (vars->test_num % 2)
+		max_dlen = (client_threads_num > 3) ? 262144 : 524288;
 	else
 		max_dlen = 10000;
 

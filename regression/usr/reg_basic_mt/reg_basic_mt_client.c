@@ -51,8 +51,6 @@
 struct  connection_entry {
 	struct xio_connection		*connection;
 	struct thread_data		*tdata;
-	uint64_t			nsent;
-	uint64_t			nrecv;
 	int				disconnected;
 	int				cid;
 	struct session_entry		*session_entry;
@@ -91,6 +89,9 @@ struct client_data {
 	TAILQ_HEAD(, session_entry)	sessions_list;
 };
 
+/*---------------------------------------------------------------------------*/
+/* obt_iobuf_obj_init							     */
+/*---------------------------------------------------------------------------*/
 static void out_iobuf_obj_init(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -99,6 +100,9 @@ static void out_iobuf_obj_init(void *user_context, void *obj)
 	*iobuf = xio_alloc(tdata->client_data->client_dlen);
 }
 
+/*---------------------------------------------------------------------------*/
+/* in_iobuf_obj_init							     */
+/*---------------------------------------------------------------------------*/
 static void in_iobuf_obj_init(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -107,6 +111,9 @@ static void in_iobuf_obj_init(void *user_context, void *obj)
 	*iobuf = xio_alloc(tdata->client_data->server_dlen);
 }
 
+/*---------------------------------------------------------------------------*/
+/* iobuf_obj_free							     */
+/*---------------------------------------------------------------------------*/
 static void iobuf_obj_free(void *user_context, void *obj)
 {
 	struct xio_buf		**iobuf	= obj;
@@ -114,6 +121,9 @@ static void iobuf_obj_free(void *user_context, void *obj)
 	xio_free(iobuf);
 }
 
+/*---------------------------------------------------------------------------*/
+/* msg_obj_init								     */
+/*---------------------------------------------------------------------------*/
 static void msg_obj_init(void *user_context, void *obj)
 {
 	struct xio_msg		*req	= obj;
@@ -227,7 +237,6 @@ static void *worker_thread(void *data)
 		    tdata->client_data->disconnect_nr) {
 			req = obj_pool_get(tdata->req_pool);
 			xio_send_request(connection_entry->connection, req);
-			connection_entry->nsent++;
 			tdata->client_data->nsent++;
 		}
 	}
@@ -240,7 +249,7 @@ static void *worker_thread(void *data)
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
 	/* normal exit phase */
-	DEBUG("exit signaled\n");
+	DEBUG("client exit signaled\n");
 
 	obj_pool_free(tdata->req_pool, NULL, NULL);
 	if (tdata->client_data->client_dlen)
@@ -251,7 +260,7 @@ static void *worker_thread(void *data)
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
 
-	DEBUG("thread exit\n");
+	DEBUG("client thread exit\n");
 
 	return NULL;
 }
@@ -400,7 +409,6 @@ static int on_response(struct xio_session *session,
 #if  TEST_DISCONNECT
 	pthread_spin_lock(&tdata->client_data->lock);
 	tdata->client_data->nrecv++;
-	conn_entry->nrecv++;
 	if (tdata->client_data->nrecv == tdata->client_data->disconnect_nr) {
 		TAILQ_FOREACH(connection_entry,
 			      &session_entry->conns_list,
@@ -451,7 +459,6 @@ static int on_response(struct xio_session *session,
 
 	xio_send_request(conn_entry->connection, rsp);
 	pthread_spin_lock(&tdata->client_data->lock);
-	conn_entry->nsent++;
 	tdata->client_data->nsent++;
 	pthread_spin_unlock(&tdata->client_data->lock);
 

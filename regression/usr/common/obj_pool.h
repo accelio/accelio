@@ -50,6 +50,7 @@ extern "C" {
 struct obj_pool {
 	void		**stack_ptr;
 	void		**stack_end;
+	void		*data;
 
 	/* pool of tasks */
 	void		**array;
@@ -137,10 +138,11 @@ static inline struct obj_pool *obj_pool_init(int max, size_t size,
 		data = ((char *)data) + size;
 	}
 
+	q->data = q->array[0];
 	q->stack_ptr = q->stack;
 	q->stack_end = (q->stack_ptr + max);
-	q->max = max;
-	q->nr = max;
+	q->max	= max;
+	q->nr	= max;
 
 	return q;
 }
@@ -152,14 +154,19 @@ static inline void obj_pool_free(struct obj_pool *q,
 				 void *user_context,
 				 void (*obj_close)(void *, void *))
 {
-	int			i;
+	int i;
 
-	for (i = 0; i < q->max; i++) {
-		if (obj_close)
+	if (q->nr != q->max)
+		fprintf(stderr, "obj_pool: destroying pool while " \
+			"missing objects. %d/%d\n", q->nr, q->max);
+
+	if (obj_close) {
+		for (i = 0; i < q->max; i++) {
 			obj_close(user_context, q->array[i]);
+			q->array[i] = NULL;
+		}
 	}
-
-	free(q->array[0]);
+	free(q->data);
 	free(q);
 }
 
