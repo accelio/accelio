@@ -41,7 +41,8 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./rdma/xio_rdma_mempool.h		\
 			./rdma/xio_rdma_transport.h		\
 			./rdma/xio_rdma_utils.h			\
-			../common/xio_schedwork.h		\
+			../common/xio_workqueue.h		\
+			../common/xio_workqueue_priv.h		\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
 			../common/xio_conn.h			\
@@ -82,7 +83,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_usr_utils.c		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
-			./xio/xio_schedwork.c		\
+			./xio/xio_workqueue.c		\
 			./rdma/xio_rdma_mempool.c	\
 			./rdma/xio_rdma_utils.c		\
 			./rdma/xio_rdma_verbs.c		\

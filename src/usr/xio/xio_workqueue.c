@@ -37,7 +37,7 @@
  */
 #include "xio_os.h"
 
-#include "xio_schedwork.h"
+#include "xio_workqueue.h"
 #include "xio_log.h"
 #include "xio_observer.h"
 #include "xio_context.h"

@@ -40,7 +40,6 @@
 #include "xio_observer.h"
 #include "xio_common.h"
 #include "xio_context.h"
-#include "xio_schedwork.h"
 #include "get_clock.h"
 #include "xio_ev_loop.h"
 

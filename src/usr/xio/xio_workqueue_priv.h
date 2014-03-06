@@ -35,8 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_SCHEDWORK_PRIV_H
-#define XIO_SCHEDWORK_PRIV_H
+#ifndef XIO_WORKQUEUE_PRIV_H
+#define XIO_WORKQUEUE_PRIV_H
 
 enum xio_work_flags {
 	XIO_WORK_PENDING	=  1 << 0
@@ -59,4 +59,4 @@ typedef struct xio_delayed_work_struct {
 	struct xio_timers_list_entry	timer;
 } xio_delayed_work_handle_t;
 
-#endif /* XIO_SCHEDWORK_PRIV_H */
+#endif /* XIO_WORKQUEUE_PRIV_H */

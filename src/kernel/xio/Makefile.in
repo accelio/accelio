@@ -10,7 +10,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/common/xio_observer.h \
 	io_context.c xio_ev_loop.c \
 	xio_init.c xio_mem.c xio_task.c xio_kernel_utils.c \
-	xio_schedwork.c \
+	xio_workqueue.c \
 	../../common/xio_conn.c \
 	../../common/xio_conns_store.c \
 	../../common/xio_options.c \
@@ -78,7 +78,7 @@ xio-objs := \
 	xio_mem.o \
 	xio_task.o \
 	xio_kernel_utils.o \
-	xio_schedwork.o \
+	xio_workqueue.o \
 	../../common/xio_conn.o \
 	../../common/xio_conns_store.o \
 	../../common/xio_options.o \

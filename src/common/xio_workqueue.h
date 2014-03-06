@@ -38,7 +38,7 @@
 #ifndef XIO_WORKQUEUE_H
 #define XIO_WORKQUEUE_H
 
-#include "xio_schedwork_priv.h"
+#include "xio_workqueue_priv.h"
 
 /* opaque type */
 struct xio_workqueue;
