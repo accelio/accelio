@@ -546,11 +546,11 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 	connection->state = transition->next_state;
 
 	if (connection->state == XIO_CONNECTION_STATE_TIME_WAIT) {
-		int retval = xio_ctx_timer_add(
+		int retval = xio_ctx_add_delayed_work(
 				connection->ctx,
 				2, connection,
 				xio_close_time_wait,
-				&connection->fin_time_hndl);
+				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
 			return retval;
@@ -633,11 +633,11 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 	}
 
 	if (connection->state == XIO_CONNECTION_STATE_TIME_WAIT) {
-		retval = xio_ctx_timer_add(
+		retval = xio_ctx_add_delayed_work(
 				connection->ctx,
 				2, connection,
 				xio_close_time_wait,
-				&connection->fin_time_hndl);
+				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
 			return retval;
@@ -659,8 +659,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_vmsg *vmsg = &msg->in;
 
 
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
-		return 0;
+//	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
+//		fprintf(stderr, "RRRRRRRRRRRRRRRRRRRRRRRRRR\n");
+//		return 0;
+//	}
 
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)

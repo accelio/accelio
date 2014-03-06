@@ -920,10 +920,9 @@ static void xio_conn_release(void *data)
 	if (!conn->is_listener)
 		xio_conns_store_remove(conn->cid);
 
-	if (conn->close_time_hndl) {
-		xio_ctx_timer_del(conn->transport_hndl->ctx,
-				  conn->close_time_hndl);
-		conn->close_time_hndl  = NULL;
+	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
+		xio_ctx_del_delayed_work(conn->transport_hndl->ctx,
+					 &conn->close_time_hndl);
 	}
 
 	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
@@ -950,6 +949,12 @@ static void xio_on_context_close(struct xio_conn *conn,
 	/* shut down the context and its dependent without waiting */
 	if (conn->transport->context_shutdown)
 		conn->transport->context_shutdown(conn->transport_hndl, ctx);
+
+	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
+			xio_ctx_del_delayed_work(
+					ctx,
+					&conn->close_time_hndl);
+	}
 
 	/* at that stage the conn->transport_hndl no longer exist */
 	conn->transport_hndl = NULL;
@@ -1118,6 +1123,14 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 	}
 	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
+
+	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
+		ERROR_LOG("FFFFFFFFFFFFFFF\n");
+		if (conn->transport_hndl)
+			xio_ctx_del_delayed_work(
+					conn->transport_hndl->ctx,
+					&conn->close_time_hndl);
+	}
 
 	xio_conn_initial_pool_free(conn);
 
@@ -1428,9 +1441,9 @@ struct xio_conn *xio_conn_open(
 						    observer);
 			xio_conn_hash_observer(conn, observer, oid);
 		}
-		if (conn->close_time_hndl) {
-			xio_ctx_timer_del(ctx, conn->close_time_hndl);
-			conn->close_time_hndl  = NULL;
+		if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
+			xio_ctx_del_delayed_work(ctx,
+						 &conn->close_time_hndl);
 			kref_init(&conn->kref);
 		} else {
 			xio_conn_addref(conn);
@@ -1646,7 +1659,7 @@ static void xio_conn_delayed_close(struct kref *kref)
 		xio_conn_release(conn);
 		break;
 	default:
-		retval = xio_ctx_timer_add(
+		retval = xio_ctx_add_delayed_work(
 				conn->transport_hndl->ctx,
 				XIO_CONN_CLOSE_TIMEOUT, conn,
 				xio_conn_release,

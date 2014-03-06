@@ -641,12 +641,6 @@ int xio_send_request(struct xio_connection *connection,
 		return -1;
 	}
 
-	if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
-		     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-		     connection->state != XIO_CONNECTION_STATE_INIT)) {
-		xio_set_error(ESHUTDOWN);
-		return -1;
-	}
 
 	if (unlikely(xio_session_not_queueing(connection->session) &&
 		     !xio_is_connection_online(connection))) {
@@ -668,6 +662,20 @@ int xio_send_request(struct xio_connection *connection,
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid out message\n");
 			return -1;
+		}
+
+		if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
+			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+			     connection->state != XIO_CONNECTION_STATE_INIT)) {
+			xio_set_error(ESHUTDOWN);
+			xio_session_notify_msg_error(connection, pmsg,
+						     XIO_E_MSG_FLUSHED);
+			if (pmsg->next == NULL) {
+				pmsg = pmsg->next;
+				continue;
+			} else {
+				return -1;
+			}
 		}
 
 		vmsg = &pmsg->out;
@@ -725,6 +733,8 @@ int xio_send_response(struct xio_msg *msg)
 		     connection->state != XIO_CONNECTION_STATE_INIT)) {
 			xio_set_error(ESHUTDOWN);
 			xio_tasks_pool_put(task);
+			xio_session_notify_msg_error(connection, pmsg,
+						     XIO_E_MSG_FLUSHED);
 			if (pmsg->next == NULL) {
 				pmsg = pmsg->next;
 				continue;
@@ -900,6 +910,19 @@ static void xio_connection_release(struct kref *kref)
 	struct xio_connection *connection = container_of(kref,
 							 struct xio_connection,
 							 kref);
+
+	if (xio_is_work_pending(&connection->hello_work))
+		xio_ctx_del_work(connection->ctx,
+				 &connection->hello_work);
+
+	if (xio_is_delayed_work_pending(&connection->fin_delayed_work))
+		xio_ctx_del_delayed_work(connection->ctx,
+					&connection->fin_delayed_work);
+
+	if (xio_is_work_pending(&connection->fin_work))
+		xio_ctx_del_work(connection->ctx,
+				 &connection->fin_work);
+
 	xio_free_ow_msg_pool(connection);
 	list_del(&connection->ctx_list_entry);
 
@@ -1170,11 +1193,11 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("connection state is not online\n");
 		return 0;
 	}
-	retval = xio_ctx_timer_add(
+	retval = xio_ctx_add_work(
 			connection->ctx,
-			0, connection,
+			connection,
 			xio_pre_disconnect,
-			&connection->fin_time_hndl);
+			&connection->fin_work);
 	if (retval != 0) {
 		ERROR_LOG("xio_ctx_timer_add failed.\n");
 		return retval;

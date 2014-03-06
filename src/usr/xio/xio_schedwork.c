@@ -43,13 +43,17 @@
 #include "xio_context.h"
 #include "xio_timers_list.h"
 
+enum xio_workqueue_flags {
+	XIO_WORKQUEUE_IN_POLL		= 1 << 0,
+	XIO_WORKQUEUE_TIMER_ARMED	= 1 << 1
+};
 
-
-struct xio_schedwork {
+struct xio_workqueue {
 	struct xio_context		*ctx;
 	struct xio_timers_list		timers_list;
 	int				timer_fd;
-	int				armed_timer;
+	int				pipe_fd[2];
+	volatile uint32_t		flags;
 };
 
 #define NSEC_PER_SEC    1000000000L
@@ -85,24 +89,28 @@ static void set_normalized_timespec(struct timespec *ts,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_rearm							     */
+/* xio_workqueue_rearm							     */
 /*---------------------------------------------------------------------------*/
-static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
+static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 {
 	struct itimerspec new_t = { {0, 0}, {0, 0} };
 	int		  err;
 	int64_t		  ns_to_expire;
 
-	ns_to_expire =
-		xio_timerlist_ns_duration_to_expire(
-			&sched_work->timers_list);
 
-	if (ns_to_expire == -1 && !sched_work->armed_timer)
+	if (work_queue->flags & XIO_WORKQUEUE_IN_POLL)
+		return 0;
+	if (xio_timers_list_is_empty(&work_queue->timers_list))
 		return 0;
 
-	if (ns_to_expire == -1) {
-		new_t.it_value.tv_nsec = 0;
-	} else if (ns_to_expire < 1) {
+	ns_to_expire =
+		xio_timerlist_ns_duration_to_expire(
+			&work_queue->timers_list);
+
+	if (ns_to_expire == -1)
+		return 0;
+
+	if (ns_to_expire < 1) {
 		new_t.it_value.tv_nsec = 1;
 	} else {
 		set_normalized_timespec(&new_t.it_value,
@@ -110,31 +118,46 @@ static int xio_schedwork_rearm(struct xio_schedwork *sched_work)
 	}
 
 	/* rearm the timer */
-	err = timerfd_settime(sched_work->timer_fd, 0, &new_t, NULL);
+	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
 	if (err < 0) {
 		ERROR_LOG("timerfd_settime failed. %m\n");
 		return -1;
 	}
 
-	if (ns_to_expire == -1)
-		sched_work->armed_timer = 0;
-	else
-		sched_work->armed_timer = 1;
+	work_queue->flags |= XIO_WORKQUEUE_TIMER_ARMED;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_timed_action_handler						     */
+/* xio_workqueue_disarm							     */
 /*---------------------------------------------------------------------------*/
-static void xio_timed_action_handler(int fd, int events, void *user_context)
+static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 {
-	struct xio_schedwork	*sched_work = user_context;
+	struct itimerspec new_t = { {0, 0}, {0, 0} };
+	int		  err;
+
+	if (!(work_queue->flags & XIO_WORKQUEUE_TIMER_ARMED))
+		return;
+
+	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
+	if (err < 0)
+		ERROR_LOG("timerfd_settime failed. %m\n");
+
+	work_queue->flags &= ~XIO_WORKQUEUE_TIMER_ARMED;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_delayed_action_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_delayed_action_handler(int fd, int events, void *user_context)
+{
+	struct xio_workqueue	*work_queue = user_context;
 	int64_t			exp;
 	ssize_t			s;
 
 	/* consume the timer data in fd */
-	s = read(sched_work->timer_fd, &exp, sizeof(exp));
+	s = read(work_queue->timer_fd, &exp, sizeof(exp));
 	if (s < 0) {
 		if (errno != EAGAIN)
 			ERROR_LOG("failed to read from timerfd, %m\n");
@@ -144,121 +167,251 @@ static void xio_timed_action_handler(int fd, int events, void *user_context)
 		ERROR_LOG("failed to read from timerfd, %m\n");
 		return;
 	}
-	sched_work->armed_timer = 0;
 
-	xio_timers_list_expire(&sched_work->timers_list);
 
-	xio_schedwork_rearm(sched_work);
+	work_queue->flags |= XIO_WORKQUEUE_IN_POLL;
+	xio_timers_list_expire(&work_queue->timers_list);
+	xio_timers_list_lock(&work_queue->timers_list);
+	work_queue->flags &= ~XIO_WORKQUEUE_IN_POLL;
+	xio_workqueue_rearm(work_queue);
+	xio_timers_list_unlock(&work_queue->timers_list);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_init							     */
+/* xio_work_action_handler						     */
 /*---------------------------------------------------------------------------*/
-struct xio_schedwork *xio_schedwork_init(struct xio_context *ctx)
+static void xio_work_action_handler(int fd, int events, void *user_context)
 {
-	struct xio_schedwork	*sched_work;
+	struct xio_workqueue	*work_queue = user_context;
+	int64_t			exp;
+	ssize_t			s;
+	xio_work_handle_t	*work;
+
+	/* drain the pipe data */
+	while (1) {
+		s = read(work_queue->pipe_fd[0], &exp, sizeof(exp));
+		if (s < 0) {
+			if (errno != EAGAIN)
+				ERROR_LOG("failed to read from pipe, %m\n");
+			return;
+		}
+		if (s != sizeof(uint64_t)) {
+			ERROR_LOG("failed to read from pipe, %m\n");
+			return;
+		}
+		work = ptr_from_int64(exp);
+
+		if (work->flags & XIO_WORK_PENDING) {
+			work->flags	&= ~XIO_WORK_PENDING;
+
+			work->function(work->data);
+		}
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_create							     */
+/*---------------------------------------------------------------------------*/
+struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
+{
+	struct xio_workqueue	*work_queue;
 	int			retval;
 
-	sched_work = ucalloc(1, sizeof(*sched_work));
-	if (sched_work == NULL) {
+	work_queue = ucalloc(1, sizeof(*work_queue));
+	if (work_queue == NULL) {
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
 	}
 
-	xio_timers_list_init(&sched_work->timers_list);
-	sched_work->ctx = ctx;
+	xio_timers_list_init(&work_queue->timers_list);
+	work_queue->ctx = ctx;
 
-	sched_work->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
-	if (sched_work->timer_fd < 0) {
+	work_queue->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	if (work_queue->timer_fd < 0) {
 		ERROR_LOG("timerfd_create failed. %m\n");
-		ufree(sched_work);
-		return NULL;
+		goto exit;
+	}
+
+	retval = pipe2(work_queue->pipe_fd, O_NONBLOCK);
+	if (retval < 0) {
+		ERROR_LOG("pipe failed. %m\n");
+		goto exit1;
 	}
 
 	/* add to epoll */
 	retval = xio_context_add_ev_handler(
 			ctx,
-			sched_work->timer_fd,
+			work_queue->timer_fd,
 			XIO_POLLIN,
-			xio_timed_action_handler,
-			sched_work);
+			xio_delayed_action_handler,
+			work_queue);
 	if (retval) {
 		ERROR_LOG("ev_loop_add_cb failed. %m\n");
-		close(sched_work->timer_fd);
-		ufree(sched_work);
-		return NULL;
+		goto exit2;
 	}
 
-	return sched_work;
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			ctx,
+			work_queue->pipe_fd[0],
+			XIO_POLLIN,
+			xio_work_action_handler,
+			work_queue);
+	if (retval) {
+		ERROR_LOG("ev_loop_add_cb failed. %m\n");
+		goto exit2;
+	}
+
+	return work_queue;
+
+exit2:
+	close(work_queue->pipe_fd[0]);
+	close(work_queue->pipe_fd[1]);
+exit1:
+	close(work_queue->timer_fd);
+exit:
+	ufree(work_queue);
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_close							     */
+/* xio_workqueue_destroy						     */
 /*---------------------------------------------------------------------------*/
-int xio_schedwork_close(struct xio_schedwork *sched_work)
+int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 {
 	int retval;
 
+	xio_workqueue_disarm(work_queue);
+
 	retval = xio_context_del_ev_handler(
-			sched_work->ctx,
-			sched_work->timer_fd);
+			work_queue->ctx,
+			work_queue->timer_fd);
 	if (retval)
 		ERROR_LOG("ev_loop_del_cb failed. %m\n");
 
-	xio_timers_list_close(&sched_work->timers_list);
-	retval = xio_schedwork_rearm(sched_work);
+	retval = xio_context_del_ev_handler(
+			work_queue->ctx,
+			work_queue->pipe_fd[0]);
 	if (retval)
-		ERROR_LOG("xio_schedwork_rearm failed. %m\n");
+		ERROR_LOG("ev_loop_del_cb failed. %m\n");
 
-	close(sched_work->timer_fd);
-	ufree(sched_work);
+	xio_timers_list_close(&work_queue->timers_list);
+
+	close(work_queue->pipe_fd[0]);
+	close(work_queue->pipe_fd[1]);
+	close(work_queue->timer_fd);
+	ufree(work_queue);
 
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_add							     */
+/* xio_workqueue_add_delayed_work					     */
 /*---------------------------------------------------------------------------*/
-int xio_schedwork_add(struct xio_schedwork *sched_work,
-		      int msec_duration, void *data,
-		      void (*timer_fn)(void *data),
-		      xio_schedwork_handle_t *handle_out)
+int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
+			    int msec_duration, void *data,
+			    void (*function)(void *data),
+			    xio_delayed_work_handle_t *dwork)
 {
-	int	retval;
+	int			retval = 0;
+	enum timers_list_rc	rc;
+	xio_work_handle_t	*work = &dwork->work;
 
-	xio_timers_list_add_duration(
-			&sched_work->timers_list,
-			timer_fn, data,
+
+	xio_timers_list_lock(&work_queue->timers_list);
+
+	work->function	= function;
+	work->data	= data;
+	work->flags	|= XIO_WORK_PENDING;
+
+	rc = xio_timers_list_add_duration(
+			&work_queue->timers_list,
 			((uint64_t)msec_duration) * 1000000ULL,
-			handle_out);
+			&dwork->timer);
+	if (rc == TIMERS_LIST_RC_ERROR) {
+		ERROR_LOG("adding to timer failed\n");
+		retval = -1;
+		goto unlock;
+	}
 
-	/* rearm the timer */
-	retval = xio_schedwork_rearm(sched_work);
+	/* if the recently add timer is now the first in list, rearm */
+		/* rearm the timer */
+	retval = xio_workqueue_rearm(work_queue);
 	if (retval)
-		ERROR_LOG("xio_schedwork_rearm failed. %m\n");
+		ERROR_LOG("xio_workqueue_rearm failed. %m\n");
 
-
+unlock:
+	xio_timers_list_unlock(&work_queue->timers_list);
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_schedwork_del							     */
+/* xio_workqueue_del_delayed_work					     */
 /*---------------------------------------------------------------------------*/
-int xio_schedwork_del(struct xio_schedwork *sched_work,
-		      xio_schedwork_handle_t timer_handle)
+int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
+				   xio_delayed_work_handle_t *dwork)
 {
-	int	retval;
+	int			retval = 0;
+	enum timers_list_rc	rc;
 
-	xio_timers_list_del(
-			&sched_work->timers_list,
-			timer_handle);
+	/* stop the timer */
+	xio_workqueue_disarm(work_queue);
 
+	xio_timers_list_lock(&work_queue->timers_list);
+
+	dwork->work.flags &= ~XIO_WORK_PENDING;
+
+	rc = xio_timers_list_del(&work_queue->timers_list, &dwork->timer);
+	if (rc == TIMERS_LIST_RC_ERROR) {
+		ERROR_LOG("deleting work from queue failed. queue is empty\n");
+		goto unlock;
+	}
 	/* rearm the timer */
-	retval = xio_schedwork_rearm(sched_work);
+	retval = xio_workqueue_rearm(work_queue);
 	if (retval)
-		ERROR_LOG("xio_schedwork_rearm failed. %m\n");
-
-
+		ERROR_LOG("xio_workqueue_rearm failed. %m\n");
+unlock:
+	xio_timers_list_unlock(&work_queue->timers_list);
 	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_add_work						     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_add_work(struct xio_workqueue *work_queue,
+			   void *data,
+			   void (*function)(void *data),
+			   xio_work_handle_t *work)
+{
+	uint64_t	exp = uint64_from_ptr(work);
+	int		s;
+
+	work->function	= function;
+	work->data	= data;
+	work->flags	|= XIO_WORK_PENDING;
+
+	s = write(work_queue->pipe_fd[1], &exp, sizeof(exp));
+	if (s < 0) {
+		ERROR_LOG("failed to write to pipe, %m\n");
+		return -1;
+	}
+	if (s != sizeof(uint64_t)) {
+		ERROR_LOG("failed to write to pipe, %m\n");
+		return -1;
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_work						     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_del_work(struct xio_workqueue *work_queue,
+			   xio_work_handle_t *work)
+{
+	if (work->flags & XIO_WORK_PENDING) {
+		work->flags &= ~XIO_WORK_PENDING;
+		return 0;
+	}
+	return -1;
 }
 

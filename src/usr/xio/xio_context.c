@@ -180,10 +180,10 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);
 
-	ctx->sched_work = xio_schedwork_init(ctx);
-	if (!ctx->sched_work) {
+	ctx->workqueue = xio_workqueue_create(ctx);
+	if (!ctx->workqueue) {
 		xio_set_error(errno);
-		ERROR_LOG("schedwork_init failed. %m\n");
+		ERROR_LOG("schedwork_queue_init failed. %m\n");
 		goto cleanup1;
 	}
 
@@ -288,45 +288,45 @@ void xio_context_destroy(struct xio_context *ctx)
 		if (ctx->stats.name[i])
 			free(ctx->stats.name[i]);
 
-	xio_schedwork_close(ctx->sched_work);
+	xio_workqueue_destroy(ctx->workqueue);
 
 	xio_ev_loop_destroy(&ctx->ev_loop);
 	ufree(ctx);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_add							     */
+/* xio_ctx_add_delayed_work						     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_add(struct xio_context *ctx,
-		      int msec_duration, void *data,
-		      void (*timer_fn)(void *data),
-		      xio_ctx_timer_handle_t *handle_out)
+int xio_ctx_add_delayed_work(struct xio_context *ctx,
+			     int msec_duration, void *data,
+			     void (*timer_fn)(void *data),
+			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
 
-	retval = xio_schedwork_add(ctx->sched_work,
-				   msec_duration, data,
-				   timer_fn, handle_out);
+	retval = xio_workqueue_add_delayed_work(ctx->workqueue,
+						msec_duration, data,
+						timer_fn, work);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("xio_schedwork_add failed. %m\n");
+		ERROR_LOG("xio_workqueue_add_delayed_work failed. %m\n");
 	}
 
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_del							     */
+/* xio_ctx_del_delayed_work						     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_del(struct xio_context *ctx,
-		      xio_ctx_timer_handle_t timer_handle)
+int xio_ctx_del_delayed_work(struct xio_context *ctx,
+			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
 
-	retval = xio_schedwork_del(ctx->sched_work, timer_handle);
+	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
 	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("xio_schedwork_add failed. %m\n");
+		ERROR_LOG("xio_workqueue_del_delayed_work failed. %m\n");
 	}
 
 	return retval;
@@ -447,3 +447,40 @@ void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread)
 	xio_ev_loop_stop(ctx->ev_loop, is_self_thread);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_add_work							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_add_work(struct xio_context *ctx,
+		     void *data,
+		     void (*function)(void *data),
+		     xio_ctx_work_t *work)
+{
+	int retval;
+
+	retval = xio_workqueue_add_work(ctx->workqueue,
+					data, function, work);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("xio_workqueue_add_work failed. %m\n");
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_del_work							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_del_work(struct xio_context *ctx,
+		     xio_ctx_work_t *work)
+
+{
+	int retval;
+
+	retval = xio_workqueue_del_work(ctx->workqueue, work);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("xio_workqueue_del_work failed. %m\n");
+	}
+
+	return retval;
+}

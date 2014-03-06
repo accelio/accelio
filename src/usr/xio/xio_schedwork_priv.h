@@ -35,67 +35,28 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_EV_LOOP_H
-#define XIO_EV_LOOP_H
+#ifndef XIO_SCHEDWORK_PRIV_H
+#define XIO_SCHEDWORK_PRIV_H
 
-#include "libxio.h"
-
-/*---------------------------------------------------------------------------*/
-/* defines								     */
-/*---------------------------------------------------------------------------*/
-
-#define XIO_EV_LOOP_WAKE	1
-#define XIO_EV_LOOP_STOP	(1 << 1)
-#define XIO_EV_LOOP_DOWN	(1 << 2)
-#define XIO_EV_LOOP_SCHED	(1 << 3)
-
-/*---------------------------------------------------------------------------*/
-/* structures								     */
-/*---------------------------------------------------------------------------*/
-
-struct xio_ev_loop {
-	struct xio_context *ctx;
-	void *loop_object;
-	int  (*run)(void *loop_hndl);
-	void (*stop)(void *loop_hndl);
-	int  (*add_event)(void *loop_hndl, struct xio_ev_data *data);
-	unsigned long	flags;
-	volatile unsigned long	states;
-	union {
-		struct {
-			union {
-				wait_queue_head_t wait;
-				struct tasklet_struct tasklet;
-			};
-		};
-		struct workqueue_struct *workqueue;
-	};
-	/* for thread, tasklet and for stopped workqueue  */
-	struct llist_head ev_llist;
+enum xio_work_flags {
+	XIO_WORK_PENDING	=  1 << 0
 };
 
-/*---------------------------------------------------------------------------*/
-/* XIO default event loop API						     */
-/*									     */
-/* NoTE: xio provides default muxer implementation around epoll.	     */
-/* users are encouraged to utilize their own implementations and provides    */
-/* appropriate services to xio via the xio's context open interface	     */
-/*---------------------------------------------------------------------------*/
-/**
- * initializes event loop handle
- *
- * @returns event loop handle or NULL upon error
- */
-void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
-		       struct xio_loop_ops *loop);
+struct xio_timers_list_entry {
+	struct list_head	entry;
+	uint64_t		expires;
+};
 
-/**
- * destroy the event loop
- *
- * @param[in] loop_hndl		Handle to event loop
- */
-void xio_ev_loop_destroy(void *loop);
+typedef struct xio_work_struct {
+	void			(*function)(void *data);
+	void			*data;
+	volatile uint32_t	flags;
+	uint32_t		pad;
+} xio_work_handle_t;
 
+typedef struct xio_delayed_work_struct {
+	struct xio_work_struct		work;
+	struct xio_timers_list_entry	timer;
+} xio_delayed_work_handle_t;
 
-#endif
-
+#endif /* XIO_SCHEDWORK_PRIV_H */

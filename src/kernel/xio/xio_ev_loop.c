@@ -86,6 +86,16 @@ static int priv_ev_add_thread(void *loop_hndl, struct xio_ev_data *event);
 static int priv_ev_add_tasklet(void *loop_hndl, struct xio_ev_data *event);
 static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event);
 
+void xio_repush(struct llist_node *head, struct llist_head *llist)
+{
+	struct llist_node *tmp;
+	while (head) {
+		tmp = head;
+		head = head->next;
+		llist_add(tmp, llist);
+	}
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_init							     */
 /*---------------------------------------------------------------------------*/
@@ -320,6 +330,11 @@ static void priv_ev_loop_run_tasklet(unsigned long data)
 	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
 		node = llist_reverse_order(node);
 		while (node) {
+			if (unlikely(test_bit(XIO_EV_LOOP_STOP,
+					      &loop->states))) {
+				xio_repush(node, &loop->ev_llist);
+				return;
+			}
 			tev = llist_entry(node, struct xio_ev_data, ev_llist);
 			node = llist_next(node);
 			tev->handler(tev->data);
@@ -399,11 +414,18 @@ retry_dont_wait:
 	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
 		node = llist_reverse_order(node);
 		while (node) {
+			if (unlikely(test_bit(XIO_EV_LOOP_STOP,
+					      &loop->states))) {
+				xio_repush(node, &loop->ev_llist);
+				goto stopped;
+			}
 			tev = llist_entry(node, struct xio_ev_data, ev_llist);
 			node = llist_next(node);
 			tev->handler(tev->data);
 		}
 	}
+
+stopped:
 
 	/* "race point" */
 	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
@@ -439,18 +461,4 @@ void priv_ev_loop_stop(void *loop_hndl)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
-
-	switch (loop->flags) {
-	case XIO_LOOP_GIVEN_THREAD:
-		if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states)) {
-			wake_up_interruptible(&loop->wait);
-		}
-		break;
-	case XIO_LOOP_TASKLET:
-		break;
-	case XIO_LOOP_WORKQUEUE:
-		break;
-	default:
-		break;
-	}
 }

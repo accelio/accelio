@@ -141,7 +141,7 @@ struct xio_conn {
 	int				is_first_req;
 	int				is_listener;
 	int				pad;
-	xio_ctx_timer_handle_t		close_time_hndl;
+	xio_delayed_work_handle_t	close_time_hndl;
 
 	struct list_head		observers_htbl;
 
@@ -298,11 +298,10 @@ static inline int xio_conn_get_proto(struct xio_conn *conn)
 static inline void xio_conn_addref(struct xio_conn *conn)
 {
 
-	if (conn->close_time_hndl) {
+	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
 		kref_init(&conn->kref);
-		xio_ctx_timer_del(conn->transport_hndl->ctx,
-				conn->close_time_hndl);
-		conn->close_time_hndl = NULL;
+		xio_ctx_del_delayed_work(conn->transport_hndl->ctx,
+					 &conn->close_time_hndl);
 	} else {
 		kref_get(&conn->kref);
 	}
