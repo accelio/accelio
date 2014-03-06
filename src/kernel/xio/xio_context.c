@@ -121,10 +121,10 @@ struct xio_context *xio_context_create(unsigned int flags,
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
 	ctx->polling_timeout = polling_timeout;
-	ctx->sched_work = xio_schedwork_init(ctx);
-	if (!ctx->sched_work) {
+	ctx->workqueue = xio_workqueue_create(ctx);
+	if (!ctx->workqueue) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("xio_schedwork_init failed.\n");
+		ERROR_LOG("xio_workqueue_init failed.\n");
 		goto cleanup1;
 	}
 
@@ -163,7 +163,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	return ctx;
 
 cleanup2:
-	xio_schedwork_close(ctx->sched_work);
+	xio_workqueue_destroy(ctx->workqueue);
 
 cleanup1:
 	kfree(ctx);
@@ -189,7 +189,7 @@ void xio_context_destroy(struct xio_context *ctx)
 		if (ctx->stats.name[i])
 			kfree(ctx->stats.name[i]);
 
-	xio_schedwork_close(ctx->sched_work);
+	xio_workqueue_destroy(ctx->workqueue);
 
 	/* can free only xio created loop */
 	if (ctx->flags != XIO_LOOP_USER_LOOP)
@@ -201,42 +201,45 @@ void xio_context_destroy(struct xio_context *ctx)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_add							     */
+/* xio_ctx_add_delayed_work						     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_add(struct xio_context *ctx,
-		      int msec_duration, void *data,
-		      void (*timer_fn)(void *data),
-		      xio_ctx_timer_handle_t *handle_out)
+int xio_ctx_add_delayed_work(struct xio_context *ctx,
+			     int msec_duration, void *data,
+			     void (*timer_fn)(void *data),
+			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
 
-	retval = xio_schedwork_add(ctx->sched_work,
-				   msec_duration, data,
-				   timer_fn, handle_out);
+	retval = xio_workqueue_add_delayed_work(ctx->workqueue,
+						msec_duration, data,
+						timer_fn, work);
 	if (retval) {
-		xio_set_error(ENOMEM);
-		ERROR_LOG("xio_schedwork_add failed.\n");
+		xio_set_error(retval);
+		ERROR_LOG("xio_workqueue_add_delayed_work failed. err=%d\n",
+			   retval);
 	}
 
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_timer_del							     */
+/* xio_ctx_del_delayed_work						     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_timer_del(struct xio_context *ctx,
-		      xio_ctx_timer_handle_t timer_handle)
+int xio_ctx_del_delayed_work(struct xio_context *ctx,
+			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
 
-	retval = xio_schedwork_del(ctx->sched_work, timer_handle);
+	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
 	if (retval) {
-		xio_set_error(ENOMEM);
-		ERROR_LOG("xio_schedwork_del failed.\n");
+		xio_set_error(retval);
+		ERROR_LOG("xio_workqueue_del_delayed_work failed. err=%d\n",
+			  retval);
 	}
 
 	return retval;
 }
+
 
 int xio_context_run_loop(struct xio_context *ctx)
 {
@@ -254,4 +257,42 @@ int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	return ev_loop->add_event(ev_loop->loop_object, data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_add_work							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_add_work(struct xio_context *ctx,
+		     void *data,
+		     void (*function)(void *data),
+		     xio_ctx_work_t *work)
+{
+	int retval;
+
+	retval = xio_workqueue_add_work(ctx->workqueue,
+					data, function, work);
+	if (retval) {
+		xio_set_error(retval);
+		ERROR_LOG("xio_workqueue_add_work failed. err=%d\n", retval);
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_del_work							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_del_work(struct xio_context *ctx,
+		     xio_ctx_work_t *work)
+
+{
+	int retval;
+
+	retval = xio_workqueue_del_work(ctx->workqueue, work);
+	if (retval) {
+		xio_set_error(retval);
+		ERROR_LOG("xio_workqueue_del_work failed. err=%d\n", retval);
+	}
+
+	return retval;
 }
