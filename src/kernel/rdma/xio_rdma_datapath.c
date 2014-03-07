@@ -593,25 +593,23 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 	if (wc->status == IB_WC_WR_FLUSH_ERR) {
 		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "
 			  "wr_id:0x%llx, "
-			  "err:%s, vendor_err:0x%x, "
-			   "ib_op:%x\n",
+			  "err:%s, vendor_err:0x%x\n",
 			   rdma_hndl, rdma_task, task,
 			   wc->wr_id,
 			   xio_ib_wc_status_str(wc->status),
-			   wc->vendor_err,
-			   rdma_task->ib_op);
+			   wc->vendor_err);
 	} else  {
-		ERROR_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "
+		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, task:%p, "
 			  "wr_id:0x%llx, "
-			  "err:%s, vendor_err:0x%x,"
-			  "ib_op:0x%x\n",
+			  "err:%s, vendor_err:0x%x\n",
+			  rdma_hndl->base.is_client ? "client" : "server",
+			  rdma_hndl->state,
 			  rdma_hndl, rdma_task, task,
 			  wc->wr_id,
 			  xio_ib_wc_status_str(wc->status),
-			  wc->vendor_err,
-			  rdma_task->ib_op);
+			  wc->vendor_err);
 
-		ERROR_LOG("byte_len=%u, immdata=%u, qp=%p, qp_num=0x%x, src_qp=%u\n",
+		ERROR_LOG("byte_len=%u, immdata=%u, qp=%p, qp_num=0x%x, src_qp=0x%x\n",
 			  wc->byte_len, ntohl(wc->ex.imm_data),
 			  wc->qp, wc->qp ? wc->qp->qp_num : 0xdeadbeaf,
 			  wc->src_qp);
