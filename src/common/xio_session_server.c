@@ -401,7 +401,8 @@ int xio_accept(struct xio_session *session,
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
-		ERROR_LOG("failed to send message\n");
+		ERROR_LOG("failed to send message. errno:%d\n", -retval);
+		xio_set_error(-retval);
 		return -1;
 	}
 
@@ -465,7 +466,8 @@ int xio_redirect(struct xio_session *session,
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
-		ERROR_LOG("failed to send message\n");
+		ERROR_LOG("failed to send message errno:%d\n", -retval);
+		xio_set_error(-retval);
 		return -1;
 	}
 
@@ -507,7 +509,8 @@ int xio_reject(struct xio_session *session,
 
 	retval = xio_connection_send(task->connection, msg);
 	if (retval != 0) {
-		ERROR_LOG("failed to send message\n");
+		ERROR_LOG("failed to send message. errno:%d\n", -retval);
+		xio_set_error(-retval);
 		return -1;
 	}
 

@@ -395,6 +395,11 @@ struct xio_session_ops {
 	/* notify the user to assign a data buffer for incoming read */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
 				  void *cb_user_context);
+
+	 /* sender's send completion notification - one way message only */
+	int (*on_ow_msg_send_complete)(struct xio_session *session,
+				       struct xio_msg *msg,
+				       void *conn_user_context);
 };
 
 /**

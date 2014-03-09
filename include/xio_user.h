@@ -637,6 +637,22 @@ struct xio_session_ops {
 	 */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
 			void *conn_user_context);
+
+	/**
+	 * send completion notification - one way message only
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] msg			the sent message
+	 *  @param[in] conn_user_context	user private data provided on
+	 *					connection creation
+	 *
+	 *  @returns 0
+	 *  @note  called only if "read receipt" was not requested
+	 */
+	int (*on_ow_msg_send_complete)(struct xio_session *session,
+				       struct xio_msg *msg,
+				       void *conn_user_context);
+
 };
 
 /**

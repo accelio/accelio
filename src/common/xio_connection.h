@@ -83,6 +83,8 @@ struct xio_connection {
 	int32_t				send_req_toggle;
 	int				disable_notify;
 	int				close_reason;
+	int				in_flight_reqs_budget;
+	int				in_flight_sends_budget; /* one way msgs */
 
 	struct kref			kref;
 	struct xio_msg_list		reqs_msgq;
@@ -202,6 +204,7 @@ int xio_connection_release_hello(struct xio_connection *conn,
 				 struct xio_msg *msg);
 
 char *xio_connection_state_str(enum xio_connection_state state);
+
 
 #endif /*XIO_CONNECTION_H */
 
