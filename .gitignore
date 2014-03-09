@@ -27,9 +27,15 @@ xio_bidi_client
 xio_bidi_server
 xio_lat_client
 xio_lat_server
+xio_ow_client
+xio_ow_server
 xio_oneway_client
 xio_oneway_server
 xio_read_lat
 xio_read_bw
+reg_basic_mt
 version.c
+*/usr/*/Makefile.in
+*/usr/Makefile.in
+doc
 Doxyfile
