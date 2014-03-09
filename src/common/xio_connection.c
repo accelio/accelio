@@ -684,7 +684,8 @@ int xio_send_request(struct xio_connection *connection,
 
 		if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
 			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			     connection->state != XIO_CONNECTION_STATE_INIT)) {
+			     connection->state != XIO_CONNECTION_STATE_INIT &&
+			     connection->in_close)) {
 			xio_set_error(ESHUTDOWN);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_FLUSHED);
@@ -748,7 +749,8 @@ int xio_send_response(struct xio_msg *msg)
 		if (unlikely(
 		     connection->state != XIO_CONNECTION_STATE_ONLINE  &&
 		     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-		     connection->state != XIO_CONNECTION_STATE_INIT)) {
+		     connection->state != XIO_CONNECTION_STATE_INIT &&
+		     connection->in_close)) {
 			xio_set_error(ESHUTDOWN);
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
@@ -881,6 +883,20 @@ int xio_send_msg(struct xio_connection *connection,
 			ERROR_LOG("invalid out message\n");
 			return -1;
 		}
+		if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
+			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+			     connection->state != XIO_CONNECTION_STATE_INIT &&
+			     connection->in_close)) {
+			xio_set_error(ESHUTDOWN);
+			xio_session_notify_msg_error(connection, pmsg,
+						     XIO_E_MSG_FLUSHED);
+			if (pmsg->next == NULL) {
+				pmsg = pmsg->next;
+				continue;
+			} else {
+				return -1;
+			}
+		}
 
 		vmsg	= &pmsg->out;
 		pmsg->timestamp = get_cycles();
@@ -1000,7 +1016,7 @@ int xio_release_response(struct xio_msg *msg)
 			return -1;
 		}
 		if (task->sender_task == NULL) {
-			/* do not release resopnse in responder */
+			/* do not release response in responder */
 			xio_set_error(EINVAL);
 			return -1;
 		}
@@ -1177,6 +1193,13 @@ static void xio_pre_disconnect(void *_connection)
 {
 	struct xio_connection *connection = _connection;
 
+	/* now we are on the right context, reaffirm that in the mean time, state
+	 * was not changed
+	 */
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
+		return;
+
+	connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
 	xio_send_fin_req(connection);
 
 	if (!connection->disable_notify) {
@@ -1200,10 +1223,11 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("xio_disconnect failed %m\n");
 		return -1;
 	}
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
-		ERROR_LOG("connection state is not online\n");
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
+	    connection->in_close) {
 		return 0;
 	}
+	connection->in_close = 1;
 	retval = xio_ctx_add_work(
 			connection->ctx,
 			connection,

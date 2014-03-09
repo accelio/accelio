@@ -464,20 +464,6 @@ int xio_on_fin_req_send_comp(struct xio_connection *connection,
 		  "connection:%p\n",
 		  connection->session, connection);
 
-	switch (connection->state) {
-	case XIO_CONNECTION_STATE_ONLINE: /* active close */
-		TRACE_LOG("connection %p state change: current_state:%s, " \
-				"next_state:%s\n",
-				connection,
-				xio_connection_state_str(connection->state),
-				xio_connection_state_str(
-					XIO_CONNECTION_STATE_FIN_WAIT_1));
-		connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
-		break;
-	default:
-		return 0;
-	}
-
 	return 0;
 }
 
@@ -672,7 +658,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_statistics *stats = &connection->ctx->stats;
 	struct xio_vmsg *vmsg = &msg->in;
 
-
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)
 		return -1;
@@ -733,8 +718,13 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_task		*sender_task = task->sender_task;
 	struct xio_statistics *stats = &connection->ctx->stats;
 
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
+	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
+		xio_connection_remove_in_flight(connection, sender_task->omsg);
+		xio_session_notify_msg_error(connection, sender_task->omsg,
+					     XIO_E_MSG_FLUSHED);
+		xio_release_response_task(task);
 		goto xmit;
+	}
 
 	/* read session header */
 	if (xio_session_read_header(task, &hdr) != 0)
@@ -825,8 +815,6 @@ static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
-		return 0;
 
 	/* remove the message from in flight queue */
 	xio_connection_remove_in_flight(connection, task->omsg);
@@ -865,19 +853,14 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
-		goto xmit;
-
-
-	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT))
-		xio_connection_remove_in_flight(connection, task->omsg);
-
 	/* recycle the task */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
 		struct xio_statistics *stats = &connection->ctx->stats;
 		struct xio_msg *omsg = task->omsg;
 		xio_stat_add(stats, XIO_STAT_DELAY,
 			     get_cycles() - omsg->timestamp);
+
+		xio_connection_remove_in_flight(connection, task->omsg);
 
 		/* send completion notification to
 		 * release request
@@ -889,7 +872,7 @@ static int xio_on_ow_req_send_comp(
 		}
 		xio_tasks_pool_put(task);
 	}
-xmit:
+
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
 
