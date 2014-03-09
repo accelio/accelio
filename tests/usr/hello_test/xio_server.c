@@ -59,7 +59,7 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
-#define TEST_DISCONNECT		1
+#define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
 
 struct xio_test_config {

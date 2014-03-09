@@ -59,12 +59,12 @@
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
-#define MAX_OUTSTANDING_REQS	50
-#define TEST_DISCONNECT		1
+#define MAX_OUTSTANDING_REQS	5000
+#define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
 
 
-#define MAX_POOL_SIZE		50
+#define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
@@ -606,7 +606,7 @@ int main(int argc, char *argv[])
 			msg_pool_put(test_params.pool, msg);
 			goto exit3;
 		}
-		test_params.nsent = msg->sn;
+		test_params.nsent++;
 	}
 
 	/* the default xio supplied main loop */
