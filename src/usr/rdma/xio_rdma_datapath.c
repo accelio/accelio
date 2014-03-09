@@ -308,6 +308,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		rdma_hndl->sim_peer_credits += rdma_hndl->credits;
 		rdma_hndl->credits = 0;
 		rdma_hndl->peer_credits--;
+		rdma_hndl->last_send_was_signaled =
+			rdma_task->txd.send_wr.send_flags & IBV_SEND_SIGNALED;
 
 		prev_wr->send_wr.next = &curr_wr->send_wr;
 		prev_wr = &rdma_task->txd;
@@ -599,15 +601,34 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 	if (rdma_hndl->state != XIO_STATE_CONNECTED)
 		return 0;
 
-	/* send nop if no message is queued */
-	if (!(rdma_hndl->peer_credits && rdma_hndl->credits &&
-	      rdma_hndl->sqe_avail &&
-	      rdma_hndl->sim_peer_credits < MAX_RECV_WR))
+	/* send nop if messages are not queued */
+
+	/* can the peer receive messages? */
+	if (!rdma_hndl->peer_credits)
 		return 0;
 
+	/* does the local have resources to send message?  */
+	if (!rdma_hndl->sqe_avail)
+		return 0;
+
+	if ((rdma_hndl->reqs_in_flight_nr || rdma_hndl->rsps_in_flight_nr) &&
+	     !rdma_hndl->last_send_was_signaled)
+		goto send_final_nop;
+
+	/* does the peer have already maximum credits? */
+	if (rdma_hndl->sim_peer_credits >= MAX_RECV_WR)
+		return 0;
+
+	/* does the local have any credits to send? */
+	if (!rdma_hndl->credits)
+		return 0;
+
+send_final_nop:
 	TRACE_LOG("peer_credits:%d, credits:%d sim_peer_credits:%d\n",
 		  rdma_hndl->peer_credits, rdma_hndl->credits,
 		  rdma_hndl->sim_peer_credits);
+
+	rdma_hndl->last_send_was_signaled = 0;
 
 	xio_rdma_send_nop(rdma_hndl);
 
@@ -3211,7 +3232,8 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
-	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	rdma_task->txd.send_wr.send_flags =
+		IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE;
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
 	rdma_task->txd.send_wr.num_sge	= 1;
