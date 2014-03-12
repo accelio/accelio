@@ -352,6 +352,8 @@ int run_server_test(struct perf_parameters *user_param)
 	struct perf_command	command;
 
 
+	xio_init();
+
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 
@@ -433,7 +435,9 @@ int run_server_test(struct perf_parameters *user_param)
 
 	pthread_join(server_data.thread_id, NULL);
 
-		free(server_data.tdata);
+	free(server_data.tdata);
+
+	xio_shutdown();
 
 	return 0;
 }

@@ -169,15 +169,16 @@ static void *statistics_thread_cb(void *data)
 		if (max_rtt < sess_data->tdata[i].stat.min_rtt)
 			max_rtt = sess_data->tdata[i].stat.max_rtt;
 	}
+	if ( scnt_end != scnt_start) {
+		sess_data->avg_lat_us = (rtt_end - rtt_start)/g_mhz;
+		sess_data->avg_lat_us /= (scnt_end - scnt_start);
 
-	sess_data->avg_lat_us = (rtt_end - rtt_start)/g_mhz;
-	sess_data->avg_lat_us /= (scnt_end - scnt_start);
+		sess_data->min_lat_us = min_rtt/g_mhz;
+		sess_data->max_lat_us = max_rtt/g_mhz;
 
-	sess_data->min_lat_us = min_rtt/g_mhz;
-	sess_data->max_lat_us = max_rtt/g_mhz;
-
-	sess_data->tps    = ((scnt_end - scnt_start)*USECS_IN_SEC)/delta;
-	sess_data->avg_bw = (1.0*sess_data->tps*tx_len/ONE_MB);
+		sess_data->tps    = ((scnt_end - scnt_start)*USECS_IN_SEC)/delta;
+		sess_data->avg_bw = (1.0*sess_data->tps*tx_len/ONE_MB);
+	}
 
 	for (i = 0; i < threads_iter; i++)
 		sess_data->tdata[i].disconnect = 1;
@@ -409,6 +410,7 @@ int run_client_test(struct perf_parameters *user_param)
 		NULL,
 		0
 	};
+	xio_init();
 
 	g_mhz		= get_cpu_mhz(0);
 	max_cpus	= sysconf(_SC_NPROCESSORS_ONLN);
