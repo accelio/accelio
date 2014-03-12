@@ -24,7 +24,7 @@ endif
 lib_LTLIBRARIES = libxio.la
 
 # where to install the headers on the system
-libxio_includedir = $(includedir)/xio/
+libxio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
 libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  \

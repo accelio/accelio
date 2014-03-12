@@ -15,7 +15,7 @@ bin_PROGRAMS = raio_client 			\
 	       raio_server
 
 # where to install the headers on the system
-libraio_includedir = $(includedir)/raio/
+libraio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
 libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/libraio.h 
