@@ -2610,7 +2610,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_task->req_read_num_sge)
 		task->imsg.out.data_iovlen = rdma_task->req_read_num_sge;
 	else if (rdma_task->req_recv_num_sge)
-		task->imsg.out.data_iovlen = rdma_task->req_read_num_sge;
+		task->imsg.out.data_iovlen = rdma_task->req_recv_num_sge;
 	else
 		task->imsg.out.data_iovlen = 0;
 
@@ -2831,7 +2831,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_task->req_read_num_sge)
 		imsg->out.data_iovlen = rdma_task->req_read_num_sge;
 	else if (rdma_task->req_recv_num_sge)
-		imsg->out.data_iovlen = rdma_task->req_read_num_sge;
+		imsg->out.data_iovlen = rdma_task->req_recv_num_sge;
 	else
 		imsg->out.data_iovlen = 0;
 
