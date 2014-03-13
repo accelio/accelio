@@ -38,7 +38,8 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-#include <libxio.h>
+#include "xio_common.h"
+#include "xio_ev_data.h"
 
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */
@@ -118,7 +119,6 @@ int xio_ev_loop_add(void *loop,
  */
 int xio_ev_loop_del(void *loop, int fd);
 
-
 /**
  * get loop poll parameters to assign to external dispatcher
  *
@@ -130,6 +130,42 @@ int xio_ev_loop_del(void *loop, int fd);
  */
 int xio_ev_loop_get_poll_params(void *loop,
 				struct xio_poll_params *poll_params);
+
+/**
+ * initialize event job
+ *
+ * @param[in] evt	  the scheduled event data
+ * @param[in] sched_handler callback function to call when event
+ *			  is scheduled
+ * @param[in] data	  user private data to pass to callback
+ *
+ * @returns none
+ */
+void xio_ev_loop_init_event(struct xio_ev_data *evt,
+			    xio_event_handler_t event_handler,
+			    void *data);
+
+/**
+ * add event job to scheduled events queue
+ *
+ * @param[in] loop	  the dispatcher context
+ * @param[in] evt	  the scheduled event data
+ *
+ * @returns none
+ */
+void xio_ev_loop_add_event(void *loop,
+			   struct xio_ev_data *evt);
+
+/**
+ * remove event from events queue
+ *
+ * @param[in] loop	  the dispatcher context
+ * @param[in] evt	  the scheduled event data
+ *
+ * @returns none
+ */
+void xio_ev_loop_remove_event(void *loop,
+			      struct xio_ev_data *evt);
 
 #endif
 

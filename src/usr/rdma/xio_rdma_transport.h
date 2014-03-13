@@ -39,6 +39,7 @@
 #define XIO_RDMA_TRANSPORT_H
 
 #include "xio_transport.h"
+#include "xio_context.h"
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -49,7 +50,7 @@ extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
 
 
-/* poll_cq defentions */
+/* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
 
@@ -70,6 +71,7 @@ extern struct list_head		dev_list;
 #define OMX_MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
+#define MAX_NUM_DELAYED_ARM		16
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
 					   * one for reply tx
@@ -265,6 +267,7 @@ struct xio_cq  {
 	struct ibv_comp_channel		*channel;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
+	xio_ctx_event_t			event_data;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
 	int32_t				cq_events_that_need_ack;
@@ -273,7 +276,7 @@ struct xio_cq  {
 	int32_t				alloc_sz;     /* allocation factor  */
 	int32_t				cqe_avail;    /* free elements  */
 	atomic_t			refcnt;       /* utilization counter */
-	int32_t				pad;
+	int32_t				num_delayed_arm;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */
@@ -496,7 +499,7 @@ static inline void xio_rdma_notify_message_error(
 					    &ev_data);
 }
 
-void xio_data_ev_handler(int fd, int events, void *user_context);
+void xio_cq_event_handler(int fd, int events, void *data);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
 		  struct xio_task *task, int num_recv_bufs);
 int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl);

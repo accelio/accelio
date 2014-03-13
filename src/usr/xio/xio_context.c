@@ -64,6 +64,9 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_stats_handler							     */
+/*---------------------------------------------------------------------------*/
 static void xio_stats_handler(int fd, int events, void *data)
 {
 	struct xio_context *ctx = (struct xio_context *)data;
@@ -142,7 +145,7 @@ static void xio_stats_handler(int fd, int events, void *data)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_create                                                            */
+/* xio_context_create                                                        */
 /*---------------------------------------------------------------------------*/
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 				       int polling_timeout_us)
@@ -342,7 +345,7 @@ int xio_add_counter(struct xio_context *ctx, char *name)
 		if (!ctx->stats.name[i]) {
 			ctx->stats.name[i] = strdup(name);
 			if (!ctx->stats.name[i]) {
-				perror("malloc");
+				ERROR_LOG("stddup failed. %m");
 				return -1;
 			}
 			ctx->stats.counter[i] = 0;
@@ -356,11 +359,10 @@ int xio_add_counter(struct xio_context *ctx, char *name)
 /*---------------------------------------------------------------------------*/
 /* xio_del_counter							     */
 /*---------------------------------------------------------------------------*/
-
 int xio_del_counter(struct xio_context *ctx, int counter)
 {
 	if (counter < XIO_STAT_USER_FIRST || counter >= XIO_STAT_LAST) {
-		fprintf(stderr, "counter(%d) out of range\n", counter);
+		ERROR_LOG("counter(%d) out of range\n", counter);
 		return -1;
 	}
 
@@ -403,7 +405,6 @@ int xio_context_get_poll_params(struct xio_context *ctx,
 				struct xio_poll_params *poll_params)
 {
 	return xio_ev_loop_get_poll_params(ctx->ev_loop, poll_params);
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -483,3 +484,31 @@ int xio_ctx_del_work(struct xio_context *ctx,
 
 	return retval;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_init_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_init_event(
+		xio_ctx_event_t *evt,
+		void (*event_handler)(xio_ctx_event_t *tev, void *data),
+		void *data)
+{
+	xio_ev_loop_init_event(evt, event_handler, data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_add_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_add_event(struct xio_context *ctx, xio_ctx_event_t *evt)
+{
+	xio_ev_loop_add_event(ctx->ev_loop, evt);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_remove_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_remove_event(struct xio_context *ctx, xio_ctx_event_t *evt)
+{
+	xio_ev_loop_remove_event(ctx->ev_loop, evt);
+}
+

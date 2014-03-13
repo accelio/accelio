@@ -54,19 +54,12 @@
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */
 /*---------------------------------------------------------------------------*/
-struct xio_ev_data {
-	xio_ev_handler_t		handler;
-	void				*data;
-	int				fd;
-	int				reserved;
-	struct list_head		events_list_entry;
-};
-
 struct xio_ev_loop {
 	int				efd;
 	int				stop_loop;
 	int				wakeup_event;
 	int				wakeup_armed;
+	struct list_head		poll_events_list;
 	struct list_head		events_list;
 };
 
@@ -103,7 +96,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		tev->handler	= handler;
 		tev->fd		= fd;
 
-		list_add(&tev->events_list_entry, &loop->events_list);
+		list_add(&tev->events_list_entry, &loop->poll_events_list);
 	}
 
 	ev.data.ptr = tev;
@@ -130,7 +123,7 @@ static struct xio_ev_data *xio_event_lookup(void *loop_hndl, int fd)
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct xio_ev_data	*tev;
 
-	list_for_each_entry(tev, &loop->events_list, events_list_entry) {
+	list_for_each_entry(tev, &loop->poll_events_list, events_list_entry) {
 		if (tev->fd == fd)
 			return tev;
 	}
@@ -223,6 +216,7 @@ void *xio_ev_loop_create()
 		return NULL;
 	}
 
+	INIT_LIST_HEAD(&loop->poll_events_list);
 	INIT_LIST_HEAD(&loop->events_list);
 
 	loop->stop_loop		= 0;
@@ -260,6 +254,68 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_ev_loop_init_event						     */
+/*---------------------------------------------------------------------------*/
+void xio_ev_loop_init_event(struct xio_ev_data *evt,
+			  xio_event_handler_t event_handler, void *data)
+{
+	evt->event_handler = event_handler;
+	evt->scheduled = 0;
+	evt->data = data;
+	INIT_LIST_HEAD(&evt->events_list_entry);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_add_event						     */
+/*---------------------------------------------------------------------------*/
+void xio_ev_loop_add_event(void *_loop, struct xio_ev_data *evt)
+{
+	struct xio_ev_loop *loop = _loop;
+
+	if (!evt->scheduled) {
+		evt->scheduled = 1;
+		list_add_tail(&evt->events_list_entry,
+			      &loop->events_list);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_remove_event						     */
+/*---------------------------------------------------------------------------*/
+void xio_ev_loop_remove_event(void *loop, struct xio_ev_data *evt)
+{
+	if (evt->scheduled) {
+		evt->scheduled = 0;
+		list_del_init(&evt->events_list_entry);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_exec_scheduled						     */
+/*---------------------------------------------------------------------------*/
+static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
+{
+	struct list_head *last_sched;
+	struct xio_ev_data *tev, *tevn;
+	int work_remains = 0;
+
+	if (!list_empty(&loop->events_list)) {
+		/* execute only work scheduled till now */
+		last_sched = loop->events_list.prev;
+		list_for_each_entry_safe(tev, tevn, &loop->events_list,
+					 events_list_entry) {
+			xio_ev_loop_remove_event(loop, tev);
+			tev->event_handler(tev, tev->data);
+			if (&tev->events_list_entry == last_sched)
+				break;
+		}
+		if (!list_empty(&loop->events_list))
+			work_remains = 1;
+	}
+	return work_remains;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_ev_loop_run_helper                                                    */
 /*---------------------------------------------------------------------------*/
 inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
@@ -268,10 +324,15 @@ inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	int			nevent = 0, i;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
+	int			work_remains;
+	int			tmout;
 
 retry:
-	nevent = epoll_wait(loop->efd, events, ARRAY_SIZE(events), timeout);
-	if (nevent < 0) {
+	work_remains = xio_ev_loop_exec_scheduled(loop);
+	tmout = work_remains ? 0 : timeout;
+
+	nevent = epoll_wait(loop->efd, events, ARRAY_SIZE(events), tmout);
+	if (unlikely(nevent < 0)) {
 		if (errno != EINTR) {
 			xio_set_error(errno);
 			ERROR_LOG("epoll_wait failed. %m\n");
@@ -279,7 +340,7 @@ retry:
 		} else {
 			goto retry;
 		}
-	} else if (likely(nevent)) {
+	} else if (nevent > 0) {
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
 			if (likely(tev != NULL)) {
@@ -302,7 +363,8 @@ retry:
 		}
 	} else {
 		/* timed out */
-		loop->stop_loop = 1;
+		if (tmout)
+			loop->stop_loop = 1;
 		/* TODO: timeout should be updated by the elapsed
 		 * duration of each loop
 		 * */
@@ -366,9 +428,14 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	if (*loop == NULL)
 		return;
 
-	list_for_each_entry_safe(tev, tmp_tev, &(*loop)->events_list,
+	list_for_each_entry_safe(tev, tmp_tev, &(*loop)->poll_events_list,
 				 events_list_entry) {
 		xio_ev_loop_del((*loop), tev->fd);
+	}
+
+	list_for_each_entry_safe(tev, tmp_tev, &(*loop)->events_list,
+				 events_list_entry) {
+		xio_ev_loop_remove_event((*loop), tev);
 	}
 
 	xio_ev_loop_del((*loop), (*loop)->wakeup_event);

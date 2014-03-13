@@ -286,7 +286,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 			ctx,
 			tcq->channel->fd,
 			XIO_POLLIN,
-			xio_data_ev_handler,
+			xio_cq_event_handler,
 			tcq);
 	if (retval) {
 		xio_set_error(errno);

@@ -75,6 +75,8 @@ static int xio_rdma_on_recv_cancel_rsp(struct xio_rdma_transport *rdma_hndl,
 static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl);
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 				 struct xio_task *task);
+static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data);
+static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data);
 
 
 /*---------------------------------------------------------------------------*/
@@ -556,8 +558,8 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			   ibv_wc_status_str(wc->status),
 			   wc->vendor_err);
 	} else  {
-		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, task:%p, "  \
-			  "wr_id:0x%lx, " \
+		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, "  \
+			  "task:%p, wr_id:0x%lx, " \
 			  "err:%s, vendor_err:0x%x\n",
 			  rdma_hndl->base.is_client ? "client" : "server",
 			  rdma_hndl->state,
@@ -612,7 +614,7 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 		return 0;
 
 	if ((rdma_hndl->reqs_in_flight_nr || rdma_hndl->rsps_in_flight_nr) &&
-	     !rdma_hndl->last_send_was_signaled)
+	    !rdma_hndl->last_send_was_signaled)
 		goto send_final_nop;
 
 	/* does the peer have already maximum credits? */
@@ -903,77 +905,189 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
 	}
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_cq_event_handler							     */
-/*---------------------------------------------------------------------------*/
-static int xio_cq_event_handler(struct xio_cq *tcq, int timeout_us)
+/*
+ * Could read as many entries as possible without blocking, but
+ * that just fills up a list of tasks.  Instead pop out of here
+ * so that tx progress, like issuing rdma reads and writes, can
+ * happen periodically.
+ */
+static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 {
-	int				retval;
-	int				i;
-	int				num_delayed_arm = 0;
-	cycles_t			timeout = timeout_us*g_mhz;
-	cycles_t			start_time;
-	int				req_notify = 0;
-	int				last_recv = -1;
-	int				budget_counter = 0;
+	int		err = 0, numwc = 0;
+	int		wclen, i;
+	int		last_recv = -1;
+	int		timeouts_num = 0;
+	cycles_t	timeout;
+	cycles_t	start_time = 0;
 
+	for (;;) {
+		wclen = max_wc - numwc;
+		if (wclen > tcq->wc_array_len)
+			wclen = tcq->wc_array_len;
 
-retry:
-	while (1) {
-		retval = ibv_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
-		if (likely(retval > 0)) {
-			num_delayed_arm = 0;
-			req_notify = 0;
-			for (i = retval; i > 0; i--) {
-				if (tcq->wc_array[i-1].opcode == IBV_WC_RECV) {
-					last_recv = i-1;
-					break;
-				}
-			}
-			for (i = 0; i < retval; i++) {
-				if (tcq->wc_array[i].status == IBV_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i],
-						      (i != last_recv));
-				else
-					xio_handle_wc_error(
-							&tcq->wc_array[i]);
-			}
-
-			/* avoid epoll starvation */
-			if (++budget_counter == BUDGET_SIZE)
-				break;
-		} else if (retval == 0) {
+		err = ibv_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
+		if (err == 0) { /* no completions retrieved */
 			if (timeout_us == 0)
 				break;
 			/* wait timeout before going out */
-			if (num_delayed_arm == 0) {
+			if (timeouts_num == 0) {
 				start_time = get_cycles();
 			} else {
+				/*calculate it again, need to spend time */
+				timeout = timeout_us*g_mhz;
 				if (timeout_us > 0 &&
 				    (get_cycles() - start_time) > timeout)
 					break;
 			}
-			num_delayed_arm++;
-		} else {
-			ERROR_LOG("ibv_poll_cq failed. (errno=%d %m)\n", errno);
+			timeouts_num++;
+			continue;
+		}
+
+		if (unlikely(err < 0)) {
+			ERROR_LOG("ibv_poll_cq failed\n");
+			break;
+		}
+		timeouts_num = 0;
+		for (i = err; i > 0; i--) {
+			if (tcq->wc_array[i-1].opcode == IBV_WC_RECV) {
+				last_recv = i-1;
+				break;
+			}
+		}
+		for (i = 0; i < err; i++) {
+			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
+				xio_handle_wc(&tcq->wc_array[i],
+					      (i != last_recv));
+			else
+				xio_handle_wc_error(
+						&tcq->wc_array[i]);
+		}
+		if (++numwc == max_wc) {
+			err = 1;
 			break;
 		}
 	}
-
-	if (req_notify == 0) {
-		retval = ibv_req_notify_cq(tcq->cq, 0);
-		if (unlikely(retval))
-			ERROR_LOG("ibv_req_notify_cq failed. (errno=%d %m)\n",
-				  errno);
-		req_notify = 1;
-		if (budget_counter != BUDGET_SIZE)
-			goto retry;
-	}
-
-	return 0;
+	return err;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_rearm_completions						     */
+/*---------------------------------------------------------------------------*/
+static void xio_rearm_completions(struct xio_cq *tcq)
+{
+	int err;
 
+	err = ibv_req_notify_cq(tcq->cq, 0);
+	if (unlikely(err)) {
+		ERROR_LOG("ibv_req_notify_cq failed. (errno=%d %m)\n",
+			  errno);
+	}
+
+	xio_ctx_init_event(&tcq->event_data,
+			   xio_sched_consume_cq, tcq);
+	xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+
+	tcq->num_delayed_arm = 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_poll_cq_armable							     */
+/*---------------------------------------------------------------------------*/
+static void xio_poll_cq_armable(struct xio_cq *tcq)
+{
+	int err;
+
+	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
+	if (unlikely(err < 0)) {
+		xio_rearm_completions(tcq);
+		return;
+	}
+
+	if (err == 0 && (++tcq->num_delayed_arm == MAX_NUM_DELAYED_ARM))
+		/* no more completions on cq, give up and arm the interrupts */
+		xio_rearm_completions(tcq);
+	else {
+		xio_ctx_init_event(&tcq->event_data,
+				   xio_sched_poll_cq, tcq);
+		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+	}
+}
+
+/* xio_sched_consume_cq() is scheduled to consume completion events that
+   could arrive after the cq had been seen empty, but just before
+   the interrupts were re-armed.
+   Intended to consume those remaining completions only, the function
+   does not re-arm interrupts, but polls the cq until it's empty.
+   As we always limit the number of completions polled at a time, we may
+   need to schedule this functions few times.
+   It may happen that during this process new completions occur, and
+   we get an interrupt about that. Some of the "new" completions may be
+   processed by the self-scheduling xio_sched_consume_cq(), which is
+   a good thing, because we don't need to wait for the interrupt event.
+   When the interrupt notification arrives, its handler will remove the
+   scheduled event, and call xio_poll_cq_armable(), so that the polling
+   cycle resumes normally.
+*/
+static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data)
+{
+	struct xio_cq *tcq = data;
+	int err;
+
+	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
+	if (err > 0) {
+		xio_ctx_init_event(&tcq->event_data,
+				   xio_sched_consume_cq, tcq);
+		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+	}
+}
+
+/* Scheduled to poll cq after a completion event has been
+   received and acknowledged, if no more completions are found
+   the interrupts are re-armed */
+static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data)
+{
+	struct xio_cq *tcq = data;
+	xio_poll_cq_armable(tcq);
+}
+
+/*
+ * Called from main event loop when a CQ notification is available.
+ */
+void xio_cq_event_handler(int fd  __attribute__ ((unused)),
+			  int events __attribute__ ((unused)),
+			  void *data)
+{
+	void				*cq_context;
+	struct ibv_cq			*cq;
+	struct xio_cq			*tcq = data;
+	struct xio_rdma_transport	*rdma_hndl;
+	int				err;
+
+	err = ibv_get_cq_event(tcq->channel, &cq, &cq_context);
+	if (unlikely(err != 0)) {
+		/* Just print the log message, if that was a serious problem,
+		   it will express itself elsewhere */
+		ERROR_LOG("failed to retrieve CQ event, cq:%p\n", cq);
+		return;
+	}
+	/* accumulate number of cq events that need to
+	 * be acked, and periodically ack them
+	 */
+	if (++tcq->cq_events_that_need_ack == 128/*UINT_MAX*/) {
+		ibv_ack_cq_events(tcq->cq, 128/*UINT_MAX*/);
+		tcq->cq_events_that_need_ack = 0;
+	}
+
+	/* if a poll was previously scheduled, remove it,
+	   as it will be scheduled when necessary */
+	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+
+	xio_poll_cq_armable(tcq);
+
+	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
+		xio_rdma_idle_handler(rdma_hndl);
+	}
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_poll							     */
@@ -1046,41 +1160,6 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	}
 
 	return nr_comp;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_data_ev_handler							     */
-/*---------------------------------------------------------------------------*/
-void xio_data_ev_handler(int fd, int events, void *user_context)
-{
-	void				*cq_context;
-	struct ibv_cq			*cq;
-	struct xio_cq			*tcq = user_context;
-	struct xio_rdma_transport	*rdma_hndl;
-	int				retval;
-
-	retval = ibv_get_cq_event(tcq->channel, &cq, &cq_context);
-	if (unlikely(retval != 0)) {
-		ERROR_LOG("ibv_get_cq_event failed cq:%p. (retval=%d %m)\n",
-			  cq, errno);
-		return;
-	}
-
-	/* accumulate number of cq events that need to
-	 * be acked, and periodically ack them
-	 */
-	if (++tcq->cq_events_that_need_ack == UINT_MAX) {
-		ibv_ack_cq_events(tcq->cq, UINT_MAX);
-		tcq->cq_events_that_need_ack = 0;
-	}
-
-	xio_cq_event_handler(tcq, tcq->ctx->polling_timeout);
-
-	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
-		xio_rdma_idle_handler(rdma_hndl);
-	}
-
-	return;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1813,7 +1892,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
 
 
-	if(IS_FIN(task->tlv_type)) {
+	if (IS_FIN(task->tlv_type)) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
 		must_send = 1;
 	}
@@ -2006,7 +2085,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		rdma_hndl->tx_ready_tasks_num++;
 	}
 
-	if(IS_FIN(task->tlv_type)) {
+	if (IS_FIN(task->tlv_type)) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
 		must_send = 1;
 	}

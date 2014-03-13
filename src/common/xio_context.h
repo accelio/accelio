@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies�� BSD license
+ * directory of this source tree, or the Mellanox Technologies® BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies�� nor the names of its
+ *      - Neither the name of the Mellanox Technologies® nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -39,9 +39,11 @@
 #define XIO_CONTEXT_H
 
 #include "xio_workqueue.h"
+#include "xio_ev_data.h"
 
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
+#define xio_ctx_event_t xio_ev_data_t
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
@@ -100,26 +102,45 @@ int xio_context_reg_observer(struct xio_context *context,
 void xio_context_unreg_observer(struct xio_context *conn,
 				struct xio_observer *observer);
 
-
+/*---------------------------------------------------------------------------*/
+/* xio_add_counter							     */
+/*---------------------------------------------------------------------------*/
 int xio_add_counter(struct xio_context *ctx, char *name);
 
+/*---------------------------------------------------------------------------*/
+/* xio_del_counter							     */
+/*---------------------------------------------------------------------------*/
 int xio_del_counter(struct xio_context *ctx, int counter);
 
-static inline void xio_ctx_stat_add(struct xio_context *ctx, int counter, uint64_t val)
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_stat_add							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_ctx_stat_add(struct xio_context *ctx,
+				    int counter, uint64_t val)
 {
 	ctx->stats.counter[counter] += val;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_stat_inc							     */
+/*---------------------------------------------------------------------------*/
 static inline void xio_ctx_stat_inc(struct xio_context *ctx, int counter)
 {
 	ctx->stats.counter[counter]++;
 }
 
-static inline void xio_stat_add(struct xio_statistics *stats, int counter, uint64_t val)
+/*---------------------------------------------------------------------------*/
+/* xio_stat_add								     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_stat_add(struct xio_statistics *stats,
+				int counter, uint64_t val)
 {
 	stats->counter[counter] += val;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_stat_inc								     */
+/*---------------------------------------------------------------------------*/
 static inline void xio_stat_inc(struct xio_statistics *stats, int counter)
 {
 	stats->counter[counter]++;
@@ -148,11 +169,30 @@ int xio_ctx_add_work(struct xio_context *ctx,
 			     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_del_delayed_work					             */
+/* xio_ctx_del_work							     */
 /*---------------------------------------------------------------------------*/
 int xio_ctx_del_work(struct xio_context *ctx,
 		     xio_ctx_work_t *work);
 
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_init_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_init_event(
+		xio_ctx_event_t *evt,
+		void (*event_handler)(xio_ctx_event_t *tev, void *data),
+		void *data);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_add_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_add_event(struct xio_context *ctx,
+		       xio_ctx_event_t *evt);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_remove_event							     */
+/*---------------------------------------------------------------------------*/
+void xio_ctx_remove_event(struct xio_context *ctx,
+			  xio_ctx_event_t *evt);
 
 #endif /*XIO_CONTEXT_H */
 
