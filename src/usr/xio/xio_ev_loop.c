@@ -318,7 +318,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_run_helper                                                    */
 /*---------------------------------------------------------------------------*/
-inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
+static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	int			nevent = 0, i;
@@ -363,7 +363,7 @@ retry:
 		}
 	} else {
 		/* timed out */
-		if (tmout)
+		if (tmout || timeout == 0)
 			loop->stop_loop = 1;
 		/* TODO: timeout should be updated by the elapsed
 		 * duration of each loop
