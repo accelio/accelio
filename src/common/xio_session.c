@@ -816,6 +816,11 @@ static int xio_on_rsp_send_comp(
 		struct xio_task *task)
 {
 
+	if (connection->is_flushed) {
+		xio_tasks_pool_put(task);
+		goto xmit;
+	}
+
 	/* remove the message from in flight queue */
 	xio_connection_remove_in_flight(connection, task->omsg);
 
@@ -840,6 +845,7 @@ static int xio_on_rsp_send_comp(
 		xio_tasks_pool_put(task);
 	}
 
+xmit:
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
 
@@ -853,6 +859,11 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
+	if (connection->is_flushed) {
+		xio_tasks_pool_put(task);
+		goto xmit;
+	}
+
 	/* recycle the task */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
 		struct xio_statistics *stats = &connection->ctx->stats;
@@ -873,6 +884,7 @@ static int xio_on_ow_req_send_comp(
 		xio_tasks_pool_put(task);
 	}
 
+xmit:
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
 

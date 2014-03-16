@@ -463,6 +463,8 @@ int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 					     XIO_E_MSG_FLUSHED);
 	}
 
+	connection->is_flushed = 1;
+
 	return 0;
 }
 
