@@ -682,9 +682,9 @@ int xio_send_request(struct xio_connection *connection,
 			return -1;
 		}
 
-		if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
+		if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
 			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			     connection->state != XIO_CONNECTION_STATE_INIT &&
+			     connection->state != XIO_CONNECTION_STATE_INIT) ||
 			     connection->in_close)) {
 			xio_set_error(ESHUTDOWN);
 			xio_session_notify_msg_error(connection, pmsg,
@@ -747,9 +747,9 @@ int xio_send_response(struct xio_msg *msg)
 		}
 
 		if (unlikely(
-		     connection->state != XIO_CONNECTION_STATE_ONLINE  &&
+		     (connection->state != XIO_CONNECTION_STATE_ONLINE  &&
 		     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-		     connection->state != XIO_CONNECTION_STATE_INIT &&
+		     connection->state != XIO_CONNECTION_STATE_INIT) ||
 		     connection->in_close)) {
 			xio_set_error(ESHUTDOWN);
 			xio_tasks_pool_put(task);
@@ -883,9 +883,9 @@ int xio_send_msg(struct xio_connection *connection,
 			ERROR_LOG("invalid out message\n");
 			return -1;
 		}
-		if (unlikely(connection->state != XIO_CONNECTION_STATE_ONLINE &&
+		if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
 			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			     connection->state != XIO_CONNECTION_STATE_INIT &&
+			     connection->state != XIO_CONNECTION_STATE_INIT) ||
 			     connection->in_close)) {
 			xio_set_error(ESHUTDOWN);
 			xio_session_notify_msg_error(connection, pmsg,
