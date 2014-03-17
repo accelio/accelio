@@ -439,7 +439,7 @@ void xio_unreg_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 	struct xio_mem_reg *reg = &mdesc->mem_reg;
 	struct fast_reg_descriptor *fdesc = reg->mem_h;
 
-	if (reg->mem_h)
+	if (!reg->mem_h)
 		return;
 
 	reg->mem_h = NULL;
