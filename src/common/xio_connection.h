@@ -86,7 +86,7 @@ struct xio_connection {
 	int				in_flight_reqs_budget;
 	int				in_flight_sends_budget; /* one way msgs */
 	int				in_close;
-	int				pad;
+	int				is_flushed;
 
 	struct kref			kref;
 	struct xio_msg_list		reqs_msgq;
