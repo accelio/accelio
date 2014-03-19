@@ -50,11 +50,11 @@ double	g_mhz;
 
 extern struct xio_transport xio_rdma_transport;
 
-struct xio_transport  *transport_tbl[] = {
+static struct xio_transport  *transport_tbl[] = {
 	&xio_rdma_transport
 };
 
-size_t transport_tbl_sz = (sizeof(transport_tbl) / sizeof(transport_tbl[0]));
+#define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
 
 static volatile int32_t	ini_refcnt = 0;
 static DEFINE_MUTEX(ini_mutex);
