@@ -918,6 +918,8 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 
 	rdma_task->txd.send_wr.num_sge = 1;
 	rdma_task->ib_op = XIO_IB_NULL;
+	rdma_task->phantom_idx = 0;
+	rdma_task->sn = 0;
 
 	return 0;
 }
@@ -1985,7 +1987,7 @@ static struct xio_transport xio_rdma_transport = {
 	.name			= "rdma",
 	.ctor			= NULL,
 	.dtor			= NULL,
-	.init			= xio_rdma_transport_init,
+	.init			= NULL,
 	.release		= NULL,
 	.context_shutdown	= xio_rdma_context_shutdown,
 	.open			= xio_rdma_open,
