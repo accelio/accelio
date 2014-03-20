@@ -1150,6 +1150,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		}
 	}
 
+	/*
 	retval = ibv_req_notify_cq(tcq->cq, 0);
 	if (unlikely(retval)) {
 		errno = retval;
@@ -1158,6 +1159,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 			  errno);
 		return -1;
 	}
+	*/
 
 	return nr_comp;
 }
