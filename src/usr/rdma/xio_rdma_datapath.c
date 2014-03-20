@@ -1046,8 +1046,15 @@ static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data)
    the interrupts are re-armed */
 static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data)
 {
-	struct xio_cq *tcq = data;
+	struct xio_rdma_transport	*rdma_hndl;
+	struct xio_cq			*tcq = data;
+
 	xio_poll_cq_armable(tcq);
+
+	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
+		xio_rdma_idle_handler(rdma_hndl);
+	}
+
 }
 
 /*
@@ -1060,7 +1067,6 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 	void				*cq_context;
 	struct ibv_cq			*cq;
 	struct xio_cq			*tcq = data;
-	struct xio_rdma_transport	*rdma_hndl;
 	int				err;
 
 	err = ibv_get_cq_event(tcq->channel, &cq, &cq_context);
@@ -1083,10 +1089,6 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
 
 	xio_poll_cq_armable(tcq);
-
-	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
-		xio_rdma_idle_handler(rdma_hndl);
-	}
 }
 
 /*---------------------------------------------------------------------------*/
