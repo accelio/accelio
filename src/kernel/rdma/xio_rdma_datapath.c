@@ -3064,7 +3064,7 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	rdma_hndl->rsps_in_flight_nr++;
 
-	list_add_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
+	list_move(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
