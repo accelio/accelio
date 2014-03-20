@@ -1125,7 +1125,6 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 	xio_observable_unreg_all_observers(&conn->observable);
 
 	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
-		ERROR_LOG("FFFFFFFFFFFFFFF\n");
 		if (conn->transport_hndl)
 			xio_ctx_del_delayed_work(
 					conn->transport_hndl->ctx,
