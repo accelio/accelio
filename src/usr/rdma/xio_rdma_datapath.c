@@ -829,8 +829,9 @@ static void xio_rdma_rd_comp_handler(
 		event_data.msg.op		= XIO_WC_OP_RECV;
 		event_data.msg.task		= task;
 
-		xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_NEW_MESSAGE,
-					 &event_data);
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_NEW_MESSAGE,
+					      &event_data);
 
 		while (rdma_hndl->rdma_in_flight) {
 			task = list_first_entry(
@@ -851,7 +852,7 @@ static void xio_rdma_rd_comp_handler(
 			event_data.msg.op	= XIO_WC_OP_RECV;
 			event_data.msg.task	= task;
 
-			xio_rdma_notify_observer(rdma_hndl,
+			xio_transport_notify_observer(&rdma_hndl->base,
 						 XIO_TRANSPORT_NEW_MESSAGE,
 						 &event_data);
 		}
@@ -2152,8 +2153,9 @@ static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 	event_data.msg.op	= XIO_WC_OP_SEND;
 	event_data.msg.task	= task;
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_SEND_COMPLETION, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_SEND_COMPLETION,
+				      &event_data);
 
 	return 0;
 }
@@ -2172,8 +2174,9 @@ static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 	event_data.msg.op	= XIO_WC_OP_SEND;
 	event_data.msg.task	= task;
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_SEND_COMPLETION, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_SEND_COMPLETION,
+				      &event_data);
 
 	return 0;
 }
@@ -2371,15 +2374,16 @@ partial_msg:
 	event_data.msg.task	= task;
 
 	/* notify the upper layer of received message */
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_NEW_MESSAGE, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_NEW_MESSAGE,
+				      &event_data);
 	return 0;
 
 cleanup:
 	retval = xio_errno();
 	ERROR_LOG("xio_rdma_on_recv_rsp failed. (errno=%d %s)\n",
 		  retval, xio_strerror(retval));
-	xio_rdma_notify_observer_error(rdma_hndl, retval);
+	xio_transport_notify_observer_error(&rdma_hndl->base, retval);
 
 	return -1;
 }
@@ -2395,8 +2399,9 @@ static int xio_rdma_assign_in_buf(struct xio_rdma_transport *rdma_hndl,
 			.assign_in_buf.is_assigned = 0
 	};
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_ASSIGN_IN_BUF, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_ASSIGN_IN_BUF,
+				      &event_data);
 
 	*is_assigned = event_data.assign_in_buf.is_assigned;
 	return 0;
@@ -3000,8 +3005,8 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	event_data.msg.op	= XIO_WC_OP_RECV;
 	event_data.msg.task	= task;
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_NEW_MESSAGE, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_NEW_MESSAGE, &event_data);
 
 	return 0;
 
@@ -3009,7 +3014,7 @@ cleanup:
 	retval = xio_errno();
 	ERROR_LOG("xio_rdma_on_recv_req failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
-	xio_rdma_notify_observer_error(rdma_hndl, retval);
+	xio_transport_notify_observer_error(&rdma_hndl->base, retval);
 
 	return -1;
 }
@@ -3233,8 +3238,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	event_data.msg.op	= XIO_WC_OP_RECV;
 	event_data.msg.task	= task;
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_NEW_MESSAGE, &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_NEW_MESSAGE, &event_data);
 	return 0;
 }
 
@@ -3551,9 +3556,9 @@ static int xio_rdma_cancel_req_handler(struct xio_rdma_transport *rdma_hndl,
 		event_data.cancel.result	   =  0;
 
 
-		xio_rdma_notify_observer(rdma_hndl,
-					 XIO_TRANSPORT_CANCEL_REQUEST,
-					 &event_data);
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_CANCEL_REQUEST,
+					      &event_data);
 	}
 
 	return 0;
@@ -3606,9 +3611,10 @@ static int xio_rdma_cancel_rsp_handler(struct xio_rdma_transport *rdma_hndl,
 			event_data.cancel.task		=  NULL;
 			event_data.cancel.result	=  XIO_E_MSG_NOT_FOUND;
 
-			xio_rdma_notify_observer(rdma_hndl,
-						 XIO_TRANSPORT_CANCEL_RESPONSE,
-						 &event_data);
+			xio_transport_notify_observer(
+					&rdma_hndl->base,
+					XIO_TRANSPORT_CANCEL_RESPONSE,
+					&event_data);
 			return 0;
 		}
 	}
@@ -3619,9 +3625,9 @@ static int xio_rdma_cancel_rsp_handler(struct xio_rdma_transport *rdma_hndl,
 	event_data.cancel.task		   =  task_to_cancel;
 	event_data.cancel.result	   =  cancel_hdr->result;
 
-	xio_rdma_notify_observer(rdma_hndl,
-				 XIO_TRANSPORT_CANCEL_RESPONSE,
-				 &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      &event_data);
 
 	return 0;
 }
@@ -3744,7 +3750,7 @@ cleanup:
 	retval = xio_errno();
 	ERROR_LOG("xio_rdma_on_recv_req failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
-	xio_rdma_notify_observer_error(rdma_hndl, retval);
+	xio_transport_notify_observer_error(&rdma_hndl->base, retval);
 
 	return -1;
 }
@@ -3787,9 +3793,9 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 			event_data.cancel.task		=  ptask;
 			event_data.cancel.result	=  XIO_E_MSG_CANCELED;
 
-			xio_rdma_notify_observer(rdma_hndl,
-						 XIO_TRANSPORT_CANCEL_RESPONSE,
-						 &event_data);
+			xio_transport_notify_observer(&rdma_hndl->base,
+						      XIO_TRANSPORT_CANCEL_RESPONSE,
+						      &event_data);
 			return 0;
 		}
 	}
@@ -3838,8 +3844,9 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 	event_data.cancel.task		   =  NULL;
 	event_data.cancel.result	   =  XIO_E_MSG_NOT_FOUND;
 
-	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_CANCEL_RESPONSE,
-				 &event_data);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      &event_data);
 
 	return 0;
 }

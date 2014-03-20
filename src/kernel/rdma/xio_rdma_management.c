@@ -1175,7 +1175,7 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 	if (retval) {
 		xio_set_error(retval);
 		ERROR_LOG("rdma_resolve_route failed. (err=%d)\n", retval);
-		xio_rdma_notify_observer_error(rdma_hndl, xio_errno());
+		xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
 	}
 }
 
@@ -1244,7 +1244,7 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 notify_err2:
 	xio_release_qp(rdma_hndl);
 notify_err1:
-	xio_rdma_notify_observer_error(rdma_hndl, xio_errno());
+	xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1303,9 +1303,9 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 
 	event_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
-	xio_rdma_notify_observer(parent_hndl,
-				 XIO_TRANSPORT_NEW_CONNECTION,
-				 &event_data);
+	xio_transport_notify_observer(&parent_hndl->base,
+				      XIO_TRANSPORT_NEW_CONNECTION,
+				      &event_data);
 
 	return;
 
@@ -1313,7 +1313,7 @@ notify_err2:
 	xio_rdma_close((struct xio_transport_base *)child_hndl);
 
 notify_err1:
-	xio_rdma_notify_observer_error(parent_hndl, xio_errno());
+	xio_transport_notify_observer_error(&parent_hndl->base, xio_errno());
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1324,7 +1324,8 @@ static void on_cm_refused(struct rdma_cm_event *ev,
 {
 	TRACE_LOG("on_cm refused. reason:%s\n",
 		  xio_cm_rej_reason_str(ev->status));
-	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_REFUSED, NULL);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_REFUSED, NULL);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1333,7 +1334,8 @@ static void on_cm_refused(struct rdma_cm_event *ev,
 static void on_cm_established(struct rdma_cm_event *ev,
 			      struct xio_rdma_transport *rdma_hndl)
 {
-	xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_ESTABLISHED, NULL);
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_ESTABLISHED, NULL);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1374,13 +1376,15 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 	xio_rdma_flush_all_tasks(rdma_hndl);
 
 	if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
-		xio_rdma_notify_observer(rdma_hndl,
-					 XIO_TRANSPORT_DISCONNECTED, NULL);
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_DISCONNECTED,
+					      NULL);
 	}
 
 	if (rdma_hndl->state == XIO_STATE_CLOSED) {
-		xio_rdma_notify_observer(rdma_hndl, XIO_TRANSPORT_CLOSED,
-					 NULL);
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_CLOSED,
+					      NULL);
 		rdma_hndl->state = XIO_STATE_DESTROYED;
 	}
 }
@@ -1414,7 +1418,7 @@ static void on_cm_error(struct rdma_cm_event *ev,
 		break;
 	}
 
-	xio_rdma_notify_observer_error(rdma_hndl, reason);
+	xio_transport_notify_observer_error(&rdma_hndl->base, reason);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1610,9 +1614,9 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			rdma_hndl->state = XIO_STATE_CLOSED;
 			break;
 		default:
-			xio_rdma_notify_observer(rdma_hndl,
-						 XIO_TRANSPORT_CLOSED,
-						 NULL);
+			xio_transport_notify_observer(&rdma_hndl->base,
+						      XIO_TRANSPORT_CLOSED,
+						      NULL);
 			rdma_hndl->state = XIO_STATE_DESTROYED;
 			break;
 		};
@@ -2002,8 +2006,6 @@ static struct xio_transport xio_rdma_transport = {
 	.get_opt		= xio_rdma_get_opt,
  	.cancel_req		= xio_rdma_cancel_req,
  	.cancel_rsp		= xio_rdma_cancel_rsp,
-	.reg_observer		= xio_transport_reg_observer,
-	.unreg_observer		= xio_transport_unreg_observer,
 	.get_pools_setup_ops	= xio_rdma_get_pools_ops,
 	.set_pools_cls		= xio_rdma_set_pools_cls,
 

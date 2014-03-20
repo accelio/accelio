@@ -166,12 +166,6 @@ struct xio_transport {
 	int	(*context_shutdown)(struct xio_transport_base *trans_hndl,
 				    struct xio_context *ctx);
 
-	/* observers */
-	void	(*reg_observer)(struct xio_transport_base *trans_hndl,
-				struct xio_observer *observer);
-	void	(*unreg_observer)(struct xio_transport_base *trans_hndl,
-				   struct xio_observer *observer);
-
 	/* task pools managment */
 	void	(*get_pools_setup_ops)(struct xio_transport_base *trans_hndl,
 				struct xio_tasks_pool_ops **initial_pool_ops,
@@ -235,13 +229,58 @@ static inline void xio_transport_reg_observer(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_transport_remove_observer	                                     */
+/* xio_transport_unreg_observer						     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_transport_unreg_observer(
 		struct xio_transport_base *trans_hndl,
 		struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&trans_hndl->observable, observer);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_unreg_observer						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_transport_notify_observer(
+		struct xio_transport_base *trans_hndl,
+		int event, void *event_data)
+{
+	xio_observable_notify_all_observers(&trans_hndl->observable,
+					    event, event_data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_notify_observer_error					     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_transport_notify_observer_error(
+				struct xio_transport_base *trans_hndl,
+				int reason)
+{
+	union xio_transport_event_data ev_data = {
+		.error.reason = reason
+	};
+
+	xio_observable_notify_all_observers(&trans_hndl->observable,
+					    XIO_TRANSPORT_ERROR,
+					    &ev_data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_notify_message_error					     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_transport_notify_message_error(
+				struct xio_transport_base *trans_hndl,
+				struct xio_task *task,
+				enum xio_status reason)
+{
+	union xio_transport_event_data ev_data;
+
+	ev_data.msg_error.task		= task;
+	ev_data.msg_error.reason	= reason;
+
+	xio_observable_notify_all_observers(&trans_hndl->observable,
+					    XIO_TRANSPORT_MESSAGE_ERROR,
+					    &ev_data);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -266,6 +305,7 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			struct xio_task *task, enum xio_status result,
 			void *ulp_msg, size_t ulp_msg_sz);
+
 
 #endif /*XIO_TRANSPORT_H */
 

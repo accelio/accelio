@@ -1023,13 +1023,8 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	xio_conns_store_add(conn, &conn->cid);
 
 	/* add  the new connection as observer to transport */
-	if (conn->transport->reg_observer) {
-		conn->transport->reg_observer(conn->transport_hndl,
-					      &conn->trans_observer);
-	} else {
-		ERROR_LOG("transport does not implement \"add_observer\"\n");
-		goto cleanup;
-	}
+	xio_transport_reg_observer(conn->transport_hndl,
+				   &conn->trans_observer);
 
 	if (conn->transport->get_pools_setup_ops) {
 		conn->transport->get_pools_setup_ops(conn->transport_hndl,
@@ -1117,10 +1112,9 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 {
 	TRACE_LOG("conn:%p - close complete\n", conn);
 
-	if (conn->transport->unreg_observer && conn->transport_hndl) {
-		conn->transport->unreg_observer(conn->transport_hndl,
-						&conn->trans_observer);
-	}
+	xio_transport_unreg_observer(conn->transport_hndl,
+				     &conn->trans_observer);
+
 	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
 

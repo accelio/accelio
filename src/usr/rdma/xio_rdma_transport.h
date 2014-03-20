@@ -459,45 +459,7 @@ int xio_mr_list_free(void);
 const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode);
 
 
-/* xio_rdma_datapath.c */
-static inline void xio_rdma_notify_observer(
-		struct xio_rdma_transport *rdma_hndl,
-		int event, void *event_data)
-{
-	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
-					    event, event_data);
-}
 
-static inline void xio_rdma_notify_observer_error(
-				struct xio_rdma_transport *rdma_hndl,
-				int reason)
-{
-	union xio_transport_event_data ev_data = {
-		.error.reason = reason
-	};
-
-	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
-					    XIO_TRANSPORT_ERROR,
-					    &ev_data);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_notify_message_error					     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_rdma_notify_message_error(
-				struct xio_rdma_transport *rdma_hndl,
-				struct xio_task *task,
-				enum xio_status reason)
-{
-	union xio_transport_event_data ev_data;
-
-	ev_data.msg_error.task		= task;
-	ev_data.msg_error.reason	= reason;
-
-	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
-					    XIO_TRANSPORT_MESSAGE_ERROR,
-					    &ev_data);
-}
 
 void xio_cq_event_handler(int fd, int events, void *data);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,

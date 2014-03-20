@@ -465,25 +465,6 @@ const char *xio_rdma_event_str(enum rdma_cm_event_type event);
 
 
 /* xio_rdma_datapath.c */
-static inline void xio_rdma_notify_observer(struct xio_rdma_transport *rdma_hndl,
-					    int event, void *event_data)
-{
-	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
-					    event, event_data);
-}
-
-static inline void xio_rdma_notify_observer_error(struct xio_rdma_transport *rdma_hndl,
-						  int reason)
-{
-	union xio_transport_event_data ev_data = {
-		.error.reason = reason
-	};
-
-	xio_observable_notify_all_observers(&rdma_hndl->base.observable,
-					    XIO_TRANSPORT_ERROR,
-					    &ev_data);
-}
-
 void xio_data_ev_handler(int fd, int events, void *user_context);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
 		  struct xio_task *task, int num_recv_bufs);
