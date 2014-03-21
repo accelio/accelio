@@ -314,6 +314,7 @@ struct xio_rdma_tasks_pool {
 
 	/* memory registration for data */
 	struct ibv_mr			*data_mr;
+	struct xio_buf			*io_buf;
 	int				buf_size;
 	int				pad;
 };

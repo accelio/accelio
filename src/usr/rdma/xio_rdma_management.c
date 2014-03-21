@@ -58,7 +58,7 @@
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
 #define XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD		SEND_BUF_SZ
-#define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		1024
+#define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		256
 #define XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD		65536
 
 /*---------------------------------------------------------------------------*/
@@ -948,11 +948,12 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 	 * also note that client holds the sent and recv tasks
 	 * simultanousely */
 
-	rdma_hndl->num_tasks = 8*(rdma_hndl->sq_depth +
+	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);
+
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
-	rdma_hndl->max_tx_ready_tasks_num = 2*rdma_hndl->sq_depth;
+	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
 
 	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
 		  rdma_hndl->alloc_sz,
@@ -1141,31 +1142,60 @@ static int xio_rdma_primary_pool_alloc(
 		struct xio_transport_base *transport_hndl,
 		int max, void *pool_dd_data)
 {
+	struct xio_mr_elem *tmr_elem;
+
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
 	rdma_pool->buf_size = rdma_hndl->membuf_sz;
-	rdma_pool->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
-	if (!rdma_pool->data_pool) {
-		xio_set_error(ENOMEM);
-		ERROR_LOG("malloc rdma pool sz:%zu failed\n",
-			  rdma_hndl->alloc_sz);
-		return -1;
+
+	if (disable_huge_pages) {
+		rdma_pool->io_buf = xio_alloc(rdma_hndl->alloc_sz);
+		if (!rdma_pool->io_buf) {
+			xio_set_error(ENOMEM);
+			ERROR_LOG("xio_alloc rdma pool sz:%zu failed\n",
+					rdma_hndl->alloc_sz);
+			return -1;
+		}
+		rdma_pool->data_pool = rdma_pool->io_buf->addr;
+		rdma_pool->data_mr = NULL;
+		list_for_each_entry(tmr_elem,
+				    &rdma_pool->io_buf->mr->dm_list,
+				    dm_list_entry) {
+			if (rdma_hndl->tcq->dev == tmr_elem->dev)  {
+				rdma_pool->data_mr = tmr_elem->mr;
+				break;
+			}
+		}
+		if (!rdma_pool->data_mr) {
+			xio_set_error(errno);
+			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			return -1;
+		}
+	} else {
+		rdma_pool->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
+		if (!rdma_pool->data_pool) {
+			xio_set_error(ENOMEM);
+			ERROR_LOG("malloc rdma pool sz:%zu failed\n",
+					rdma_hndl->alloc_sz);
+			return -1;
+		}
+
+		/* One pool of registered memory per PD */
+		rdma_pool->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
+				rdma_pool->data_pool,
+				rdma_hndl->alloc_sz,
+				IBV_ACCESS_LOCAL_WRITE);
+		if (!rdma_pool->data_mr) {
+			xio_set_error(errno);
+			ufree_huge_pages(rdma_pool->data_pool);
+			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			return -1;
+		}
 	}
 
-	/* One pool of registered memory per PD */
-	rdma_pool->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
-			rdma_pool->data_pool,
-			rdma_hndl->alloc_sz,
-			IBV_ACCESS_LOCAL_WRITE);
-	if (!rdma_pool->data_mr) {
-		xio_set_error(errno);
-		ufree_huge_pages(rdma_pool->data_pool);
-		ERROR_LOG("ibv_reg_mr failed, %m\n");
-		return -1;
-	}
 	DEBUG_LOG("pool buf:%p, mr:%p lkey:0x%x\n",
 		  rdma_pool->data_pool, rdma_pool->data_mr,
 		  rdma_pool->data_mr->lkey);
@@ -1196,8 +1226,12 @@ static int xio_rdma_primary_pool_free(
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
-	ibv_dereg_mr(rdma_pool->data_mr);
-	ufree_huge_pages(rdma_pool->data_pool);
+	if (rdma_pool->io_buf) {
+		xio_free(&rdma_pool->io_buf);
+	} else {
+		ibv_dereg_mr(rdma_pool->data_mr);
+		ufree_huge_pages(rdma_pool->data_pool);
+	}
 
 	return 0;
 }
@@ -2058,7 +2092,7 @@ static int xio_rdma_set_opt(void *xio_obj,
 		rdma_options.rdma_buf_threshold = *((int *)optval) +
 					XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
 		rdma_options.rdma_buf_threshold =
-			ALIGN(rdma_options.rdma_buf_threshold, 1024);
+			ALIGN(rdma_options.rdma_buf_threshold, 64);
 		return 0;
 		break;
 	default:

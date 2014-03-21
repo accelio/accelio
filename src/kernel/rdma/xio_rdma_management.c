@@ -774,12 +774,12 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 	 * simultaneously
 	 */
 
-	rdma_hndl->num_tasks = 8*(rdma_hndl->sq_depth +
+	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);
 
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
 
-	rdma_hndl->max_tx_ready_tasks_num = 2*rdma_hndl->sq_depth;
+	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
 
 	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
 		  rdma_hndl->alloc_sz,
