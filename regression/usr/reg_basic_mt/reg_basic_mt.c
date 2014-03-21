@@ -85,7 +85,6 @@ void rand_params(struct program_vars *vars)
 	int max_dlen;
 	int max_qdepth;
 	int client_threads_num;
-	int server_threads_num;
 
 	time((time_t *)&vars->seed);
 	/*
@@ -98,7 +97,6 @@ void rand_params(struct program_vars *vars)
 		var = random() % 10;
 	} while (var == 0);
 	sprintf(vars->server_threads_num, "%d", var);
-	server_threads_num = var;
 
 	/* threads number [1,24] */
 	do {
