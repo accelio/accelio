@@ -1112,8 +1112,9 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 {
 	TRACE_LOG("conn:%p - close complete\n", conn);
 
-	xio_transport_unreg_observer(conn->transport_hndl,
-				     &conn->trans_observer);
+	if (conn->transport_hndl)
+		xio_transport_unreg_observer(conn->transport_hndl,
+					     &conn->trans_observer);
 
 	xio_conn_free_observers_htbl(conn);
 	xio_observable_unreg_all_observers(&conn->observable);
