@@ -673,7 +673,8 @@ int xio_on_conn_refused(struct xio_session *session,
 			struct xio_conn *conn,
 			union xio_conn_event_data *event_data)
 {
-	struct xio_connection *connection;
+	struct xio_connection *connection,
+			      *curr_connection, *next_connection;
 
 	/* enable the teardown */
 	session->disable_teardown  = 0;
@@ -684,13 +685,14 @@ int xio_on_conn_refused(struct xio_session *session,
 	case XIO_SESSION_STATE_CONNECT:
 	case XIO_SESSION_STATE_REDIRECTED:
 		session->state = XIO_SESSION_STATE_REFUSED;
-
-		while (!list_empty(&session->connections_list)) {
-			connection = list_first_entry(
-				&session->connections_list,
-				struct xio_connection,
-				connections_list_entry);
-			xio_connection_refused(connection);
+		list_for_each_entry_safe(curr_connection, next_connection,
+					 &session->connections_list,
+					 connections_list_entry) {
+					 connection = list_first_entry(
+						&session->connections_list,
+						struct xio_connection,
+						connections_list_entry);
+					 xio_connection_refused(connection);
 		}
 		break;
 	default:
