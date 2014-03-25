@@ -3425,7 +3425,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->read_num_sge		= 0;
 
 	ulp_hdr_len = sizeof(*cancel_hdr) + sizeof(uint16_t) + ulp_msg_sz;
-	omsg.out.header.iov_base = malloc(ulp_hdr_len);
+	omsg.out.header.iov_base = ucalloc(1, ulp_hdr_len);
 	omsg.out.header.iov_len = ulp_hdr_len;
 
 
