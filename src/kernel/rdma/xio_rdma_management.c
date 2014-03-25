@@ -724,7 +724,7 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 	if (!list_empty(&rdma_hndl->in_flight_list)) {
 		TRACE_LOG("in_flight_list not empty!\n");
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
-		/* for task that attched to senders with ref coount = 2 */
+		/* for task that attached to senders with ref count = 2 */
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
 	}
 
@@ -751,7 +751,7 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 	if (!list_empty(&rdma_hndl->tx_ready_list)) {
 		TRACE_LOG("tx_ready_list not empty!\n");
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
-		/* for task that attached to senders with ref coount = 2 */
+		/* for task that attached to senders with ref count = 2 */
 		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
 	}
 
@@ -1355,7 +1355,7 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
-			ERROR_LOG("conn:%p rdma_disconnect failed, err=%d\n",
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, err=%d\n",
 				  rdma_hndl, retval);
 	}
 }
@@ -1425,7 +1425,7 @@ static void on_cm_error(struct rdma_cm_event *ev,
 /* xio_handle_cm_event							     */
 /*---------------------------------------------------------------------------*/
 /**
- * rdma_cm_event_handler - Callback used to report user events.
+ * xio_cm_event_handler - Callback used to report user events.
  *
  * Notes: Users may not call rdma_destroy_id from this callback to destroy
  *   the passed in id, or a corresponding listen id.  Returning a

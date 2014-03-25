@@ -943,10 +943,10 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 {
-	/* four queues are invloved:
+	/* four queues are involved:
 	 * tx_ready_queue, recv_queue, sent_queue, io_submit_queue,
 	 * also note that client holds the sent and recv tasks
-	 * simultanousely */
+	 * simultaneously */
 
 	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);

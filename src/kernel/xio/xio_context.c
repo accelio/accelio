@@ -168,7 +168,7 @@ cleanup1:
 	kfree(ctx);
 
 cleanup0:
-	ERROR_LOG("xio_ctx_open ailed\n");
+	ERROR_LOG("xio_ctx_open failed\n");
 
 	return NULL;
 }

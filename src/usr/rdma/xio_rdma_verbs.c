@@ -97,7 +97,7 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_reg_mr								     */
+/* xio_reg_mr_ex							     */
 /*---------------------------------------------------------------------------*/
 static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 {

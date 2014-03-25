@@ -3296,7 +3296,7 @@ static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  rdma_hndl->exp_sn, nop.sn);
 
-	/* the rx task is returend back to pool */
+	/* the rx task is returned back to pool */
 	xio_tasks_pool_put(task);
 
 	return 0;
