@@ -358,7 +358,8 @@ int xio_connection_send(struct xio_connection *connection,
 	/* write session header */
 	hdr.flags		= msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
-	xio_session_write_header(task, &hdr);
+	if (xio_session_write_header(task, &hdr) != 0)
+		goto cleanup;
 
 	/* send it */
 	retval = xio_conn_send(connection->conn, task);
