@@ -115,7 +115,7 @@ int xio_on_conn_message_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_session_read_header						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_read_header(struct xio_task *task,
+void xio_session_read_header(struct xio_task *task,
 			    struct xio_session_hdr *hdr);
 
 /*---------------------------------------------------------------------------*/

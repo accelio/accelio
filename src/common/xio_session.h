@@ -119,7 +119,7 @@ struct xio_session *xio_session_init(
 		uint32_t flags,
 		void *cb_user_context);
 
-int xio_session_write_header(
+void xio_session_write_header(
 		struct xio_task *task,
 		struct xio_session_hdr *hdr);
 
