@@ -341,8 +341,8 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 	uint16_t			str_len;
 
 	/* read session header */
-	if (xio_session_read_header(task, &hdr) != 0)
-		return -1;
+	xio_session_read_header(task, &hdr);
+
 	task->imsg.sn = hdr.serial_num;
 
 	/* free the outgoing message */

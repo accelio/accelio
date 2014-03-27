@@ -69,11 +69,8 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	};
 
 	/* read session header */
-	if (xio_session_read_header(task, &hdr) != 0) {
-		ERROR_LOG("failed to read header\n");
-		xio_set_error(XIO_E_MSG_INVALID);
-		goto cleanup;
-	}
+	xio_session_read_header(task, &hdr);
+
 	task->imsg.sn = hdr.serial_num;
 	task->connection = connection;
 	connection->session->setup_req = msg;
@@ -163,7 +160,6 @@ cleanup2:
 cleanup1:
 	kfree(req.uri);
 
-cleanup:
 	if (session->ses_ops.on_session_event) {
 		error_event.reason = xio_errno();
 		session->ses_ops.on_session_event(

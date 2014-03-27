@@ -212,7 +212,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_header						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_write_header(struct xio_task *task,
+void xio_session_write_header(struct xio_task *task,
 			     struct xio_session_hdr *hdr)
 {
 	struct xio_session_hdr *tmp_hdr;
@@ -227,14 +227,12 @@ int xio_session_write_header(struct xio_task *task,
 	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_read_header						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_read_header(struct xio_task *task,
+void xio_session_read_header(struct xio_task *task,
 			    struct xio_session_hdr *hdr)
 {
 	struct xio_session_hdr *tmp_hdr;
@@ -249,8 +247,6 @@ int xio_session_read_header(struct xio_task *task,
 	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -659,8 +655,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_vmsg *vmsg = &msg->in;
 
 	/* read session header */
-	if (xio_session_read_header(task, &hdr) != 0)
-		return -1;
+	xio_session_read_header(task, &hdr);
 
 	msg->sn		= hdr.serial_num;
 	msg->flags	= hdr.flags;
@@ -727,8 +722,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	}
 
 	/* read session header */
-	if (xio_session_read_header(task, &hdr) != 0)
-		return -1;
+	xio_session_read_header(task, &hdr);
 
 	msg->sn = hdr.serial_num;
 
