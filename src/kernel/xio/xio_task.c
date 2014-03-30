@@ -86,7 +86,6 @@ struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
 
 	/* array */
 	q->array = buf;
-	buf = buf + max*sizeof(struct xio_task *);
 
 	elems_alloc_sz = PAGE_ALIGN(elems_alloc_sz);
 
