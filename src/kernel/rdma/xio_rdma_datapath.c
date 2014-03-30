@@ -2861,6 +2861,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		retval = xio_sched_rdma_rd_req(rdma_hndl, task);
 		if (retval == 0)
 			return 0;
+		break;
 	default:
 		ERROR_LOG("unexpected opcode\n");
 		break;
