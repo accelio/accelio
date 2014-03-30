@@ -163,7 +163,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	int		cpu;
 
 	/* If two session were created with the same context and
-	 * the address resovled on the same davice than the smae
+	 * the address resolved on the same device than the same
 	 * CQ is used
 	 */
 	read_lock_bh(&dev->cq_lock);
@@ -462,7 +462,7 @@ static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 		int retval = ib_resize_cq(tcq->cq,
 					  tcq->cq_depth + tcq->alloc_sz);
 		if (retval != 0) {
-			ERROR_LOG("ibv_resize_cq failed. %m\n");
+			ERROR_LOG("ibv_resize_cq failed. ret=%d\n", retval);
 			return -1;
 		}
 		tcq->cq_depth  += tcq->alloc_sz;
@@ -1518,14 +1518,14 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 	rdma_hndl = kzalloc(sizeof(struct xio_rdma_transport), GFP_KERNEL);
 	if (rdma_hndl == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("calloc failed.\n");
 		return NULL;
 	}
 
 	rdma_hndl->rdma_mempool = xio_rdma_mempool_array_get(ctx);
 	if (rdma_hndl->rdma_mempool == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("allocating rdma mempool failed. %m\n");
+		ERROR_LOG("allocating rdma mempool failed.\n");
 		goto cleanup;
 	}
 
@@ -1722,7 +1722,7 @@ static int xio_rdma_connect(struct xio_transport_base *transport,
 	rdma_hndl->base.portal_uri = kstrdup(portal_uri, GFP_KERNEL);
 	if (rdma_hndl->base.portal_uri == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("calloc failed. %m\n");
+		ERROR_LOG("kstrdup failed.\n");
 		goto exit1;
 	}
 	rdma_hndl->base.is_client = 1;

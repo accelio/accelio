@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies�� BSD license
+ * directory of this source tree, or the Mellanox Technologies® BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies�� nor the names of its
+ *      - Neither the name of the Mellanox Technologies® nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -77,6 +77,10 @@ struct xio_chunks_list {
 
 struct xio_rdma_mempool {
 	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
+	char name[256]; /* kmem_cache_create keeps a pointer to the pool's name
+			 * Therefore the name must be valid until the pool
+			 * is destroyed
+			 */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -111,7 +115,6 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 	struct xio_rdma_mempool *p;
 	struct xio_chunks_list *ch;
 	int real_ones, i;
-	char name[256];
 
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p) {
@@ -121,17 +124,22 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 
 	real_ones = ARRAY_SIZE(sizes) - 1;
 	ch = p->pool;
-	for (i =  0; i < real_ones; i++) {
+	for (i = 0; i < real_ones; i++) {
 		ch->block_sz = sizes[i];
-		sprintf(name, "xio_rdma_cache-%zuK", ch->block_sz/1024);
-		ch->kcache = kmem_cache_create(name,
+		/* The name must be valid until the pool is destroyed
+		 * Use the address of the pool structure to create a unique
+		 * name for the pool
+		 */
+		sprintf(p->name, "xio_rdma_mempool-%zuK-%p",
+			ch->block_sz/1024, p);
+		ch->kcache = kmem_cache_create(p->name,
 					       ch->block_sz, PAGE_SIZE,
 					       SLAB_HWCACHE_ALIGN, NULL);
 		if (!ch->kcache) {
-			ERROR_LOG("kcache(%s) creation failed\n", name);
+			ERROR_LOG("kcache(%s) creation failed\n", p->name);
 			goto cleanup;
 		}
-		INFO_LOG("kcache(%s) created(%p)\n", name, ch->kcache);
+		INFO_LOG("kcache(%s) created(%p)\n", p->name, ch->kcache);
 		ch++;
 	}
 
