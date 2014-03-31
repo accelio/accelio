@@ -1703,8 +1703,10 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 {
 	int	retval;
 
-	if (!conn->transport)
-		BUG();
+	if (!conn->transport) {
+		ERROR_LOG("transport not initialized\n");
+		return -1;
+	}
 	if (conn->transport->send) {
 		retval = conn->transport->send(conn->transport_hndl, task);
 		if (retval != 0) {
