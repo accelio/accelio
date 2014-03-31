@@ -72,6 +72,17 @@ static struct llist_node *llist_reverse_order(struct llist_node *head)
 }
 #endif
 
+static void xio_append_ordered(struct llist_node *first,
+			       struct llist_node *last,
+			       struct xio_ev_loop *loop)
+{
+	if (loop->first)
+		loop->last->next = first;
+	else
+		loop->first = first;
+	loop->last = last;
+}
+
 /*---------------------------------------------------------------------------*/
 /* forward declarations	of private API					     */
 /*---------------------------------------------------------------------------*/
@@ -82,19 +93,11 @@ static void priv_ev_loop_stop(void *loop_hndl);
 static void priv_ev_loop_run_tasklet(unsigned long data);
 static void priv_ev_loop_run_work(struct work_struct *work);
 
+static void priv_ev_loop_stop_thread(void *loop_hndl);
+
 static int priv_ev_add_thread(void *loop_hndl, struct xio_ev_data *event);
 static int priv_ev_add_tasklet(void *loop_hndl, struct xio_ev_data *event);
 static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event);
-
-void xio_repush(struct llist_node *head, struct llist_head *llist)
-{
-	struct llist_node *tmp;
-	while (head) {
-		tmp = head;
-		head = head->next;
-		llist_add(tmp, llist);
-	}
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_init							     */
@@ -113,8 +116,11 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 	}
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
+	init_completion(&loop->complete);
 
 	init_llist_head(&loop->ev_llist);
+	loop->first = NULL;
+	loop->last = NULL;
 
 	/* use default implementation */
 	loop->run  = priv_ev_loop_run;
@@ -130,6 +136,7 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 		loop->loop_object = loop_ops->ev_loop;
 		break;
 	case XIO_LOOP_GIVEN_THREAD:
+		loop->stop = priv_ev_loop_stop_thread;
 		loop->add_event = priv_ev_add_thread;
 		init_waitqueue_head(&loop->wait);
 		break;
@@ -139,15 +146,15 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 			     (unsigned long)loop);
 		break;
 	case XIO_LOOP_WORKQUEUE:
-		/* temp (also change to single thread) */
+		/* temporary (also change to single thread) */
 		sprintf(queue_name, "xio-%p", loop);
-		/* check flags and bw comp */
+		/* check flags and backward  compatibility */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
 		loop->workqueue = create_workqueue(queue_name);
 #else
 		loop->workqueue = alloc_workqueue(queue_name,
-						WQ_MEM_RECLAIM | WQ_HIGHPRI,
-						0);
+						  WQ_MEM_RECLAIM | WQ_HIGHPRI,
+						  0);
 #endif
 		if (!loop->workqueue) {
 			ERROR_LOG("workqueue create failed.\n");
@@ -174,7 +181,7 @@ cleanup0:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_destroy                                                          */
+/* xio_ev_loop_destroy							     */
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_destroy(void *loop_hndl)
 {
@@ -183,14 +190,28 @@ void xio_ev_loop_destroy(void *loop_hndl)
 	if (loop == NULL)
 		return;
 
-	set_bit(XIO_EV_LOOP_DOWN, &loop->states);
+	if (test_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states)) {
+		ERROR_LOG("Can't destroy the loop from within handlers.\n");
+		return;
+	}
 
-	/* CLEAN call unhandled events !!!! */
+	if (test_and_set_bit(XIO_EV_LOOP_DOWN, &loop->states)) {
+		ERROR_LOG("Down already in progress.\n");
+		return;
+	}
+
+	set_bit(XIO_EV_LOOP_STOP, &loop->states);
+
+	/* TODO: Clean all unhandled events !!!! */
 
 	switch (loop->flags) {
 	case XIO_LOOP_GIVEN_THREAD:
 		if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states)) {
 			wake_up_interruptible(&loop->wait);
+		}
+		if (test_bit(XIO_EV_LOOP_ACTIVE, &loop->states)) {
+			TRACE_LOG("loop: wait_for_completion");
+			wait_for_completion(&loop->complete);
 		}
 		break;
 	case XIO_LOOP_TASKLET:
@@ -224,9 +245,8 @@ static int priv_ev_add_thread(void *loop_hndl, struct xio_ev_data *event)
 	if (test_bit(XIO_EV_LOOP_STOP, &loop->states))
 		return 0;
 
-	if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states)) {
+	if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
 		wake_up_interruptible(&loop->wait);
-	}
 
 	return 0;
 }
@@ -235,7 +255,7 @@ static void priv_ipi(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
 
-	/* csd can be reused */
+	/* CSD can be reused */
 	clear_bit(XIO_EV_LOOP_SCHED, &loop->states);
 
 	/* don't wake up */
@@ -265,7 +285,7 @@ static void priv_kick_tasklet(void *loop_hndl)
 	}
 	put_cpu();
 
-	/* check if csd in use */
+	/* check if CSD in use */
 	if (test_and_set_bit(XIO_EV_LOOP_SCHED, &loop->states))
 		return;
 
@@ -318,37 +338,134 @@ static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event)
 	return 0;
 }
 
+
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_run_tasklet						     */
+/* priv_ev_loop_run_thread						     */
+/*---------------------------------------------------------------------------*/
+static void priv_ev_loop_run_thread(struct xio_ev_loop *loop)
+{
+	struct xio_ev_data	*tev;
+	struct llist_node	*last, *first;
+	struct llist_node	*node;
+
+	if (test_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states)) {
+		/* If a callback i.e. "tev->handler" stopped the loop,
+		 * and then restart it by calling run than we must exit
+		 */
+		TRACE_LOG("call loop run while in handler\n");
+		return;
+	}
+
+	set_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
+	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states)) {
+		complete(&loop->complete);
+		clear_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
+		return;
+	}
+
+	/* loop can stopped and restarted, thus old events can be pending in
+	 * order in the (first - last) list or new events (in reverse order)
+	 * are queued in ev_llsits
+	 */
+	if (loop->first || !llist_empty(&loop->ev_llist)) {
+		if (test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
+			goto retry_wait; /* race detected */
+		else
+			goto retry_dont_wait; /* was one wake-up was called */
+	}
+
+retry_wait:
+
+	wait_event_interruptible(loop->wait,
+				 test_bit(XIO_EV_LOOP_WAKE, &loop->states));
+
+	if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
+		goto stopped;
+
+retry_dont_wait:
+
+	while ((last = llist_del_all(&loop->ev_llist)) != NULL) {
+		first = llist_reverse_order(last);
+		xio_append_ordered(first, last, loop);
+		node = loop->first;
+		while (node) {
+			if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
+				goto stopped;
+
+			tev = llist_entry(node, struct xio_ev_data, ev_llist);
+			node = llist_next(node);
+			loop->first = node;
+			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
+			tev->handler(tev->data);
+			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
+		}
+		loop->last = NULL;
+	}
+
+	/* All events were processed prepare to wait */
+
+	/* "race point" */
+	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
+
+	if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
+		goto stopped;
+
+	/* if a new entry was added while we were at "race point"
+	 * an event was added and loop was resumed,
+	 * than wait event might block forever as condition is false
+	 */
+	if (llist_empty(&loop->ev_llist))
+		goto retry_wait;
+
+	if (test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
+		goto retry_wait; /* bit is set add_event did set it  */
+	else
+		goto retry_dont_wait; /* add_event will not call wake up */
+
+stopped:
+	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
+		complete(&loop->complete);
+	clear_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
+
+	return;
+}
+
+/*---------------------------------------------------------------------------*/
+/* priv_ev_loop_run_tasklet						     */
 /*---------------------------------------------------------------------------*/
 static void priv_ev_loop_run_tasklet(unsigned long data)
 {
 	struct xio_ev_loop *loop = (struct xio_ev_loop *) data;
 	struct xio_ev_data	*tev;
+	struct llist_node	*last, *first;
 	struct llist_node	*node;
 
-	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-		node = llist_reverse_order(node);
+	while ((last = llist_del_all(&loop->ev_llist)) != NULL) {
+		first = llist_reverse_order(last);
+		xio_append_ordered(first, last, loop);
+		node = loop->first;
 		while (node) {
-			if (unlikely(test_bit(XIO_EV_LOOP_STOP,
-					      &loop->states))) {
-				xio_repush(node, &loop->ev_llist);
+			if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
 				return;
-			}
 			tev = llist_entry(node, struct xio_ev_data, ev_llist);
 			node = llist_next(node);
+			loop->first = node;
+			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 			tev->handler(tev->data);
+			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 		}
+		loop->last = NULL;
 	}
 }
 
 /*---------------------------------------------------------------------------*/
-/* priv_ev_loop_run_work							     */
+/* priv_ev_loop_run_work						     */
 /*---------------------------------------------------------------------------*/
 static void priv_ev_loop_run_work(struct work_struct *work)
 {
 	struct xio_ev_data *tev = container_of(work, struct xio_ev_data, work);
 
+	/*  CURRENTLY CAN'T MARK IN LOOP */
 	tev->handler(tev->data);
 }
 
@@ -359,6 +476,7 @@ int priv_ev_loop_run(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct xio_ev_data	*tev;
+	struct llist_node	*last, *first;
 	struct llist_node	*node;
 	int cpu;
 
@@ -379,7 +497,8 @@ int priv_ev_loop_run(void *loop_hndl)
 			set_cpus_allowed_ptr(get_current(),
 					     cpumask_of(loop->ctx->cpuid));
 		}
-		break;
+		priv_ev_loop_run_thread(loop);
+		return 0;
 	case XIO_LOOP_TASKLET:
 		/* were events added to list while in STOP state ? */
 		if (!llist_empty(&loop->ev_llist))
@@ -387,16 +506,20 @@ int priv_ev_loop_run(void *loop_hndl)
 		return 0;
 	case XIO_LOOP_WORKQUEUE:
 		/* were events added to list while in STOP state ? */
-		while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-			node = llist_reverse_order(node);
+		while ((last = llist_del_all(&loop->ev_llist)) != NULL) {
+			first = llist_reverse_order(last);
+			xio_append_ordered(first, last, loop);
+			node = loop->first;
 			while (node) {
 				tev = llist_entry(node, struct xio_ev_data,
 						  ev_llist);
 				node = llist_next(node);
+				loop->first = node;
 				tev->work.func = priv_ev_loop_run_work;
 				queue_work_on(loop->ctx->cpuid, loop->workqueue,
 					      &tev->work);
 			}
+			loop->last = NULL;
 		}
 		return 0;
 	default:
@@ -405,53 +528,13 @@ int priv_ev_loop_run(void *loop_hndl)
 		return -1;
 	}
 
-retry_wait:
-	wait_event_interruptible(loop->wait,
-				 test_bit(XIO_EV_LOOP_WAKE, &loop->states));
-
-retry_dont_wait:
-
-	while ((node = llist_del_all(&loop->ev_llist)) != NULL) {
-		node = llist_reverse_order(node);
-		while (node) {
-			if (unlikely(test_bit(XIO_EV_LOOP_STOP,
-					      &loop->states))) {
-				xio_repush(node, &loop->ev_llist);
-				goto stopped;
-			}
-			tev = llist_entry(node, struct xio_ev_data, ev_llist);
-			node = llist_next(node);
-			tev->handler(tev->data);
-		}
-	}
-
-stopped:
-
-	/* "race point" */
-	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
-
-	if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
-		return 0;
-
-	/* if a new entry was added while we were at "race point"
-	 * than wait event might block forever as condition is false */
-	if (llist_empty(&loop->ev_llist))
-		goto retry_wait;
-
-	/* race detected */
-	if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
-		goto retry_dont_wait;
-
-	/* was one wakeup was called */
-	goto retry_wait;
-
 cleanup0:
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
 	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
-/* priv_ev_loop_stop                                                        */
+/* priv_ev_loop_stop							     */
 /*---------------------------------------------------------------------------*/
 void priv_ev_loop_stop(void *loop_hndl)
 {
@@ -461,4 +544,19 @@ void priv_ev_loop_stop(void *loop_hndl)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
+}
+
+/*---------------------------------------------------------------------------*/
+/* priv_ev_loop_stop							     */
+/*---------------------------------------------------------------------------*/
+void priv_ev_loop_stop_thread(void *loop_hndl)
+{
+	struct xio_ev_loop *loop = loop_hndl;
+
+	if (loop == NULL)
+		return;
+
+	set_bit(XIO_EV_LOOP_STOP, &loop->states);
+	if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
+		wake_up_interruptible(&loop->wait);
 }

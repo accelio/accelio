@@ -59,4 +59,20 @@ typedef struct xio_delayed_work_struct {
 	struct xio_timers_list_entry	timer;
 } xio_delayed_work_handle_t;
 
+/*---------------------------------------------------------------------------*/
+/* xio_is_work_pending							     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_work_pending(xio_work_handle_t *work)
+{
+	return work->flags & XIO_WORK_PENDING;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_delayed_work_pending						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_delayed_work_pending(xio_delayed_work_handle_t *dwork)
+{
+	return dwork->work.flags & XIO_WORK_PENDING;
+}
+
 #endif /* XIO_WORKQUEUE_PRIV_H */

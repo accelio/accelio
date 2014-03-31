@@ -48,6 +48,8 @@
 #define XIO_EV_LOOP_STOP	(1 << 1)
 #define XIO_EV_LOOP_DOWN	(1 << 2)
 #define XIO_EV_LOOP_SCHED	(1 << 3)
+#define XIO_EV_LOOP_IN_HANDLER	(1 << 4)
+#define XIO_EV_LOOP_ACTIVE	(1 << 5)
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -62,16 +64,15 @@ struct xio_ev_loop {
 	unsigned long	flags;
 	volatile unsigned long	states;
 	union {
-		struct {
-			union {
-				wait_queue_head_t wait;
-				struct tasklet_struct tasklet;
-			};
-		};
+		wait_queue_head_t wait;
+		struct tasklet_struct tasklet;
 		struct workqueue_struct *workqueue;
 	};
 	/* for thread, tasklet and for stopped workqueue  */
 	struct llist_head ev_llist;
+	struct llist_node *first;
+	struct llist_node *last;
+	struct completion complete;
 };
 
 /*---------------------------------------------------------------------------*/

@@ -323,7 +323,6 @@ struct xio_ev_data {
 	void		 *data;
 	union {
 		struct llist_node  ev_llist;
-		struct list_head   ev_list;
 		struct work_struct work;
 	};
 };

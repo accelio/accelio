@@ -55,6 +55,7 @@
 struct xio_workqueue {
 	struct xio_context	*ctx;
 	struct workqueue_struct	*workqueue;
+	spinlock_t 		lock;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -67,19 +68,19 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 
 	workqueue = kmalloc(sizeof(*workqueue), GFP_KERNEL);
 	if (workqueue == NULL) {
-		ERROR_LOG("kmalloc failed. %m\n");
+		ERROR_LOG("kmalloc failed.\n");
 		return NULL;
 	}
 
-	/* temp (also change to single thread) */
-	sprintf(queue_name, "xio-scheuler-%p", ctx);
-	/* check flags and bw comp */
+	/* temporary (also change to single thread) */
+	sprintf(queue_name, "xio-scheduler-%p", ctx);
+	/* check flags and backward  compatibility */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
 	workqueue->workqueue = create_workqueue(queue_name);
 #else
 	workqueue->workqueue = alloc_workqueue(queue_name,
-						WQ_MEM_RECLAIM | WQ_HIGHPRI,
-						0);
+					       WQ_MEM_RECLAIM | WQ_HIGHPRI,
+					       0);
 #endif
 	if (!workqueue->workqueue) {
 		ERROR_LOG("workqueue create failed.\n");
@@ -87,6 +88,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	}
 
 	workqueue->ctx = ctx;
+	spin_lock_init(&workqueue->lock);
 
 	return workqueue;
 
@@ -110,32 +112,225 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 
 static void xio_ev_callback(void *user_context)
 {
-	struct xio_work *work = user_context;
+	struct xio_uwork *uwork = user_context;
 
-	if (!test_bit(XIO_WORK_CANCELED, &work->flags))
-		work->function(work->data);
-	clear_bit(XIO_WORK_PENDING, &work->flags);
+	set_bit(XIO_WORK_RUNNING, &uwork->flags);
+	if (test_bit(XIO_WORK_CANCELED, &uwork->flags)) {
+		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+	} else {
+		void (*function)(void *data);
+		void *data;
+		/* Must clear pending before calling the function
+		 * in case the function deletes the work or the
+		 * enclosing structure. Note that since the function
+		 * can reuse the work structure after clearing the
+		 * pending flag then we must use temporary variables
+		 */
+		function = uwork->function;
+		data = uwork->data;
+		/* Set running before clearing pending */
+		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+		set_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+		function(data);
+		clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+	}
+	clear_bit(XIO_WORK_RUNNING, &uwork->flags);
+	complete(&uwork->complete);
+}
+
+static void xio_uwork_add_event(struct xio_uwork *uwork)
+{
+	struct xio_ev_data *ev_data;
+
+	if (test_bit(XIO_WORK_CANCELED, &uwork->flags)) {
+		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+		return;
+	}
+
+	/* This routine is called on context core */
+
+	ev_data = &uwork->ev_data;
+	ev_data->handler = xio_ev_callback;
+	ev_data->data    = uwork;
+
+	xio_context_add_event(uwork->ctx, ev_data);
+
+	return;
 }
 
 static void xio_dwork_callback(struct work_struct *workp)
 {
-	struct xio_delayed_work *dw;
+	struct xio_delayed_work *dwork;
+	struct xio_uwork *uwork;
+
+	dwork = container_of(workp, struct xio_delayed_work, dwork.work);
+	uwork = &dwork->uwork;
+
+	xio_uwork_add_event(uwork);
+}
+
+static void xio_work_callback(struct work_struct *workp)
+{
 	struct xio_work *work;
-	struct xio_ev_data *ev_data;
+	struct xio_uwork *uwork;
 
-	dw = container_of(workp, struct xio_delayed_work, dwork.work);
-	work = &dw->work;
-	ev_data = &work->ev_data;
-	/* Add event to event queue */
+	work = container_of(workp, struct xio_work, work);
+	uwork = &work->uwork;
 
-	ev_data->handler = xio_ev_callback;
-	ev_data->data    = work;
+	xio_uwork_add_event(uwork);
+}
 
-	/* tell "poller mechanism" */
-	if (!test_bit(XIO_WORK_CANCELED, &work->flags))
-		xio_context_add_event(work->ctx, ev_data);
-	else
-		clear_bit(XIO_WORK_PENDING, &work->flags);
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_uwork2						     */
+/*---------------------------------------------------------------------------*/
+static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
+				    struct xio_uwork *uwork)
+{
+	/* Work is in event loop queue or running, can wait for its completion
+	 * only if on other workers context
+	 */
+
+	if (workqueue->ctx == uwork->ctx) {
+		if (test_bit(XIO_WORK_IN_HANDLER, &uwork->flags)) {
+			/* simple self cancellation detected
+			 * it doesn't detect loop cancellation
+			 */
+			TRACE_LOG("self cancellation.\n");
+			return -1;
+		} else {
+			/* It is O.K. to arm a work and then to cancel it but
+			 * waiting for it will create a lockout situation.
+			 * that is this context needs to block until completion
+			 * is signaled from this context.
+			 * since the work was marked canceled in phase 1 it
+			 * is guaranteed not to run in the future.
+			 */
+			return 0;
+		}
+	}
+
+	/* work may be on event handler */
+	/* TODO: tasklet version? */
+	wait_for_completion(&uwork->complete);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_uwork1						     */
+/*---------------------------------------------------------------------------*/
+static int xio_workqueue_del_uwork1(struct xio_workqueue *workqueue,
+				    struct xio_uwork *uwork)
+{
+	int ret;
+
+	if (!test_bit(XIO_WORK_INITIALIZED, &uwork->flags)) {
+		ERROR_LOG("work not initialized.\n");
+		return -1;
+	}
+
+	if (!workqueue->workqueue) {
+		ERROR_LOG("No work-queue\n");
+		return -1;
+	}
+
+	if (test_and_set_bit(XIO_WORK_CANCELED, &uwork->flags)) {
+		/* Already canceled */
+		return 0;
+	}
+
+	if (test_bit(XIO_WORK_RUNNING, &uwork->flags)) {
+		/* In xio_ev_callback go directly to phase 2 */
+		TRACE_LOG("phase1 -> phase2.\n");
+		ret = xio_workqueue_del_uwork2(workqueue, uwork);
+		return ret;
+	}
+
+	if (!test_bit(XIO_WORK_PENDING, &uwork->flags)) {
+		/* work not pending (run done) */
+		TRACE_LOG("work not pending.\n");
+		return 0;
+	}
+
+	/* need to cancel the work */
+	return 1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_delayed_work					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_del_delayed_work(struct xio_workqueue *workqueue,
+				   xio_delayed_work_handle_t *dwork)
+{
+	struct xio_uwork *uwork = &dwork->uwork;
+	int ret;
+
+	ret = xio_workqueue_del_uwork1(workqueue, uwork);
+	if (ret <= 0)
+		return ret;
+
+	/* need to cancel the work */
+	if (cancel_delayed_work_sync(&dwork->dwork)) {
+		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+		return 0;
+	}
+
+	ret = xio_workqueue_del_uwork2(workqueue, uwork);
+
+	return ret;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_del_work						     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_del_work(struct xio_workqueue *workqueue,
+			   xio_work_handle_t *work)
+{
+	struct xio_uwork *uwork = &work->uwork;
+	int ret;
+
+	ret = xio_workqueue_del_uwork1(workqueue, uwork);
+	if (ret <= 0)
+		return ret;
+
+	/* need to cancel the work */
+	if (cancel_work_sync(&work->work)) {
+		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+		return 0;
+	}
+
+	ret = xio_workqueue_del_uwork2(workqueue, uwork);
+
+	return ret;
+}
+
+static int xio_init_uwork(struct xio_context *ctx,
+			  struct xio_uwork *uwork,
+			  void *data,
+			  void (*function)(void *data))
+{
+	if (test_and_set_bit(XIO_WORK_PENDING, &uwork->flags)) {
+		/* work already pending */
+		TRACE_LOG("work already pending.\n");
+		return -1;
+	}
+	clear_bit(XIO_WORK_CANCELED, &uwork->flags);
+
+	if (test_and_set_bit(XIO_WORK_INITIALIZED, &uwork->flags)) {
+		/* re-arm completion */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+		INIT_COMPLETION(uwork->complete);
+#else
+		reinit_completion(&uwork->complete);
+#endif
+	} else {
+		init_completion(&uwork->complete);
+	}
+
+	uwork->data = data;
+	uwork->function = function;
+	uwork->ctx = ctx;
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -147,20 +342,14 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *workqueue,
 				   xio_delayed_work_handle_t *dwork)
 
 {
-	struct xio_work *work = &dwork->work;
+	struct xio_uwork *uwork = &dwork->uwork;
 	struct xio_context *ctx = workqueue->ctx;
 	unsigned long delay_jiffies;
 
-	if (test_and_set_bit(XIO_WORK_PENDING, &dwork->work.flags)) {
-		/* work already pending */
-		TRACE_LOG("work already pending.\n");
+	if (xio_init_uwork(ctx, uwork, data, function) < 0) {
+		ERROR_LOG("initialization of work failed.\n");
 		return -1;
 	}
-	clear_bit(XIO_WORK_CANCELED, &dwork->work.flags);
-
-	work->data = data;
-	work->function = function;
-	work->ctx = ctx;
 
 	INIT_DELAYED_WORK(&dwork->dwork, xio_dwork_callback);
 
@@ -177,29 +366,6 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *workqueue,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_workqueue_del_delayed_work					     */
-/*---------------------------------------------------------------------------*/
-int xio_workqueue_del_delayed_work(struct xio_workqueue *workqueue,
-				   xio_delayed_work_handle_t *dwork)
-{
-	/* work could be already in event loop */
-	set_bit(XIO_WORK_CANCELED, &dwork->work.flags);
-
-	if (!workqueue->workqueue) {
-		ERROR_LOG("No schedwork\n");
-		return -1;
-	}
-
-	if (cancel_delayed_work_sync(&dwork->dwork)) {
-		clear_bit(XIO_WORK_PENDING, &dwork->work.flags);
-		return 0;
-	}
-
-	ERROR_LOG("Pending work wasn't found\n");
-	return -1;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_workqueue_add_work						     */
 /*---------------------------------------------------------------------------*/
 int xio_workqueue_add_work(struct xio_workqueue *workqueue,
@@ -207,45 +373,21 @@ int xio_workqueue_add_work(struct xio_workqueue *workqueue,
 			   void (*function)(void *data),
 			   xio_work_handle_t *work)
 {
+	struct xio_uwork *uwork = &work->uwork;
 	struct xio_context *ctx = workqueue->ctx;
-	struct xio_ev_data *ev_data;
 
-	if (test_and_set_bit(XIO_WORK_PENDING, &work->flags)) {
-		/* work already pending in event queue */
-		TRACE_LOG("work already pending.\n");
-		return -1;
-	}
-	clear_bit(XIO_WORK_CANCELED, &work->flags);
-
-	work->data = data;
-	work->function = function;
-	work->ctx = ctx;
-
-	ev_data = &work->ev_data;
-
-	/* Add event to event queue */
-	ev_data->handler = xio_ev_callback;
-	ev_data->data    = work;
-
-	/* tell "poller mechanism" */
-	xio_context_add_event(work->ctx, ev_data);
-
-	return 0;
-}
-/*---------------------------------------------------------------------------*/
-/* xio_workqueue_del_work						     */
-/*---------------------------------------------------------------------------*/
-int xio_workqueue_del_work(struct xio_workqueue *work_queue,
-			   xio_work_handle_t *work)
-{
-	/* work can only be marked canceled */
-	set_bit(XIO_WORK_CANCELED, &work->flags);
-	if (!test_bit(XIO_WORK_PENDING, &work->flags)) {
-		/* work not pending */
-		TRACE_LOG("work not pending.\n");
+	if (xio_init_uwork(ctx, uwork, data, function) < 0) {
+		ERROR_LOG("initialization of work failed.\n");
 		return -1;
 	}
 
-	/* work is pending must wait for callback from event handler */
+	INIT_WORK(&work->work, xio_work_callback);
+
+	/* queue the work */
+	if (!queue_work_on(ctx->cpuid, workqueue->workqueue, &work->work)) {
+		ERROR_LOG("work already queued?.\n");
+		return -1;
+	}
+
 	return 0;
 }

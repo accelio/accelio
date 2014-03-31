@@ -83,22 +83,5 @@ int xio_workqueue_add_work(struct xio_workqueue *work_queue,
 int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 			   xio_work_handle_t *work);
 
-
-/*---------------------------------------------------------------------------*/
-/* xio_is_work_pending							     */
-/*---------------------------------------------------------------------------*/
-static inline int xio_is_work_pending(xio_work_handle_t *work)
-{
-	return work->flags & XIO_WORK_PENDING;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_is_delayed_work_pending						     */
-/*---------------------------------------------------------------------------*/
-static inline int xio_is_delayed_work_pending(xio_delayed_work_handle_t *dwork)
-{
-	return dwork->work.flags & XIO_WORK_PENDING;
-}
-
 #endif /* XIO_WORKQUEUE_H */
 

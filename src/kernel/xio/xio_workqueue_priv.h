@@ -39,22 +39,59 @@
 #define XIO_WORKQUEUE_PRIV_H
 
 enum xio_work_flags {
-	XIO_WORK_PENDING	=  1 << 0,
-	XIO_WORK_CANCELED	=  1 << 1
+	XIO_WORK_PENDING	= 1 << 0,
+	XIO_WORK_CANCELED	= 1 << 1,
+	XIO_WORK_RUNNING	= 1 << 2,
+	XIO_WORK_INITIALIZED	= 1 << 3,
+	XIO_WORK_IN_HANDLER	= 1 << 4
 };
 
-typedef struct xio_work {
+struct xio_uwork {
 	struct xio_ev_data ev_data;
 	struct xio_context *ctx;
 	void	(*function)(void *data);
 	void	*data;
 	volatile unsigned long flags;
+	struct completion complete;
+};
+
+typedef struct xio_work {
+	struct work_struct	work;
+	struct xio_uwork	uwork;
 } xio_work_handle_t;
 
 typedef struct xio_delayed_work {
 	struct delayed_work	dwork;
-	struct xio_work		work;
+	struct xio_uwork	uwork;
 } xio_delayed_work_handle_t;
+
+static inline int xio_is_uwork_pending(struct xio_uwork *uwork)
+{
+	/* xio_ev_callback sets RUNNING before clearing PENDING */
+	if (test_bit(XIO_WORK_PENDING, &uwork->flags))
+		return 1;
+
+	if (test_bit(XIO_WORK_RUNNING, &uwork->flags))
+		return 1;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_work_pending							     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_work_pending(xio_work_handle_t *work)
+{
+	return xio_is_uwork_pending(&work->uwork);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_is_delayed_work_pending						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_is_delayed_work_pending(xio_delayed_work_handle_t *dwork)
+{
+	return xio_is_uwork_pending(&dwork->uwork);
+}
 
 #endif /* XIO_WORKQUEUE_PRIV_H */
 
