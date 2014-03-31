@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013 Mellanox Technologies��. All rights reserved.
+ * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
  * License (GPL) Version 2, available from the file COPYING in the main
- * directory of this source tree, or the Mellanox Technologies�� BSD license
+ * directory of this source tree, or the Mellanox Technologies® BSD license
  * below:
  *
  *      - Redistribution and use in source and binary forms, with or without
@@ -19,7 +19,7 @@
  *        disclaimer in the documentation and/or other materials
  *        provided with the distribution.
  *
- *      - Neither the name of the Mellanox Technologies�� nor the names of its
+ *      - Neither the name of the Mellanox Technologies® nor the names of its
  *        contributors may be used to endorse or promote products derived from
  *        this software without specific prior written permission.
  *
@@ -50,7 +50,7 @@
 
 
 /*---------------------------------------------------------------------------*/
-/* private structs							     */
+/* private structures							     */
 /*---------------------------------------------------------------------------*/
 struct xio_observers_htbl_node {
 	struct xio_observer	*observer;
@@ -908,9 +908,9 @@ static int xio_conn_primary_pool_free(struct xio_conn *conn)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_release		                                             */
+/* xio_conn_release_cb							     */
 /*---------------------------------------------------------------------------*/
-static void xio_conn_release(void *data)
+static void xio_conn_release_cb(void *data)
 {
 	struct xio_conn *conn = data;
 
@@ -920,11 +920,6 @@ static void xio_conn_release(void *data)
 	if (!conn->is_listener)
 		xio_conns_store_remove(conn->cid);
 
-	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
-		xio_ctx_del_delayed_work(conn->transport_hndl->ctx,
-					 &conn->close_time_hndl);
-	}
-
 	if (conn->state != XIO_CONN_STATE_DISCONNECTED) {
 		conn->state = XIO_CONN_STATE_CLOSED;
 		TRACE_LOG("conn state changed to closed\n");
@@ -933,6 +928,24 @@ static void xio_conn_release(void *data)
 	/* now it is zero */
 	if (conn->transport->close)
 		conn->transport->close(conn->transport_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_release							     */
+/*---------------------------------------------------------------------------*/
+static void xio_conn_release(void *data)
+{
+	struct xio_conn *conn = data;
+
+	TRACE_LOG("physical connection close. conn:%p rdma_hndl:%p\n",
+		  conn, conn->transport_hndl);
+
+	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
+		xio_ctx_del_delayed_work(conn->transport_hndl->ctx,
+					 &conn->close_time_hndl);
+	}
+
+	xio_conn_release_cb(data);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -951,9 +964,8 @@ static void xio_on_context_close(struct xio_conn *conn,
 		conn->transport->context_shutdown(conn->transport_hndl, ctx);
 
 	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
-			xio_ctx_del_delayed_work(
-					ctx,
-					&conn->close_time_hndl);
+		xio_ctx_del_delayed_work(ctx,
+					 &conn->close_time_hndl);
 	}
 
 	/* at that stage the conn->transport_hndl no longer exist */
@@ -1656,7 +1668,7 @@ static void xio_conn_delayed_close(struct kref *kref)
 		retval = xio_ctx_add_delayed_work(
 				conn->transport_hndl->ctx,
 				XIO_CONN_CLOSE_TIMEOUT, conn,
-				xio_conn_release,
+				xio_conn_release_cb,
 				&conn->close_time_hndl);
 		if (retval)
 			ERROR_LOG("xio_conn_delayed_close failed\n");
@@ -1691,6 +1703,8 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 {
 	int	retval;
 
+	if (!conn->transport)
+		BUG();
 	if (conn->transport->send) {
 		retval = conn->transport->send(conn->transport_hndl, task);
 		if (retval != 0) {
@@ -1705,7 +1719,6 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 					   &conn->observable,
 					   XIO_CONN_EVENT_MESSAGE_ERROR,
 					   &conn_event_data);
-
 				xio_set_error(ENOMSG);
 			}
 			return -1;
