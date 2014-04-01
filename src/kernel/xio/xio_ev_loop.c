@@ -347,6 +347,7 @@ static void priv_ev_loop_run_thread(struct xio_ev_loop *loop)
 	struct xio_ev_data	*tev;
 	struct llist_node	*last, *first;
 	struct llist_node	*node;
+	unsigned long		start_time = jiffies;
 
 	if (test_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states)) {
 		/* If a callback i.e. "tev->handler" stopped the loop,
@@ -396,6 +397,10 @@ retry_dont_wait:
 			node = llist_next(node);
 			loop->first = node;
 			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
+			if (time_after(jiffies, start_time)) {
+				schedule();
+				start_time = jiffies;
+			}
 			tev->handler(tev->data);
 			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 		}

@@ -1021,71 +1021,74 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 /*---------------------------------------------------------------------------*/
 /* xio_cq_event_handler							     */
 /*---------------------------------------------------------------------------*/
-static int xio_cq_event_handler(struct xio_cq *tcq, int timeout_us)
+static int xio_cq_event_handler(struct xio_cq *tcq)
 {
+	unsigned long	start_time;
+	u32		budget = MAX_POLL_WC;
+	int		poll_nr, polled;
+	int		last_recv = -1;
 	int		retval;
 	int		i;
-	int		num_delayed_arm = 0;
-	unsigned long	timeout;
-	unsigned long	start_time;
-	int		req_notify = 0;
-	int		last_recv = -1;
-	/* TODO: budget? */
 
-	timeout = usecs_to_jiffies((unsigned int)timeout_us);
 	start_time = jiffies;
 
 retry:
-	while (1) {
-		retval = ib_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
-		if (likely(retval > 0)) {
-			num_delayed_arm = 0;
-			req_notify = 0;
-			for (i = retval; i > 0; i--) {
-				if (tcq->wc_array[i-1].opcode == IB_WC_RECV) {
-					last_recv = i-1;
-					break;
-				}
-			}
-			for (i = 0; i < retval; i++) {
-				if (tcq->wc_array[i].status == IB_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i],
-						      (i != last_recv));
-				else
-					xio_handle_wc_error(
-							&tcq->wc_array[i]);
-			}
-		} else if (retval == 0) {
-			if (timeout_us == 0)
+	while (budget) {
+		poll_nr = min(budget, tcq->wc_array_len);
+		for (i = 0; i < poll_nr; i++) {
+			/* don't hold spinlock_irqsave for long */
+			retval = ib_poll_cq(tcq->cq, 1, &tcq->wc_array[i]);
+			if (unlikely(retval <= 0))
 				break;
-			/* wait timeout before going out */
-			if (num_delayed_arm == 0) {
-				start_time = jiffies;
-			} else {
-				if (time_is_before_eq_jiffies(start_time + timeout))
-					break;
-			}
-			num_delayed_arm++;
-		} else {
-			ERROR_LOG("ib_poll_cq failed. (err=%d)\n", retval);
+			if (tcq->wc_array[i].opcode == IB_WC_RECV)
+				last_recv = i;
+		}
+		polled = i;
+		budget -= i;
+		/* process work completions */
+		for (i = 0; i < polled; i++) {
+			if (tcq->wc_array[i].status == IB_WC_SUCCESS)
+				xio_handle_wc(&tcq->wc_array[i],
+					      (i != last_recv));
+			else
+				xio_handle_wc_error(&tcq->wc_array[i]);
+		}
+		/* an error or no more work completions */
+		if (polled != poll_nr)
 			break;
+
+		if (time_after(jiffies, start_time)) {
+			/* time slice exhausted, reschedule */
+			xio_cq_data_callback(tcq->cq, tcq);
+			return 0;
 		}
 	}
 
-	if (req_notify == 0) {
-		retval = ib_req_notify_cq(tcq->cq,
-					  IB_CQ_NEXT_COMP |
-					  IB_CQ_REPORT_MISSED_EVENTS);
-		if (unlikely(retval)) {
-			if (retval < 0)
-				ERROR_LOG("ib_req_notify_cq failed. (err=%d)\n",
-					  retval);
-		}
-		req_notify = 1;
+	if (!budget) {
+		/* budget was consumed, reschedule */
+		xio_cq_data_callback(tcq->cq, tcq);
+		return 0;
+	}
+
+	/* If loop was terminated before the budget was consumed
+	 * need to re-arm the CQ
+	 */
+	retval = ib_req_notify_cq(tcq->cq,
+				  IB_CQ_NEXT_COMP |
+				  IB_CQ_REPORT_MISSED_EVENTS);
+	if (likely(!retval))
+		return 0;
+
+	/* if driver supports IB_CQ_REPORT_MISSED_EVENTS
+	 * note budget is not yet consumed
+	 */
+	if (retval > 0)
 		goto retry;
-	}
 
-	return 0;
+	ERROR_LOG("ib_req_notify_cq failed. (err=%d)\n",
+		  retval);
+
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1096,7 +1099,7 @@ void xio_data_handler(void *user_context)
 	struct xio_cq *tcq = (struct xio_cq *) user_context;
 	struct xio_rdma_transport *rdma_hndl;
 
-	xio_cq_event_handler(tcq, tcq->ctx->polling_timeout);
+	xio_cq_event_handler(tcq);
 
 	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
 		xio_rdma_idle_handler(rdma_hndl);
@@ -1115,7 +1118,7 @@ void xio_cq_data_callback(struct ib_cq *cq, void *cq_context)
 	/* do it in init time */
 	tcq->event_data.handler = xio_data_handler;
 	tcq->event_data.data    = cq_context;
-	/* tell "poller mechanisme" */
+	/* tell "poller mechanism" */
 	xio_context_add_event(tcq->ctx, &tcq->event_data);
 }
 
