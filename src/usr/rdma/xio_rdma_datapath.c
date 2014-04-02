@@ -1104,7 +1104,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq;
 	int				last_recv = -1;
-	int				nr_comp = 0;
+	int				nr_comp = 0, recv_counter;
 	int				nr;
 	cycles_t			timeout = -1;
 	cycles_t			start_time = get_cycles();
@@ -1129,16 +1129,19 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 					break;
 				}
 			}
+			recv_counter = 0;
 			for (i = 0; i < retval; i++) {
-				if (rdma_hndl->tcq->wc_array[i].status ==
+				if (tcq->wc_array[i].opcode == IBV_WC_RECV)
+					recv_counter++;
+					if (rdma_hndl->tcq->wc_array[i].status ==
 				    IBV_WC_SUCCESS)
 					xio_handle_wc(&tcq->wc_array[i],
 						      (i != last_recv));
 				else
 					xio_handle_wc_error(&tcq->wc_array[i]);
 			}
-			nr_comp += retval;
-			max_nr -= retval;
+			nr_comp += recv_counter;
+			max_nr -= recv_counter;
 			if (nr_comp >= min_nr || max_nr == 0)
 				break;
 			if ((get_cycles() - start_time) >= timeout)
