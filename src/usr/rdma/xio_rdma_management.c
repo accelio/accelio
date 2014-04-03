@@ -377,6 +377,8 @@ static void xio_cq_release(struct xio_cq *tcq, int delete_fd)
 			ERROR_LOG("ev_loop_del_cb failed. (errno=%d %m)\n",
 				  errno);
 	}
+	/* if  event is scheduled, then remove it */
+	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
 
 	/* the event loop may be release by the time this function is called */
 	retval = ibv_destroy_cq(tcq->cq);
