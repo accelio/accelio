@@ -79,6 +79,7 @@
 #include <linux/kref.h>
 #include <linux/usr.h>
 #include <linux/netlink.h>
+#include <linux/debugfs.h>
 
 #include "get_clock.h"
 
