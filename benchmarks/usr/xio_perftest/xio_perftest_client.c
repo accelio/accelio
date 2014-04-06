@@ -207,7 +207,8 @@ static void *worker_thread(void *data)
 	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout);
+	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout,
+					tdata->affinity);
 
 
 	/* connect the session  */

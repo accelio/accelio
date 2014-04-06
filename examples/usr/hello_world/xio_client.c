@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	/* create thread context for the client */
-	session_data.ctx = xio_context_create(NULL, 0);
+	session_data.ctx = xio_context_create(NULL, 0, -1);
 
 
 	/* create url to connect to */

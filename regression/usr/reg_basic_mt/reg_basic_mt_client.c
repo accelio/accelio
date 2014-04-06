@@ -193,7 +193,7 @@ static void *worker_thread(void *data)
 		qdepth_per_thread = 1;
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0);
+	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	/* get session entry */
 	connection_entry = calloc(1, sizeof(*connection_entry));

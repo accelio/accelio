@@ -45,7 +45,7 @@
 #define MAX_THREADS		4
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		1000000
-#define TEST_DISCONNECT		0
+#define TEST_DISCONNECT		1
 #define DISCONNECT_NR		2000000
 
 
@@ -180,7 +180,7 @@ static void *portal_server_cb(void *data)
 
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0);
+	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
@@ -300,7 +300,7 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	/* create thread context for the client */
-	server_data->ctx	= xio_context_create(NULL, 0);
+	server_data->ctx	= xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);

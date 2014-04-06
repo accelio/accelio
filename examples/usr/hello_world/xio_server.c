@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* create thread context for the client */
-	server_data.ctx	= xio_context_create(NULL, 0);
+	server_data.ctx	= xio_context_create(NULL, 0, -1);
 
 
 	/* create url to connect to */

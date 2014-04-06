@@ -641,7 +641,7 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
-	ctx	= xio_context_create(NULL, 0);
+	ctx	= xio_context_create(NULL, 0, test_config.cpu);
 
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;

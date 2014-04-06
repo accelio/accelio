@@ -218,7 +218,7 @@ int establish_connection(struct perf_comm *comm)
 	};
 
 	/* create thread context for the client */
-	comm->control_ctx->ctx = xio_context_create(NULL, 0);
+	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
 
 	if (comm->user_param->machine_type == SERVER) {
 		sprintf(url, "rdma://*:%d", CONFIG_PORT);

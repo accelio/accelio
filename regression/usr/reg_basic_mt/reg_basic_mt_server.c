@@ -355,7 +355,7 @@ static void *portal_server_cb(void *data)
 
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0);
+	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	if (tdata->server_data->server_dlen)
 		tdata->out_iobuf_pool = obj_pool_init(
@@ -618,7 +618,7 @@ int server_main(int argc, char *argv[])
 	xio_init();
 
 	/* create thread context for the client */
-	server_data->ctx	= xio_context_create(NULL, 0);
+	server_data->ctx	= xio_context_create(NULL, 0, -1);
 
 	TAILQ_INIT(&server_data->sessions_list);
 	pthread_spin_init(&server_data->lock, PTHREAD_PROCESS_PRIVATE);

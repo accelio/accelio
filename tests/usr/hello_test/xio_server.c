@@ -496,7 +496,7 @@ int main(int argc, char *argv[])
 	if (test_params.pool == NULL)
 		goto cleanup;
 
-	test_params.ctx = xio_context_create(NULL, 0);
+	test_params.ctx = xio_context_create(NULL, 0, test_config.cpu);
 	if (test_params.ctx == NULL) {
 		int error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",

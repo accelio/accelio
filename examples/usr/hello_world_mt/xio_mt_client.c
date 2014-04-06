@@ -45,7 +45,7 @@
 
 #define MAX_THREADS		4
 #define PRINT_COUNTER		400000
-#define TEST_DISCONNECT		0
+#define TEST_DISCONNECT		1
 #define DISCONNECT_NR		3000000
 
 
@@ -86,7 +86,7 @@ static void *worker_thread(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0);
+	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,

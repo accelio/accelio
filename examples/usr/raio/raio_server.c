@@ -236,7 +236,7 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0);
+	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
@@ -393,7 +393,7 @@ int main(int argc, char *argv[])
 	SLIST_INIT(&server_data.ses_list);
 
 	/* create thread context for the client */
-	server_data.ctx	= xio_context_create(NULL, 0);
+	server_data.ctx	= xio_context_create(NULL, 0, curr_cpu);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", argv[1], port);

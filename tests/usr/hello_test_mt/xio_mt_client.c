@@ -258,7 +258,7 @@ static void *worker_thread(void *data)
 	}
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout);
+	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout, tdata->affinity);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,

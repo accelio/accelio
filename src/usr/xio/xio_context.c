@@ -148,7 +148,7 @@ static void xio_stats_handler(int fd, int events, void *data)
 /* xio_context_create                                                        */
 /*---------------------------------------------------------------------------*/
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
-				       int polling_timeout_us)
+				       int polling_timeout_us, int cpu_hint)
 {
 	struct xio_context		*ctx = NULL;
 	int				cpu;
@@ -158,10 +158,14 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 	xio_read_logging_level();
 
-	cpu = sched_getcpu();
-	if (cpu == -1) {
-		xio_set_error(errno);
-		return NULL;
+	if (cpu_hint == -1) {
+		cpu = sched_getcpu();
+		if (cpu == -1) {
+			xio_set_error(errno);
+			return NULL;
+		}
+	} else {
+		cpu = cpu_hint;
 	}
 
 	/* allocate new context */

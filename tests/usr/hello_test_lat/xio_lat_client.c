@@ -474,7 +474,7 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
-	ctx = xio_context_create(NULL, POLLING_TIMEOUT);
+	ctx = xio_context_create(NULL, POLLING_TIMEOUT, test_config.cpu);
 	if (ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",

@@ -814,11 +814,13 @@ void xio_shutdown(void);
  *
  * @param[in] ctx_attr context attributes
  * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
+ * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
  *
  * @returns xio context handle, or NULL upon error
  */
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
-				       int polling_timeout_us);
+				       int polling_timeout_us,
+				       int cpu_hint);
 
 /**
  * closes the xio context and free its resources

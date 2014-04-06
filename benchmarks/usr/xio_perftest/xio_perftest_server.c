@@ -202,7 +202,8 @@ static void *portal_server_cb(void *data)
 	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth + 32);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout);
+	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout,
+					tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(tdata->ctx, &portal_server_ops,
@@ -302,7 +303,7 @@ static void *balancer_server_cb(void *data)
 
 	/* create thread context for the client */
 	server_data->ctx = xio_context_create(NULL,
-				server_data->user_param->poll_timeout);
+				server_data->user_param->poll_timeout, -1);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://*:%d", server_data->user_param->server_port);

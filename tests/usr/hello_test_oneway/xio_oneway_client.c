@@ -578,7 +578,7 @@ int main(int argc, char *argv[])
 
 
 	/* open xio context and assign a loop */
-	ow_params.ctx = xio_context_create(NULL, 0);
+	ow_params.ctx = xio_context_create(NULL, 0, test_config.cpu);
 	if (ow_params.ctx == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",

@@ -346,7 +346,7 @@ static void *portal_server_cb(void *data)
 				     0, 0);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout);
+	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout, tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
@@ -614,7 +614,8 @@ int main(int argc, char *argv[])
 		return -1;
 
 	/* create thread context for the client */
-	server_data.ctx = xio_context_create(NULL, test_config.poll_timeout);
+	server_data.ctx = xio_context_create(NULL, test_config.poll_timeout,
+					     test_config.cpu);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,

@@ -410,7 +410,7 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 
 
 	/* create thread context for the client */
-	session_data->ctx = xio_context_create(NULL, 0);
+	session_data->ctx = xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d",
