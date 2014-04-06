@@ -482,3 +482,12 @@ int xio_ev_loop_get_poll_params(void *loop_hndl,
 	return 0;
 }
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_is_stopping						     */
+/*---------------------------------------------------------------------------*/
+inline int xio_ev_loop_is_stopping(void *loop_hndl)
+{
+	return loop_hndl ? ((struct xio_ev_loop	*)loop_hndl)->stop_loop : 0;
+}
+

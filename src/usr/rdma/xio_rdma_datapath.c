@@ -956,6 +956,12 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			}
 		}
 		for (i = 0; i < err; i++) {
+			if (xio_context_is_loop_stopping(tcq->ctx)) {
+				tcq->curr_wc_idx = i;
+				tcq->last_wc_idx = err;
+				err = 1; /* same as in budget */
+				break;
+			}
 			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
 				xio_handle_wc(&tcq->wc_array[i],
 					      (i != last_recv));
@@ -998,12 +1004,29 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 {
 	int err;
 
+	/* handle the leftovers */
+	for (; tcq->curr_wc_idx < tcq->last_wc_idx; tcq->curr_wc_idx++) {
+		if (xio_context_is_loop_stopping(tcq->ctx)) {
+				err = 1; /* same as in budget */
+				goto stopped;
+		}
+		if (likely(tcq->wc_array[tcq->curr_wc_idx].status == IBV_WC_SUCCESS))
+			xio_handle_wc(&tcq->wc_array[tcq->curr_wc_idx], 0);
+		else
+			xio_handle_wc_error(&tcq->wc_array[tcq->curr_wc_idx]);
+	}
+	if (tcq->curr_wc_idx == tcq->last_wc_idx) {
+		tcq->curr_wc_idx = 0;
+		tcq->last_wc_idx = 0;
+	}
+
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (unlikely(err < 0)) {
 		xio_rearm_completions(tcq);
 		return;
 	}
 
+stopped:
 	if (err == 0 && (++tcq->num_delayed_arm == MAX_NUM_DELAYED_ARM))
 		/* no more completions on cq, give up and arm the interrupts */
 		xio_rearm_completions(tcq);
@@ -1055,7 +1078,6 @@ static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data)
 	list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
 		xio_rdma_idle_handler(rdma_hndl);
 	}
-
 }
 
 /*

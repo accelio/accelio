@@ -89,6 +89,7 @@ static void xio_append_ordered(struct llist_node *first,
 
 static int priv_ev_loop_run(void *loop_hndl);
 static void priv_ev_loop_stop(void *loop_hndl);
+static int priv_ev_is_loop_stopping(void *loop_hndl);
 
 static void priv_ev_loop_run_tasklet(unsigned long data);
 static void priv_ev_loop_run_work(struct work_struct *work);
@@ -125,6 +126,7 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 	/* use default implementation */
 	loop->run  = priv_ev_loop_run;
 	loop->stop = priv_ev_loop_stop;
+	loop->is_stopping = priv_ev_is_loop_stopping;
 	loop->loop_object = loop;
 
 	switch (flags) {
@@ -564,4 +566,17 @@ void priv_ev_loop_stop_thread(void *loop_hndl)
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
 	if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
 		wake_up_interruptible(&loop->wait);
+}
+
+/*---------------------------------------------------------------------------*/
+/* priv_ev_is_loop_stopping						     */
+/*---------------------------------------------------------------------------*/
+int priv_ev_is_loop_stopping(void *loop_hndl)
+{
+	struct xio_ev_loop *loop = loop_hndl;
+
+	if (loop == NULL)
+		return 0;
+
+	return test_bit(XIO_EV_LOOP_STOP, &loop->states);
 }

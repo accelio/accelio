@@ -270,6 +270,8 @@ struct xio_cq  {
 	xio_ctx_event_t			event_data;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
+	int32_t				curr_wc_idx;
+	int32_t				last_wc_idx;
 	int32_t				cq_events_that_need_ack;
 	int32_t				max_cqe;     /* max snd elements  */
 	int32_t				cq_depth;     /* current cq depth  */

@@ -86,6 +86,13 @@ int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
 void xio_ev_loop_stop(void *loop, int is_self_thread);
 
 /**
+ * check if stop activated
+ *
+ * @param[in] loop		Pointer to event loop
+ */
+int xio_ev_loop_is_stopping(void *loop_hndl);
+
+/**
  * destroy the event loop
  *
  * @param[in] loop		Pointer to event loop

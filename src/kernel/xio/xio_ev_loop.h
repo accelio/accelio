@@ -60,6 +60,7 @@ struct xio_ev_loop {
 	void *loop_object;
 	int  (*run)(void *loop_hndl);
 	void (*stop)(void *loop_hndl);
+	int (*is_stopping)(void *loop_hndl);
 	int  (*add_event)(void *loop_hndl, struct xio_ev_data *data);
 	unsigned long	flags;
 	volatile unsigned long	states;

@@ -258,6 +258,12 @@ int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 	return ev_loop->add_event(ev_loop->loop_object, data);
 }
 
+int xio_context_is_loop_stopping(struct xio_context *ctx)
+{
+	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+	return ev_loop->is_stopping(ev_loop->loop_object);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_work							     */
 /*---------------------------------------------------------------------------*/
