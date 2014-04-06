@@ -267,6 +267,7 @@ int xio_connection_send(struct xio_connection *connection,
 	struct xio_task		*req_task = NULL;
 	struct xio_session_hdr	hdr = {0};
 	int			is_req = 0;
+	int 			rc = EFAULT;
 
 	/*  control of the number of messages sent */
 	if (msg->type == XIO_MSG_TYPE_REQ &&
@@ -363,14 +364,7 @@ int xio_connection_send(struct xio_connection *connection,
 	/* send it */
 	retval = xio_conn_send(connection->conn, task);
 	if (retval != 0) {
-		int rc;
-		if ((rc = xio_errno()) != EAGAIN) {
-			/* ERROR_LOG("xio_conn_send failed\n"); */
-			/* message error notification expected no need
-			 * to do cleanup
-			 */
-			return -rc;
-		}
+		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
 		goto cleanup;
 	}
 	if (!task->is_control) {
@@ -388,7 +382,7 @@ cleanup:
 		list_move(&task->tasks_list_entry, &connection->io_tasks_list);
 
 
-	return -EFAULT;
+	return -rc;
 }
 
 /*---------------------------------------------------------------------------*/
