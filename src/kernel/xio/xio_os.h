@@ -55,6 +55,7 @@
 #else
 #include <linux/atomic.h>
 #endif
+#include <linux/debugfs.h>
 
 /* /usr/include/bits/types.h: *__STD_TYPE __U32_TYPE __socklen_t; */
 typedef u32 __socklen_t;

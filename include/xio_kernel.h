@@ -42,6 +42,7 @@
 #include <linux/socket.h>
 #include <linux/sched.h>
 #include <linux/llist.h>
+#include <linux/debugfs.h>
 
 #define DRV_VERSION "0.1"
 #define DRV_RELDATE "2013-Oct-01"
@@ -902,6 +903,8 @@ int xio_context_run_loop(struct xio_context *ctx);
 void xio_context_stop_loop(struct xio_context *ctx);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data);
+
+struct dentry *xio_debugfs_root(void);
 
 #endif /*XIO_API_H */
 

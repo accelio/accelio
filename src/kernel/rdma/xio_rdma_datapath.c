@@ -93,6 +93,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				 struct xio_task *task);
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 				 struct xio_task *task);
+void xio_cq_data_callback_cont(struct ib_cq *cq, void *cq_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_post_recv							     */
@@ -1045,6 +1046,7 @@ retry:
 		}
 		polled = i;
 		budget -= i;
+		tcq->wqes += i;
 		/* process work completions */
 		for (i = 0; i < polled; i++) {
 			if (tcq->wc_array[i].status == IB_WC_SUCCESS)
@@ -1059,14 +1061,14 @@ retry:
 
 		if (time_after(jiffies, start_time)) {
 			/* time slice exhausted, reschedule */
-			xio_cq_data_callback(tcq->cq, tcq);
+			xio_cq_data_callback_cont(tcq->cq, tcq);
 			return 0;
 		}
 	}
 
 	if (!budget) {
 		/* budget was consumed, reschedule */
-		xio_cq_data_callback(tcq->cq, tcq);
+		xio_cq_data_callback_cont(tcq->cq, tcq);
 		return 0;
 	}
 
@@ -1109,12 +1111,28 @@ void xio_data_handler(void *user_context)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_cq_data_callback_cont (completion)				     */
+/*---------------------------------------------------------------------------*/
+void xio_cq_data_callback_cont(struct ib_cq *cq, void *cq_context)
+{
+	struct xio_cq *tcq = (struct xio_cq *) cq_context;
+
+	tcq->scheds++;
+	/* do it in init time */
+	tcq->event_data.handler = xio_data_handler;
+	tcq->event_data.data    = cq_context;
+	/* tell "poller mechanism" */
+	xio_context_add_event(tcq->ctx, &tcq->event_data);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_cq_data_callback (completion)					     */
 /*---------------------------------------------------------------------------*/
 void xio_cq_data_callback(struct ib_cq *cq, void *cq_context)
 {
 	struct xio_cq *tcq = (struct xio_cq *) cq_context;
 
+	tcq->events++;
 	/* do it in init time */
 	tcq->event_data.handler = xio_data_handler;
 	tcq->event_data.data    = cq_context;

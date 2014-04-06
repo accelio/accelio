@@ -213,8 +213,26 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	tcq->cqe_avail	= alloc_sz;
 	tcq->wc_array_len = alloc_sz;
 	/* xio_rdma_poll doesn't support separate tx & rx poll
-	 * so we use only one cq fro RX and TX
+	 * so we use only one cq for RX and TX
 	 */
+	if (ctx->ctx_dentry) {
+		struct dentry *d;
+		tcq->tcq_dentry = debugfs_create_dir("tcq", ctx->ctx_dentry);
+		if (!tcq->tcq_dentry)
+			goto cleanup2;
+		d = debugfs_create_u64("events", S_IRUGO,
+				       tcq->tcq_dentry, &tcq->events);
+		if (!d)
+			goto cleanup2;
+		d = debugfs_create_u64("wqes", S_IRUGO,
+				       tcq->tcq_dentry, &tcq->wqes);
+		if (!d)
+			goto cleanup2;
+		d = debugfs_create_u64("scheds", S_IRUGO,
+				       tcq->tcq_dentry, &tcq->scheds);
+		if (!d)
+			goto cleanup2;
+	}
 
 	tcq->cq = ib_create_cq(dev->ib_dev,
 			       xio_cq_data_callback,
@@ -223,14 +241,14 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 			       alloc_sz, cpu);
 	if (IS_ERR(tcq->cq)) {
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
-		goto cleanup2;
+		goto cleanup3;
 	}
 
 	/* we don't expect missed events (if supported) so it is an error */
 	if (ib_req_notify_cq(tcq->cq,
 			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
 		ERROR_LOG("ib_req_notify_cq\n");
-		goto cleanup3;
+		goto cleanup4;
 	}
 
 	INIT_LIST_HEAD(&tcq->trans_list);
@@ -245,8 +263,11 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 
 	return tcq;
 
-cleanup3:
+cleanup4:
 	ib_destroy_cq(tcq->cq);
+cleanup3:
+	debugfs_remove_recursive(tcq->tcq_dentry);
+	tcq->tcq_dentry = NULL;
 cleanup2:
 	kfree(tcq->wc_array);
 cleanup1:
@@ -280,6 +301,10 @@ static void xio_cq_release(struct xio_cq *tcq)
 	if (retval)
 		ERROR_LOG("ib_destroy_cq failed. (err=%d)\n", retval);
 
+	if (tcq->tcq_dentry) {
+		debugfs_remove_recursive(tcq->tcq_dentry);
+		tcq->tcq_dentry = NULL;
+	}
 
 	kfree(tcq->wc_array);
 	kfree(tcq);

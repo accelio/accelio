@@ -52,12 +52,26 @@ MODULE_DESCRIPTION("XIO generic part "
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+/* The root of XIO debugfs tree */
+static struct dentry *xio_root;
+
 /*---------------------------------------------------------------------------*/
 /* xio_constructor							     */
 /*---------------------------------------------------------------------------*/
 
 static int __init xio_init_module(void)
 {
+	if (debugfs_initialized()) {
+		xio_root = debugfs_create_dir("xio", NULL);
+		if (!xio_root) {
+			pr_err("xio_root debugfs creation failed\n");
+			return -ENOMEM;
+		}
+	} else {
+		xio_root = NULL;
+		pr_err("debugfs not initialized\n");
+	}
+
 	sessions_store_construct();
 	conns_store_construct();
 
@@ -66,6 +80,15 @@ static int __init xio_init_module(void)
 
 static void __exit xio_cleanup_module(void)
 {
+	if (xio_root) {
+		debugfs_remove_recursive(xio_root);
+		xio_root = NULL;
+	}
+}
+
+struct dentry *xio_debugfs_root(void)
+{
+	return xio_root;
 }
 
 module_init(xio_init_module);

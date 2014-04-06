@@ -40,7 +40,7 @@
 
 #include "xio_transport.h"
 
-/* poll_cq defentions */
+/* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
 
@@ -264,6 +264,10 @@ struct xio_cq  {
 						       */
 	struct list_head		cq_list_entry;	/* on device cq list */
 	struct xio_observer		observer;	/* context observer */
+	struct dentry			*tcq_dentry;	/* debugfs */
+	u64				events;
+	u64				wqes;
+	u64				scheds;
 };
 
 struct xio_page_vec {
