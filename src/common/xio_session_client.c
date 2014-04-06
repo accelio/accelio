@@ -730,7 +730,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 		msg->type = XIO_SESSION_SETUP_REQ;
 		retval = xio_connection_send(session->lead_connection,
 					     msg);
-		if (retval) {
+		if (retval && retval != -EAGAIN) {
 			TRACE_LOG("failed to send session "\
 					"setup request\n");
 			ev_data.conn =  session->lead_connection;
@@ -755,7 +755,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 
 		retval = xio_connection_send(session->redir_connection,
 					     msg);
-		if (retval) {
+		if (retval && retval != -EAGAIN) {
 			TRACE_LOG("failed to send session setup request\n");
 			ev_data.conn =  session->redir_connection;
 			ev_data.conn_user_context =

@@ -1177,6 +1177,8 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
+	if (retval == -EAGAIN)
+		retval = 0;
 
 	if (!connection->disable_notify)
 		xio_session_notify_connection_closed(connection->session,
@@ -1378,6 +1380,7 @@ int xio_get_connection_params(struct xio_connection *connection,
 int xio_connection_send_hello_req(struct xio_connection *connection)
 {
 	struct xio_msg *msg;
+	int		retval;
 
 	TRACE_LOG("send hello request. session:%p, connection:%p\n",
 		  connection->session, connection);
@@ -1392,7 +1395,11 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	msg->out.data_iovlen	= 0;
 
 	/* we don't want to send all queued messages yet - send directly */
-	return xio_connection_send(connection, msg);
+	retval = xio_connection_send(connection, msg);
+	if (retval == -EAGAIN)
+		retval = 0;
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1402,6 +1409,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 				  struct xio_task *task)
 {
 	struct xio_msg	*msg;
+	int		retval;
 
 	TRACE_LOG("send hello response. session:%p, connection:%p\n",
 		  connection->session, connection);
@@ -1419,7 +1427,11 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 
 
 	/* we don't want to send all queued messages yet - send directly */
-	return xio_connection_send(connection, msg);
+	retval = xio_connection_send(connection, msg);
+	if (retval == -EAGAIN)
+		retval = 0;
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
