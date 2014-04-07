@@ -249,8 +249,8 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	struct xio_rdma_mp_mem		read_sge[XIO_MAX_IOV];
-	struct xio_rdma_mp_mem		write_sge[XIO_MAX_IOV];
+	struct xio_mempool_obj		read_sge[XIO_MAX_IOV];
+	struct xio_mempool_obj		write_sge[XIO_MAX_IOV];
 
 	/* What this side got from the peer for RDMA R/W
 	 */
@@ -325,7 +325,7 @@ struct xio_rdma_transport {
 	struct xio_transport_base	base;
 	struct xio_cq			*tcq;
 	struct ibv_qp			*qp;
-	struct xio_rdma_mempool		*rdma_mempool;
+	struct xio_mempool		*rdma_mempool;
 
 	struct list_head		trans_list_entry;
 

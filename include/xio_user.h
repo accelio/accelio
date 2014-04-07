@@ -263,6 +263,7 @@ struct xio_server;			     /* server handle                */
 struct xio_session;			     /* session handle		     */
 struct xio_connection;			     /* connection handle	     */
 struct xio_mr;				     /* registered memory handle     */
+struct xio_mempool;			     /* mempool object		     */
 
 /*---------------------------------------------------------------------------*/
 /* typedefs								     */
@@ -1257,6 +1258,92 @@ int xio_set_opt(void *xio_obj, int level, int optname,
  */
 int xio_get_opt(void *xio_obj, int level, int optname,
 		void *optval, int *optlen);
+
+
+/**
+ * @struct xio_mempool_obj
+ * @brief mempool object item
+ */
+struct xio_mempool_obj {
+	void		*addr;
+	size_t		length;
+	struct xio_mr	*mr;
+	void		*cache;
+};
+
+/**
+ * @enum xio_mempool_flag
+ * @brief creation flags for mempool
+ */
+enum xio_mempool_flag {
+	XIO_MEMPOOL_FLAG_NONE		= 0x0000,
+	XIO_MEMPOOL_FLAG_REG_MR		= 0x0001
+};
+
+/**
+ * create mempool with default allocators
+ *
+ * @param[in] nodeid	  numa node id. -1 if don't care
+ * @param[in] flags	  mask of mempool creation flags
+ *			  defined (@ref xio_mempool_flag)
+ *
+ * @returns success (0), or a (negative) error value
+ */
+struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
+
+/**
+ * create mempool with NO (!) allocators
+ *
+ * @param[in] nodeid	  numa node id. -1 if don't care
+ * @param[in] flags	  mask of mempool creation flags
+ *			  defined (@ref xio_mempool_flag)
+ *
+ * @returns success (0), or a (negative) error value
+ */
+struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags);
+
+/**
+ * add an allocator to current set (setup only)
+ *
+ * @param[in] mpool	  the memory pool
+ * @param[in] size	  slab memory size
+ * @param[in] min	  initial buffers to allocate
+ * @param[in] max	  maximum buffers to allocate
+ * @param[in] alloc_quantum_nr	allocation quantum
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_mempool_add_allocator(struct xio_mempool *mpool,
+			      size_t size, size_t min, size_t max,
+			      size_t alloc_quantum_nr);
+
+/**
+ * destroy memory pool
+ *
+ * @param[in] mpool	  the memory pool
+ *
+ */
+void xio_mempool_destroy(struct xio_mempool *mpool);
+
+/**
+ * allocate mempool object from memory pool
+ *
+ * @param[in] mpool	  the memory pool
+ * @param[in] length	  buffer size to allocate
+ * @param[in] mp_obj	  the allocated mempool object
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_mempool_alloc(struct xio_mempool *mpool,
+		      size_t length, struct xio_mempool_obj *mp_obj);
+
+/**
+ * free mempool object back to memory pool
+ *
+ * @param[in] mp_obj	  the allocated mempool object
+ *
+ */
+void xio_mempool_free(struct xio_mempool_obj *mp_obj);
 
 
 #ifdef __cplusplus

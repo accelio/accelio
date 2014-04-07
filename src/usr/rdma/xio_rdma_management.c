@@ -64,7 +64,7 @@
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_rdma_mempool		**mempool_array;
+static struct xio_mempool		**mempool_array;
 static int				mempool_array_len;
 static spinlock_t			mngmt_lock;
 static pthread_rwlock_t			dev_lock;
@@ -565,7 +565,7 @@ static void xio_rdma_mempool_array_release()
 
 	for (i = 0; i < mempool_array_len; i++) {
 		if (mempool_array[i]) {
-			xio_rdma_mempool_destroy(mempool_array[i]);
+			xio_mempool_destroy(mempool_array[i]);
 			mempool_array[i] = NULL;
 		}
 	}
@@ -575,7 +575,7 @@ static void xio_rdma_mempool_array_release()
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mempool_array_get						     */
 /*---------------------------------------------------------------------------*/
-static struct xio_rdma_mempool *xio_rdma_mempool_array_get(
+static struct xio_mempool *xio_rdma_mempool_array_get(
 		struct xio_context *ctx)
 {
 	if (ctx->nodeid > mempool_array_len) {
@@ -585,9 +585,10 @@ static struct xio_rdma_mempool *xio_rdma_mempool_array_get(
 	if (mempool_array[ctx->nodeid])
 		return mempool_array[ctx->nodeid];
 
-	mempool_array[ctx->nodeid] = xio_rdma_mempool_create();
+	mempool_array[ctx->nodeid] = xio_mempool_create(ctx->nodeid,
+						        XIO_MEMPOOL_FLAG_REG_MR);
 	if (!mempool_array[ctx->nodeid]) {
-		ERROR_LOG("xio_rdma_mempool_create failed " \
+		ERROR_LOG("xio_mempool_create failed " \
 			  "(errno=%d %m)\n", errno);
 		return NULL;
 	}
@@ -1280,7 +1281,7 @@ static int xio_rdma_task_pre_put(
 	/* put buffers back to pool */
 	for (i = 0; i < rdma_task->read_num_sge; i++) {
 		if (rdma_task->read_sge[i].cache) {
-			xio_rdma_mempool_free(&rdma_task->read_sge[i]);
+			xio_mempool_free(&rdma_task->read_sge[i]);
 			rdma_task->read_sge[i].cache = NULL;
 		}
 	}
@@ -1288,7 +1289,7 @@ static int xio_rdma_task_pre_put(
 
 	for (i = 0; i < rdma_task->write_num_sge; i++) {
 		if (rdma_task->write_sge[i].cache) {
-			xio_rdma_mempool_free(&rdma_task->write_sge[i]);
+			xio_mempool_free(&rdma_task->write_sge[i]);
 			rdma_task->write_sge[i].cache = NULL;
 		}
 	}

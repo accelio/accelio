@@ -48,7 +48,6 @@
 #include "xio_protocol.h"
 #include "get_clock.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
 
@@ -1718,7 +1717,7 @@ static int xio_rdma_prep_req_out_data(
 			/* user did not provide mr - take buffers from pool
 			 * and do copy */
 			for (i = 0; i < vmsg->data_iovlen; i++) {
-				retval = xio_rdma_mempool_alloc(
+				retval = xio_mempool_alloc(
 						rdma_hndl->rdma_mempool,
 						vmsg->data_iov[i].iov_len,
 						&rdma_task->write_sge[i]);
@@ -1757,7 +1756,7 @@ static int xio_rdma_prep_req_out_data(
 
 cleanup:
 	for (i = 0; i < rdma_task->write_num_sge; i++)
-		xio_rdma_mempool_free(&rdma_task->write_sge[i]);
+		xio_mempool_free(&rdma_task->write_sge[i]);
 
 	rdma_task->write_num_sge = 0;
 
@@ -1814,7 +1813,7 @@ static int xio_rdma_prep_req_in_data(
 
 			/* user did not provide mr */
 			for (i = 0; i < vmsg->data_iovlen; i++) {
-				retval = xio_rdma_mempool_alloc(
+				retval = xio_mempool_alloc(
 						rdma_hndl->rdma_mempool,
 						vmsg->data_iov[i].iov_len,
 						&rdma_task->read_sge[i]);
@@ -1839,7 +1838,7 @@ static int xio_rdma_prep_req_in_data(
 
 cleanup:
 	for (i = 0; i < rdma_task->read_num_sge; i++)
-		xio_rdma_mempool_free(&rdma_task->read_sge[i]);
+		xio_mempool_free(&rdma_task->read_sge[i]);
 
 	rdma_task->read_num_sge = 0;
 	rdma_task->recv_num_sge = 0;
@@ -2372,7 +2371,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				/* put buffers back to pool */
 				for (i = 0; i < rdma_sender_task->read_num_sge;
 						i++) {
-					xio_rdma_mempool_free(
+					xio_mempool_free(
 						&rdma_sender_task->read_sge[i]);
 					rdma_sender_task->read_sge[i].cache = 0;
 				}
@@ -2738,7 +2737,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		}
 
 		for (i = 0;  i < rdma_task->req_write_num_sge; i++) {
-			retval = xio_rdma_mempool_alloc(
+			retval = xio_mempool_alloc(
 					rdma_hndl->rdma_mempool,
 					rdma_task->req_write_sge[i].length,
 					&rdma_task->read_sge[i]);
@@ -2802,7 +2801,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 cleanup:
 	for (i = 0; i < rdma_task->read_num_sge; i++)
-		xio_rdma_mempool_free(&rdma_task->read_sge[i]);
+		xio_mempool_free(&rdma_task->read_sge[i]);
 
 	rdma_task->read_num_sge = 0;
 	return -1;
@@ -2835,7 +2834,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 		/* user did not provide mr - take buffers from pool
 		 * and do copy */
 		for (i = 0; i < task->omsg->out.data_iovlen; i++) {
-			retval = xio_rdma_mempool_alloc(
+			retval = xio_mempool_alloc(
 					rdma_hndl->rdma_mempool,
 					task->omsg->out.data_iov[i].iov_len,
 					&rdma_task->write_sge[i]);
@@ -2912,7 +2911,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 cleanup:
 	for (i = 0; i < rdma_task->write_num_sge; i++)
-		xio_rdma_mempool_free(&rdma_task->write_sge[i]);
+		xio_mempool_free(&rdma_task->write_sge[i]);
 
 	rdma_task->write_num_sge = 0;
 	return -1;

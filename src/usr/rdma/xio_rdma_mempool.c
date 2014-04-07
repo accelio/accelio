@@ -39,7 +39,6 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
 
 /* Accelio's default mempool profile (don't expose it) */
 #define XIO_MEM_SLOTS_NR	4
@@ -86,6 +85,7 @@ struct xio_mem_region {
 };
 
 struct xio_mem_slot {
+	struct xio_mempool		*pool;
 	struct list_head		mem_regions_list;
 	struct xio_mem_block		*free_blocks_list;
 	struct list_head		blocks_list;
@@ -102,8 +102,10 @@ struct xio_mem_slot {
 	int				pad;
 };
 
-struct xio_rdma_mempool {
+struct xio_mempool {
 	uint32_t			slots_nr; /* less sentinel */
+	uint32_t			flags;
+	int				nodeid;
 	int				pad;
 	struct xio_mem_slot		*slot;
 };
@@ -209,9 +211,9 @@ static struct xio_mem_block *new_block(struct xio_mem_slot *slot)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mem_slot_free						     */
+/* xio_mem_slot_free						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
+static int xio_mem_slot_free(struct xio_mem_slot *slot)
 {
 	struct xio_mem_region *r, *tmp_r;
 
@@ -232,9 +234,9 @@ static int xio_rdma_mem_slot_free(struct xio_mem_slot *slot)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mem_slot_resize						     */
+/* xio_mem_slot_resize						     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mem_block *xio_rdma_mem_slot_resize(struct xio_mem_slot *slot,
+static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 						      int alloc)
 {
 	char				*buf;
@@ -331,9 +333,9 @@ static struct xio_mem_block *xio_rdma_mem_slot_resize(struct xio_mem_slot *slot,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_destroy						     */
+/* xio_mempool_destroy						     */
 /*---------------------------------------------------------------------------*/
-void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
+void xio_mempool_destroy(struct xio_mempool *p)
 {
 	int i;
 
@@ -341,23 +343,25 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 		return;
 
 	for (i = 0; i < p->slots_nr; i++)
-		xio_rdma_mem_slot_free(&p->slot[i]);
+		xio_mem_slot_free(&p->slot[i]);
 
 	ufree(p->slot);
 	ufree(p);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_create_ex						     */
+/* xio_mempool_create_ex						     */
 /*---------------------------------------------------------------------------*/
-struct xio_rdma_mempool *xio_rdma_mempool_create_ex(void)
+struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
 {
-	struct xio_rdma_mempool *p;
+	struct xio_mempool *p;
 
-	p = ucalloc(1, sizeof(struct xio_rdma_mempool));
+	p = ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
 
+	p->nodeid = nodeid;
+	p->flags = flags;
 	p->slots_nr = 0;
 	p->slot = NULL;
 
@@ -365,41 +369,47 @@ struct xio_rdma_mempool *xio_rdma_mempool_create_ex(void)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_create						     */
+/* xio_mempool_create						     */
 /*---------------------------------------------------------------------------*/
-struct xio_rdma_mempool *xio_rdma_mempool_create(void)
+struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 {
-	struct xio_rdma_mempool *p;
+	struct xio_mempool *p;
 	int			i;
 	int			ret;
 
-	p = ucalloc(1, sizeof(struct xio_rdma_mempool));
+	p = ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
 
+	p->nodeid = nodeid;
+	p->flags = flags;
 	p->slots_nr = XIO_MEM_SLOTS_NR;
 	p->slot = (struct xio_mem_slot *)ucalloc(p->slots_nr+1,
 						 sizeof(struct xio_mem_slot));
 
+	p->slot[0].pool			= p;
 	p->slot[0].mb_size		= XIO_16K_BLOCK_SZ;
 	p->slot[0].init_mb_nr		= XIO_16K_MIN_NR;
 	p->slot[0].max_mb_nr		= XIO_16K_MAX_NR;
 	p->slot[0].alloc_quantum_nr	= XIO_16K_ALLOC_NR;
 
+	p->slot[1].pool			= p;
 	p->slot[1].mb_size		= XIO_64K_BLOCK_SZ;
 	p->slot[1].init_mb_nr		= XIO_64K_MIN_NR;
 	p->slot[1].max_mb_nr		= XIO_64K_MAX_NR;
-	p->slot[1].alloc_quantum_nr		= XIO_64K_ALLOC_NR;
+	p->slot[1].alloc_quantum_nr	= XIO_64K_ALLOC_NR;
 
+	p->slot[2].pool			= p;
 	p->slot[2].mb_size		= XIO_256K_BLOCK_SZ;
 	p->slot[2].init_mb_nr		= XIO_256K_MIN_NR;
 	p->slot[2].max_mb_nr		= XIO_256K_MAX_NR;
-	p->slot[2].alloc_quantum_nr		= XIO_256K_ALLOC_NR;
+	p->slot[2].alloc_quantum_nr	= XIO_256K_ALLOC_NR;
 
+	p->slot[3].pool			= p;
 	p->slot[3].mb_size		= XIO_1M_BLOCK_SZ;
 	p->slot[3].init_mb_nr		= XIO_1M_MIN_NR;
 	p->slot[3].max_mb_nr		= XIO_1M_MAX_NR;
-	p->slot[3].alloc_quantum_nr		= XIO_1M_ALLOC_NR;
+	p->slot[3].alloc_quantum_nr	= XIO_1M_ALLOC_NR;
 
 	p->slot[4].mb_size		= SIZE_MAX;
 
@@ -412,21 +422,21 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		INIT_LIST_HEAD(&p->slot[i].blocks_list);
 		p->slot[i].free_blocks_list = NULL;
 		if (p->slot[i].init_mb_nr) {
-			if (xio_rdma_mem_slot_resize(&p->slot[i], 0) == NULL)
+			if (xio_mem_slot_resize(&p->slot[i], 0) == NULL)
 				goto cleanup;
 		}
 	}
 
 	return p;
 cleanup:
-	xio_rdma_mempool_destroy(p);
+	xio_mempool_destroy(p);
 	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
 /* size2index								     */
 /*---------------------------------------------------------------------------*/
-static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
+static inline int size2index(struct xio_mempool *p, size_t sz)
 {
 	int i;
 
@@ -438,10 +448,10 @@ static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_alloc						     */
+/* xio_mempool_alloc						     */
 /*---------------------------------------------------------------------------*/
-int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
-			   struct xio_rdma_mp_mem *mp_mem)
+int xio_mempool_alloc(struct xio_mempool *p, size_t length,
+			   struct xio_mempool_obj *mp_obj)
 {
 	int			index;
 	struct xio_mem_slot	*slot;
@@ -465,7 +475,7 @@ retry:
 		 */
 		block = new_block(slot);
 		if (!block) {
-			block = xio_rdma_mem_slot_resize(slot, 1);
+			block = xio_mem_slot_resize(slot, 1);
 			if (block == NULL) {
 				if (++index == p->slots_nr)
 					index  = -1;
@@ -478,34 +488,34 @@ retry:
 		pthread_spin_unlock(&slot->lock);
 	}
 
-	mp_mem->addr	= block->buf;
-	mp_mem->mr	= block->omr;
-	mp_mem->cache	= block;
-	mp_mem->length	= length;
+	mp_obj->addr	= block->buf;
+	mp_obj->mr	= block->omr;
+	mp_obj->cache	= block;
+	mp_obj->length	= length;
 
 cleanup:
 	return ret;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_free						     */
+/* xio_mempool_free						     */
 /*---------------------------------------------------------------------------*/
-void xio_rdma_mempool_free(struct xio_rdma_mp_mem *mp_mem)
+void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 {
 	struct xio_mem_block *block;
 
-	if (!mp_mem || !mp_mem->cache)
+	if (!mp_obj || !mp_obj->cache)
 		return;
 
-	block = mp_mem->cache;
+	block = mp_obj->cache;
 
 	release(block->parent_slot, block);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_add_allocator					     */
+/* xio_mempool_add_allocator					     */
 /*---------------------------------------------------------------------------*/
-int xio_rdma_mempool_add_allocator(struct xio_rdma_mempool *p,
+int xio_mempool_add_allocator(struct xio_mempool *p,
 				   size_t size, size_t min, size_t max,
 				   size_t alloc_quantum_nr)
 {
@@ -532,6 +542,7 @@ int xio_rdma_mempool_add_allocator(struct xio_rdma_mempool *p,
 	for (ix = 0; ix < p->slots_nr + 1; ++ix) {
 		if (ix == slot_ix) {
 			/* new slot */
+			new_slot[ix].pool = p;
 			new_slot[ix].mb_size = size;
 			new_slot[ix].init_mb_nr = min;
 			new_slot[ix].max_mb_nr = max;
@@ -543,7 +554,7 @@ int xio_rdma_mempool_add_allocator(struct xio_rdma_mempool *p,
 			INIT_LIST_HEAD(&new_slot[ix].blocks_list);
 			new_slot[ix].free_blocks_list = NULL;
 			if (new_slot[ix].init_mb_nr) {
-				(void) xio_rdma_mem_slot_resize(
+				(void) xio_mem_slot_resize(
 					&new_slot[ix], 0);
 			}
 			/* src adjust */

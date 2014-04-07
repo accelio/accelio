@@ -40,5 +40,12 @@ XIO_1.0 {
 		xio_bind;		
 		xio_unbind;
 		xio_poll_completions;
+		xio_mempool_create;
+		xio_mempool_create_ex;
+		xio_mempool_add_allocator;
+		xio_mempool_destroy;
+		xio_mempool_alloc;
+		xio_mempool_free;
+
 	local: *;
 };

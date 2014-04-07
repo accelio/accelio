@@ -38,37 +38,5 @@
 #ifndef XIO_RDMA_MEMPOOL_H
 #define XIO_RDMA_MEMPOOL_H
 
-#include <unistd.h>
-
-
-struct xio_mr;
-struct xio_rdma_mempool;
-
-struct xio_rdma_mp_mem {
-	void		*addr;
-	size_t		length;
-	struct xio_mr	*mr;
-	void		*cache;
-};
-
-/* create mempool with default allocators */
-struct xio_rdma_mempool *xio_rdma_mempool_create(void);
-
-/* create mempool with NO (!) allocators */
-struct xio_rdma_mempool *xio_rdma_mempool_create_ex(void);
-
-/* add an allocator to current set (setup only) */
-int xio_rdma_mempool_add_allocator(struct xio_rdma_mempool *mpool,
-				   size_t size, size_t min, size_t max,
-				   size_t alloc_quantum_nr);
-
-
-void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
-
-int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
-			   size_t length, struct xio_rdma_mp_mem *mp_mem);
-void xio_rdma_mempool_free(struct xio_rdma_mp_mem *mp_mem);
-
-
 #endif
 
