@@ -33,7 +33,7 @@ xio_oneway_client
 xio_oneway_server
 xio_read_lat
 xio_read_bw
-reg_basic_mt
+regression/usr/reg_basic_mt/reg_basic_mt
 version.c
 */usr/*/Makefile.in
 */usr/Makefile.in
