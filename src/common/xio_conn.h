@@ -144,6 +144,7 @@ struct xio_conn {
 	xio_delayed_work_handle_t	close_time_hndl;
 
 	struct list_head		observers_htbl;
+	struct list_head		tx_queue;
 
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
 };

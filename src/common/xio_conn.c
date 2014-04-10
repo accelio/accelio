@@ -68,6 +68,7 @@ static int xio_on_transport_event(void *observer, void *sender, int event,
 				  void *event_data);
 static void xio_on_conn_closed(struct xio_conn *conn,
 			       union xio_transport_event_data *event_data);
+static int xio_conn_flush_tx_queue(struct xio_conn *conn);
 
 
 /*---------------------------------------------------------------------------*/
@@ -414,7 +415,8 @@ static int xio_conn_send_setup_req(struct xio_conn *conn)
 		goto cleanup;
 
 
-	/* send it */
+	/* always add it to the top */
+	list_add(&task->tasks_list_entry, &conn->tx_queue);
 	retval = conn->transport->send(conn->transport_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup request failed\n");
@@ -476,6 +478,7 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 		goto cleanup;
 
 	/* send it */
+	list_move(&task->tasks_list_entry, &conn->tx_queue);
 	retval = conn->transport->send(conn->transport_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup respone failed\n");
@@ -1022,6 +1025,8 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 	XIO_OBSERVER_INIT(&conn->ctx_observer, conn,
 			  xio_on_context_event);
 
+	INIT_LIST_HEAD(&conn->tx_queue);
+
 	xio_context_reg_observer(transport_hndl->ctx, &conn->ctx_observer);
 
 
@@ -1137,6 +1142,7 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 					conn->transport_hndl->ctx,
 					&conn->close_time_hndl);
 	}
+	xio_conn_flush_tx_queue(conn);
 
 	xio_conn_initial_pool_free(conn);
 
@@ -1491,6 +1497,7 @@ struct xio_conn *xio_conn_open(
 
 	XIO_OBSERVER_INIT(&conn->trans_observer, conn, xio_on_transport_event);
 	XIO_OBSERVABLE_INIT(&conn->observable, conn);
+	INIT_LIST_HEAD(&conn->tx_queue);
 
 	xio_conn_init_observers_htbl(conn);
 
@@ -1695,36 +1702,62 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 	kref_put(&conn->kref, xio_conn_delayed_close);
 
 }
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_flush_tx_queue						     */
+/*---------------------------------------------------------------------------*/
+static int xio_conn_flush_tx_queue(struct xio_conn *conn)
+{
+	struct xio_task *ptask, *next_ptask;
+
+	list_for_each_entry_safe(ptask, next_ptask, &conn->tx_queue,
+				 tasks_list_entry) {
+		TRACE_LOG("flushing task %p type 0x%x\n",
+			  ptask, ptask->tlv_type);
+		if (ptask->sender_task) {
+			xio_tasks_pool_put(ptask->sender_task);
+			ptask->sender_task = NULL;
+		}
+		xio_tasks_pool_put(ptask);
+	}
+
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_conn_send							     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 {
-	int	retval;
+	int		retval;
 
 	if (!conn->transport) {
 		ERROR_LOG("transport not initialized\n");
 		return -1;
 	}
-	if (conn->transport->send) {
-		retval = conn->transport->send(conn->transport_hndl, task);
-		if (retval != 0) {
-			if (xio_errno() != EAGAIN) {
-				union xio_conn_event_data conn_event_data;
+	if (!conn->transport->send)
+		return 0;
 
-				ERROR_LOG("transport send failed\n");
-				conn_event_data.msg_error.reason = xio_errno();
-				conn_event_data.msg_error.task	= task;
+	/* push to end of the queue */
+	list_move_tail(&task->tasks_list_entry, &conn->tx_queue);
 
-				xio_observable_notify_any_observer(
-					   &conn->observable,
-					   XIO_CONN_EVENT_MESSAGE_ERROR,
-					   &conn_event_data);
-				xio_set_error(ENOMSG);
-			}
-			return -1;
-		}
+	task = list_first_entry(&conn->tx_queue,
+			        struct xio_task,  tasks_list_entry);
+
+	retval = conn->transport->send(conn->transport_hndl, task);
+	if (retval != 0) {
+		union xio_conn_event_data conn_event_data;
+
+		if (xio_errno() == EAGAIN)
+			return 0;
+
+		ERROR_LOG("transport send failed\n");
+		conn_event_data.msg_error.reason = xio_errno();
+		conn_event_data.msg_error.task	= task;
+
+		xio_observable_notify_any_observer(
+				&conn->observable,
+				XIO_CONN_EVENT_MESSAGE_ERROR,
+				&conn_event_data);
 	}
 
 	return 0;

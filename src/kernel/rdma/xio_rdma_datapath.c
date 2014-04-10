@@ -3095,7 +3095,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	xio_task_addref(task);
 	rdma_hndl->reqs_in_flight_nr++;
 
-	list_add_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
+	list_move_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
