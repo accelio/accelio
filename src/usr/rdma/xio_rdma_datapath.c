@@ -946,6 +946,10 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 		if (wclen > tcq->wc_array_len)
 			wclen = tcq->wc_array_len;
 
+		if (xio_context_is_loop_stopping(tcq->ctx)) {
+				err = 1; /* same as in budget */
+				break;
+		}
 		err = ibv_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
 		if (err == 0) { /* no completions retrieved */
 			if (timeout_us == 0)
@@ -960,6 +964,11 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 				    (get_cycles() - start_time) > timeout)
 					break;
 			}
+			if (xio_context_is_loop_stopping(tcq->ctx)) {
+				err = 1; /* same as in budget */
+				break;
+			}
+
 			timeouts_num++;
 			continue;
 		}
@@ -976,12 +985,14 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			}
 		}
 		for (i = 0; i < err; i++) {
+#if 0
 			if (xio_context_is_loop_stopping(tcq->ctx)) {
 				tcq->curr_wc_idx = i;
 				tcq->last_wc_idx = err;
 				err = 1; /* same as in budget */
 				break;
 			}
+#endif
 			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
 				xio_handle_wc(&tcq->wc_array[i],
 					      (i != last_recv));
