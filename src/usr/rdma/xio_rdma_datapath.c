@@ -596,35 +596,56 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->tx_ready_tasks_num)
-		return 0;
-
 	if (rdma_hndl->state != XIO_STATE_CONNECTED)
 		return 0;
 
-	/* send nop if messages are not queued */
-
-	/* can the peer receive messages? */
-	if (!rdma_hndl->peer_credits)
-		return 0;
-
-	/* does the local have resources to send message?  */
+	/* Does the local have resources to send message?  */
 	if (!rdma_hndl->sqe_avail)
 		return 0;
 
+	/* Try to do some useful work, want to spend time before calling the
+	 * pool, this increase the chance that more messages will arrive
+	 * and request notify will not be necessary
+	 */
+
+	if (rdma_hndl->kick_rdma_rd)
+		xio_xmit_rdma_rd(rdma_hndl);
+
+	/* Does the local have resources to send message?
+	 * xio_xmit_rdma_rd may consumed the sqe_avail
+	 */
+	if (!rdma_hndl->sqe_avail)
+		return 0;
+
+	/* Can the peer receive messages? */
+	if (!rdma_hndl->peer_credits)
+		return 0;
+
+	/* If we have real messages to send there is no need for
+	 * a special NOP message as credits are piggybacked
+	 */
+	if (rdma_hndl->tx_ready_tasks_num) {
+		xio_rdma_xmit(rdma_hndl);
+		return 0;
+	}
+
+	/* Send NOP if messages are not queued */
+
+#if 0
 	if ((rdma_hndl->reqs_in_flight_nr || rdma_hndl->rsps_in_flight_nr) &&
 	    !rdma_hndl->last_send_was_signaled)
 		goto send_final_nop;
-
-	/* does the peer have already maximum credits? */
+#endif
+	/* Does the peer have already maximum credits? */
 	if (rdma_hndl->sim_peer_credits >= MAX_RECV_WR)
 		return 0;
 
-	/* does the local have any credits to send? */
+	/* Does the local have any credits to send? */
 	if (!rdma_hndl->credits)
 		return 0;
-
+#if 0
 send_final_nop:
+#endif
 	TRACE_LOG("peer_credits:%d, credits:%d sim_peer_credits:%d\n",
 		  rdma_hndl->peer_credits, rdma_hndl->credits,
 		  rdma_hndl->sim_peer_credits);

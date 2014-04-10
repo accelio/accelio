@@ -641,22 +641,63 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->tx_ready_tasks_num)
-		return 0;
-
 	if (rdma_hndl->state != XIO_STATE_CONNECTED)
 		return 0;
 
-	/* send nop if no message is queued */
-	if (!(rdma_hndl->peer_credits && rdma_hndl->credits &&
-	      rdma_hndl->sqe_avail &&
-	      rdma_hndl->sim_peer_credits < MAX_RECV_WR))
+	/* Does the local have resources to send message?  */
+	if (!rdma_hndl->sqe_avail)
 		return 0;
 
+	/* Try to do some useful work, want to spend time before calling the
+	 * pool, this increase the chance that more messages will arrive
+	 * and request notify will not be necessary
+	 */
+
+	if (rdma_hndl->kick_rdma_rd)
+		xio_xmit_rdma_rd(rdma_hndl);
+
+	/* Does the local have resources to send message?
+	 * xio_xmit_rdma_rd may consumed the sqe_avail
+	 */
+	if (!rdma_hndl->sqe_avail)
+		return 0;
+
+	/* Can the peer receive messages? */
+	if (!rdma_hndl->peer_credits)
+		return 0;
+
+	/* If we have real messages to send there is no need for
+	 * a special NOP message as credits are piggybacked
+	 */
+	if (rdma_hndl->tx_ready_tasks_num) {
+		xio_rdma_xmit(rdma_hndl);
+		return 0;
+	}
+
+	/* Send NOP if messages are not queued */
+
+#if 0
+	if ((rdma_hndl->reqs_in_flight_nr || rdma_hndl->rsps_in_flight_nr) &&
+	    !rdma_hndl->last_send_was_signaled)
+		goto send_final_nop;
+#endif
+	/* Does the peer have already maximum credits? */
+	if (rdma_hndl->sim_peer_credits >= MAX_RECV_WR)
+		return 0;
+
+	/* Does the local have any credits to send? */
+	if (!rdma_hndl->credits)
+		return 0;
+#if 0
+send_final_nop:
+#endif
 	TRACE_LOG("peer_credits:%d, credits:%d sim_peer_credits:%d\n",
 		  rdma_hndl->peer_credits, rdma_hndl->credits,
 		  rdma_hndl->sim_peer_credits);
 
+#if 0
+	rdma_hndl->last_send_was_signaled = 0;
+#endif
 	xio_rdma_send_nop(rdma_hndl);
 
 	return 0;
@@ -1014,6 +1055,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		ERROR_LOG("ib_req_notify_cq failed. (ret=%d)\n", retval);
 		return -1;
 	}
+	tcq->num_delayed_arm = 0;
 
 	return nr_comp;
 }
@@ -1075,11 +1117,25 @@ retry:
 	/* If loop was terminated before the budget was consumed
 	 * need to re-arm the CQ
 	 */
+	tcq->num_delayed_arm++;
+	if (tcq->num_delayed_arm < MAX_NUM_DELAYED_ARM) {
+		/* Let other activities to do some work
+		 * with the hope that events will arrive and
+		 * no interrupt triggering will be required.
+		 * Kind of busy wait
+		 */
+		xio_cq_data_callback_cont(tcq->cq, tcq);
+		return 0;
+	}
+
+	/* retries limit reached */
 	retval = ib_req_notify_cq(tcq->cq,
 				  IB_CQ_NEXT_COMP |
 				  IB_CQ_REPORT_MISSED_EVENTS);
 	if (likely(!retval))
 		return 0;
+
+	tcq->num_delayed_arm = 0;
 
 	/* if driver supports IB_CQ_REPORT_MISSED_EVENTS
 	 * note budget is not yet consumed

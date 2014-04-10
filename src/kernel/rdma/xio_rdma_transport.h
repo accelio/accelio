@@ -61,6 +61,7 @@
 #define OMX_MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
+#define MAX_NUM_DELAYED_ARM		16
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
 					   * one for reply tx
@@ -258,7 +259,7 @@ struct xio_cq  {
 	u32				alloc_sz;     /* allocation factor  */
 	u32				cqe_avail;    /* free elements  */
 	atomic_t			refcnt;       /* utilization counter */
-	u32				pad;
+	u32				num_delayed_arm;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */
