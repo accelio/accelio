@@ -367,8 +367,8 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 		rdma_task = task->dd_data;
 
 		/* pending "sends" that were delayed for rdma read completion
-		 *  are moved to wait in the in_filght list
-		 *   beacuse of the need to keep order
+		 *  are moved to wait in the in_flight list
+		 *   because of the need to keep order
 		 */
 		while (!list_empty(&rdma_hndl->rdma_rd_list)) {
 			tmp_task = list_first_entry(
@@ -825,7 +825,6 @@ static void xio_rdma_rd_comp_handler(
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_transport_base	*transport =
 					(struct xio_transport_base *)rdma_hndl;
-
 
 	rdma_hndl->rdma_in_flight--;
 	rdma_hndl->sqe_avail++;
@@ -2661,7 +2660,7 @@ static int xio_prep_rdma_op(
 		}
 	}
 	if (tot_len < op_size) {
-		ERROR_LOG("iovec exausted\n");
+		ERROR_LOG("iovec exhausted\n");
 		goto cleanup;
 	}
 
@@ -2670,15 +2669,34 @@ static int xio_prep_rdma_op(
 	return 0;
 cleanup:
 
-	/* list does not contain the oringinal task */
+	/* list does not contain the original task */
 	list_for_each_entry_safe(ptask, next_ptask, &tmp_list,
 				 tasks_list_entry) {
-		/* the tmp tasks are returend back to pool */
+		/* the tmp tasks are returned back to pool */
 		xio_tasks_pool_put(task);
 	}
 	(*tasks_used) = 0;
 
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_set_msg_in_data_iovec						     */
+/*---------------------------------------------------------------------------*/
+static void xio_set_msg_in_data_iovec(struct xio_task *task)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_work_req	*rdmad = &rdma_task->rdmad;
+	int i;
+
+	for ( i = 0; i < rdmad->send_wr.num_sge; i++) {
+		task->imsg.in.data_iov[i].iov_base  	=
+					ptr_from_int64(rdmad->sge[i].addr);
+		task->imsg.in.data_iov[i].iov_len	=
+					rdmad->sge[i].length;
+		task->imsg.in.data_iov[i].mr		= NULL;
+	}
+	task->imsg.in.data_iovlen = rdmad->send_wr.num_sge;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2827,6 +2845,8 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			 1,
 			 &rdma_hndl->rdma_rd_list, &tasks_used);
 
+	/* prepare the in side of the message */
+	xio_set_msg_in_data_iovec(task);
 
 	xio_xmit_rdma_rd(rdma_hndl);
 
@@ -3036,9 +3056,12 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		retval = xio_sched_rdma_rd_req(rdma_hndl, task);
 		if (retval == 0)
 			return 0;
+		ERROR_LOG("scheduling rdma read failed\n");
+		goto cleanup;
 		break;
 	default:
 		ERROR_LOG("unexpected opcode\n");
+		goto cleanup;
 		break;
 	};
 
