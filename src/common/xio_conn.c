@@ -1724,6 +1724,48 @@ static int xio_conn_flush_tx_queue(struct xio_conn *conn)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_conn_xmit							     */
+/*---------------------------------------------------------------------------*/
+static int xio_conn_xmit(struct xio_conn *conn)
+{
+	int		retval;
+	struct xio_task *task;
+
+	if (!conn->transport) {
+		ERROR_LOG("transport not initialized\n");
+		return -1;
+	}
+	if (!conn->transport->send)
+		return 0;
+
+	while (1) {
+		task = list_first_entry_or_null(&conn->tx_queue,
+				struct xio_task,  tasks_list_entry);
+		if (!task)
+			break;
+
+		retval = conn->transport->send(conn->transport_hndl, task);
+		if (retval != 0) {
+			union xio_conn_event_data conn_event_data;
+
+			if (xio_errno() == EAGAIN)
+				return 0;
+
+			ERROR_LOG("transport send failed\n");
+			conn_event_data.msg_error.reason = xio_errno();
+			conn_event_data.msg_error.task	= task;
+
+			xio_observable_notify_any_observer(
+					&conn->observable,
+					XIO_CONN_EVENT_MESSAGE_ERROR,
+					&conn_event_data);
+		}
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_conn_send							     */
 /*---------------------------------------------------------------------------*/
 int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
@@ -1740,27 +1782,10 @@ int xio_conn_send(struct xio_conn *conn, struct xio_task *task)
 	/* push to end of the queue */
 	list_move_tail(&task->tasks_list_entry, &conn->tx_queue);
 
-	task = list_first_entry(&conn->tx_queue,
-			        struct xio_task,  tasks_list_entry);
+	/* xmit it to the transport */
+	retval = xio_conn_xmit(conn);
 
-	retval = conn->transport->send(conn->transport_hndl, task);
-	if (retval != 0) {
-		union xio_conn_event_data conn_event_data;
-
-		if (xio_errno() == EAGAIN)
-			return 0;
-
-		ERROR_LOG("transport send failed\n");
-		conn_event_data.msg_error.reason = xio_errno();
-		conn_event_data.msg_error.task	= task;
-
-		xio_observable_notify_any_observer(
-				&conn->observable,
-				XIO_CONN_EVENT_MESSAGE_ERROR,
-				&conn_event_data);
-	}
-
-	return 0;
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
