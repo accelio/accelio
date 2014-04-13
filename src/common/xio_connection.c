@@ -1342,34 +1342,41 @@ int xio_cancel(struct xio_msg *req, enum xio_status result)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_set_connection_params						     */
+/* xio_modify_connection						     */
 /*---------------------------------------------------------------------------*/
-int xio_set_connection_params(struct xio_connection *connection,
-			      struct xio_connection_params *params)
+int xio_modify_connection(struct xio_connection *connection,
+		       struct xio_connection_attr *attr,
+		       int attr_mask)
 {
-	if (!connection || !params) {
+	if (!connection || !attr) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid parameters\n");
 		return -1;
 	}
 
-	connection->cb_user_context = params->user_context;
+	if (attr_mask & XIO_CONNECTION_ATTR_USER_CTX)
+		connection->cb_user_context = attr->user_context;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_get_connection_params						     */
+/* xio_query_connection							     */
 /*---------------------------------------------------------------------------*/
-int xio_get_connection_params(struct xio_connection *connection,
-			      struct xio_connection_params *params)
+int xio_query_connection(struct xio_connection *connection,
+		       struct xio_connection_attr *attr,
+		       int attr_mask)
 {
-	if (!connection || !params) {
+	if (!connection || !attr) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid parameters\n");
 		return -1;
 	}
-	params->user_context = connection->cb_user_context;
+	if (attr_mask & XIO_CONNECTION_ATTR_USER_CTX)
+		attr->user_context = connection->cb_user_context;
+
+	if (attr_mask & XIO_CONNECTION_ATTR_CTX)
+		attr->ctx = connection->ctx;
 
 	return 0;
 }

@@ -255,6 +255,23 @@ enum xio_msg_type {
 	XIO_MSG_TYPE_ONE_WAY		= (XIO_ONE_WAY | XIO_REQUEST),
 };
 
+/**
+ * @enum xio_connection_attr_mask
+ * @brief supported connection attributes to query/modify
+ */
+enum xio_connection_attr_mask {
+	XIO_CONNECTION_ATTR_CTX                 = 1 << 0,
+	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1
+};
+
+/**
+ * @enum xio_context_attr_mask
+ * @brief supported context attributes to query/modify
+ */
+enum xio_context_attr_mask {
+	XIO_CONTEXT_ATTR_USER_CTX		= 1 << 0
+};
+
 /*---------------------------------------------------------------------------*/
 /* opaque data structures                                                    */
 /*---------------------------------------------------------------------------*/
@@ -313,23 +330,14 @@ struct xio_session_attr {
 };
 
 /**
- * @struct xio_connection_params
- * @brief connection parameters structure
+ * @struct xio_connection_attr
+ * @brief connection attributes structure
  */
-struct xio_connection_params {
+struct xio_connection_attr {
 	void			*user_context;  /**< private user context to */
 						/**< pass to connection      */
 						/**< oriented callbacks      */
-};
-
-/**
- * @struct xio_context_params
- * @brief context parameters structure
- */
-struct xio_context_params {
-	void			*user_context;  /**< private user context to */
-						/**< pass to connection      */
-						/**< oriented callbacks      */
+	struct xio_context	*ctx;
 };
 
 /**
@@ -337,7 +345,9 @@ struct xio_context_params {
  * @brief context attributes structure
  */
 struct xio_context_attr {
-	uint64_t		reserved;	/**< private context */
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< oriented callbacks      */
 };
 
 /**
@@ -894,23 +904,31 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread);
 
 /**
- * set context parameters
+ * modify context parameters
  *
  * @param[in] ctx	The xio context handle
- * @param[in] params	The context parameters structure
+ * @param[in] attr	The context attributes structure
+ * @param[in] attr_mask Attribute mask to modify
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_context_set_params(struct xio_context *ctx,
-			   struct xio_context_params *params);
+int xio_modify_context(struct xio_context *ctx,
+		       struct xio_context_attr *attr,
+		       int attr_mask);
 
 /**
- * get context parameters
+ * get context attributes
  *
  * @param[in] ctx	The xio context handle
+ * @param[in] attr	The context attributes structure
+ * @param[in] attr_mask Attribute mask to query
  *
+ * @returns success (0), or a (negative) error value
+  *
  */
-struct xio_context_params *xio_context_get_params(struct xio_context *ctx);
+int xio_query_context(struct xio_context *ctx,
+		      struct xio_context_attr *attr,
+		      int attr_mask);
 
 /*---------------------------------------------------------------------------*/
 /* XIO session API                                                           */
@@ -987,36 +1005,29 @@ int xio_disconnect(struct xio_connection *conn);
 int xio_connection_destroy(struct xio_connection *conn);
 
 /**
- * set connection parameters
+ * modify connection parameters
  *
  * @param[in] conn	The xio connection handle
- * @param[in] params	The connection parameters structure
+ * @param[in] attr	The connection attributes structure
+ * @param[in] attr_mask Attribute mask to modify
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_set_connection_params(struct xio_connection *conn,
-			      struct xio_connection_params *params);
-
+int xio_modify_connection(struct xio_connection *conn,
+		       struct xio_connection_attr *attr,
+		       int attr_mask);
 /**
- * get connection parameters
+ * query connection parameters
  *
  * @param[in] conn	The xio connection handle
- * @param[in] params	The connection parameters structure
+ * @param[in] attr	The connection attributes structure
+ * @param[in] attr_mask attribute mask to modify
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_get_connection_params(struct xio_connection *conn,
-			      struct xio_connection_params *params);
-
-/**
- * get connection context
- *
- * @param[in] conn	The xio connection handle
- *
- * @returns connection's associated context
- */
-struct xio_context *xio_get_connection_context(struct xio_connection *conn);
-
+int xio_query_connection(struct xio_connection *conn,
+		         struct xio_connection_attr *attr,
+			 int attr_mask);
 /**
  * send request to responder
  *

@@ -81,7 +81,7 @@ struct xio_context {
 	unsigned int			flags;
 	uint64_t			worker;
 	struct xio_statistics		stats;
-	struct xio_context_params	params;
+	void				*user_context;
 	struct xio_workqueue		*workqueue;
 	struct list_head		ctx_list;  /* per context storage */
 

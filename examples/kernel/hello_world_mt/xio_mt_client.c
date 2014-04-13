@@ -121,7 +121,7 @@ static int on_session_event(struct xio_session *session,
 	struct session_data *sdata;
 	struct thread_data *tdata;
 	struct xio_context *tctx[MAX_THREADS];
-	struct xio_connection_params params;
+	struct xio_connection_attr attr;
 	int i;
 
 	sdata = (struct session_data *) cb_user_context;
@@ -132,8 +132,9 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		xio_get_connection_params(event_data->conn, &params);
-		tdata = (struct thread_data *) params.user_context;
+		xio_query_connection(event_data->conn, &attr,
+				     XIO_CONNECTION_ATTR_USER_CTX);
+		tdata = (struct thread_data *) attr.user_context;
 		spin_lock(&sdata->lock);
 		rcu_assign_pointer(tdata->connection, NULL);
 		spin_unlock(&sdata->lock);

@@ -180,8 +180,10 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->cpuid		= cpu;
 	ctx->nodeid		= xio_get_nodeid(cpu);
 	ctx->polling_timeout	= polling_timeout_us;
+	ctx->worker		= (uint64_t) pthread_self();
 
-	ctx->worker = (uint64_t) pthread_self();
+	if (ctx_attr)
+		ctx->user_context = ctx_attr->user_context;
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);
@@ -378,28 +380,41 @@ int xio_del_counter(struct xio_context *ctx, int counter)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_set_params						     */
+/* xio_modify_context							     */
 /*---------------------------------------------------------------------------*/
-int xio_context_set_params(struct xio_context *ctx,
-			    struct xio_context_params *params)
+int xio_modify_context(struct xio_context *ctx,
+		       struct xio_context_attr *attr,
+		       int attr_mask)
 {
-	if (!ctx || !params) {
+	if (!ctx || !attr) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid parameters\n");
 		return -1;
 	}
 
-	ctx->params.user_context = params->user_context;
+	if (attr_mask & XIO_CONTEXT_ATTR_USER_CTX)
+		ctx->user_context = attr->user_context;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_get_params						     */
+/* xio_query_context							     */
 /*---------------------------------------------------------------------------*/
-struct xio_context_params *xio_context_get_params(struct xio_context *ctx)
+int xio_query_context(struct xio_context *ctx,
+		      struct xio_context_attr *attr,
+		      int attr_mask)
 {
-	return &ctx->params;
+	if (!ctx || !attr) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+
+	if (attr_mask & XIO_CONTEXT_ATTR_USER_CTX)
+		attr->user_context = ctx->user_context;
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/

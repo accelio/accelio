@@ -191,6 +191,44 @@ cleanup0:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_modify_context							     */
+/*---------------------------------------------------------------------------*/
+int xio_modify_context(struct xio_context *ctx,
+		       struct xio_context_attr *attr,
+		       int attr_mask)
+{
+	if (!ctx || !attr) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+
+	if (attr_mask & XIO_CONTEXT_ATTR_USER_CTX)
+		ctx->user_context = attr->user_context;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_query_context							     */
+/*---------------------------------------------------------------------------*/
+int xio_query_context(struct xio_context *ctx,
+		      struct xio_context_attr *attr,
+		      int attr_mask)
+{
+	if (!ctx || !attr) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+
+	if (attr_mask & XIO_CONTEXT_ATTR_USER_CTX)
+		attr->user_context = ctx->user_context;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
 /*---------------------------------------------------------------------------*/
 void xio_context_destroy(struct xio_context *ctx)

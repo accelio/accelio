@@ -96,6 +96,9 @@ module_exit(xio_cleanup_module);
 
 EXPORT_SYMBOL(xio_context_create);
 EXPORT_SYMBOL(xio_context_destroy);
+EXPORT_SYMBOL(xio_modify_context);
+EXPORT_SYMBOL(xio_query_context);
+
 
 EXPORT_SYMBOL(xio_context_reg_observer);
 EXPORT_SYMBOL(xio_context_unreg_observer);
@@ -134,9 +137,8 @@ EXPORT_SYMBOL(xio_disconnect);
 
 EXPORT_SYMBOL(xio_get_connection);
 EXPORT_SYMBOL(xio_connection_destroy);
-EXPORT_SYMBOL(xio_get_connection_params);
-EXPORT_SYMBOL(xio_set_connection_params);
-EXPORT_SYMBOL(xio_get_connection_context);
+EXPORT_SYMBOL(xio_modify_connection);
+EXPORT_SYMBOL(xio_query_connection);
 
 EXPORT_SYMBOL(xio_send_request);
 EXPORT_SYMBOL(xio_send_response);

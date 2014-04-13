@@ -170,8 +170,8 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct xio_connection_params cparams;
-	struct test_params *test_params = cb_user_context;
+	struct xio_connection_attr	conn_attr;
+	struct test_params		*test_params = cb_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -181,8 +181,9 @@ static int on_session_event(struct xio_session *session,
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
 		/* assign connection private data */
-		cparams.user_context = cb_user_context;
-		xio_set_connection_params(event_data->conn, &cparams);
+		conn_attr.user_context = cb_user_context;
+		xio_modify_connection(event_data->conn, &conn_attr,
+				      XIO_CONNECTION_ATTR_USER_CTX);
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 		xio_disconnect(event_data->conn);
