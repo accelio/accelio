@@ -928,15 +928,14 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
  */
 static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 {
-	int		err = 0, numwc = 0;
-	int		wclen, i;
+	int		err = 0;
+	int		wclen = max_wc, i, numwc  = 0;
 	int		last_recv = -1;
 	int		timeouts_num = 0;
 	cycles_t	timeout;
 	cycles_t	start_time = 0;
 
 	for (;;) {
-		wclen = max_wc - numwc;
 		if (wclen > tcq->wc_array_len)
 			wclen = tcq->wc_array_len;
 
@@ -944,7 +943,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 				err = 1; /* same as in budget */
 				break;
 		}
-		err = ibv_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
+		err = ibv_poll_cq(tcq->cq, wclen, tcq->wc_array);
 		if (err == 0) { /* no completions retrieved */
 			if (timeout_us == 0)
 				break;
@@ -979,14 +978,6 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			}
 		}
 		for (i = 0; i < err; i++) {
-#if 0
-			if (xio_context_is_loop_stopping(tcq->ctx)) {
-				tcq->curr_wc_idx = i;
-				tcq->last_wc_idx = err;
-				err = 1; /* same as in budget */
-				break;
-			}
-#endif
 			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
 				xio_handle_wc(&tcq->wc_array[i],
 					      (i != last_recv));
@@ -994,11 +985,14 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 				xio_handle_wc_error(
 						&tcq->wc_array[i]);
 		}
-		if (++numwc == max_wc) {
+		numwc += err;
+		if (numwc == max_wc) {
 			err = 1;
 			break;
 		}
+		wclen = max_wc - numwc;
 	}
+
 	return err;
 }
 
@@ -1029,29 +1023,12 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 {
 	int err;
 
-	/* handle the leftovers */
-	for (; tcq->curr_wc_idx < tcq->last_wc_idx; tcq->curr_wc_idx++) {
-		if (xio_context_is_loop_stopping(tcq->ctx)) {
-				err = 1; /* same as in budget */
-				goto stopped;
-		}
-		if (likely(tcq->wc_array[tcq->curr_wc_idx].status == IBV_WC_SUCCESS))
-			xio_handle_wc(&tcq->wc_array[tcq->curr_wc_idx], 0);
-		else
-			xio_handle_wc_error(&tcq->wc_array[tcq->curr_wc_idx]);
-	}
-	if (tcq->curr_wc_idx == tcq->last_wc_idx) {
-		tcq->curr_wc_idx = 0;
-		tcq->last_wc_idx = 0;
-	}
-
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (unlikely(err < 0)) {
 		xio_rearm_completions(tcq);
 		return;
 	}
 
-stopped:
 	if (err == 0 && (++tcq->num_delayed_arm == MAX_NUM_DELAYED_ARM))
 		/* no more completions on cq, give up and arm the interrupts */
 		xio_rearm_completions(tcq);
