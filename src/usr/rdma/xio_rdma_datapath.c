@@ -349,16 +349,18 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_task		*task = NULL;
-	struct xio_task		*tmp_task;
 	struct xio_rdma_task	*rdma_task = NULL;
-	struct xio_rdma_task	*tmp_rdma_task;
-	struct xio_rdma_task	*prev_rdma_task = NULL;
 	struct xio_work_req	*first_wr = NULL;
+	struct xio_work_req	dummy_wr;
+	struct xio_work_req	*prev_wr = &dummy_wr;
+	struct xio_work_req	*curr_wr = NULL;
 	int num_reqs = 0;
 	int err;
 
+
 	while (!list_empty(&rdma_hndl->rdma_rd_list) &&
 	       rdma_hndl->sqe_avail > num_reqs) {
+
 		task = list_first_entry(
 				&rdma_hndl->rdma_rd_list,
 				struct xio_task,  tasks_list_entry);
@@ -370,31 +372,24 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 		 *  are moved to wait in the in_flight list
 		 *   because of the need to keep order
 		 */
-		while (!list_empty(&rdma_hndl->rdma_rd_list)) {
-			tmp_task = list_first_entry(
-				&rdma_hndl->rdma_rd_list,
-				struct xio_task,  tasks_list_entry);
-			tmp_rdma_task = tmp_task->dd_data;
-
-			if (tmp_rdma_task->ib_op != XIO_IB_RECV)
-				break;
-			list_move_tail(&task->tasks_list_entry,
-				       &rdma_hndl->rdma_rd_in_flight_list);
+		if (rdma_task->ib_op == XIO_IB_RECV) {
 			rdma_hndl->rdma_in_flight++;
+			continue;
 		}
 
 		/* prepare it for rdma read */
-		if (first_wr == NULL)
-			first_wr = &rdma_task->rdmad;
-		else
-			prev_rdma_task->rdmad.send_wr.next =
-						&rdma_task->rdmad.send_wr;
-		prev_rdma_task = rdma_task;
+		curr_wr = &rdma_task->rdmad;
+		prev_wr->send_wr.next = &curr_wr->send_wr;
+		prev_wr = &rdma_task->rdmad;
+
 		num_reqs++;
 	}
+
 	rdma_hndl->kick_rdma_rd = 0;
-	if (prev_rdma_task) {
-		prev_rdma_task->rdmad.send_wr.next = NULL;
+	if (num_reqs) {
+		first_wr = container_of(dummy_wr.send_wr.next,
+					struct xio_work_req, send_wr);
+		prev_wr->send_wr.next = NULL;
 		rdma_hndl->rdma_in_flight += num_reqs;
 		/* submit the chain of rdma-rd requests, start from the first */
 		err = xio_post_send(rdma_hndl, first_wr, num_reqs);
