@@ -2694,7 +2694,6 @@ static void xio_set_msg_in_data_iovec(struct xio_task *task)
 					ptr_from_int64(rdmad->sge[i].addr);
 		task->imsg.in.data_iov[i].iov_len	=
 					rdmad->sge[i].length;
-		task->imsg.in.data_iov[i].mr		= NULL;
 	}
 	task->imsg.in.data_iovlen = rdmad->send_wr.num_sge;
 }
