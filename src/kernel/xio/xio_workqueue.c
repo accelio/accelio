@@ -211,6 +211,11 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 
 	/* work may be on event handler */
 	/* TODO: tasklet version? */
+	if (in_atomic()) {
+		ERROR_LOG("Can't wait for cancellation in atomic context.\n");
+		return -1;
+	}
+
 	wait_for_completion(&uwork->complete);
 	return 0;
 }
