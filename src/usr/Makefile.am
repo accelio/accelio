@@ -73,7 +73,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 
 # the sources to add to the library and to add to the source distribution
 libxio_la_SOURCES =	$(libxio_headers)		\
-			 $(top_srcdir)/version.c	\
+			../../version.c			\
 			./xio/xio_init.c		\
 			./xio/get_clock.c		\
 			./xio/xio_ev_loop.c		\

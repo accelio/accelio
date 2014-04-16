@@ -1,8 +1,10 @@
 # this is example-file: configure.ac
 
 # initial information about the project
-AC_INIT([libxio],[1.0],[libxio@accelio.org])
-AM_INIT_AUTOMAKE
+AC_INIT([libxio],[1.0],[info@accelio.org], [], [http://accelio.org])
+
+# automake initialization (mandatory) and check for minimal automake API version 1.11
+AM_INIT_AUTOMAKE([subdir-objects 1.11])
 
 # Checks for language
 AC_LANG_C
@@ -15,8 +17,6 @@ AC_PROG_LIBTOOL
 AC_PROG_CC
 AM_PROG_CC_C_O
 
-# automake initialisation (mandatory) and check for minimal automake API version 1.9
-AM_INIT_AUTOMAKE([1.11])
 AM_SILENT_RULES([yes])
 
 # use the C compiler for the following checks
