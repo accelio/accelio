@@ -77,7 +77,7 @@ struct xio_chunks_list {
 
 struct xio_rdma_mempool {
 	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
-	char name[256]; /* kmem_cache_create keeps a pointer to the pool's name
+	char name[64];	/* kmem_cache_create keeps a pointer to the pool's name
 			 * Therefore the name must be valid until the pool
 			 * is destroyed
 			 */
@@ -130,7 +130,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		 * Use the address of the pool structure to create a unique
 		 * name for the pool
 		 */
-		sprintf(p->name, "xio_rdma_mempool-%zuK-%p",
+		sprintf(p->name, "rdma_pool-%zuK-%p",
 			ch->block_sz/1024, p);
 		ch->kcache = kmem_cache_create(p->name,
 					       ch->block_sz, PAGE_SIZE,

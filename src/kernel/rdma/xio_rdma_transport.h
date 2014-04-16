@@ -329,6 +329,10 @@ struct xio_device {
 struct xio_rdma_tasks_pool {
 	/* memory for non-rdma send/recv */
 	struct kmem_cache		*data_pool;
+	char name[32];	/* kmem_cache_create keeps a pointer to the pool's name
+			 * Therefore the name must be valid until the pool
+			 * is destroyed
+			 */
 	int				buf_size;
 	int				pad;
 };

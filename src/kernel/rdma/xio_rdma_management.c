@@ -824,7 +824,12 @@ static int xio_rdma_initial_pool_alloc(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
 	rdma_pool->buf_size = CONN_SETUP_BUF_SIZE;
-	rdma_pool->data_pool = kmem_cache_create("initial_pool",
+	/* The name must be valid until the pool is destroyed
+	 * Use the address of the pool structure to create a unique
+	 * name for the pool
+	 */
+	sprintf(rdma_pool->name, "initial_pool-%p", rdma_pool);
+	rdma_pool->data_pool = kmem_cache_create(rdma_pool->name,
 						 rdma_pool->buf_size, PAGE_SIZE,
 						 SLAB_HWCACHE_ALIGN, NULL);
 	if (rdma_pool->data_pool == NULL) {
@@ -832,6 +837,8 @@ static int xio_rdma_initial_pool_alloc(
 		ERROR_LOG("kcache(initial_pool) creation failed\n");
 		return -1;
 	}
+	INFO_LOG("kcache(%s) created(%p)\n",
+		 rdma_pool->name, rdma_pool->data_pool);
 
 	return 0;
 }
@@ -1039,6 +1046,11 @@ static int xio_rdma_primary_pool_alloc(
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
 	rdma_pool->buf_size = rdma_hndl->membuf_sz;
+	/* The name must be valid until the pool is destroyed
+	 * Use the address of the pool structure to create a unique
+	 * name for the pool
+	 */
+	sprintf(rdma_pool->name, "primary_pool-%p", rdma_pool);
 	rdma_pool->data_pool = kmem_cache_create("primary_pool",
 						 rdma_pool->buf_size, PAGE_SIZE,
 						 SLAB_HWCACHE_ALIGN, NULL);
@@ -1047,6 +1059,8 @@ static int xio_rdma_primary_pool_alloc(
 		ERROR_LOG("kcache(primary_pool) creation failed\n");
 		return -1;
 	}
+	INFO_LOG("kcache(%s) created(%p)\n",
+		 rdma_pool->name, rdma_pool->data_pool);
 
 	/* tasks may require fast registration for RDMA read and write */
 	if (rdma_hndl->dev->fastreg.alloc_rdma_reg_res(rdma_hndl)) {
