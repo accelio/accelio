@@ -202,8 +202,16 @@ int xio_device_thread_add_device(struct xio_device *dev)
 {
 	int retval;
 
-	fcntl(dev->verbs->async_fd, F_SETFL,
-	      fcntl(dev->verbs->async_fd, F_GETFL, 0) | O_NONBLOCK);
+	retval = fcntl(dev->verbs->async_fd, F_GETFL, 0);
+	if (retval != -1) {
+		retval = fcntl(dev->verbs->async_fd, F_SETFL,
+			       retval | O_NONBLOCK);
+	}
+	if (retval == -1) {
+		xio_set_error(errno);
+		ERROR_LOG("fcntl failed. (errno=%d %m)\n", errno);
+		return -1;
+	}
 
 	/* add to epoll */
 	retval = xio_ev_loop_add(
@@ -277,8 +285,16 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 			  errno);
 		goto cleanup2;
 	}
-	fcntl(tcq->channel->fd, F_SETFL,
-	      fcntl(tcq->channel->fd, F_GETFL, 0) | O_NONBLOCK);
+	retval = fcntl(tcq->channel->fd, F_GETFL, 0);
+	if (retval != -1) {
+		retval = fcntl(tcq->channel->fd, F_SETFL,
+			       retval | O_NONBLOCK);
+	}
+	if (retval == -1) {
+		xio_set_error(errno);
+		ERROR_LOG("fcntl failed. (errno=%d %m)\n", errno);
+		goto cleanup2;
+	}
 
 
 	/* add to epoll */
@@ -439,6 +455,8 @@ static struct xio_device *xio_device_init(struct ibv_context *ib_ctx)
 cleanup1:
 	ibv_dealloc_pd(dev->pd);
 cleanup:
+	ufree(dev);
+
 	ERROR_LOG("rdma device: [new] failed\n");
 	return NULL;
 }
@@ -541,7 +559,13 @@ static void xio_device_list_release(int del_fd)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_mempool_array_init()
 {
-	int cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
+	long cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
+	if (cpus_nr < 0) {
+		xio_set_error(errno);
+		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
+		return -1;
+	}
+
 
 	/* free devices */
 	mempool_array_len = 0;
@@ -1702,8 +1726,16 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 		return NULL;
 	}
 	/* turn the file descriptor to non blocking */
-	fcntl(channel->cm_channel->fd, F_SETFL,
-	      fcntl(channel->cm_channel->fd, F_GETFL, 0) | O_NONBLOCK);
+	retval = fcntl(channel->cm_channel->fd, F_GETFL, 0);
+	if (retval != -1) {
+		retval = fcntl(channel->cm_channel->fd, F_SETFL,
+			       retval | O_NONBLOCK);
+	}
+	if (retval == -1) {
+		xio_set_error(errno);
+		ERROR_LOG("fcntl failed. (errno=%d %m)\n", errno);
+		goto cleanup;
+	}
 
 	retval = xio_context_add_ev_handler(
 			ctx,

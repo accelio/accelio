@@ -1238,6 +1238,11 @@ int xio_on_cancel_response(struct xio_session *sess,
 	struct xio_msg			msg;
 	struct xio_msg			*pmsg;
 
+	if (!event_data) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("null event_data\n");
+		return -1;
+	}
 
 	if (event_data->cancel.task == NULL) {
 		tmp_hdr			 = event_data->cancel.ulp_msg;

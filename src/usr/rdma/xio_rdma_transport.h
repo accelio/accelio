@@ -68,7 +68,7 @@ extern struct list_head		dev_list;
 
 #define DEF_DATA_ALIGNMENT		0
 #define SEND_BUF_SZ			8192
-#define OMX_MAX_HDR_SZ			512
+#define MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
 #define MAX_NUM_DELAYED_ARM		16

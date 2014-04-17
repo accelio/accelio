@@ -100,7 +100,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 				strncpy(host, cp, len);
 				host[len] = 0;
 				tp++;
-				if (tp == NULL)
+				if (*tp == 0)
 					strcpy(port, "0");
 				else
 					strcpy(port, tp);

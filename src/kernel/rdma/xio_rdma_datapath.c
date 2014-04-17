@@ -589,15 +589,22 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			   xio_ib_wc_status_str(wc->status),
 			   wc->vendor_err);
 	} else  {
-		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, task:%p, "
-			  "wr_id:0x%llx, "
-			  "err:%s, vendor_err:0x%x\n",
-			  rdma_hndl->base.is_client ? "client" : "server",
-			  rdma_hndl->state,
-			  rdma_hndl, rdma_task, task,
-			  wc->wr_id,
-			  xio_ib_wc_status_str(wc->status),
-			  wc->vendor_err);
+		if (rdma_hndl)
+			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, "
+				  "rdma_task:%p, task:%p, "
+				  "wr_id:0x%llx, "
+				  "err:%s, vendor_err:0x%x\n",
+				  rdma_hndl->base.is_client ? "client" : "server",
+				  rdma_hndl->state,
+				  rdma_hndl, rdma_task, task,
+				  wc->wr_id,
+				  xio_ib_wc_status_str(wc->status),
+				  wc->vendor_err);
+		else
+			ERROR_LOG("wr_id:0x%llx, err:%s, vendor_err:0x%x\n",
+				  wc->wr_id,
+				  xio_ib_wc_status_str(wc->status),
+				  wc->vendor_err);
 
 		ERROR_LOG("byte_len=%u, immdata=%u, qp=%p, qp_num=0x%x, src_qp=0x%x\n",
 			  wc->byte_len, ntohl(wc->ex.imm_data),
@@ -1963,7 +1970,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_out_imm_len;
 	size_t			retval;
-	int			data_alignment = DEF_DATA_ALIGNMENT;
+	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	/* calculate headers */
 	ulp_out_hdr_len	= vmsg->header.iov_len;
@@ -1982,11 +1989,13 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 	/* the data is outgoing via SEND */
 	if ((ulp_out_hdr_len + ulp_out_imm_len +
-	    OMX_MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
+	     MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
+		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
 		}
+		*/
 		rdma_task->ib_op = XIO_IB_SEND;
 		/* user has small request - no rdma operation expected */
 		rdma_task->write_num_sge = 0;
@@ -2071,7 +2080,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	 * from receive buffers to user buffers
 	 */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
-	    data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
+	    data_len + hdr_len + MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 	} else  {
@@ -2236,7 +2245,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	uint64_t		ulp_imm_len;
 	size_t			retval;
 	int			i;
-	int			data_alignment = DEF_DATA_ALIGNMENT;
+	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 	size_t			sge_len;
 	int			must_send = 0;
 
@@ -2276,13 +2285,15 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
 	 */
-	if (!rdma_task->req_read_num_sge &&
-	    ((xio_hdr_len + ulp_hdr_len + data_alignment + ulp_imm_len)
-				< rdma_hndl->max_send_buf_sz)) {
+	if ((ulp_imm_len == 0) || (!rdma_task->req_read_num_sge &&
+	    ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
+				< rdma_hndl->max_send_buf_sz))) {
+		/*
 		if (data_alignment && ulp_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
 		}
+		*/
 		rdma_task->ib_op = XIO_IB_SEND;
 		/* write xio header to the buffer */
 		retval = xio_rdma_prep_rsp_header(rdma_hndl, task,

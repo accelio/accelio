@@ -38,7 +38,6 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
-#include "xio_common.h"
 
 extern int			disable_huge_pages;
 extern int			allocator_assigned;

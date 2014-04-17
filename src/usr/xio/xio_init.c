@@ -86,6 +86,8 @@ static void xio_ctor()
 	size_t i;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size < 0)
+		page_size = 4096;
 	g_mhz = get_cpu_mhz(0);
 	xio_thread_data_construct();
 	sessions_store_construct();

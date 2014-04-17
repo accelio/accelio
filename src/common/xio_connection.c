@@ -288,14 +288,6 @@ int xio_connection_send(struct xio_connection *connection,
 			return -ENOMEM;
 		}
 		req_task = container_of(msg->request, struct xio_task, imsg);
-		if (req_task == NULL) {
-			ERROR_LOG("response with id %llu is unknown." \
-				  " - connection:%p, session:%p, conn:%p\n",
-				  msg->request->sn, connection,
-				  connection->session, connection->conn);
-			xio_tasks_pool_put(task);
-			return -EINVAL;
-		}
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->pre_send_list);
 
@@ -321,15 +313,7 @@ int xio_connection_send(struct xio_connection *connection,
 		} else {
 			task = container_of(msg->request,
 					    struct xio_task, imsg);
-			if (task == NULL) {
-				ERROR_LOG("response with id %llu"   \
-					  "is unknown. - connection:%p," \
-					  "session:%p, conn:%p\n",
-					  msg->request->sn, connection,
-					  connection->session,
-					  connection->conn);
-				return -EINVAL;
-			}
+
 			list_move_tail(&task->tasks_list_entry,
 				       &connection->pre_send_list);
 
@@ -819,11 +803,6 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 		return -1;
 	}
 	task = container_of(msg, struct xio_task, imsg);
-	if (task == NULL) {
-		xio_set_error(EINVAL);
-		ERROR_LOG("request not found\n");
-		return -1;
-	}
 
 	rsp = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, rsp, pdata);
@@ -1005,11 +984,6 @@ int xio_release_response(struct xio_msg *msg)
 
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
-		if (task == NULL) {
-			xio_set_error(EINVAL);
-			ERROR_LOG("request not found\n");
-			return -1;
-		}
 		if (task->sender_task == NULL) {
 			/* do not release response in responder */
 			xio_set_error(EINVAL);
@@ -1041,11 +1015,6 @@ int xio_release_msg(struct xio_msg *msg)
 
 	while (pmsg) {
 		task = container_of(pmsg, struct xio_task, imsg);
-		if (task == NULL) {
-			xio_set_error(EINVAL);
-			ERROR_LOG("request not found\n");
-			return -1;
-		}
 		if (task->tlv_type != XIO_ONE_WAY_REQ) {
 			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 				  task->tlv_type);
@@ -1059,7 +1028,7 @@ int xio_release_msg(struct xio_msg *msg)
 
 		pmsg = pmsg->next;
 
-		/* the rx task is returend back to pool */
+		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
 	}
 
@@ -1324,17 +1293,11 @@ int xio_cancel(struct xio_msg *req, enum xio_status result)
 	}
 
 	task = container_of(req, struct xio_task, imsg);
-	if (task == NULL) {
-		xio_set_error(XIO_E_MSG_NOT_FOUND);
-		ERROR_LOG("message was not found\n");
-		return -1;
-	}
-
 	xio_connection_send_cancel_response(task->connection, &task->imsg,
 					    task, result);
 	/* release the message */
 	if (result == XIO_E_MSG_CANCELED) {
-		/* the rx task is returend back to pool */
+		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
 	}
 

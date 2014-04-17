@@ -1096,14 +1096,14 @@ static void xio_on_new_connection(struct xio_conn *conn,
 	child_conn = xio_conn_create(
 			conn,
 			event_data->new_connection.child_trans_hndl);
+
+	conn_event_data.new_connection.child_conn = child_conn;
 	if (child_conn == NULL) {
 		ERROR_LOG("failed to create child connection\n");
 		goto exit;
 	}
 
 	/* notify of new child to server */
-	conn_event_data.new_connection.child_conn = child_conn;
-
 	xio_conn_notify_server(
 			conn,
 			XIO_CONN_EVENT_NEW_CONNECTION,
@@ -1115,9 +1115,6 @@ exit:
 			conn,
 			XIO_CONN_EVENT_ERROR,
 			&conn_event_data);
-
-	xio_conn_reject(child_conn);
-	xio_conn_close(child_conn, NULL);
 }
 
 /*---------------------------------------------------------------------------*/

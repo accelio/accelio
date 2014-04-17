@@ -55,7 +55,12 @@ void *malloc_huge_pages(size_t size)
 	void	*ptr = NULL;
 
 	if (disable_huge_pages) {
-		int page_size = sysconf(_SC_PAGESIZE);
+		long page_size = sysconf(_SC_PAGESIZE);
+		if (page_size < 0) {
+			xio_set_error(errno);
+			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
+			return NULL;
+		}
 
 		real_size = ALIGN(size, page_size);
 		retval = posix_memalign(&ptr, page_size, real_size);
@@ -77,7 +82,13 @@ void *malloc_huge_pages(size_t size)
 			MAP_POPULATE | MAP_HUGETLB|MAP_NORESERVE, -1, 0);
 	if (ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
-		int page_size = sysconf(_SC_PAGESIZE);
+		long page_size = sysconf(_SC_PAGESIZE);
+		if (page_size < 0) {
+			xio_set_error(errno);
+			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
+			return NULL;
+		}
+
 		WARN_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
 			 real_size, errno);
 		real_size = ALIGN(size + HUGE_PAGE_SZ, page_size);
