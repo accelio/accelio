@@ -73,14 +73,14 @@ static size_t sizes[] = {
 struct xio_chunks_list {
 	struct kmem_cache *kcache;
 	size_t		   block_sz;
-};
-
-struct xio_rdma_mempool {
-	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
 	char name[64];	/* kmem_cache_create keeps a pointer to the pool's name
 			 * Therefore the name must be valid until the pool
 			 * is destroyed
 			 */
+};
+
+struct xio_rdma_mempool {
+	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
 };
 
 /*---------------------------------------------------------------------------*/
@@ -99,7 +99,7 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 	for (i =  0; i < real_ones; i++) {
 		if (!ch->kcache)
 			break;
-		INFO_LOG("kcache(%p) freed\n", ch->kcache);
+		INFO_LOG("kcache(%s) freed\n", ch->name);
 		kmem_cache_destroy(ch->kcache);
 		ch->kcache = NULL;
 	}
@@ -130,16 +130,16 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		 * Use the address of the pool structure to create a unique
 		 * name for the pool
 		 */
-		sprintf(p->name, "rdma_pool-%zuK-%p",
+		sprintf(ch->name, "rdma_pool-%zuK-%p",
 			ch->block_sz/1024, p);
-		ch->kcache = kmem_cache_create(p->name,
+		ch->kcache = kmem_cache_create(ch->name,
 					       ch->block_sz, PAGE_SIZE,
 					       SLAB_HWCACHE_ALIGN, NULL);
 		if (!ch->kcache) {
-			ERROR_LOG("kcache(%s) creation failed\n", p->name);
+			ERROR_LOG("kcache(%s) creation failed\n", ch->name);
 			goto cleanup;
 		}
-		INFO_LOG("kcache(%s) created(%p)\n", p->name, ch->kcache);
+		INFO_LOG("kcache(%s) created(%p)\n", ch->name, ch->kcache);
 		ch++;
 	}
 

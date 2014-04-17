@@ -334,7 +334,7 @@ struct xio_rdma_tasks_pool {
 			 * is destroyed
 			 */
 	int				buf_size;
-	int				pad;
+	int				count;
 };
 
 struct xio_rdma_transport {

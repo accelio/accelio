@@ -839,6 +839,7 @@ static int xio_rdma_initial_pool_alloc(
 	}
 	INFO_LOG("kcache(%s) created(%p)\n",
 		 rdma_pool->name, rdma_pool->data_pool);
+	rdma_pool->count = 0;
 
 	return 0;
 }
@@ -965,6 +966,12 @@ static int xio_rdma_initial_pool_free(struct xio_transport_base *transport_hndl,
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
+	INFO_LOG("kcache(%s) freed\n", rdma_pool->name);
+
+	if (rdma_pool->count)
+		ERROR_LOG("pool(%s) not-free(%d)\n",
+			   rdma_pool->name, rdma_pool->count);
+
 	kmem_cache_destroy(rdma_pool->data_pool);
 
 	return 0;
@@ -979,6 +986,11 @@ static int xio_rdma_initial_pool_uninit_task(void *pool_dd_data,
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	if (rdma_pool->count)
+		rdma_pool->count--;
+	else
+		ERROR_LOG("pool(%s) double free?\n", rdma_pool->name);
 
 	kmem_cache_free(rdma_pool->data_pool, rdma_task->buf);
 
@@ -1004,6 +1016,7 @@ static int xio_rdma_initial_pool_init_task(
 		ERROR_LOG("kmem_cache_zalloc(initial_pool)\n");
 		return -ENOMEM;
 	}
+	rdma_pool->count++;
 
 	return xio_rdma_task_init(task,
 				  rdma_hndl,
@@ -1051,7 +1064,7 @@ static int xio_rdma_primary_pool_alloc(
 	 * name for the pool
 	 */
 	sprintf(rdma_pool->name, "primary_pool-%p", rdma_pool);
-	rdma_pool->data_pool = kmem_cache_create("primary_pool",
+	rdma_pool->data_pool = kmem_cache_create(rdma_pool->name,
 						 rdma_pool->buf_size, PAGE_SIZE,
 						 SLAB_HWCACHE_ALIGN, NULL);
 	if (!rdma_pool->data_pool) {
@@ -1071,6 +1084,7 @@ static int xio_rdma_primary_pool_alloc(
 	}
 
 	DEBUG_LOG("pool buf:%p\n", rdma_pool->data_pool);
+	rdma_pool->count = 0;
 
 	return 0;
 }
@@ -1100,7 +1114,13 @@ static int xio_rdma_primary_pool_free(struct xio_transport_base *t_hndl,
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
+	INFO_LOG("kcache(%s) freed\n", rdma_pool->name);
+
 	rdma_hndl->dev->fastreg.free_rdma_reg_res(rdma_hndl);
+
+	if (rdma_pool->count)
+		ERROR_LOG("pool(%s) not-free(%d)\n",
+			   rdma_pool->name, rdma_pool->count);
 
 	kmem_cache_destroy(rdma_pool->data_pool);
 
@@ -1116,6 +1136,11 @@ static int xio_rdma_primary_pool_uninit_task(void *pool_dd_data,
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	if (rdma_pool->count)
+		rdma_pool->count--;
+	else
+		ERROR_LOG("pool(%s) double free?\n", rdma_pool->name);
 
 	kmem_cache_free(rdma_pool->data_pool, rdma_task->buf);
 
@@ -1144,6 +1169,8 @@ static int xio_rdma_primary_pool_init_task(struct xio_transport_base *t_hndl,
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
 		return -ENOMEM;
 	}
+
+	rdma_pool->count++;
 
 	return xio_rdma_task_init(task,
 				  rdma_hndl,
