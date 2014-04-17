@@ -1784,7 +1784,11 @@ static int xio_rdma_prep_req_in_data(
 	data_len  = xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen);
 	hdr_len  = vmsg->header.iov_len;
 
-	if (data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
+	/* requester may insist on RDMA for small buffers to eliminate copy
+	 * from receive buffers to user buffers
+	 */
+	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
+	    data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 		if (data_len) {
@@ -1794,7 +1798,7 @@ static int xio_rdma_prep_req_in_data(
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
 		/* user provided mr */
-		if (vmsg->data_iov[0].mr)  {
+		if (vmsg->data_iov[0].mr) {
 			for (i = 0; i < vmsg->data_iovlen; i++) {
 				rdma_task->read_sge[i].addr =
 					vmsg->data_iov[i].iov_base;
@@ -2021,7 +2025,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
 
-	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
+	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
 			  ulp_hdr_len,
 			  rdma_hndl->max_send_buf_sz - xio_hdr_len);
@@ -2029,9 +2033,12 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		goto cleanup;
 	}
 
-	/* the data is outgoing via SEND */
-	if ((xio_hdr_len + ulp_hdr_len + data_alignment +
-	    ulp_imm_len) < rdma_hndl->max_send_buf_sz) {
+	/* Small data is outgoing via SEND unless the requester explicitly
+	 * insisted on RDMA operation and provided resources.
+	 */
+	if (!rdma_task->req_read_num_sge &&
+	    ((xio_hdr_len + ulp_hdr_len + data_alignment + ulp_imm_len)
+				< rdma_hndl->max_send_buf_sz)) {
 		if (data_alignment && ulp_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;

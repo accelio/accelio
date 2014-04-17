@@ -1973,7 +1973,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_req_hdr);
 
-	if (SEND_BUF_SZ	 < (xio_hdr_len + ulp_out_hdr_len)) {
+	if (rdma_hndl->max_send_buf_sz	< (xio_hdr_len + ulp_out_hdr_len)) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
 			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz -
 			  xio_hdr_len);
@@ -1982,7 +1982,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 	/* the data is outgoing via SEND */
 	if ((ulp_out_hdr_len + ulp_out_imm_len +
-	    OMX_MAX_HDR_SZ) < SEND_BUF_SZ) {
+	    OMX_MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
@@ -2067,7 +2067,11 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	data_len = xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen);
 	hdr_len  = vmsg->header.iov_len;
 
-	if (data_len + hdr_len + OMX_MAX_HDR_SZ < SEND_BUF_SZ) {
+	/* requester may insist on RDMA for small buffers to eliminate copy
+	 * from receive buffers to user buffers
+	 */
+	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
+	    data_len + hdr_len + OMX_MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 	} else  {
@@ -2262,15 +2266,19 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
 
-	if (SEND_BUF_SZ	 < (xio_hdr_len + ulp_hdr_len)) {
+	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
 			  ulp_hdr_len,
 			  rdma_hndl->max_send_buf_sz - xio_hdr_len);
 		goto cleanup;
 	}
-	/* the data is outgoing via SEND */
-	if ((xio_hdr_len + ulp_hdr_len + data_alignment +
-	    ulp_imm_len) < SEND_BUF_SZ) {
+
+	/* Small data is outgoing via SEND unless the requester explicitly
+	 * insisted on RDMA operation and provided resources.
+	 */
+	if (!rdma_task->req_read_num_sge &&
+	    ((xio_hdr_len + ulp_hdr_len + data_alignment + ulp_imm_len)
+				< rdma_hndl->max_send_buf_sz)) {
 		if (data_alignment && ulp_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 			ulp_pad_len = ALIGN(hdr_len, data_alignment) - hdr_len;
@@ -3066,7 +3074,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_setup_msg  req;
 
-	req.buffer_sz		= SEND_BUF_SZ;
+	req.buffer_sz		= rdma_hndl->max_send_buf_sz;
 	req.sq_depth		= rdma_hndl->sq_depth;
 	req.rq_depth		= rdma_hndl->rq_depth;
 	req.credits		= 0;
