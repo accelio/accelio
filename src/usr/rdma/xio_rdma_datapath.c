@@ -2442,7 +2442,7 @@ static int xio_prep_rdma_op(
 		struct xio_rdma_transport *rdma_hndl,
 		enum xio_ib_op_code  xio_ib_op,
 		enum ibv_wc_opcode   opcode,
-		struct xio_sge *lsg_list, size_t lsize,
+		struct xio_sge *lsg_list, size_t lsize, size_t *out_lsize,
 		struct xio_sge *rsg_list, size_t rsize,
 		uint32_t op_size,
 		int	signaled,
@@ -2466,6 +2466,7 @@ static int xio_prep_rdma_op(
 	uint32_t rkey	= rsg_list[0].stag;
 	int	l = 0, r = 0, k = 0;
 	uint32_t	tot_len = 0;
+	uint32_t	int_len = 0;
 
 	LIST_HEAD(tmp_list);
 
@@ -2509,6 +2510,7 @@ static int xio_prep_rdma_op(
 			k				= 0;
 
 			tot_len				+= rlen;
+			int_len				+= rlen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
@@ -2517,6 +2519,9 @@ static int xio_prep_rdma_op(
 			/* advance the remote index */
 			r++;
 			if (r == rsize) {
+				lsg_list[l].length = int_len;
+				int_len = 0;
+				l++;
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
@@ -2546,7 +2551,10 @@ static int xio_prep_rdma_op(
 			rdmad->sge[k].length	= llen;
 			rdmad->sge[k].lkey	= lkey;
 			tot_len			+= llen;
+			int_len			+= llen;
 
+			lsg_list[l].length = int_len;
+			int_len = 0;
 			/* advance the local index */
 			l++;
 			if (l == lsize) {
@@ -2590,6 +2598,7 @@ static int xio_prep_rdma_op(
 			k				= 0;
 
 			tot_len			       += llen;
+			int_len			       += llen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
@@ -2599,6 +2608,9 @@ static int xio_prep_rdma_op(
 			/* advance the remote index */
 			r++;
 			if (r == rsize) {
+				lsg_list[l].length = int_len;
+				int_len = 0;
+				l++;
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
@@ -2617,6 +2629,8 @@ static int xio_prep_rdma_op(
 				(struct xio_rdma_task *)tmp_task->dd_data;
 			rdmad = &tmp_rdma_task->rdmad;
 
+			lsg_list[l].length = int_len;
+			int_len = 0;
 			/* advance the local index */
 			l++;
 			if (l == lsize)
@@ -2631,6 +2645,8 @@ static int xio_prep_rdma_op(
 			rkey	= rsg_list[r].stag;
 		}
 	}
+	*out_lsize = l;
+
 	if (tot_len < op_size) {
 		ERROR_LOG("iovec exhausted\n");
 		goto cleanup;
@@ -2655,19 +2671,16 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_set_msg_in_data_iovec						     */
 /*---------------------------------------------------------------------------*/
-static void xio_set_msg_in_data_iovec(struct xio_task *task)
+static inline void xio_set_msg_in_data_iovec(struct xio_task *task,
+					     struct xio_sge *lsg_list,
+					     size_t lsize)
 {
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_work_req	*rdmad = &rdma_task->rdmad;
 	int i;
 
-	for ( i = 0; i < rdmad->send_wr.num_sge; i++) {
-		task->imsg.in.data_iov[i].iov_base  	=
-					ptr_from_int64(rdmad->sge[i].addr);
-		task->imsg.in.data_iov[i].iov_len	=
-					rdmad->sge[i].length;
-	}
-	task->imsg.in.data_iovlen = rdmad->send_wr.num_sge;
+	for (i = 0; i < lsize; i++)
+		task->imsg.in.data_iov[i].iov_len = lsg_list[i].length;
+
+	task->imsg.in.data_iovlen = lsize;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2683,6 +2696,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	int			tasks_used = 0;
 	struct xio_sge		lsg_list[XIO_MAX_IOV];
 	size_t			lsg_list_len;
+	size_t			lsg_out_list_len;
 	struct ibv_mr		*mr;
 
 	/* responder side got request for rdma read */
@@ -2809,7 +2823,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			 XIO_IB_RDMA_READ,
 			 IBV_WR_RDMA_READ,
 			 lsg_list,
-			 lsg_list_len,
+			 lsg_list_len, &lsg_out_list_len,
 			 rdma_task->req_write_sge,
 			 rdma_task->req_write_num_sge,
 			 min(rlen, llen),
@@ -2817,7 +2831,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			 &rdma_hndl->rdma_rd_list, &tasks_used);
 
 	/* prepare the in side of the message */
-	xio_set_msg_in_data_iovec(task);
+	xio_set_msg_in_data_iovec(task, lsg_list, lsg_out_list_len);
 
 	xio_xmit_rdma_rd(rdma_hndl);
 
@@ -2841,6 +2855,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sge		lsg_list[XIO_MAX_IOV];
 	struct ibv_mr		*mr;
 	size_t			lsg_list_len;
+	size_t			lsg_out_list_len;
 	size_t			rlen = 0, llen = 0;
 	int			tasks_used = 0;
 
@@ -2921,7 +2936,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	xio_prep_rdma_op(task, rdma_hndl,
 			 XIO_IB_RDMA_WRITE,
 			 IBV_WR_RDMA_WRITE,
-			 lsg_list, lsg_list_len,
+			 lsg_list, lsg_list_len, &lsg_out_list_len,
 			 rdma_task->req_read_sge,
 			 rdma_task->req_read_num_sge,
 			 min(rlen, llen),

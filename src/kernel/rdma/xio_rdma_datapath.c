@@ -1295,6 +1295,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	uint32_t rlen;
 	uint32_t rkey;
 	uint32_t tot_len = 0;
+	uint32_t int_len = 0;
 	int l = 0, r = 0, k = 0;
 	LIST_HEAD(tmp_list);
 
@@ -1356,6 +1357,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			k				= 0;
 
 			tot_len				+= rlen;
+			int_len				+= rlen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
@@ -1364,6 +1366,9 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* advance the remote index */
 			r++;
 			if (r == rsize) {
+				liov[l].iov_len = int_len;
+				int_len = 0;
+				l++;
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
@@ -1395,7 +1400,10 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				    llen, offset_in_page(laddr));
 			sg++;
 			tot_len			+= llen;
+			int_len			+= llen;
 
+			liov[l].iov_len = int_len;
+			int_len = 0;
 			/* advance the local index */
 			l++;
 			if (l == lsize) {
@@ -1443,6 +1451,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			k = 0;
 
 			tot_len			       += llen;
+			int_len			       += llen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
 			tmp_rdma_task->phantom_idx	= rsize - r - 1;
 
@@ -1452,6 +1461,9 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* advance the remote index */
 			r++;
 			if (r == rsize) {
+				liov[l].iov_len = int_len;
+				int_len = 0;
+				l++;
 				break;
 			} else if (r < rsize - 1) {
 				/* take new task */
@@ -1472,6 +1484,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			sg_init_table(sg, XIO_MAX_IOV);
 
 			/* advance the local index */
+			liov[l].iov_len = int_len;
+			int_len = 0;
 			l++;
 			if (l == lsize)
 				break;
@@ -1484,8 +1498,9 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			rkey	= rsg_list[r].stag;
 		}
 	}
+	vmsg->data_iovlen = l;
 	if (tot_len < op_size) {
-		ERROR_LOG("iovec exausted\n");
+		ERROR_LOG("iovec exhausted\n");
 		goto cleanup;
 	}
 
@@ -1494,10 +1509,10 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	return 0;
 cleanup:
 
-	/* list does not contain the oringinal task */
+	/* list does not contain the original task */
 	list_for_each_entry_safe(ptask, next_ptask, &tmp_list,
 				 tasks_list_entry) {
-		/* the tmp tasks are returend back to pool */
+		/* the tmp tasks are returned back to pool */
 		xio_tasks_pool_put(task);
 	}
 	(*tasks_used) = 0;
@@ -2640,24 +2655,6 @@ static int xio_rdma_assign_in_buf(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_set_msg_in_data_iovec						     */
-/*---------------------------------------------------------------------------*/
-static void xio_set_msg_in_data_iovec(struct xio_task *task)
-{
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_work_req	*rdmad = &rdma_task->rdmad;
-	int i;
-
-	for ( i = 0; i < rdmad->send_wr.num_sge; i++) {
-		task->imsg.in.data_iov[i].iov_base  	=
-					ptr_from_int64(rdmad->sge[i].addr);
-		task->imsg.in.data_iov[i].iov_len	=
-					rdmad->sge[i].length;
-	}
-	task->imsg.in.data_iovlen = rdmad->send_wr.num_sge;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_sched_rdma_rd_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
@@ -2792,9 +2789,6 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			 min(rlen, llen),
 			 1,
 			 &rdma_hndl->rdma_rd_list, &tasks_used);
-
-	/* prepare the in side of the message */
-	xio_set_msg_in_data_iovec(task);
 
 #endif
 
