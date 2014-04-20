@@ -241,6 +241,30 @@ int xio_device_thread_remove_device(struct xio_device *dev)
 	return 0;
 }
 
+#ifdef HAVE_IBV_MODIFY_CQ
+/*---------------------------------------------------------------------------*/
+/* xio_cq_modify - use to throttle rates				     */
+/*---------------------------------------------------------------------------*/
+static int xio_cq_modify(struct xio_cq *tcq, int cq_count, int cq_pariod)
+{
+	struct ibv_cq_attr  cq_attr;
+	int		    retval;
+
+	memset(&cq_attr, 0, sizeof(cq_attr));
+
+	cq_attr.comp_mask = IBV_CQ_ATTR_MODERATION;
+	cq_attr.moderation.cq_count = cq_count;
+	cq_attr.moderation.cq_period = cq_pariod;
+
+	retval = ibv_modify_cq(tcq->cq, &cq_attr,
+			       IBV_CQ_MODERATION);
+	if (retval)
+		ERROR_LOG("ibv_modify_cq failed. (errno=%d %m)\n", errno);
+
+	return retval;
+}
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* xio_cq_create							     */
 /*---------------------------------------------------------------------------*/
@@ -250,6 +274,9 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	struct xio_cq		*tcq;
 	int			retval;
 	int			comp_vec = 0;
+#ifdef HAVE_IBV_MODIFY_CQ
+	int			throttle = 0;
+#endif
 
 	list_for_each_entry(tcq, &dev->cq_list, cq_list_entry) {
 		if (tcq->ctx == ctx)
@@ -319,6 +346,11 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		ERROR_LOG("ibv_create_cq failed. (errno=%d %m)\n", errno);
 		goto cleanup4;
 	}
+
+#ifdef HAVE_IBV_MODIFY_CQ
+	if (throttle)
+		retval = xio_cq_modify(tcq, 5, 5);
+#endif
 
 	retval = ibv_req_notify_cq(tcq->cq, 0);
 	if (retval) {
