@@ -88,9 +88,10 @@ void *malloc_huge_pages(size_t size)
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
 			return NULL;
 		}
+		WARN_LOG("huge pages allocation failed, allocating regular pages\n");
 
-		WARN_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
-			 real_size, errno);
+		DEBUG_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
+			  real_size, errno);
 		real_size = ALIGN(size + HUGE_PAGE_SZ, page_size);
 		retval = posix_memalign(&ptr, page_size, real_size);
 		if (retval) {
@@ -140,4 +141,52 @@ void free_huge_pages(void *ptr)
 		   and must be deallocated via free()
 		   */
 		free(real_ptr);
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_numa_alloc	                                                     */
+/*---------------------------------------------------------------------------*/
+void *xio_numa_alloc(size_t bytes, int node)
+{
+	size_t real_size = ALIGN(bytes, page_size);
+	void *p = numa_alloc_onnode(real_size, node);
+	if (!p) {
+		ERROR_LOG("numa_alloc_onnode failed sz:%zu. %m\n",
+			  real_size);
+		return NULL;
+	}
+	/* force the OS to allocate physical memory for the region */
+	memset(p, 0, real_size);
+
+	/* Save real_size since numa_free() requires a size parameter */
+	*((size_t *)p) = real_size;
+
+	/* Skip the page with metadata */
+	return p + page_size;
+
+	return p;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_numa_free	                                                     */
+/*---------------------------------------------------------------------------*/
+void xio_numa_free(void *ptr)
+{
+	void	*real_ptr;
+	size_t	real_size;
+
+	if (ptr == NULL)
+		return;
+
+	/* Jump back to the page with metadata */
+	real_ptr = (char *)ptr - page_size;
+	/* Read the original allocation size */
+	real_size = *((size_t *)real_ptr);
+
+	if (real_size != 0)
+		/* The memory was allocated via numa_alloc()
+		   and must be deallocated via numa_free()
+		   */
+		numa_free(real_ptr, real_size);
 }

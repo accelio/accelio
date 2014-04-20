@@ -59,6 +59,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <sched.h>
+#include <numa.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>

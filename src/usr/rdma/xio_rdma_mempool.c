@@ -222,8 +222,15 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 		list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
 					 mem_region_entry) {
 			list_del(&r->mem_region_entry);
-			xio_dereg_mr(&r->omr);
-			ufree_huge_pages(r->buf);
+			if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
+				xio_dereg_mr(&r->omr);
+
+			if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+				ufree_huge_pages(r->buf);
+			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+				unuma_free(r->buf);
+			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+				ufree(r->buf);
 			ufree(r);
 		}
 	}
@@ -280,15 +287,29 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	data_alloc_sz = nr_blocks*slot->mb_size;
 
 	/* allocate the buffers and register them */
-	region->buf = umalloc_huge_pages(data_alloc_sz);
+	if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+		region->buf = umalloc_huge_pages(data_alloc_sz);
+	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+		region->buf = unuma_alloc(data_alloc_sz, slot->pool->nodeid);
+	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+		region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t));
+
 	if (region->buf == NULL) {
 		ufree(buf);
 		return NULL;
 	}
 
-	region->omr = xio_reg_mr(region->buf, data_alloc_sz);
+	if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
+		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
+
 	if (region->omr == NULL) {
-		ufree_huge_pages(region->buf);
+		if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+			ufree_huge_pages(region->buf);
+		else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			unuma_free(region->buf);
+		else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			ufree(region->buf);
+
 		ufree(buf);
 		return NULL;
 	}
@@ -356,6 +377,34 @@ struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
 {
 	struct xio_mempool *p;
 
+	if (flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
+		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+		DEBUG_LOG("mempool: using huge pages allocator\n");
+	}else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+		DEBUG_LOG("mempool: using numa allocator\n");
+	} else {
+		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+		flags |= XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		DEBUG_LOG("mempool: using regular allocator\n");
+	}
+
+	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+		int ret;
+		if (nodeid == -1) {
+			int cpu = sched_getcpu();
+			nodeid = numa_node_of_cpu(cpu);
+		}
+		/* pin to node */
+		ret = numa_run_on_node(nodeid);
+		if (ret) {
+			return NULL;
+		}
+	}
+
 	p = ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
@@ -377,6 +426,32 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 	int			i;
 	int			ret;
 
+	if (flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
+		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+		DEBUG_LOG("mempool: using huge pages allocator\n");
+	} else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+		DEBUG_LOG("mempool: using numa allocator\n");
+	} else {
+		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+		flags |= XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		DEBUG_LOG("mempool: using regular allocator\n");
+	}
+	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+		int ret;
+		if (nodeid == -1) {
+			int cpu = sched_getcpu();
+			nodeid = numa_node_of_cpu(cpu);
+		}
+		/* pin to node */
+		ret = numa_run_on_node(nodeid);
+		if (ret) {
+			return NULL;
+		}
+	}
 	p = ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
@@ -428,6 +503,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 	}
 
 	return p;
+
 cleanup:
 	xio_mempool_destroy(p);
 	return NULL;

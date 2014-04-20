@@ -44,6 +44,8 @@
 #include "xio_ev_loop.h"
 
 
+
+
 /*---------------------------------------------------------------------------*/
 /* xio_context_add_observer						     */
 /*---------------------------------------------------------------------------*/
@@ -145,6 +147,52 @@ static void xio_stats_handler(int fd, int events, void *data)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_pin_to_cpu - pin to specific cpu					     */
+/*---------------------------------------------------------------------------*/
+static int xio_pin_to_cpu(int cpu)
+{
+	int		ncpus = numa_num_task_cpus();
+	int		ret;
+	cpu_set_t	cs;
+
+	if (ncpus > CPU_SETSIZE)
+		return -1;
+
+	CPU_ZERO(&cs);
+	CPU_SET(cpu, &cs);
+	if (CPU_COUNT(&cs) == 1)
+		return 0;
+
+	ret = sched_setaffinity(0, sizeof(cs), &cs);
+	if (ret) {
+		xio_set_error(errno);
+		ERROR_LOG("sched_setaffinity failed. %m\n");
+		return -1;
+	}
+	/* guaranteed to take effect immediately */
+	sched_yield();
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_node - pin to the numa node of the cpu			     */
+/*---------------------------------------------------------------------------*/
+static int xio_pin_to_node(int cpu)
+{
+  int node = numa_node_of_cpu(cpu);
+  /* pin to node */
+  int ret = numa_run_on_node(node);
+  if (ret)
+	return -1;
+
+  /* is numa_run_on_node() guaranteed to take effect immediately? */
+  sched_yield();
+
+  return -1;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_context_create                                                        */
 /*---------------------------------------------------------------------------*/
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
@@ -167,6 +215,11 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	} else {
 		cpu = cpu_hint;
 	}
+	/*pin the process to cpu */
+	xio_pin_to_cpu(cpu);
+	/* pin to the numa node of the cpu */
+	xio_pin_to_node(cpu);
+
 
 	/* allocate new context */
 	ctx = ucalloc(1, sizeof(struct xio_context));
@@ -178,7 +231,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->ev_loop		= xio_ev_loop_create();
 
 	ctx->cpuid		= cpu;
-	ctx->nodeid		= xio_get_nodeid(cpu);
+	ctx->nodeid		= numa_node_of_cpu(cpu);
 	ctx->polling_timeout	= polling_timeout_us;
 	ctx->worker		= (uint64_t) pthread_self();
 

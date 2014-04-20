@@ -609,8 +609,11 @@ static struct xio_mempool *xio_rdma_mempool_array_get(
 	if (mempool_array[ctx->nodeid])
 		return mempool_array[ctx->nodeid];
 
-	mempool_array[ctx->nodeid] = xio_mempool_create(ctx->nodeid,
-						        XIO_MEMPOOL_FLAG_REG_MR);
+	mempool_array[ctx->nodeid] = xio_mempool_create(
+			ctx->nodeid,
+			XIO_MEMPOOL_FLAG_REG_MR |
+			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);
+
 	if (!mempool_array[ctx->nodeid]) {
 		ERROR_LOG("xio_mempool_create failed " \
 			  "(errno=%d %m)\n", errno);
@@ -1202,6 +1205,9 @@ static int xio_rdma_primary_pool_alloc(
 			return -1;
 		}
 	} else {
+		/* maybe allocation of with unuma_alloc can provide better
+		 * performance?
+		 */
 		rdma_pool->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
 		if (!rdma_pool->data_pool) {
 			xio_set_error(ENOMEM);

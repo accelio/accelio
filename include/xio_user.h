@@ -727,6 +727,28 @@ struct xio_mem_allocator {
 	 *  @returns pointer to block or NULL if allocate fails
 	 */
 	void   (*free_huge_pages)(void *ptr, void *user_context);
+
+	/**
+	 *  allocates block of memory on specific numa node
+	 *
+	 *  @param[in] size			block size to allocate
+	 *  @param[in] node			the numa node
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 */
+	void * (*numa_alloc)(size_t size, int node, void *user_context);
+
+	/**
+	 *  deallocates block of memory previously allocated by
+	 *  numa_alloc
+	 *
+	 *  @param[in] ptr			pointer to allocated block
+	 *  @param[in] user_context		user specific context
+	 *
+	 *  @returns pointer to block or NULL if allocate fails
+	 */
+	void   (*numa_free)(void *ptr, void *user_context);
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1288,8 +1310,11 @@ struct xio_mempool_obj {
  * @brief creation flags for mempool
  */
 enum xio_mempool_flag {
-	XIO_MEMPOOL_FLAG_NONE		= 0x0000,
-	XIO_MEMPOOL_FLAG_REG_MR		= 0x0001
+	XIO_MEMPOOL_FLAG_NONE			= 0x0000,
+	XIO_MEMPOOL_FLAG_REG_MR			= 0x0001,
+	XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC	= 0x0002,
+	XIO_MEMPOOL_FLAG_NUMA_ALLOC		= 0x0004,
+	XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC	= 0x0008
 };
 
 /**

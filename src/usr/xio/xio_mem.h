@@ -41,10 +41,14 @@
 
 extern int			disable_huge_pages;
 extern int			allocator_assigned;
+extern int			page_size;
 extern struct xio_mem_allocator *mem_allocator;
 
 extern void *malloc_huge_pages(size_t size);
 extern void free_huge_pages(void *ptr);
+extern void *xio_numa_alloc(size_t bytes, int node);
+extern void xio_numa_free(void *ptr);
+
 
 static inline void xio_disable_huge_pages(int disable)
 {
@@ -130,6 +134,21 @@ static inline void ufree_huge_pages(void *ptr)
 		free_huge_pages(ptr);
 }
 
+static inline void *unuma_alloc(size_t size, int node)
+{
+	if (allocator_assigned && mem_allocator->numa_alloc)
+		return mem_allocator->numa_alloc(size, node, mem_allocator->user_context);
+	else
+		return xio_numa_alloc(size, node);
+}
+
+static inline void unuma_free(void *ptr)
+{
+	if (allocator_assigned && mem_allocator->numa_free)
+		mem_allocator->numa_free(ptr, mem_allocator->user_context);
+	else
+		xio_numa_free(ptr);
+}
 
 #endif
 
