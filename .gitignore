@@ -39,3 +39,4 @@ version.c
 */usr/Makefile.in
 doc
 Doxyfile
+.dirstamp
