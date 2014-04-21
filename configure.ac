@@ -29,6 +29,8 @@ AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
 AC_CHECK_HEADERS([numa.h],
 		 [mypj_found_numa_headers=yes; break;])
 
+AC_CHECK_HEADERS([event2/event.h],
+		 [mypj_found_event_headers=yes; break;])
 
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the infiniband header files])])
@@ -140,6 +142,9 @@ if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/rdma])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
+if test "$mypj_found_event_headers" == "yes"; then
+	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_libevent])
+fi
 fi
 
 if test "$enable_kernel_module" != "no"; then
@@ -147,6 +152,10 @@ if test "$enable_kernel_module" != "no"; then
 else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 examples/usr/hello_world";
+
+if test "$mypj_found_event_headers" == "yes"; then
+	subdirs2="$subdirs2 examples/usr/hello_world_libevent";
+fi
 	subdirs2="$subdirs2 examples/usr/hello_world_mt";
 if test "$enable_raio_build" != "no"; then
 	subdirs2="$subdirs2 examples/usr/raio";
@@ -204,6 +213,9 @@ AC_CONFIG_FILES([Doxyfile])
 AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
+if test "$mypj_found_event_headers" == "yes"; then
+	AC_CONFIG_FILES([examples/usr/hello_world_libevent/Makefile])
+fi
 AC_CONFIG_FILES([examples/usr/raio/Makefile])
 if test "$enable_fio_build" != "no"; then
 AC_CONFIG_FILES([examples/usr/fio/Makefile])

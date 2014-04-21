@@ -35,14 +35,14 @@ RedHat (RHEL 6.4 and above)
 	yum groupinstall "Infiniband Support"
 	yum install libtool autoconf automake
 	yum install infiniband-diags perftest libibverbs-utils librdmacm-utils
-	yum install librdmacm-devel libibverbs-devel numactl numactl-devel libaio-devel
+	yum install librdmacm-devel libibverbs-devel numactl numactl-devel libaio-devel libevent-devel
 
 
 Ubuntu (Ubuntu 13.04 and above)
 
 	apt-get install libtool autoconf automake build-essential
 	apt-get install ibverbs-utils rdmacm-utils infiniband-diags perftest
-	apt-get install librdmacm-dev libibverbs-dev numactl libnuma-dev libaio-dev
+	apt-get install librdmacm-dev libibverbs-dev numactl libnuma-dev libaio-dev libevent-dev
 
 
 MLNX_OFED
@@ -51,6 +51,9 @@ MLNX_OFED
 	look for latest OFED packages at:
 	http://www.mellanox.com/page/products_dyn?product_family=26
 
+libevent
+	libevent 2.0.10 and above is prerequisite to enable the build of
+	hello_world_libevent example
 
 Building and installation
 --------------------------
@@ -73,7 +76,10 @@ scripts showing how to run the example from the local directory.
 	2. hello world mt - a multi-threaded client, and multi-threaded server
 			    demonstrating how to scale and work in multi
 			    threaded environment.
-
+			    
+	3. hello world libevent - simple client that demonstrates how to
+			    incorporate accelio with libevent
+	
 	3. R-AIO	 -  Linux's Remote AIO API over libxio. The example contains
 			    a library, a server application and simple client.
 			    the client demonstrates reading of files from the server.
