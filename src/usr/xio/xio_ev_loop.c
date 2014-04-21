@@ -369,11 +369,15 @@ retry:
 		 * duration of each loop
 		 * */
 	}
-	if (!list_empty(&loop->events_list))
-		goto retry;
 
 	if (likely(loop->stop_loop == 0))
 		goto retry;
+	else {
+		/* drain events before returning */
+		while (!list_empty(&loop->events_list)) {
+			xio_ev_loop_exec_scheduled(loop);
+		}
+	}
 
 	loop->stop_loop = 0;
 	loop->wakeup_armed = 0;
