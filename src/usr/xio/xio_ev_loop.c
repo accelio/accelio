@@ -369,6 +369,9 @@ retry:
 		 * duration of each loop
 		 * */
 	}
+	if (!list_empty(&loop->events_list))
+		goto retry;
+
 	if (likely(loop->stop_loop == 0))
 		goto retry;
 

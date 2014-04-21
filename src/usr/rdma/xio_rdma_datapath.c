@@ -939,6 +939,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	int		wclen = max_wc, i, numwc  = 0;
 	int		last_recv = -1;
 	int		timeouts_num = 0;
+	int		polled = 0;
 	cycles_t	timeout;
 	cycles_t	start_time = 0;
 
@@ -946,11 +947,12 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 		if (wclen > tcq->wc_array_len)
 			wclen = tcq->wc_array_len;
 
-		if (xio_context_is_loop_stopping(tcq->ctx)) {
+		if (xio_context_is_loop_stopping(tcq->ctx) && polled) {
 				err = 1; /* same as in budget */
 				break;
 		}
 		err = ibv_poll_cq(tcq->cq, wclen, tcq->wc_array);
+		polled = 1;
 		if (err == 0) { /* no completions retrieved */
 			if (timeout_us == 0)
 				break;
