@@ -79,7 +79,7 @@ void *malloc_huge_pages(size_t size)
 
 	ptr = mmap(NULL, real_size, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS |
-			MAP_POPULATE | MAP_HUGETLB|MAP_NORESERVE, -1, 0);
+			MAP_POPULATE | MAP_HUGETLB, -1, 0);
 	if (ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
 		long page_size = sysconf(_SC_PAGESIZE);
