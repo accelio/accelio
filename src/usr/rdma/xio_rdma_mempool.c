@@ -299,19 +299,19 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 		return NULL;
 	}
 
-	if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
+	if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
 		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
+		if (region->omr == NULL) {
+			if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+				ufree_huge_pages(region->buf);
+			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+				unuma_free(region->buf);
+			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+				ufree(region->buf);
 
-	if (region->omr == NULL) {
-		if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
-			ufree_huge_pages(region->buf);
-		else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
-			unuma_free(region->buf);
-		else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
-			ufree(region->buf);
-
-		ufree(buf);
-		return NULL;
+			ufree(buf);
+			return NULL;
+		}
 	}
 
 	qblock = &dummy;
