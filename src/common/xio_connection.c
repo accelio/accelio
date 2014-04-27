@@ -48,7 +48,7 @@
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_INFLIGHT_BUDGET	64
-
+#define XIO_CONNECTION_APP_BUDGET	256
 
 #define		IS_APPLICATION_MSG(msg) \
 		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
@@ -234,6 +234,7 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		connection->conn_idx	= conn_idx;
 		connection->in_flight_reqs_budget = XIO_CONNECTION_INFLIGHT_BUDGET;
 		connection->in_flight_sends_budget = XIO_CONNECTION_INFLIGHT_BUDGET;
+		connection->app_io_budget = XIO_CONNECTION_APP_BUDGET;
 		connection->cb_user_context = cb_user_context;
 		memcpy(&connection->ses_ops, &session->ses_ops,
 		       sizeof(session->ses_ops));
@@ -276,6 +277,9 @@ int xio_connection_send(struct xio_connection *connection,
 
 	if (msg->type == XIO_ONE_WAY_REQ &&
 	    connection->in_flight_sends_budget == 0)
+		return -EAGAIN;
+
+	if (connection->app_io_budget < 0)
 		return -EAGAIN;
 
 	if (IS_RESPONSE(msg->type) &&
@@ -724,6 +728,7 @@ int xio_send_response(struct xio_msg *msg)
 			xio_set_error(EINVAL);
 			return -1;
 		}
+		connection->app_io_budget++;
 
 		if (unlikely(
 		     (connection->state != XIO_CONNECTION_STATE_ONLINE  &&
@@ -954,6 +959,8 @@ int xio_connection_close(struct xio_connection *connection)
 void xio_connection_queue_io_task(struct xio_connection *connection,
 				    struct xio_task *task)
 {
+	if (task->tlv_type != XIO_ONE_WAY_RSP)
+		connection->app_io_budget--;
 	list_move_tail(&task->tasks_list_entry, &connection->io_tasks_list);
 }
 
@@ -990,6 +997,7 @@ int xio_release_response(struct xio_msg *msg)
 			return -1;
 		}
 		connection = task->connection;
+		connection->app_io_budget++;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
@@ -1023,6 +1031,7 @@ int xio_release_msg(struct xio_msg *msg)
 		}
 
 		connection = task->connection;
+		connection->app_io_budget++;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
