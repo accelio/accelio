@@ -200,9 +200,6 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		goto cleanup1;
 	}
 
-	tcq->max_cqe  = dev->device_attr.max_cqe;
-	tcq->cq_depth	= tcq->alloc_sz;
-	tcq->cqe_avail	= tcq->alloc_sz;
 	atomic_set(&tcq->refcnt, 1);
 
 	tcq->ctx	= ctx;
