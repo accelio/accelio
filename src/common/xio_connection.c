@@ -312,6 +312,11 @@ int xio_connection_send(struct xio_connection *connection,
 			task->omsg	= msg;
 			hdr.serial_num	= task->omsg->sn;
 			is_req = 1;
+			/* save the message "in" side */
+			if (msg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+				memcpy(&task->in_receipt,
+				       &msg->in, sizeof(task->in_receipt));
+
 			list_move_tail(&task->tasks_list_entry,
 				       &connection->pre_send_list);
 		} else {
@@ -328,7 +333,7 @@ int xio_connection_send(struct xio_connection *connection,
 	/* reset the task mbuf */
 	xio_mbuf_reset(&task->mbuf);
 
-	/* set the the mbuf to begining of tlv */
+	/* set the mbuf to beginning of tlv */
 	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
 		goto cleanup;
 

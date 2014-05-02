@@ -78,6 +78,8 @@ struct xio_task {
 	uint32_t		omsg_flags;
 	uint32_t		pad;
 	struct xio_msg		imsg;		/* message to the user */
+	struct xio_vmsg		in_receipt;     /* save in of message with */
+						/* receipt */
 
 };
 

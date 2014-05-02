@@ -775,6 +775,12 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			if ((hdr.flags &
 			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
 					XIO_MSG_RSP_FLAG_FIRST) {
+
+				/* after receipt delivered reproduce the
+				 * original "in" side  */
+				memcpy(&omsg->in, &sender_task->in_receipt,
+				       sizeof(omsg->in));
+
 				/* recycle the receipt */
 				xio_tasks_pool_put(task);
 			}
