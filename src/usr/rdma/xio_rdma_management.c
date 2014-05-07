@@ -804,7 +804,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.recv_cq			= tcq->cq;
 	qp_init_attr.cap.max_send_wr		= MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
-	qp_init_attr.cap.max_send_sge		= MAX_SGE;
+	qp_init_attr.cap.max_send_sge		= min(MAX_SGE, dev->device_attr.max_sge);
 	qp_init_attr.cap.max_recv_sge		= 1;
 	qp_init_attr.cap.max_inline_data	= MAX_INLINE_DATA;
 
@@ -826,7 +826,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	if (ibv_query_qp(rdma_hndl->qp, &qp_attr, 0, &qp_init_attr) != 0)
 		ERROR_LOG("ibv_query_qp failed. (errno=%d %m)\n", errno);
 	rdma_hndl->max_inline_data = qp_attr.cap.max_inline_data;
-
+	rdma_hndl->max_sge	   = min(MAX_SGE, dev->device_attr.max_sge);
 
 	list_add(&rdma_hndl->trans_list_entry, &tcq->trans_list);
 
@@ -2330,7 +2330,7 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->in;
 
-	if (vmsg->data_iovlen >= XIO_MAX_IOV)
+	if (vmsg->data_iovlen > XIO_MAX_IOV)
 		return 0;
 
 	if ((vmsg->header.iov_base != NULL)  &&
@@ -2363,7 +2363,7 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->out;
 
-	if (vmsg->data_iovlen >= XIO_MAX_IOV)
+	if (vmsg->data_iovlen > XIO_MAX_IOV)
 		return 0;
 
 	if (((vmsg->header.iov_base != NULL)  &&

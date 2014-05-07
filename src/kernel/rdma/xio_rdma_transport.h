@@ -142,9 +142,12 @@ struct __attribute__((__packed__)) xio_req_hdr {
 	uint16_t		credits;	/* peer send credits	*/
 	uint16_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			recv_num_sge;
-	uint8_t			read_num_sge;
-	uint8_t			write_num_sge;
+	uint8_t			pad[3];
+
+	uint16_t		recv_num_sge;
+	uint16_t		read_num_sge;
+	uint16_t		write_num_sge;
+	uint16_t		pad1;
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
@@ -385,6 +388,7 @@ struct xio_rdma_transport {
 	int				tx_ready_tasks_num;
 	int				max_tx_ready_tasks_num;
 	int				max_inline_data;
+	int				max_sge;
 	uint16_t			req_sig_cnt;
 	uint16_t			rsp_sig_cnt;
 	/* sender window parameters */
@@ -408,8 +412,6 @@ struct xio_rdma_transport {
 	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
-
-	uint16_t			pad2[2];
 
 	/* connection's flow control */
 	size_t				alloc_sz;

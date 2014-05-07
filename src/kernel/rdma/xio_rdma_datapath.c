@@ -1284,6 +1284,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			    struct xio_vmsg *vmsg,
 			    struct xio_sge *rsg_list, size_t rsize,
 			    uint32_t op_size,
+			    int	max_sge,
 			    int signaled,
 			    struct list_head *target_list,
 			    int *tasks_used)
@@ -1520,7 +1521,7 @@ cleanup:
 	list_for_each_entry_safe(ptask, next_ptask, &tmp_list,
 				 tasks_list_entry) {
 		/* the tmp tasks are returned back to pool */
-		xio_tasks_pool_put(task);
+		xio_tasks_pool_put(ptask);
 	}
 	(*tasks_used) = 0;
 
@@ -1538,7 +1539,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sge			*tmp_sge;
 	struct xio_sge			sge;
 	size_t				hdr_len;
-	uint8_t				i;
+	uint32_t			i;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct ib_device *ib_dev = rdma_hndl->dev->ib_dev;
 	struct ib_mr *mr = rdma_hndl->dev->mr; /* Need fix for FMR/FRWR */
@@ -1556,8 +1557,8 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	/* ack_sn	shall be coded later */
 	/* credits	shall be coded later */
 	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
+	PACK_SVAL(req_hdr, tmp_req_hdr, recv_num_sge);
 	tmp_req_hdr->opcode	   = req_hdr->opcode;
-	tmp_req_hdr->recv_num_sge  = req_hdr->recv_num_sge;
 	/* In case of FMR/FRWR the remote side will get one element */
 	if (rdma_task->read_sge.mem_reg.mem_h)
 		read_num_sge = 1;
@@ -1568,8 +1569,8 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	else
 		write_num_sge = req_hdr->write_num_sge;
 
-	tmp_req_hdr->read_num_sge = read_num_sge;
-	tmp_req_hdr->write_num_sge = write_num_sge;
+	tmp_req_hdr->read_num_sge = htons(read_num_sge);
+	tmp_req_hdr->write_num_sge = htons(write_num_sge);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_hdr_len);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_pad_len);
 	/*remain_data_len is not used		*/
@@ -1680,10 +1681,9 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, credits);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
 	req_hdr->opcode		= tmp_req_hdr->opcode;
-	req_hdr->recv_num_sge	= tmp_req_hdr->recv_num_sge;
-	req_hdr->read_num_sge	= tmp_req_hdr->read_num_sge;
-	req_hdr->write_num_sge	= tmp_req_hdr->write_num_sge;
-
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, recv_num_sge);
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, read_num_sge);
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, write_num_sge);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_pad_len);
 
@@ -2150,6 +2150,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	/* add tlv */
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0) {
 		ERROR_LOG("write tlv failed\n");
+		xio_set_error(EOVERFLOW);
 		return -1;
 	}
 
@@ -2279,6 +2280,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
 			  ulp_hdr_len,
 			  rdma_hndl->max_send_buf_sz - xio_hdr_len);
+		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
 
@@ -2346,6 +2348,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			retval = xio_rdma_prep_rsp_header(rdma_hndl, task,
 							  ulp_hdr_len, 0, 0,
 							  XIO_E_PARTIAL_MSG);
+			goto cleanup;
 		}
 	}
 
@@ -2806,6 +2809,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			 rdma_task->req_write_sge,
 			 rdma_task->req_write_num_sge,
 			 min(rlen, llen),
+			 rdma_hndl->max_sge,
 			 1,
 			 &rdma_hndl->rdma_rd_list, &tasks_used);
 
@@ -2859,6 +2863,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 			 rdma_task->req_read_sge,
 			 rdma_task->req_read_num_sge,
 			 min(rlen, llen),
+			 rdma_hndl->max_sge,
 			 0,
 			 &rdma_hndl->tx_ready_list, &tasks_used);
 	/* xio_prep_rdma_op used splice to transfer "tasks_used"  to

@@ -1748,7 +1748,7 @@ static int xio_conn_xmit(struct xio_conn *conn)
 			if (xio_errno() == EAGAIN)
 				return 0;
 
-			ERROR_LOG("transport send failed\n");
+			ERROR_LOG("transport send failed err:%d\n", xio_errno());
 			conn_event_data.msg_error.reason = xio_errno();
 			conn_event_data.msg_error.task	= task;
 
