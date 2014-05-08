@@ -42,7 +42,7 @@
 /* forward declarations	                                                     */
 /*---------------------------------------------------------------------------*/
 struct xio_task;
-struct xio_task_pool;
+struct xio_tasks_pool;
 struct xio_observer;
 struct xio_observable;
 struct xio_tasks_pool_ops;
@@ -124,27 +124,34 @@ struct xio_transport_msg_validators_cls {
 
 struct xio_tasks_pool_ops {
 	void	(*pool_get_params)(struct xio_transport_base *transport_hndl,
-				int *pool_len, int *pool_dd_sz,
+				int *start_nr,
+				int *max_nr,
+				int *alloc_nr,
+				int *slab_dd_size,
 				int *task_dd_size);
-	int	(*pool_alloc)(struct xio_transport_base *trans_hndl,
-				int max, void *pool_dd_data);
-	int	(*pool_free)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data);
-	int	(*pool_init_item)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data, struct xio_task *task);
-	int	(*pool_uninit_item)(void *pool_dd_data, struct xio_task *task);
-	int	(*pool_run)(struct xio_transport_base *trans_hndl);
 
-	int	(*pre_put)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
-	int	(*post_get)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
+	int	(*slab_pre_create)(struct xio_transport_base *trans_hndl,
+				   int alloc_nr, void *slab_dd_data);
+	int	(*slab_destroy)(struct xio_transport_base *trans_hndl,
+				void *slab_dd_data);
+	int	(*slab_init_task)(struct xio_transport_base *trans_hndl,
+				  void *slab_dd_data, int tid,
+				  struct xio_task *task);
+	int	(*slab_uninit_task)(void *slab_dd_data, struct xio_task *task);
+	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
+				    void *slab_dd_data);
+	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,
+				    struct xio_tasks_pool *pool);
+	int	(*task_pre_put)(struct xio_transport_base *trans_hndl,
+				struct xio_task *task);
+	int	(*task_post_get)(struct xio_transport_base *trans_hndl,
+				 struct xio_task *task);
 };
 
 struct xio_tasks_pool_cls {
 	void		*pool;
-	struct xio_task * (*task_alloc)(void *pool);
-	void		  (*task_free)(struct xio_task *task);
+	struct xio_task * (*task_get)(void *pool);
+	void		  (*task_put)(struct xio_task *task);
 
 	struct xio_task	* (*task_lookup)(void *pool, int task_id);
 };

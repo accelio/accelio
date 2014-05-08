@@ -41,6 +41,7 @@
 #include "libxio.h"
 #include "xio_mbuf.h"
 
+
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,
 	XIO_TASK_STATE_DELIVERED,
@@ -52,8 +53,14 @@ enum xio_task_state {
 typedef void (*release_task_fn)(struct kref *kref);
 
 /*---------------------------------------------------------------------------*/
+/* forward declarations							     */
+/*---------------------------------------------------------------------------*/
+struct xio_tasks_pool;
+
+/*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
+
 struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
@@ -83,21 +90,68 @@ struct xio_task {
 
 };
 
-struct xio_tasks_pool {
-	/* pool of tasks */
-	struct xio_task		**array;
-	/* LIFO */
-	struct list_head	stack;
+struct xio_tasks_pool_hooks {
+	void	*context;
+	int	(*slab_pre_create)(void *context, int alloc_nr,
+				   void *slab_dd_data);
+	int	(*slab_destroy)(void *context, void *slab_dd_data);
+	int	(*slab_init_task)(void *context, void *slab_dd_data,
+				  int tid, struct xio_task *task);
+	int	(*slab_uninit_task)(void *slab_dd_data, struct xio_task *task);
+	int	(*slab_post_create)(void *context, void *slab_dd_data);
+	int	(*pool_post_create)(void *context, struct xio_tasks_pool *pool);
+	int	(*task_pre_put)(void *context, struct xio_task *task);
+	int	(*task_post_get)(void *context, struct xio_task *task);
+};
 
-	/* max number of elements */
-	int			max;
-	int			nr;
-	void			*dd_data;
-	void			*pool_ops;
+struct xio_tasks_pool_params {
+	int				start_nr;
+	int				max_nr;
+	int				alloc_nr;
+	int				slab_dd_data_sz;
+	int				task_dd_data_sz;
+	int				pad;
+	struct xio_tasks_pool_hooks	pool_hooks;
+};
+
+struct xio_tasks_slab {
+	struct list_head		slabs_list_entry;
+	/* pool of tasks */
+	struct xio_task			**array;
+	uint32_t			start_idx;
+	uint32_t			end_idx;
+	uint32_t			nr;
+	uint32_t			pad;
+	void				*dd_data;
+};
+
+struct xio_tasks_pool {
+	struct list_head		slabs_list;
+	/* LIFO */
+	struct list_head		stack;
+	struct xio_tasks_pool_params	params;
+	int				curr_idx;
+	int				max_used;
+	int				curr_free;
+	int				curr_used;
+	int				curr_alloced;
+	int				node_id; /* numa node id */
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_task_add_ref							     */
+/* xio_task_reset							     */
+/*---------------------------------------------------------------------------*/
+static void xio_task_reset(struct xio_task *task)
+{
+	task->imsg.user_context		= 0;
+	task->imsg.flags		= 0;
+	task->tlv_type			= 0xdead;
+	task->omsg_flags		= 0;
+	task->state			= XIO_TASK_STATE_INIT;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_task_addref							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_task_addref(
 			struct xio_task *t)
@@ -106,35 +160,78 @@ static inline void xio_task_addref(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_free						     */
+/* xio_task_release							     */
 /*---------------------------------------------------------------------------*/
-void xio_tasks_pool_free(struct xio_tasks_pool *q);
+static inline void xio_task_release(struct kref *kref)
+{
+	struct xio_task *task = container_of(kref, struct xio_task, kref);
+	struct xio_tasks_pool *pool;
+
+	assert(task->pool);
+
+	pool = (struct xio_tasks_pool *)task->pool;
+
+	if (pool->params.pool_hooks.task_pre_put)
+		pool->params.pool_hooks.task_pre_put(
+				pool->params.pool_hooks.context, task);
+
+	xio_task_reset(task);
+
+	pool->curr_free++;
+	pool->curr_used--;
+
+	list_move(&task->tasks_list_entry, &pool->stack);
+}
+
+
+
+
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_init						     */
+/* xio_tasks_pool_create						     */
 /*---------------------------------------------------------------------------*/
-struct xio_tasks_pool *xio_tasks_pool_init(int max,
-			int pool_dd_data_sz,
-			int task_dd_data_sz,
-			void *pool_ops);
+struct xio_tasks_pool *xio_tasks_pool_create(
+		struct xio_tasks_pool_params *params);
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_destroy						     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_destroy(struct xio_tasks_pool *q);
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_alloc_slab						     */
+/*---------------------------------------------------------------------------*/
+int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_get							     */
 /*---------------------------------------------------------------------------*/
-static inline struct xio_task *xio_tasks_pool_get(
-			struct xio_tasks_pool *q)
+static inline struct xio_task *xio_tasks_pool_get(struct xio_tasks_pool *q)
 {
 	struct xio_task *t;
 
-
-	if (list_empty(&q->stack))
-		return NULL;
+	if (list_empty(&q->stack)) {
+		if (q->curr_used == q->params.max_nr)
+			return NULL;
+		xio_tasks_pool_alloc_slab(q);
+		if (list_empty(&q->stack))
+			return NULL;
+	}
 
 	t = list_first_entry(&q->stack, struct xio_task,  tasks_list_entry);
 	list_del_init(&t->tasks_list_entry);
-	q->nr--;
+	q->curr_free--;
+	q->curr_used++;
+	if (q->curr_used > q->max_used)
+		q->max_used = q->curr_used;
+
 	kref_init(&t->kref);
 	t->tlv_type = 0xbeef;  /* poison the type */
+
+	if (q->params.pool_hooks.task_post_get)
+		q->params.pool_hooks.task_post_get(
+				q->params.pool_hooks.context, t);
+
 	return t;
 }
 
@@ -143,7 +240,7 @@ static inline struct xio_task *xio_tasks_pool_get(
 /*---------------------------------------------------------------------------*/
 static inline void xio_tasks_pool_put(struct xio_task *task)
 {
-	kref_put(&task->kref, task->release);
+	kref_put(&task->kref, xio_task_release);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -155,10 +252,11 @@ static inline int xio_tasks_pool_free_tasks(
 	if (!q)
 		return 0;
 
-	if (q->nr != q->max)
+	if (q->curr_used)
 		ERROR_LOG("tasks inventory: %d/%d = missing:%d\n",
-			  q->nr, q->max, q->max-q->nr);
-	return q->nr;
+			  q->curr_free, q->curr_alloced, q->curr_used);
+
+	return q->curr_free;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -168,7 +266,19 @@ static inline struct xio_task *xio_tasks_pool_lookup(
 			struct xio_tasks_pool *q,
 			int id)
 {
-	return  ((id < q->max) ? q->array[id] : NULL);
+	struct xio_tasks_slab *slab;
+
+	list_for_each_entry(slab, &q->slabs_list, slabs_list_entry) {
+		if (id >= slab->start_idx && id <= slab->end_idx) {
+			int i = id - slab->start_idx;
+			if (likely(slab->array[i]->ltid == id))
+				return slab->array[i];
+			else
+				return NULL;
+		}
+	}
+
+	return NULL;
 }
 
 #endif

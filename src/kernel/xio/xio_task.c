@@ -49,78 +49,164 @@
 #define XIO_TASK_MAGIC   0x58494f5f5441534b
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_init							     */
+/* xio_tasks_pool_alloc_slab						     */
 /*---------------------------------------------------------------------------*/
-struct xio_tasks_pool *xio_tasks_pool_init(int max, int pool_dd_data_sz,
-					   int task_dd_data_sz,
-					   void *pool_ops)
+int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 {
-	int			i;
+	int			alloc_nr;
+	size_t			slab_alloc_sz;
+	size_t			tasks_alloc_sz;
 	void			*buf;
 	void			*data;
-	struct xio_tasks_pool	*q;
-	size_t			elems_alloc_sz;
+	struct xio_tasks_slab	*s;
+	int			retval = 0, i, tot_len;
 
-	/* pool + private data */
-	size_t pool_alloc_sz = sizeof(struct xio_tasks_pool) +
-				pool_dd_data_sz +
-				max*sizeof(struct xio_task *);
+	if (q->params.start_nr < 0  || q->params.max_nr < 0 ||
+	    q->params.alloc_nr < 0) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
 
-	/* pool data */
-	elems_alloc_sz = max*(sizeof(struct xio_task) + task_dd_data_sz);
+	if (q->curr_alloced < q->params.start_nr)
+		alloc_nr = min(q->params.start_nr, q->params.max_nr);
+	else
+		alloc_nr = min(q->params.alloc_nr,
+			       q->params.max_nr - q->curr_alloced);
 
-	pool_alloc_sz = PAGE_ALIGN(pool_alloc_sz);
+	if (alloc_nr == 0)
+		return 0;
 
-	buf = vmalloc(pool_alloc_sz);
+	/* slab + private data */
+	slab_alloc_sz = sizeof(struct xio_tasks_slab) +
+			q->params.slab_dd_data_sz +
+			alloc_nr*sizeof(struct xio_task *);
+
+	/* slab data */
+	tasks_alloc_sz = alloc_nr*(sizeof(struct xio_task) +
+			 q->params.task_dd_data_sz);
+
+	tot_len = PAGE_ALIGN(slab_alloc_sz + tasks_alloc_sz);
+	buf = vmalloc(tot_len);
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
-		return NULL;
+		return -1;
 	}
-	memset(buf, 0, pool_alloc_sz);
+	memset(buf, 0, tot_len);
 
-	/* pool */
-	q = buf;
-	q->dd_data = buf + sizeof(struct xio_tasks_pool);
+	data = buf;
 
-	buf = buf + sizeof(struct xio_tasks_pool) + pool_dd_data_sz;
+	/* slab */
+	s = (void *)((char *)buf + tasks_alloc_sz);
+	s->dd_data = (void *)((char *)s + sizeof(struct xio_tasks_slab));
 
 	/* array */
-	q->array = buf;
+	s->array = (void *)((char *)(s->dd_data) + q->params.slab_dd_data_sz);
 
-	elems_alloc_sz = PAGE_ALIGN(elems_alloc_sz);
+	/* fix indexes */
+	s->start_idx = q->curr_idx;
+	s->end_idx = s->start_idx + alloc_nr - 1;
+	q->curr_idx = s->end_idx + 1;
+	s->nr = alloc_nr;
 
-	data = vmalloc(elems_alloc_sz);
-	if (data == NULL) {
+	if (q->params.pool_hooks.slab_pre_create)
+		retval = q->params.pool_hooks.slab_pre_create(
+				q->params.pool_hooks.context,
+				alloc_nr,
+				s->dd_data);
+
+	for (i = 0; i < alloc_nr; i++) {
+		s->array[i]		= data;
+		s->array[i]->ltid	= s->start_idx + i;
+		s->array[i]->magic	= XIO_TASK_MAGIC;
+		s->array[i]->pool	= (void *)q;
+		s->array[i]->dd_data	= ((char *)data) +
+						sizeof(struct xio_task);
+
+		if (q->params.pool_hooks.slab_init_task) {
+			retval = q->params.pool_hooks.slab_init_task(
+				q->params.pool_hooks.context,
+				s->dd_data,
+				i,
+				s->array[i]);
+		}
+		list_add_tail(&s->array[i]->tasks_list_entry, &q->stack);
+		data = ((char *)data) + sizeof(struct xio_task) +
+					q->params.task_dd_data_sz;
+	}
+	q->curr_alloced += alloc_nr;
+	q->curr_free += alloc_nr;
+
+	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
+
+	if (q->params.pool_hooks.slab_post_create)
+		retval = q->params.pool_hooks.slab_post_create(
+				q->params.pool_hooks.context,
+				s->dd_data);
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_create						     */
+/*---------------------------------------------------------------------------*/
+struct xio_tasks_pool *xio_tasks_pool_create(
+		struct xio_tasks_pool_params *params)
+{
+	struct xio_tasks_pool	*q;
+
+	/* pool */
+	q = kzalloc(sizeof(*q), GFP_KERNEL);
+	if (q == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
-	memset(data, 0, elems_alloc_sz);
 
 	INIT_LIST_HEAD(&q->stack);
+	INIT_LIST_HEAD(&q->slabs_list);
 
-	for (i = 0; i < max; i++) {
-		q->array[i]		= data;
-		q->array[i]->ltid	= i;
-		q->array[i]->magic	= XIO_TASK_MAGIC;
-		q->array[i]->pool	= (void *)q;
-		q->array[i]->dd_data	= ((char *)data) +
-						sizeof(struct xio_task);
-		list_add_tail(&q->array[i]->tasks_list_entry, &q->stack);
-		data = ((char *)data) + sizeof(struct xio_task) +
-					task_dd_data_sz;
+	memcpy(&q->params, params, sizeof(*params));
+
+	xio_tasks_pool_alloc_slab(q);
+	if (list_empty(&q->stack)) {
+		kfree(q);
+		return NULL;
 	}
-	q->max = max;
-	q->nr = max;
-	q->pool_ops = pool_ops;
+	if (q->params.pool_hooks.pool_post_create)
+		q->params.pool_hooks.pool_post_create(
+				q->params.pool_hooks.context, q);
+
 
 	return q;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tasks_pool_free						     */
+/* xio_tasks_pool_destroy						     */
 /*---------------------------------------------------------------------------*/
-void xio_tasks_pool_free(struct xio_tasks_pool *q)
+void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 {
-	vfree(q->array[0]);
-	vfree(q);
+	struct xio_tasks_slab	*pslab, *next_pslab;
+	int			i;
+
+	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
+				 slabs_list_entry) {
+		list_del(&pslab->slabs_list_entry);
+
+		if (q->params.pool_hooks.slab_uninit_task) {
+			for (i = 0; i < pslab->nr; i++)
+				q->params.pool_hooks.slab_uninit_task(
+						pslab->dd_data,
+						pslab->array[i]);
+		}
+
+		if (q->params.pool_hooks.slab_destroy)
+			q->params.pool_hooks.slab_destroy(
+				q->params.pool_hooks.context,
+				pslab->dd_data);
+
+		/* the tmp tasks are returned back to pool */
+		vfree(pslab->array[0]);
+	}
+
+	kfree(q);
 }
+

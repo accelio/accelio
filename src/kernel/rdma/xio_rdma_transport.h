@@ -329,7 +329,7 @@ struct xio_device {
 	struct ib_event_handler		event_handler;
 };
 
-struct xio_rdma_tasks_pool {
+struct xio_rdma_tasks_slab {
 	/* memory for non-rdma send/recv */
 	struct kmem_cache		*data_pool;
 	char name[32];	/* kmem_cache_create keeps a pointer to the pool's name

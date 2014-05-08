@@ -63,7 +63,7 @@ struct xio_observers_htbl_node {
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
-static int xio_conn_primary_pool_setup(struct xio_conn *conn);
+static int xio_conn_primary_pool_create(struct xio_conn *conn);
 static int xio_on_transport_event(void *observer, void *sender, int event,
 				  void *event_data);
 static void xio_on_conn_closed(struct xio_conn *conn,
@@ -179,81 +179,11 @@ void xio_conn_unreg_observer(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_pre_put_task							     */
-/*---------------------------------------------------------------------------*/
-static void xio_pre_put_task(struct xio_task *task)
-{
-	task->imsg.user_context		= 0;
-	task->imsg.flags		= 0;
-	task->tlv_type			= 0xdead;
-	task->omsg_flags		= 0;
-	task->state			= XIO_TASK_STATE_INIT;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_put_task							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_conn_put_task(struct kref *kref)
-{
-	struct xio_task *task = container_of(kref, struct xio_task, kref);
-	struct xio_tasks_pool *pool;
-	struct xio_tasks_pool_ops *pool_ops;
-
-	assert(task->pool);
-
-	pool = (struct xio_tasks_pool *)task->pool;
-
-	assert(pool->pool_ops);
-
-	pool_ops = (struct xio_tasks_pool_ops *)pool->pool_ops;
-
-	if (pool_ops->pre_put)
-		pool_ops->pre_put(task->conn->transport_hndl, task);
-
-	xio_pre_put_task(task);
-
-	pool->nr++;
-	list_move(&task->tasks_list_entry, &pool->stack);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_get_initial_task						     */
-/*---------------------------------------------------------------------------*/
-static inline struct xio_task *xio_conn_get_initial_task(void *pool_provider)
-{
-	struct xio_conn *conn = pool_provider;
-
-	struct xio_task *task =  xio_tasks_pool_get(conn->initial_tasks_pool);
-
-	if (conn->initial_pool_ops->post_get)
-		conn->initial_pool_ops->post_get(conn->transport_hndl,
-						task);
-
-	return task;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_conn_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
 inline struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn)
 {
-	struct xio_task *task =  xio_tasks_pool_get(conn->primary_tasks_pool);
-
-	if (task == NULL)
-		return NULL;
-
-	if (conn->primary_pool_ops->post_get)
-		conn->primary_pool_ops->post_get(conn->transport_hndl,
-						 task);
-	return task;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_primary_task_alloc						     */
-/*---------------------------------------------------------------------------*/
-static inline struct xio_task *xio_conn_primary_task_alloc(void *conn)
-{
-	return xio_conn_get_primary_task((struct xio_conn *)conn);
+	return  xio_tasks_pool_get(conn->primary_tasks_pool);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -402,7 +332,7 @@ static int xio_conn_send_setup_req(struct xio_conn *conn)
 		return -1;
 	}
 
-	task = xio_conn_get_initial_task(conn);
+	task =  xio_tasks_pool_get(conn->initial_tasks_pool);
 	if (task == NULL) {
 		ERROR_LOG("initial task pool is empty\n");
 		return -1;
@@ -457,7 +387,7 @@ static int xio_conn_on_recv_setup_req(struct xio_conn *conn,
 	}
 
 	/* time to prepare the primary pool */
-	retval = xio_conn_primary_pool_setup(conn);
+	retval = xio_conn_primary_pool_create(conn);
 	if (retval != 0) {
 		ERROR_LOG("setup primary pool failed\n");
 		return -1;
@@ -526,7 +456,7 @@ static int xio_conn_on_recv_setup_rsp(struct xio_conn *conn,
 	xio_tasks_pool_put(task);
 
 	/* create the primary */
-	retval = xio_conn_primary_pool_setup(conn);
+	retval = xio_conn_primary_pool_create(conn);
 	if (retval != 0) {
 		ERROR_LOG("setup primary pool failed\n");
 		return -1;
@@ -663,113 +593,83 @@ static int xio_conn_on_send_msg_comp(struct xio_conn *conn,
 }
 
 /*---------------------------------------------------------------------------*/
-/* 	xio_pool_items_uninit						     */
+/* xio_conn_initial_pool_create						     */
 /*---------------------------------------------------------------------------*/
-static void xio_pool_items_uninit(struct xio_tasks_pool *tasks_pool,
-				  struct xio_tasks_pool_ops *pool_ops)
+static int xio_conn_initial_pool_create(struct xio_conn *conn)
 {
-	int i;
-
-	if (!pool_ops->pool_uninit_item)
-		return;
-
-	for (i = 0; i < tasks_pool->max; i++) {
-		if (tasks_pool->array[i]) {
-			pool_ops->pool_uninit_item(tasks_pool->dd_data,
-						   tasks_pool->array[i]);
-			tasks_pool->array[i] = NULL;
-		}
-	}
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_conn_initial_pool_setup						     */
-/*---------------------------------------------------------------------------*/
-static int xio_conn_initial_pool_setup(struct xio_conn *conn)
-{
-	int i;
-	int num_tasks;
-	int task_dd_sz;
-	int pool_dd_sz;
-	int retval;
-	struct xio_tasks_pool_cls  pool_cls;
+	int				alloc_nr;
+	int				start_nr;
+	int				max_nr;
+	int				task_dd_sz;
+	int				slab_dd_sz;
+	struct xio_tasks_pool_cls	pool_cls;
+	struct xio_tasks_pool_params	params;
 
 	if (conn->initial_pool_ops == NULL)
 		return -1;
 
 	if ((conn->initial_pool_ops->pool_get_params == NULL) ||
-	    (conn->initial_pool_ops->pool_alloc == NULL) ||
-	    (conn->initial_pool_ops->pool_init_item == NULL) ||
-	    (conn->initial_pool_ops->pool_run == NULL) ||
-	    (conn->initial_pool_ops->pool_free == NULL))
+	    (conn->initial_pool_ops->slab_pre_create == NULL) ||
+	    (conn->initial_pool_ops->slab_init_task == NULL) ||
+	    (conn->initial_pool_ops->pool_post_create == NULL) ||
+	    (conn->initial_pool_ops->slab_destroy == NULL))
 		return -1;
 
 	/* get pool properties from the transport */
-	conn->initial_pool_ops->pool_get_params(
-				conn->transport_hndl,
-				&num_tasks, &pool_dd_sz,
-				&task_dd_sz);
+	conn->initial_pool_ops->pool_get_params(conn->transport_hndl,
+						&start_nr,
+						&max_nr,
+						&alloc_nr,
+						&slab_dd_sz,
+						&task_dd_sz);
 
-	/* initialize the tasks pool */
-	conn->initial_tasks_pool = xio_tasks_pool_init(
-			num_tasks, pool_dd_sz, task_dd_sz,
-				conn->initial_pool_ops);
-	if (conn->initial_tasks_pool == NULL) {
-		ERROR_LOG("xio_ tasks_pool_init failed\n");
-		goto cleanup0;
-	}
+	memset(&params, 0, sizeof(params));
 
-	/* allocate the pool */
-	retval = conn->initial_pool_ops->pool_alloc(
-				conn->transport_hndl,
-				conn->initial_tasks_pool->max,
-				conn->initial_tasks_pool->dd_data);
-	if (retval != 0) {
-		ERROR_LOG("initial_pool_alloc failed\n");
-		goto cleanup1;
-	}
+	params.start_nr			   = start_nr;
+	params.max_nr			   = max_nr;
+	params.alloc_nr			   = alloc_nr;
+	params.slab_dd_data_sz		   = slab_dd_sz;
+	params.task_dd_data_sz		   = task_dd_sz;
+	params.pool_hooks.context	   = conn->transport_hndl;
+	params.pool_hooks.slab_pre_create  =
+		(void *)conn->initial_pool_ops->slab_pre_create;
+	params.pool_hooks.slab_post_create =
+		(void *)conn->initial_pool_ops->slab_post_create;
+	params.pool_hooks.slab_destroy	   =
+		(void *)conn->initial_pool_ops->slab_destroy;
+	params.pool_hooks.slab_init_task   =
+		(void *)conn->initial_pool_ops->slab_init_task;
+	params.pool_hooks.slab_uninit_task =
+		(void *)conn->initial_pool_ops->slab_uninit_task;
+	params.pool_hooks.pool_post_create =
+		(void *)conn->initial_pool_ops->pool_post_create;
+	params.pool_hooks.task_pre_put	   =
+		(void *)conn->initial_pool_ops->task_pre_put;
+	params.pool_hooks.task_post_get	   =
+		(void *)conn->initial_pool_ops->task_post_get;
 
-	for (i = 0; i < conn->initial_tasks_pool->max; i++) {
-		/* initialize each pool's item */
-		retval = conn->initial_pool_ops->pool_init_item(
-				conn->transport_hndl,
-				conn->initial_tasks_pool->dd_data,
-				conn->initial_tasks_pool->array[i]);
-		if (retval != 0) {
-			ERROR_LOG("initial_pool_init_item failed\n");
-			goto cleanup;
-		}
-		conn->initial_tasks_pool->array[i]->release = xio_conn_put_task;
-		conn->initial_tasks_pool->array[i]->conn = conn;
-	}
+	/* set pool helpers to the transport */
+	if (conn->transport->set_pools_cls) {
+		pool_cls.pool		= NULL;
+		pool_cls.task_get	= (void *)xio_tasks_pool_get;
+		pool_cls.task_lookup	= (void *)xio_tasks_pool_lookup;
+		pool_cls.task_put	= (void *)xio_tasks_pool_put;
 
-	pool_cls.pool	     = conn;
-	pool_cls.task_alloc  = xio_conn_get_initial_task;
-	pool_cls.task_lookup = NULL;
-	pool_cls.task_free   = xio_tasks_pool_put;
-
-	if (conn->transport->set_pools_cls)
 		conn->transport->set_pools_cls(conn->transport_hndl,
 					       &pool_cls,
 					       NULL);
-	/* pool is ready for use */
-	retval = conn->initial_pool_ops->pool_run(conn->transport_hndl);
-	if (retval != 0) {
-		ERROR_LOG("initial_pool_init failed\n");
+	}
+
+	/* initialize the tasks pool */
+	conn->initial_tasks_pool = xio_tasks_pool_create(&params);
+	if (conn->initial_tasks_pool == NULL) {
+		ERROR_LOG("xio_tasks_pool_create failed\n");
 		goto cleanup;
 	}
 
 	return 0;
 
 cleanup:
-	xio_pool_items_uninit(conn->initial_tasks_pool, conn->initial_pool_ops);
-	/* pool_free was checked above and it is not NULL */
-	conn->initial_pool_ops->pool_free(conn->transport_hndl,
-					  conn->initial_tasks_pool->dd_data);
-cleanup1:
-	xio_tasks_pool_free(conn->initial_tasks_pool);
-
-cleanup0:
 	return -1;
 }
 
@@ -778,136 +678,105 @@ cleanup0:
 /*---------------------------------------------------------------------------*/
 static int xio_conn_initial_pool_free(struct xio_conn *conn)
 {
-	int retval = 0;
+	if (!conn->primary_tasks_pool)
+		return -1;
 
-	if (conn->initial_tasks_pool == NULL)
-		return 0;
+	xio_tasks_pool_destroy(conn->initial_tasks_pool);
 
-	xio_pool_items_uninit(conn->initial_tasks_pool, conn->initial_pool_ops);
-
-	if (conn->initial_pool_ops->pool_free) {
-		retval = conn->initial_pool_ops->pool_free(conn->transport_hndl,
-					   conn->initial_tasks_pool->dd_data);
-		if (retval != 0)
-			ERROR_LOG("releasing initial pool failed\n");
-	}
-	xio_tasks_pool_free(conn->initial_tasks_pool);
-
-	return retval;
+	return  0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_primary_pool_setup					     */
+/* xio_conn_initial_pool_create						     */
 /*---------------------------------------------------------------------------*/
-static int xio_conn_primary_pool_setup(struct xio_conn *conn)
+static int xio_conn_primary_pool_create(struct xio_conn *conn)
 {
-	int i, retval;
-	int num_tasks;
-	int task_dd_sz;
-	int pool_dd_sz;
-	struct xio_tasks_pool_cls  pool_cls;
+	int				alloc_nr;
+	int				start_nr;
+	int				max_nr;
+	int				task_dd_sz;
+	int				slab_dd_sz;
+	struct xio_tasks_pool_cls	pool_cls;
+	struct xio_tasks_pool_params	params;
 
-	if (conn->initial_pool_ops == NULL)
+	if (conn->primary_pool_ops == NULL)
 		return -1;
 
 	if ((conn->primary_pool_ops->pool_get_params == NULL) ||
-	    (conn->primary_pool_ops->pool_alloc == NULL) ||
-	    (conn->primary_pool_ops->pool_init_item == NULL) ||
-	    (conn->primary_pool_ops->pool_run == NULL) ||
-	    (conn->primary_pool_ops->pool_free	== NULL))
+	    (conn->primary_pool_ops->slab_pre_create == NULL) ||
+	    (conn->primary_pool_ops->slab_init_task == NULL) ||
+	    (conn->primary_pool_ops->pool_post_create == NULL) ||
+	    (conn->primary_pool_ops->slab_destroy	== NULL))
 		return -1;
 
 	/* get pool properties from the transport */
 	conn->primary_pool_ops->pool_get_params(conn->transport_hndl,
-						 &num_tasks,
-						 &pool_dd_sz,
-						 &task_dd_sz);
+						&start_nr,
+						&max_nr,
+						&alloc_nr,
+						&slab_dd_sz,
+						&task_dd_sz);
 
-	/* initialize the tasks pool */
-	conn->primary_tasks_pool = xio_tasks_pool_init(
-			num_tasks, pool_dd_sz, task_dd_sz,
-			conn->primary_pool_ops);
-	if (conn->primary_tasks_pool == NULL) {
-		ERROR_LOG("xio_ tasks_pool_init failed\n");
-		goto cleanup0;
-	}
+	memset(&params, 0, sizeof(params));
 
-	/* allocate the pool */
-	retval = conn->primary_pool_ops->pool_alloc(
-				conn->transport_hndl,
-				conn->primary_tasks_pool->max,
-				conn->primary_tasks_pool->dd_data);
+	params.start_nr			   = start_nr;
+	params.max_nr			   = max_nr;
+	params.alloc_nr			   = alloc_nr;
+	params.slab_dd_data_sz		   = slab_dd_sz;
+	params.task_dd_data_sz		   = task_dd_sz;
+	params.pool_hooks.context	   = conn->transport_hndl;
+	params.pool_hooks.slab_pre_create  =
+		(void *)conn->primary_pool_ops->slab_pre_create;
+	params.pool_hooks.slab_post_create =
+		(void *)conn->primary_pool_ops->slab_post_create;
+	params.pool_hooks.slab_destroy	   =
+		(void *)conn->primary_pool_ops->slab_destroy;
+	params.pool_hooks.slab_init_task   =
+		(void *)conn->primary_pool_ops->slab_init_task;
+	params.pool_hooks.slab_uninit_task =
+		(void *)conn->primary_pool_ops->slab_uninit_task;
+	params.pool_hooks.pool_post_create =
+		(void *)conn->primary_pool_ops->pool_post_create;
+	params.pool_hooks.task_pre_put	   =
+		(void *)conn->primary_pool_ops->task_pre_put;
+	params.pool_hooks.task_post_get	   =
+		(void *)conn->primary_pool_ops->task_post_get;
 
-	if (retval != 0) {
-		ERROR_LOG("primary_pool_alloc failed\n");
-		goto cleanup1;
-	}
+	/* set pool helpers to the transport */
+	if (conn->transport->set_pools_cls) {
+		pool_cls.pool		= NULL;
+		pool_cls.task_get	= (void *)xio_tasks_pool_get;
+		pool_cls.task_lookup	= (void *)xio_tasks_pool_lookup;
+		pool_cls.task_put	= xio_tasks_pool_put;
 
-	for (i = 0; i < conn->primary_tasks_pool->max; i++) {
-		/* initialize each pool's item */
-		retval = conn->primary_pool_ops->pool_init_item(
-				conn->transport_hndl,
-				conn->primary_tasks_pool->dd_data,
-				conn->primary_tasks_pool->array[i]);
-		if (retval != 0) {
-			ERROR_LOG("primary_pool_init_item failed\n");
-			goto cleanup;
-		}
-		conn->primary_tasks_pool->array[i]->release = xio_conn_put_task;
-		conn->primary_tasks_pool->array[i]->conn = conn;
-	}
-	pool_cls.pool	     = conn;
-	pool_cls.task_alloc  = xio_conn_primary_task_alloc;
-	pool_cls.task_lookup = xio_conn_task_lookup;
-	pool_cls.task_free   = xio_tasks_pool_put;
-
-	if (conn->transport->set_pools_cls)
 		conn->transport->set_pools_cls(conn->transport_hndl,
 					       NULL,
 					       &pool_cls);
+	}
 
-	/* pool is ready for use */
-	retval = conn->primary_pool_ops->pool_run(conn->transport_hndl);
-	if (retval != 0) {
-		ERROR_LOG("primary_pool_init failed\n");
+	/* initialize the tasks pool */
+	conn->primary_tasks_pool = xio_tasks_pool_create(&params);
+	if (conn->primary_tasks_pool == NULL) {
+		ERROR_LOG("xio_tasks_pool_create failed\n");
 		goto cleanup;
 	}
+
 	return 0;
 
 cleanup:
-	xio_pool_items_uninit(conn->primary_tasks_pool, conn->primary_pool_ops);
-	/* pool_free was checked above and it is not NULL */
-	conn->primary_pool_ops->pool_free(conn->transport_hndl,
-					  conn->primary_tasks_pool->dd_data);
-
-cleanup1:
-	xio_tasks_pool_free(conn->primary_tasks_pool);
-
-cleanup0:
 	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_primary_pool_free						     */
+/* xio_conn_primary_pool_destroy					     */
 /*---------------------------------------------------------------------------*/
-static int xio_conn_primary_pool_free(struct xio_conn *conn)
+static int xio_conn_primary_pool_destroy(struct xio_conn *conn)
 {
-	int retval = 0;
+	if (!conn->primary_tasks_pool)
+		return -1;
 
-	if (conn->primary_tasks_pool == NULL)
-		return 0;
-
-	xio_pool_items_uninit(conn->primary_tasks_pool, conn->primary_pool_ops);
-
-	if (conn->primary_pool_ops->pool_free) {
-		retval = conn->primary_pool_ops->pool_free(conn->transport_hndl,
-					   conn->primary_tasks_pool->dd_data);
-		if (retval != 0)
-			ERROR_LOG("releasing initial pool failed\n");
-	}
-	xio_tasks_pool_free(conn->primary_tasks_pool);
-
-	return retval;
+	xio_tasks_pool_destroy(conn->primary_tasks_pool);
+	return  0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1052,7 +921,7 @@ struct xio_conn *xio_conn_create(struct xio_conn *parent_conn,
 		goto cleanup;
 	}
 
-	retval = xio_conn_initial_pool_setup(conn);
+	retval = xio_conn_initial_pool_create(conn);
 	if (retval != 0) {
 		ERROR_LOG("failed to setup initial pool\n");
 		goto cleanup;
@@ -1144,7 +1013,7 @@ static void xio_on_conn_closed(struct xio_conn *conn,
 	xio_conn_initial_pool_free(conn);
 
 	xio_conn_primary_free_tasks(conn);
-	xio_conn_primary_pool_free(conn);
+	xio_conn_primary_pool_destroy(conn);
 
 	xio_conns_store_remove(conn->cid);
 
@@ -1181,7 +1050,7 @@ static void xio_on_connection_established(struct xio_conn *conn,
 	if (!conn->transport_hndl->is_client)
 		return;
 
-	xio_conn_initial_pool_setup(conn);
+	xio_conn_initial_pool_create(conn);
 
 	xio_conn_send_setup_req(conn);
 }
@@ -1197,9 +1066,10 @@ static void xio_on_connection_disconnected(struct xio_conn *conn,
 	TRACE_LOG("conn state changed to disconnected conn:%p\n", conn);
 
 	if (!xio_observable_is_empty(&conn->observable)) {
-		xio_observable_notify_all_observers(&conn->observable,
-			XIO_CONN_EVENT_DISCONNECTED,
-			&event_data);
+		xio_observable_notify_all_observers(
+				&conn->observable,
+				XIO_CONN_EVENT_DISCONNECTED,
+				&event_data);
 	} else {
 		xio_conn_release(conn);
 	}
@@ -1697,8 +1567,8 @@ void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer)
 		xio_conn_unreg_observer(conn, observer);
 	}
 	kref_put(&conn->kref, xio_conn_delayed_close);
-
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_tx_queue						     */
 /*---------------------------------------------------------------------------*/
@@ -1748,7 +1618,8 @@ static int xio_conn_xmit(struct xio_conn *conn)
 			if (xio_errno() == EAGAIN)
 				return 0;
 
-			ERROR_LOG("transport send failed err:%d\n", xio_errno());
+			ERROR_LOG("transport send failed err:%d\n",
+				  xio_errno());
 			conn_event_data.msg_error.reason = xio_errno();
 			conn_event_data.msg_error.task	= task;
 

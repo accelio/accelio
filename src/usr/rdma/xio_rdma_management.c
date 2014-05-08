@@ -798,15 +798,16 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 
 	memset(&qp_init_attr, 0, sizeof(qp_init_attr));
 
-	qp_init_attr.qp_context			= rdma_hndl;
-	qp_init_attr.qp_type			= IBV_QPT_RC;
-	qp_init_attr.send_cq			= tcq->cq;
-	qp_init_attr.recv_cq			= tcq->cq;
-	qp_init_attr.cap.max_send_wr		= MAX_SEND_WR;
-	qp_init_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
-	qp_init_attr.cap.max_send_sge		= min(MAX_SGE, dev->device_attr.max_sge);
-	qp_init_attr.cap.max_recv_sge		= 1;
-	qp_init_attr.cap.max_inline_data	= MAX_INLINE_DATA;
+	qp_init_attr.qp_context		  = rdma_hndl;
+	qp_init_attr.qp_type		  = IBV_QPT_RC;
+	qp_init_attr.send_cq		  = tcq->cq;
+	qp_init_attr.recv_cq		  = tcq->cq;
+	qp_init_attr.cap.max_send_wr	  = MAX_SEND_WR;
+	qp_init_attr.cap.max_recv_wr	  = MAX_RECV_WR + EXTRA_RQE;
+	qp_init_attr.cap.max_send_sge	  = min(MAX_SGE,
+						dev->device_attr.max_sge);
+	qp_init_attr.cap.max_recv_sge	  = 1;
+	qp_init_attr.cap.max_inline_data  = MAX_INLINE_DATA;
 
 	/* only generate completion queue entries if requested */
 	qp_init_attr.sq_sig_all		= 0;
@@ -1024,33 +1025,33 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_initial_pool_alloc						     */
+/* xio_rdma_initial_pool_slab_pre_create				     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_alloc(
+static int xio_rdma_initial_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
-		int max, void *pool_dd_data)
+		int alloc_nr, void *slab_dd_data)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
 	uint32_t pool_size;
 
-	rdma_pool->buf_size = CONN_SETUP_BUF_SIZE;
-	pool_size = rdma_pool->buf_size * max;
-	rdma_pool->data_pool = ucalloc(pool_size, sizeof(uint8_t));
-	if (rdma_pool->data_pool == NULL) {
+	rdma_slab->buf_size = CONN_SETUP_BUF_SIZE;
+	pool_size = rdma_slab->buf_size * alloc_nr;
+	rdma_slab->data_pool = ucalloc(pool_size, sizeof(uint8_t));
+	if (rdma_slab->data_pool == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc conn_setup_data_pool sz: %u failed\n",
 			  pool_size);
 		return -1;
 	}
-	rdma_pool->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
-			rdma_pool->data_pool,
+	rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
+			rdma_slab->data_pool,
 			pool_size, IBV_ACCESS_LOCAL_WRITE);
-	if (!rdma_pool->data_mr) {
+	if (!rdma_slab->data_mr) {
 		xio_set_error(errno);
-		ufree(rdma_pool->data_pool);
+		ufree(rdma_slab->data_pool);
 		ERROR_LOG("ibv_reg_mr conn_setup pool failed, %m\n");
 		return -1;
 	}
@@ -1063,9 +1064,10 @@ static int xio_rdma_initial_pool_alloc(
 static inline struct xio_task *xio_rdma_initial_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->initial_pool_cls.task_alloc)
-		return rdma_hndl->initial_pool_cls.task_alloc(
+	if (rdma_hndl->initial_pool_cls.task_get) {
+		return rdma_hndl->initial_pool_cls.task_get(
 					rdma_hndl->initial_pool_cls.pool);
+	}
 	return NULL;
 }
 
@@ -1075,8 +1077,8 @@ static inline struct xio_task *xio_rdma_initial_task_alloc(
 struct xio_task *xio_rdma_primary_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->primary_pool_cls.task_alloc)
-		return rdma_hndl->primary_pool_cls.task_alloc(
+	if (rdma_hndl->primary_pool_cls.task_get)
+		return rdma_hndl->primary_pool_cls.task_get(
 					rdma_hndl->primary_pool_cls.pool);
 	return NULL;
 }
@@ -1099,15 +1101,16 @@ struct xio_task *xio_rdma_primary_task_lookup(
 inline void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
 			       struct xio_task *task)
 {
-	if (rdma_hndl->primary_pool_cls.task_free)
-		return rdma_hndl->primary_pool_cls.task_free(task);
+	if (rdma_hndl->primary_pool_cls.task_put)
+		return rdma_hndl->primary_pool_cls.task_put(task);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_initial_pool_run						     */
+/* xio_rdma_initial_pool_post_create					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_run(
-		struct xio_transport_base *transport_hndl)
+static int xio_rdma_initial_pool_post_create(
+		struct xio_transport_base *transport_hndl,
+		struct xio_tasks_pool *pool)
 {
 	struct xio_task *task;
 	struct xio_rdma_transport *rdma_hndl =
@@ -1115,6 +1118,7 @@ static int xio_rdma_initial_pool_run(
 	struct xio_rdma_task *rdma_task;
 	int	retval;
 
+	rdma_hndl->initial_pool_cls.pool = pool;
 
 	task = xio_rdma_initial_task_alloc(rdma_hndl);
 	if (task == NULL) {
@@ -1140,39 +1144,39 @@ static int xio_rdma_initial_pool_run(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_initial_pool_free						     */
+/* xio_rdma_initial_pool_slab_destroy					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_free(
-		struct xio_transport_base *transport_hndl, void *pool_dd_data)
+static int xio_rdma_initial_pool_slab_destroy(
+		struct xio_transport_base *transport_hndl, void *slab_dd_data)
 {
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	ibv_dereg_mr(rdma_pool->data_mr);
-	ufree(rdma_pool->data_pool);
+	ibv_dereg_mr(rdma_slab->data_mr);
+	ufree(rdma_slab->data_pool);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_initial_pool_init_task					     */
+/* xio_rdma_initial_pool_slab_init_task					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_initial_pool_init_task(
+static int xio_rdma_initial_pool_slab_init_task(
 		struct xio_transport_base *transport_hndl,
-		void *pool_dd_data, struct xio_task *task)
+		void *slab_dd_data, int tid, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
-	void *buf = rdma_pool->data_pool + (task->ltid*rdma_pool->buf_size);
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
+	void *buf = rdma_slab->data_pool + tid*rdma_slab->buf_size;
 
 	xio_rdma_task_init(
 			task,
 			rdma_hndl,
 			buf,
-			rdma_pool->buf_size,
-			rdma_pool->data_mr);
+			rdma_slab->buf_size,
+			rdma_slab->data_mr);
 
 	return 0;
 }
@@ -1182,56 +1186,59 @@ static int xio_rdma_initial_pool_init_task(
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_initial_pool_get_params(
 		struct xio_transport_base *transport_hndl,
-		int *pool_len, int *pool_dd_sz, int *task_dd_sz)
+		int *start_nr, int *max_nr, int *alloc_nr,
+		int *slab_dd_sz, int *task_dd_sz)
 {
-	*pool_len = NUM_CONN_SETUP_TASKS;
-	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
+	*start_nr = NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 0;
+	*max_nr = NUM_CONN_SETUP_TASKS;
+	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task);
 }
 
 static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 	.pool_get_params	= xio_rdma_initial_pool_get_params,
-	.pool_alloc		= xio_rdma_initial_pool_alloc,
-	.pool_free		= xio_rdma_initial_pool_free,
-	.pool_init_item		= xio_rdma_initial_pool_init_task,
-	.pool_run		= xio_rdma_initial_pool_run
+	.slab_pre_create	= xio_rdma_initial_pool_slab_pre_create,
+	.slab_destroy		= xio_rdma_initial_pool_slab_destroy,
+	.slab_init_task		= xio_rdma_initial_pool_slab_init_task,
+	.pool_post_create	= xio_rdma_initial_pool_post_create
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_primary_pool_alloc						     */
+/* xio_rdma_primary_pool_slab_pre_create				     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_alloc(
+static int xio_rdma_primary_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
-		int max, void *pool_dd_data)
+		int alloc_nr, void *slab_dd_data)
 {
 	struct xio_mr_elem *tmr_elem;
 
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	rdma_pool->buf_size = rdma_hndl->membuf_sz;
+	rdma_slab->buf_size = rdma_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		rdma_pool->io_buf = xio_alloc(rdma_hndl->alloc_sz);
-		if (!rdma_pool->io_buf) {
+		rdma_slab->io_buf = xio_alloc(rdma_hndl->alloc_sz);
+		if (!rdma_slab->io_buf) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc rdma pool sz:%zu failed\n",
-					rdma_hndl->alloc_sz);
+				  rdma_hndl->alloc_sz);
 			return -1;
 		}
-		rdma_pool->data_pool = rdma_pool->io_buf->addr;
-		rdma_pool->data_mr = NULL;
+		rdma_slab->data_pool = rdma_slab->io_buf->addr;
+		rdma_slab->data_mr = NULL;
 		list_for_each_entry(tmr_elem,
-				    &rdma_pool->io_buf->mr->dm_list,
+				    &rdma_slab->io_buf->mr->dm_list,
 				    dm_list_entry) {
 			if (rdma_hndl->tcq->dev == tmr_elem->dev)  {
-				rdma_pool->data_mr = tmr_elem->mr;
+				rdma_slab->data_mr = tmr_elem->mr;
 				break;
 			}
 		}
-		if (!rdma_pool->data_mr) {
+		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
@@ -1240,42 +1247,45 @@ static int xio_rdma_primary_pool_alloc(
 		/* maybe allocation of with unuma_alloc can provide better
 		 * performance?
 		 */
-		rdma_pool->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
-		if (!rdma_pool->data_pool) {
+		rdma_slab->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
+		if (!rdma_slab->data_pool) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("malloc rdma pool sz:%zu failed\n",
-					rdma_hndl->alloc_sz);
+				  rdma_hndl->alloc_sz);
 			return -1;
 		}
 
 		/* One pool of registered memory per PD */
-		rdma_pool->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
-				rdma_pool->data_pool,
+		rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
+				rdma_slab->data_pool,
 				rdma_hndl->alloc_sz,
 				IBV_ACCESS_LOCAL_WRITE);
-		if (!rdma_pool->data_mr) {
+		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
-			ufree_huge_pages(rdma_pool->data_pool);
+			ufree_huge_pages(rdma_slab->data_pool);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
 		}
 	}
 
 	DEBUG_LOG("pool buf:%p, mr:%p lkey:0x%x\n",
-		  rdma_pool->data_pool, rdma_pool->data_mr,
-		  rdma_pool->data_mr->lkey);
+		  rdma_slab->data_pool, rdma_slab->data_mr,
+		  rdma_slab->data_mr->lkey);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_primary_pool_run						     */
+/* xio_rdma_primary_pool_post_create					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_run(
-		struct xio_transport_base *transport_hndl)
+static int xio_rdma_primary_pool_post_create(
+		struct xio_transport_base *transport_hndl,
+		struct xio_tasks_pool *pool)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
+
+	rdma_hndl->primary_pool_cls.pool = pool;
 
 	xio_rdma_rearm_rq(rdma_hndl);
 
@@ -1283,47 +1293,45 @@ static int xio_rdma_primary_pool_run(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_primary_pool_free						     */
+/* xio_rdma_primary_pool_slab_destroy					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_free(
-		struct xio_transport_base *transport_hndl, void *pool_dd_data)
+static int xio_rdma_primary_pool_slab_destroy(
+		struct xio_transport_base *transport_hndl, void *slab_dd_data)
 {
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	if (rdma_pool->io_buf) {
-		xio_free(&rdma_pool->io_buf);
+	if (rdma_slab->io_buf) {
+		xio_free(&rdma_slab->io_buf);
 	} else {
-		ibv_dereg_mr(rdma_pool->data_mr);
-		ufree_huge_pages(rdma_pool->data_pool);
+		ibv_dereg_mr(rdma_slab->data_mr);
+		ufree_huge_pages(rdma_slab->data_pool);
 	}
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_primary_pool_init_task					     */
+/* xio_rdma_primary_pool_slab_init_task					     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_primary_pool_init_task(
+static int xio_rdma_primary_pool_slab_init_task(
 		struct xio_transport_base *transport_hndl,
-		void *pool_dd_data, struct xio_task *task)
+		void *slab_dd_data, int tid, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
-	struct xio_rdma_tasks_pool *rdma_pool =
-		(struct xio_rdma_tasks_pool *)pool_dd_data;
-	void *buf = rdma_pool->data_pool + (task->ltid*rdma_pool->buf_size);
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
+	void *buf = rdma_slab->data_pool + tid*rdma_slab->buf_size;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	rdma_task->ib_op = 0x200;
-
-
 	xio_rdma_task_init(
 			task,
 			rdma_hndl,
 			buf,
-			rdma_pool->buf_size,
-			rdma_pool->data_mr);
+			rdma_slab->buf_size,
+			rdma_slab->data_mr);
 
 	return 0;
 }
@@ -1370,24 +1378,27 @@ static int xio_rdma_task_pre_put(
 /* xio_rdma_primary_pool_get_params					     */
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_primary_pool_get_params(
-		struct xio_transport_base *transport_hndl, int *pool_len,
-		int *pool_dd_sz, int *task_dd_sz)
+		struct xio_transport_base *transport_hndl,
+		int *start_nr, int *max_nr, int *alloc_nr,
+		int *slab_dd_sz, int *task_dd_sz)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 
-	*pool_len = rdma_hndl->num_tasks;
-	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
+	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
+	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
+	*max_nr = rdma_hndl->num_tasks;
+	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task);
 }
 
 static struct xio_tasks_pool_ops   primary_tasks_pool_ops = {
 	.pool_get_params	= xio_rdma_primary_pool_get_params,
-	.pool_alloc		= xio_rdma_primary_pool_alloc,
-	.pool_free		= xio_rdma_primary_pool_free,
-	.pool_init_item		= xio_rdma_primary_pool_init_task,
-	.pool_run		= xio_rdma_primary_pool_run,
-	.pre_put		= xio_rdma_task_pre_put,
+	.slab_pre_create	= xio_rdma_primary_pool_slab_pre_create,
+	.slab_destroy		= xio_rdma_primary_pool_slab_destroy,
+	.slab_init_task		= xio_rdma_primary_pool_slab_init_task,
+	.pool_post_create	= xio_rdma_primary_pool_post_create,
+	.task_pre_put		= xio_rdma_task_pre_put,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1523,8 +1534,8 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	event_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
 	xio_transport_notify_observer(&parent_hndl->base,
-				 XIO_TRANSPORT_NEW_CONNECTION,
-				 &event_data);
+				      XIO_TRANSPORT_NEW_CONNECTION,
+				      &event_data);
 
 	return;
 
@@ -2466,8 +2477,6 @@ struct xio_transport xio_rdma_transport = {
 	.get_opt		= xio_rdma_get_opt,
 	.cancel_req		= xio_rdma_cancel_req,
 	.cancel_rsp		= xio_rdma_cancel_rsp,
-//	.reg_observer		= xio_transport_reg_observer,
-//	.unreg_observer		= xio_transport_unreg_observer,
 	.get_pools_setup_ops	= xio_rdma_get_pools_ops,
 	.set_pools_cls		= xio_rdma_set_pools_cls,
 

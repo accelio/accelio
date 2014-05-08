@@ -78,6 +78,10 @@ extern struct list_head		dev_list;
 					   */
 #define CONN_SETUP_BUF_SIZE		4096
 
+#define NUM_START_PRIMARY_POOL_TASKS	32
+#define NUM_ALLOC_PRIMARY_POOL_TASKS	256
+
+
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
 #define SEND_TRESHOLD			8
@@ -311,7 +315,7 @@ struct xio_mr {
 	struct list_head		mr_list_entry;
 };
 
-struct xio_rdma_tasks_pool {
+struct xio_rdma_tasks_slab {
 	/* memory for non-rdma send/recv */
 	void				*data_pool;
 
