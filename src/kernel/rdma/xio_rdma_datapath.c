@@ -1287,10 +1287,12 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			    int	max_sge,
 			    int signaled,
 			    struct list_head *target_list,
-			    int *tasks_used)
+			    int tasks_number)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_task		*tmp_task;
+	int task_idx;
+
 	struct xio_rdma_task	*tmp_rdma_task;
 	struct xio_work_req	*rdmad = &rdma_task->rdmad;
 	struct xio_task		*ptask, *next_ptask;
@@ -1322,14 +1324,15 @@ static int xio_prep_rdma_op(struct xio_task *task,
 
 	k = 0;
 
-	*tasks_used = 0;
-
 	if (lsize < 1 || rsize < 1) {
 		ERROR_LOG("iovec size < 1 lsize:%zud, rsize:%zud\n",
 			  lsize, rsize);
 		return -1;
 	}
-	if (rsize == 1) {
+
+	task_idx = tasks_number - 1;
+
+	if (task_idx == 0) {
 		tmp_task = task;
 	} else {
 		/* take new task */
@@ -1339,7 +1342,6 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			return -1;
 		}
 	}
-	(*tasks_used)++;
 	tmp_rdma_task = (struct xio_rdma_task *)tmp_task->dd_data;
 	rdmad = &tmp_rdma_task->rdmad;
 	sg = rdmad->sgl;
@@ -1367,7 +1369,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			tot_len				+= rlen;
 			int_len				+= rlen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
-			tmp_rdma_task->phantom_idx	= rsize - r - 1;
+			tmp_rdma_task->phantom_idx	= task_idx;
 
 			/* close the task */
 			list_move_tail(&tmp_task->tasks_list_entry, &tmp_list);
@@ -1378,7 +1380,10 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				int_len = 0;
 				l++;
 				break;
-			} else if (r < rsize - 1) {
+			}
+			task_idx--;
+			/* Is this the last task */
+			if (task_idx) {
 				/* take new task */
 				tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
 				if (!tmp_task) {
@@ -1389,7 +1394,6 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			} else {
 				tmp_task = task;
 			}
-			(*tasks_used)++;
 
 			tmp_rdma_task =
 				(struct xio_rdma_task *)tmp_task->dd_data;
@@ -1414,7 +1418,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			int_len = 0;
 			/* advance the local index */
 			l++;
-			if (l == lsize) {
+			k++;
+			if (l == lsize || k == max_sge - 1) {
 				/* .num_sge will come from rdmad->mapped */
 				rdmad->send_wr.wr_id		   =
 						uint64_from_ptr(tmp_task);
@@ -1425,8 +1430,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				rdmad->send_wr.wr.rdma.remote_addr = raddr;
 				rdmad->send_wr.wr.rdma.rkey	   = rkey;
 				tmp_rdma_task->ib_op		   = xio_ib_op;
-				tmp_rdma_task->phantom_idx	   =
-								rsize - r - 1;
+				tmp_rdma_task->phantom_idx	   = task_idx;
 
 				sg_mark_end(sg);
 				rdmad->nents = k + 1;
@@ -1434,9 +1438,33 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				/* close the task */
 				list_move_tail(&tmp_task->tasks_list_entry,
 					       &tmp_list);
-				break;
+
+				if (l == lsize)
+					break;
+
+				/* if we are here then k == max_sge - 1 */
+
+				task_idx--;
+				/* Is this the last task */
+				if (task_idx) {
+					/* take new task */
+					tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
+					if (!tmp_task) {
+						ERROR_LOG(
+						      "primary task pool is empty\n");
+						goto cleanup;
+					}
+				} else {
+					tmp_task = task;
+				}
+
+				tmp_rdma_task =
+					(struct xio_rdma_task *)tmp_task->dd_data;
+				rdmad = &tmp_rdma_task->rdmad;
+				k = 0;
+				sg = rdmad->sgl;
+				sg_init_table(sg, XIO_MAX_IOV);
 			}
-			k++;
 			rlen	-= llen;
 			raddr	+= llen;
 			laddr = uint64_from_ptr(liov[l].iov_base);
@@ -1461,19 +1489,23 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			tot_len			       += llen;
 			int_len			       += llen;
 			tmp_rdma_task->ib_op		= xio_ib_op;
-			tmp_rdma_task->phantom_idx	= rsize - r - 1;
+			tmp_rdma_task->phantom_idx	= task_idx;
 
 			/* close the task */
 			list_move_tail(&tmp_task->tasks_list_entry,
 				       &tmp_list);
-			/* advance the remote index */
+
+			liov[l].iov_len = int_len;
+			int_len = 0;
+			/* advance the remote and local indices */
 			r++;
-			if (r == rsize) {
-				liov[l].iov_len = int_len;
-				int_len = 0;
-				l++;
+			l++;
+			if ((l == lsize) || (r == rsize))
 				break;
-			} else if (r < rsize - 1) {
+
+			task_idx--;
+			/* Is this the last task */
+			if (task_idx) {
 				/* take new task */
 				tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
 				if (!tmp_task) {
@@ -1484,19 +1516,11 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			} else {
 				tmp_task = task;
 			}
-			(*tasks_used)++;
 			tmp_rdma_task =
 				(struct xio_rdma_task *)tmp_task->dd_data;
 			rdmad = &tmp_rdma_task->rdmad;
 			sg = rdmad->sgl;
 			sg_init_table(sg, XIO_MAX_IOV);
-
-			/* advance the local index */
-			liov[l].iov_len = int_len;
-			int_len = 0;
-			l++;
-			if (l == lsize)
-				break;
 
 			laddr = uint64_from_ptr(liov[l].iov_base);
 			llen  = liov[l].iov_len;
@@ -1523,7 +1547,6 @@ cleanup:
 		/* the tmp tasks are returned back to pool */
 		xio_tasks_pool_put(ptask);
 	}
-	(*tasks_used) = 0;
 
 	return -1;
 }
@@ -2794,7 +2817,9 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	retval = xio_validate_rdma_op(&task->imsg.in,
 				      rdma_task->req_write_sge,
 				      rdma_task->req_write_num_sge,
-				      min(rlen, llen));
+				      min(rlen, llen),
+				      rdma_hndl->max_sge,
+				      &tasks_used);
 	if (retval) {
 		ERROR_LOG("failed to invalidate input iovecs\n");
 		ERROR_LOG("rdma read is ignored\n");
@@ -2802,16 +2827,22 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		return -1;
 	}
 
-	xio_prep_rdma_op(task, rdma_hndl,
-			 XIO_IB_RDMA_READ,
-			 IB_WR_RDMA_READ,
-			 &task->imsg.in,
-			 rdma_task->req_write_sge,
-			 rdma_task->req_write_num_sge,
-			 min(rlen, llen),
-			 rdma_hndl->max_sge,
-			 1,
-			 &rdma_hndl->rdma_rd_list, &tasks_used);
+	retval = xio_prep_rdma_op(task, rdma_hndl,
+				  XIO_IB_RDMA_READ,
+				  IB_WR_RDMA_READ,
+				  &task->imsg.in,
+				  rdma_task->req_write_sge,
+				  rdma_task->req_write_num_sge,
+				  min(rlen, llen),
+				  rdma_hndl->max_sge,
+				  1,
+				  &rdma_hndl->rdma_rd_list, tasks_used);
+	if (retval) {
+		ERROR_LOG("failed to allocate tasks\n");
+		ERROR_LOG("rdma read is ignored\n");
+		task->imsg.status = EINVAL;
+		return -1;
+	}
 
 #endif
 
@@ -2849,23 +2880,32 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	retval = xio_validate_rdma_op(&task->omsg->out,
 				      rdma_task->req_read_sge,
 				      rdma_task->req_read_num_sge,
-				      min(rlen, llen));
+				      min(rlen, llen),
+				      rdma_hndl->max_sge,
+				      &tasks_used);
 	if (retval) {
 		ERROR_LOG("failed to invalidate input iovecs\n");
 		ERROR_LOG("rdma write is ignored\n");
 		task->omsg->status = EINVAL;
 		goto cleanup;
 	}
-	xio_prep_rdma_op(task, rdma_hndl,
-			 XIO_IB_RDMA_WRITE,
-			 IB_WR_RDMA_WRITE,
-			 &task->omsg->out,
-			 rdma_task->req_read_sge,
-			 rdma_task->req_read_num_sge,
-			 min(rlen, llen),
-			 rdma_hndl->max_sge,
-			 0,
-			 &rdma_hndl->tx_ready_list, &tasks_used);
+
+	retval = xio_prep_rdma_op(task, rdma_hndl,
+				  XIO_IB_RDMA_WRITE,
+				  IB_WR_RDMA_WRITE,
+				  &task->omsg->out,
+				  rdma_task->req_read_sge,
+				  rdma_task->req_read_num_sge,
+				  min(rlen, llen),
+				  rdma_hndl->max_sge,
+				  0,
+				  &rdma_hndl->tx_ready_list, tasks_used);
+	if (retval) {
+		ERROR_LOG("failed to allocate tasks\n");
+		ERROR_LOG("rdma write is ignored\n");
+		task->omsg->status = EINVAL;
+		goto cleanup;
+	}
 	/* xio_prep_rdma_op used splice to transfer "tasks_used"  to
 	 * tx_ready_list
 	 */

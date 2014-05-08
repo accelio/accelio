@@ -54,7 +54,9 @@
 int xio_validate_rdma_op(
 			struct xio_sge *lsg_list, size_t lsize,
 			struct xio_sge *rsg_list, size_t rsize,
-			int op_size)
+			int op_size,
+			int max_sge,
+			int *tasks_used)
 {
 	int		l	= 0,
 			r	= 0;
@@ -63,12 +65,17 @@ int xio_validate_rdma_op(
 	uint32_t	llen	= lsg_list[0].length;
 	uint32_t	rlen	= rsg_list[0].length;
 	uint32_t	tot_len = 0;
+	int		k = 0;
 
 	if (lsize < 1 || rsize < 1) {
 		ERROR_LOG("iovec size < 1 lsize:%zd, rsize:%zd\n",
 			  lsize, rsize);
+		*tasks_used = 0;
 		return -1;
 	}
+
+	/* At least one task */
+	*tasks_used = 1;
 
 	while (1) {
 		if (rlen < llen) {
@@ -80,11 +87,19 @@ int xio_validate_rdma_op(
 			laddr	+= rlen;
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
+			(*tasks_used)++;
+			k = 0;
 		} else if (llen < rlen) {
 			l++;
 			tot_len	+= llen;
 			if (l == lsize)
 				break;
+			k++;
+			if (k == max_sge - 1) {
+				/* reached last index */
+				(*tasks_used)++;
+				k = 0;
+			}
 			rlen	-= llen;
 			raddr	+= llen;
 			laddr	= lsg_list[l].addr;
@@ -95,23 +110,24 @@ int xio_validate_rdma_op(
 			tot_len	+= llen;
 			if ((l == lsize) || (r == rsize))
 				break;
-
 			laddr	= lsg_list[l].addr;
 			llen	= lsg_list[l].length;
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
+			(*tasks_used)++;
+			k = 0;
 		}
 	}
 
 	/* not enough buffers to complete */
 	if (tot_len < op_size) {
-		ERROR_LOG("iovec exausted\n");
+		*tasks_used = 0;
+		ERROR_LOG("iovec exhausted\n");
 		return -1;
 	}
 
 	return 0;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_cm_rej_reason_str					             */

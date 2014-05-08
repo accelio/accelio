@@ -38,15 +38,11 @@
 #ifndef XIO_RDMA_UTILS_H
 #define XIO_RDMA_UTILS_H
 
-#if 0
-int xio_validate_rdma_op(struct xio_sge *lsge, size_t lsize,
-			 struct xio_sge *rsge, size_t rsize,
-			 int op_size);
-#else
 int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 struct xio_sge *rsg_list, size_t rsize,
-			 int op_size);
-#endif
+			 int op_size,
+			 int max_sge,
+			 int *tasks_used);
 
 const char *xio_cm_rej_reason_str(int reason);
 
