@@ -50,8 +50,6 @@ enum xio_task_state {
 	XIO_TASK_STATE_CANCEL_PENDING,      /* mark for rdma read task */
 };
 
-typedef void (*release_task_fn)(struct kref *kref);
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
@@ -72,7 +70,6 @@ struct xio_task {
 	struct xio_connection	*connection;
 
 	void			*pool;
-	release_task_fn		release;
 
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
@@ -121,7 +118,7 @@ struct xio_tasks_slab {
 	uint32_t			start_idx;
 	uint32_t			end_idx;
 	uint32_t			nr;
-	uint32_t			pad;
+	uint32_t			huge_alloc;
 	void				*dd_data;
 };
 

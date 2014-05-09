@@ -55,6 +55,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	void			*data;
 	struct xio_tasks_slab	*s;
 	int			retval = 0, i;
+	int			tot_sz;
+	int			huge_alloc = 0;
 
 	if (q->params.start_nr < 0  || q->params.max_nr < 0 ||
 	    q->params.alloc_nr < 0) {
@@ -80,7 +82,13 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	tasks_alloc_sz = alloc_nr*(sizeof(struct xio_task) +
 			 q->params.task_dd_data_sz);
 
-	buf = ucalloc(slab_alloc_sz+tasks_alloc_sz, 1);
+	tot_sz = slab_alloc_sz+tasks_alloc_sz;
+	if (tot_sz > 1 << 21) {
+		buf = umalloc_huge_pages(tot_sz);
+		huge_alloc = 1;
+	} else {
+		buf = ucalloc(tot_sz, 1);
+	}
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed\n");
@@ -100,6 +108,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	s->end_idx = s->start_idx + alloc_nr - 1;
 	q->curr_idx = s->end_idx + 1;
 	s->nr = alloc_nr;
+	s->huge_alloc = huge_alloc;
 
 	if (q->params.pool_hooks.slab_pre_create)
 		retval = q->params.pool_hooks.slab_pre_create(
@@ -197,7 +206,11 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 				pslab->dd_data);
 
 		/* the tmp tasks are returned back to pool */
-		ufree(pslab->array[0]);
+
+		if (pslab->huge_alloc)
+			ufree_huge_pages(pslab->array[0]);
+		else
+			ufree(pslab->array[0]);
 	}
 	ufree(q);
 }
