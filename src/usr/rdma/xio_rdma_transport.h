@@ -261,12 +261,14 @@ struct xio_rdma_task {
 
 	/* What this side got from the peer for RDMA R/W
 	 */
-	struct xio_sge			req_read_sge[XIO_MAX_IOV];
-	struct xio_sge			req_write_sge[XIO_MAX_IOV];
+	union {
+		struct xio_sge			req_read_sge[XIO_MAX_IOV];
+		struct xio_sge			req_write_sge[XIO_MAX_IOV];
 
-	/* What this side got from the peer for SEND
-	 */
-	struct xio_sge			req_recv_sge[XIO_MAX_IOV];
+		/* What this side got from the peer for SEND
+		*/
+		struct xio_sge			req_recv_sge[XIO_MAX_IOV];
+	};
 };
 
 struct xio_cq  {
