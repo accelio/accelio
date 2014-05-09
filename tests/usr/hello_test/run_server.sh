@@ -3,16 +3,19 @@
 
 export LD_LIBRARY_PATH=../../../src/usr/
 
-server_ip=192.168.20.126
-#server_ip=192.168.20.236
-#server_ip=1.1.1.31
+server_ip=192.168.1.66
 port=1234
+core=1
+ovec=1
+hdrlen=0
 
-./xio_server -c 1 -p ${port} -n 0 -w 0 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 768 -w 512 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 0 -w 16384 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 0 -w 32768 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 0 -w 65536 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 0 -w 131072 ${server_ip}
-#./xio_server -c 1 -p ${port} -n 0 -w 1048576 ${server_ip}
+./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 0		-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 512		-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 1024	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 4096	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 16384	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 32768	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 65536	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 131072	-l {ovec} ${server_ip}
+#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 1048576	-l {ovec} ${server_ip}
 

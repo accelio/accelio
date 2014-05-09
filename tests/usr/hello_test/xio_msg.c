@@ -213,19 +213,22 @@ void msg_api_free(struct msg_params *msg_params)
 /*---------------------------------------------------------------------------*/
 void msg_write(struct msg_params *msg_params,
 	       struct xio_msg *msg,
-	       void *hdr, size_t hdrlen,
-	       void *data, size_t datalen)
+	       size_t hdrlen,
+	       size_t data_iovlen, size_t datalen)
 {
 	struct xio_vmsg  *pmsg = &msg->out;
+	int i = 0;
 
 	/* don't do the memcpy */
 	pmsg->header.iov_len		= hdrlen;
 	pmsg->header.iov_base		= msg_params->g_hdr;
+	pmsg->data_iovlen		= datalen ? data_iovlen : 0;
 
-	pmsg->data_iov[0].iov_base	= msg_params->g_data;
-	pmsg->data_iov[0].iov_len	= datalen;
-	pmsg->data_iov[0].mr		= msg_params->g_data_mr;
-	pmsg->data_iovlen		= msg_params->g_data ? 1 : 0;
+	for (i = 0 ; i < pmsg->data_iovlen; i++) {
+		pmsg->data_iov[i].iov_base	= msg_params->g_data;
+		pmsg->data_iov[i].iov_len	= datalen;
+		pmsg->data_iov[i].mr		= msg_params->g_data_mr;
+	}
 }
 
 /*---------------------------------------------------------------------------*/

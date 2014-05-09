@@ -58,8 +58,11 @@
 #define XIO_DEF_HEADER_SIZE	32
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
+#define XIO_DEF_IN_IOV_LEN	0
+#define XIO_DEF_OUT_IOV_LEN	1
+#define XIO_DEF_CONN_IDX	0
 #define XIO_TEST_VERSION	"1.0.0"
-#define MAX_OUTSTANDING_REQS	5000
+#define MAX_OUTSTANDING_REQS	50
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
 
@@ -68,7 +71,6 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
-#define IOV_LEN			1
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -76,6 +78,8 @@ struct xio_test_config {
 	uint16_t		cpu;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
+	uint32_t		in_iov_len;
+	uint32_t		out_iov_len;
 	uint32_t		conn_idx;
 };
 
@@ -108,7 +112,10 @@ static struct xio_test_config  test_config = {
 	XIO_DEF_PORT,
 	XIO_DEF_CPU,
 	XIO_DEF_HEADER_SIZE,
-	XIO_DEF_DATA_SIZE
+	XIO_DEF_DATA_SIZE,
+	XIO_DEF_IN_IOV_LEN,
+	XIO_DEF_OUT_IOV_LEN,
+	XIO_DEF_CONN_IDX
 };
 
 /**
@@ -291,6 +298,7 @@ static int on_response(struct xio_session *session,
 			void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
+	int j;
 
 	test_params->nrecv++;
 
@@ -321,22 +329,21 @@ static int on_response(struct xio_session *session,
 		printf("pool is empty\n");
 		return 0;
 	}
-
-	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = IOV_LEN;
-	msg->in.data_iov[0].iov_base = NULL;
-	msg->in.data_iov[0].iov_len  = ONE_MB;
-	msg->in.data_iov[0].mr = NULL;
-
+	msg->in.data_iovlen = test_config.in_iov_len ;
+	for (j = 0; j < test_config.in_iov_len; j++) {
+		msg->in.data_iov[j].iov_base = NULL;
+		msg->in.data_iov[j].iov_len  = ONE_MB;
+		msg->in.data_iov[j].mr = NULL;
+	}
 	msg->sn = 0;
 	msg->more_in_batch = 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
-		  NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+		  test_config.hdr_len,
+		  test_config.out_iov_len, test_config.data_len);
 
 
 	/* try to send it */
@@ -407,6 +414,14 @@ static void usage(const char *argv0, int status)
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
 
+	printf("\t-l, --out-iov-len=<length> ");
+	printf("\tSet the data length of the out message vector" \
+			"(default %d)\n", XIO_DEF_OUT_IOV_LEN);
+
+	printf("\t-g, --in-iov-len=<length> ");
+	printf("\tSet the data length of the message vector" \
+			"(default %d)\n", XIO_DEF_IN_IOV_LEN);
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -423,17 +438,19 @@ int parse_cmdline(struct xio_test_config *test_config,
 		int argc, char **argv)
 {
 	static struct option const long_options[] = {
-		{ .name = "cpu",	.has_arg = 1, .val = 'c'},
-		{ .name = "port",	.has_arg = 1, .val = 'p'},
-		{ .name = "header-len",	.has_arg = 1, .val = 'n'},
-		{ .name = "data-len",	.has_arg = 1, .val = 'w'},
-		{ .name = "index",	.has_arg = 1, .val = 'i'},
-		{ .name = "version",	.has_arg = 0, .val = 'v'},
-		{ .name = "help",	.has_arg = 0, .val = 'h'},
+		{ .name = "cpu",		.has_arg = 1, .val = 'c'},
+		{ .name = "port",		.has_arg = 1, .val = 'p'},
+		{ .name = "header-len",		.has_arg = 1, .val = 'n'},
+		{ .name = "data-len",		.has_arg = 1, .val = 'w'},
+		{ .name = "out-iov-len",	.has_arg = 1, .val = 'l'},
+		{ .name = "in-iov-len",		.has_arg = 1, .val = 'g'},
+		{ .name = "index",		.has_arg = 1, .val = 'i'},
+		{ .name = "version",		.has_arg = 0, .val = 'v'},
+		{ .name = "help",		.has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
 
-	static char *short_options = "c:p:n:w:i:vh";
+	static char *short_options = "c:p:n:w:l:g:i:vh";
 	optind = 0;
 	opterr = 0;
 
@@ -462,6 +479,18 @@ int parse_cmdline(struct xio_test_config *test_config,
 		case 'w':
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'l':
+			test_config->out_iov_len =
+				(uint32_t)strtol(optarg, NULL, 0);
+			if (test_config->out_iov_len > XIO_MAX_IOV)
+				test_config->out_iov_len = XIO_MAX_IOV;
+			break;
+		case 'g':
+			test_config->in_iov_len =
+				(uint32_t)strtol(optarg, NULL, 0);
+			if (test_config->in_iov_len > XIO_MAX_IOV)
+				test_config->in_iov_len = XIO_MAX_IOV;
 			break;
 		case 'i':
 			test_config->conn_idx =
@@ -506,6 +535,8 @@ static void print_test_config(
 	printf(" Server Port		: %u\n", test_config_p->server_port);
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
+	printf(" Out Vector Length	: %u\n", test_config_p->out_iov_len);
+	printf(" In Vector Length	: %u\n", test_config_p->in_iov_len);
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
 	printf(" =============================================\n");
@@ -522,6 +553,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	struct xio_msg		*msg;
 	int			i = 0;
+	int			j = 0;
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -584,16 +616,18 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = IOV_LEN;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
 
+		msg->in.data_iovlen = test_config.in_iov_len;
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			msg->in.data_iov[j].iov_base = NULL;
+			msg->in.data_iov[j].iov_len  = ONE_MB;
+			msg->in.data_iov[j].mr = NULL;
+		}
 
 		/* assign buffers to the message */
 		msg_write(&test_params.msg_params, msg,
-			  NULL, test_config.hdr_len,
-			  NULL, test_config.data_len);
+			  test_config.hdr_len,
+			  test_config.out_iov_len, test_config.data_len);
 
 		/* try to send it */
 		if (xio_send_request(test_params.connection, msg) == -1) {
