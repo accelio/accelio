@@ -109,7 +109,7 @@ enum xio_session_type {
  *	  new session request
  */
 enum xio_proto {
-	XIO_PROTO_RDMA		/**< Infinband's RDMA protocol		     */
+	XIO_PROTO_RDMA		/**< Infiniband's RDMA protocol		     */
 };
 
 /**
@@ -273,6 +273,17 @@ enum xio_context_attr_mask {
 	XIO_CONTEXT_ATTR_USER_CTX		= 1 << 0
 };
 
+/**
+ * @enum xio_session_attr_mask
+ * @brief supported session attributes to query/modify
+ */
+enum xio_session_attr_mask {
+	XIO_SESSION_ATTR_USER_CTX		= 1 << 0,
+	XIO_SESSION_ATTR_SES_OPS		= 1 << 1,
+	XIO_SESSION_ATTR_URI			= 1 << 2
+};
+
+
 /*---------------------------------------------------------------------------*/
 /* opaque data structures                                                    */
 /*---------------------------------------------------------------------------*/
@@ -307,7 +318,7 @@ struct xio_mempool;			     /* mempool object		     */
  *@param[in] line	the line number in the above file
  *@param[in] function	name of the function in which the callback is called
  *@param[in] level	message level (@ref xio_log_level)
- *@param[in] fmt	printf() format string (as defined by ISO C11)
+ *@param[in] fmt	printf() format string
  *
  */
 typedef void (*xio_log_fn)(const char *file, unsigned line,
@@ -328,6 +339,7 @@ struct xio_session_attr {
 	void			*user_context;  /**< private user data snt to */
 						/**< server upon new session  */
 	size_t			user_context_len; /**< private data length    */
+	char			*uri;		  /**< the uri		      */
 };
 
 /**
@@ -429,7 +441,7 @@ struct xio_msg {
 	int			flags;		/**< message flags mask       */
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 						/**< required                 */
-	int			reserved;	/**< reseved for padding      */
+	int			reserved;	/**< reserved for padding     */
 	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
@@ -841,7 +853,7 @@ void xio_shutdown(void);
 
 
 /*---------------------------------------------------------------------------*/
-/* XIO conncurrency (the context object) initialization and termination	     */
+/* XIO concurrency (the context object) initialization and termination	     */
 /*---------------------------------------------------------------------------*/
 /**
  * creates xio context - a context object represent concurrency unit
@@ -985,6 +997,19 @@ struct xio_session *xio_session_create(
  * @returns success (0), or a (negative) error value
  */
 int xio_session_destroy(struct xio_session *session);
+
+/**
+ * query session parameters
+ *
+ * @param[in] session	The xio session handle
+ * @param[in] attr	The session attributes structure
+ * @param[in] attr_mask attribute mask to query
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_query_session(struct xio_session *session,
+		      struct xio_session_attr *attr,
+		      int attr_mask);
 
 /**
  * creates connection handle

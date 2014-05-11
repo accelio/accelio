@@ -140,6 +140,8 @@ EXPORT_SYMBOL(xio_connection_destroy);
 EXPORT_SYMBOL(xio_modify_connection);
 EXPORT_SYMBOL(xio_query_connection);
 
+EXPORT_SYMBOL(xio_query_session);
+
 EXPORT_SYMBOL(xio_send_request);
 EXPORT_SYMBOL(xio_send_response);
 EXPORT_SYMBOL(xio_release_response);

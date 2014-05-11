@@ -1476,6 +1476,30 @@ const char *xio_session_event_str(enum xio_session_event event)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_query_session							     */
+/*---------------------------------------------------------------------------*/
+int xio_query_session(struct xio_session *session,
+		      struct xio_session_attr *attr,
+		      int attr_mask)
+{
+	if (!session || !attr) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+	if (attr_mask & XIO_SESSION_ATTR_USER_CTX)
+		attr->user_context = session->user_context;
+
+	if (attr_mask & XIO_SESSION_ATTR_SES_OPS)
+		attr->ses_ops = &session->ses_ops;
+
+	if (attr_mask & XIO_SESSION_ATTR_URI)
+		attr->uri = session->uri;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_get_connection							     */
 /*---------------------------------------------------------------------------*/
 struct xio_connection *xio_get_connection(
