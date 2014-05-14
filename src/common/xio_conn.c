@@ -1606,11 +1606,12 @@ static int xio_conn_xmit(struct xio_conn *conn)
 		return 0;
 
 	while (1) {
-		task = list_first_entry_or_null(&conn->tx_queue,
-				struct xio_task,  tasks_list_entry);
-		if (!task)
+
+		if (list_empty(&conn->tx_queue))
 			break;
 
+		task = list_first_entry(&conn->tx_queue,
+					struct xio_task,  tasks_list_entry);
 		retval = conn->transport->send(conn->transport_hndl, task);
 		if (retval != 0) {
 			union xio_conn_event_data conn_event_data;
