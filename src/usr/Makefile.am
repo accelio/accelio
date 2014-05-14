@@ -89,7 +89,6 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./rdma/xio_rdma_verbs.c		\
 			./rdma/xio_rdma_management.c	\
 			./rdma/xio_rdma_datapath.c	\
-			./linux/hexdump.c		\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\
