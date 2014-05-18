@@ -63,8 +63,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		xio_set_error(EINVAL);
 		return -1;
 	}
-
-	if (q->curr_alloced < q->params.start_nr)
+	if (q->params.start_nr && q->curr_alloced < q->params.start_nr)
 		alloc_nr = min(q->params.start_nr, q->params.max_nr);
 	else
 		alloc_nr = min(q->params.alloc_nr,
@@ -160,7 +159,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	q = ucalloc(sizeof(*q), 1);
 	if (q == NULL) {
 		xio_set_error(ENOMEM);
-		ERROR_LOG("unma_alloc failed\n");
+		ERROR_LOG("ucalloc failed\n");
 		return NULL;
 	}
 	INIT_LIST_HEAD(&q->stack);
@@ -168,10 +167,12 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 	memcpy(&q->params, params, sizeof(*params));
 
-	xio_tasks_pool_alloc_slab(q);
-	if (list_empty(&q->stack)) {
-		ufree(q);
-		return NULL;
+	if (q->params.start_nr != 0) {
+		xio_tasks_pool_alloc_slab(q);
+		if (list_empty(&q->stack)) {
+			ufree(q);
+			return NULL;
+		}
 	}
 	if (q->params.pool_hooks.pool_post_create)
 		q->params.pool_hooks.pool_post_create(
