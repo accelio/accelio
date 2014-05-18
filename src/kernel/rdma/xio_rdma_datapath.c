@@ -219,10 +219,9 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 {
 	struct xio_task		*task = NULL, *task1, *task2;
 	struct xio_rdma_task	*rdma_task = NULL;
-	struct xio_work_req	dummy_wr;
 	struct xio_work_req	*first_wr = NULL;
 	struct xio_work_req	*curr_wr = NULL;
-	struct xio_work_req	*prev_wr = &dummy_wr;
+	struct xio_work_req	*prev_wr = &rdma_hndl->dummy_wr;
 	uint16_t		tx_window;
 	uint16_t		window;
 	uint16_t		retval;
@@ -339,7 +338,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	}
 
 	if (req_nr) {
-		first_wr = container_of(dummy_wr.send_wr.next,
+		first_wr = container_of(rdma_hndl->dummy_wr.send_wr.next,
 					struct xio_work_req, send_wr);
 		prev_wr->send_wr.next = NULL;
 		if (tx_window_sz(rdma_hndl) < 1 ||
@@ -363,8 +362,7 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 	struct xio_task		*task = NULL;
 	struct xio_rdma_task	*rdma_task = NULL;
 	struct xio_work_req	*first_wr = NULL;
-	struct xio_work_req	dummy_wr;
-	struct xio_work_req	*prev_wr = &dummy_wr;
+	struct xio_work_req	*prev_wr = &rdma_hndl->dummy_wr;
 	struct xio_work_req	*curr_wr = NULL;
 	int num_reqs = 0;
 	int err;
@@ -398,7 +396,7 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 	}
 	rdma_hndl->kick_rdma_rd = 0;
 	if (num_reqs) {
-		first_wr = container_of(dummy_wr.send_wr.next,
+		first_wr = container_of(rdma_hndl->dummy_wr.send_wr.next,
 					struct xio_work_req, send_wr);
 		prev_wr->send_wr.next = NULL;
 		rdma_hndl->rdma_in_flight += num_reqs;
@@ -434,7 +432,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 		/* get ready to receive message */
 		task = xio_rdma_primary_task_alloc(rdma_hndl);
 		if (task == 0) {
-			ERROR_LOG("primary task pool is empty\n");
+			ERROR_LOG("primary tasks pool is empty\n");
 			return -1;
 		}
 		rdma_task = task->dd_data;
@@ -1336,9 +1334,11 @@ static int xio_prep_rdma_op(struct xio_task *task,
 		tmp_task = task;
 	} else {
 		/* take new task */
-		tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
+		tmp_task =
+			xio_tasks_pool_get(
+				rdma_hndl->phantom_tasks_pool);
 		if (!tmp_task) {
-			ERROR_LOG("primary task pool is empty\n");
+			ERROR_LOG("phantom tasks pool is empty\n");
 			return -1;
 		}
 	}
@@ -1385,10 +1385,12 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* Is this the last task */
 			if (task_idx) {
 				/* take new task */
-				tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
+				tmp_task =
+					xio_tasks_pool_get(
+						rdma_hndl->phantom_tasks_pool);
 				if (!tmp_task) {
 					ERROR_LOG(
-					      "primary task pool is empty\n");
+					      "phantom tasks pool is empty\n");
 					goto cleanup;
 				}
 			} else {
@@ -1448,10 +1450,12 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				/* Is this the last task */
 				if (task_idx) {
 					/* take new task */
-					tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
+					tmp_task =
+						xio_tasks_pool_get(
+							rdma_hndl->phantom_tasks_pool);
 					if (!tmp_task) {
 						ERROR_LOG(
-						      "primary task pool is empty\n");
+						      "phantom tasks pool is empty\n");
 						goto cleanup;
 					}
 				} else {
@@ -1507,10 +1511,12 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* Is this the last task */
 			if (task_idx) {
 				/* take new task */
-				tmp_task = xio_rdma_primary_task_alloc(rdma_hndl);
+				tmp_task =
+					xio_tasks_pool_get(
+						rdma_hndl->phantom_tasks_pool);
 				if (!tmp_task) {
 					ERROR_LOG(
-					       "primary task pool is empty\n");
+					       "phantom tasks pool is empty\n");
 					goto cleanup;
 				}
 			} else {
@@ -3351,7 +3357,7 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 
 	task = xio_rdma_primary_task_alloc(rdma_hndl);
 	if (!task) {
-		ERROR_LOG("primary task pool is empty\n");
+		ERROR_LOG("primary tasks pool is empty\n");
 		return -1;
 	}
 
@@ -3465,11 +3471,10 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	struct xio_task		*task;
 	struct xio_rdma_task	*rdma_task;
 	void			*buff;
-	struct xio_msg		omsg;
 
 	task = xio_rdma_primary_task_alloc(rdma_hndl);
 	if (!task) {
-		ERROR_LOG("primary task pool is empty\n");
+		ERROR_LOG("primary tasks pool is empty\n");
 		return -1;
 	}
 	xio_mbuf_reset(&task->mbuf);
@@ -3485,12 +3490,12 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->read_num_sge		= 0;
 
 	ulp_hdr_len = sizeof(*cancel_hdr) + sizeof(uint16_t) + ulp_msg_sz;
-	omsg.out.header.iov_base = kzalloc(ulp_hdr_len, GFP_KERNEL);
-	omsg.out.header.iov_len = ulp_hdr_len;
+	rdma_hndl->dummy_msg.out.header.iov_base = kzalloc(ulp_hdr_len, GFP_KERNEL);
+	rdma_hndl->dummy_msg.out.header.iov_len = ulp_hdr_len;
 
 	/* write the message */
 	/* get the pointer */
-	buff = omsg.out.header.iov_base;
+	buff = rdma_hndl->dummy_msg.out.header.iov_base;
 
 	/* pack relevant values */
 	buff += xio_write_uint16(cancel_hdr->hdr_len, 0, buff);
@@ -3499,7 +3504,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	buff += xio_write_uint16((uint16_t)(ulp_msg_sz), 0, buff);
 	buff += xio_write_array(ulp_msg, ulp_msg_sz, 0, buff);
 
-	task->omsg = &omsg;
+	task->omsg = &rdma_hndl->dummy_msg;
 
 	/* write xio header to the buffer */
 	retval = xio_rdma_prep_req_header(rdma_hndl, task,
@@ -3519,7 +3524,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->txd.send_wr.next	= NULL;
 
 	task->omsg = NULL;
-	kfree(omsg.out.header.iov_base);
+	kfree(rdma_hndl->dummy_msg.out.header.iov_base);
 
 	rdma_task->txd.nents = 1;
 

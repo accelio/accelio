@@ -1180,7 +1180,7 @@ int xio_on_cancel_request(struct xio_session *sess,
 			  union xio_conn_event_data *event_data)
 {
 	struct xio_session_cancel_hdr	hdr;
-	struct xio_msg			req;
+	struct xio_msg			*req = NULL;
 	struct xio_session_cancel_hdr	*tmp_hdr;
 	struct xio_session		*session;
 	struct xio_connection		*connection;
@@ -1219,12 +1219,18 @@ int xio_on_cancel_request(struct xio_session *sess,
 			WARN_LOG("cancel is not supported on responder\n");
 		}
 	}
-
 	TRACE_LOG("message to cancel not found %llu\n", hdr.sn);
 
-	req.sn	= hdr.sn;
-	xio_connection_send_cancel_response(connection, &req, NULL,
+	req = kcalloc(1, sizeof(*req), GFP_KERNEL);
+	if (req == NULL) {
+		ERROR_LOG("req allocation failed\n");
+		return -1;
+	}
+
+	req->sn	= hdr.sn;
+	xio_connection_send_cancel_response(connection, req, NULL,
 					    XIO_E_MSG_NOT_FOUND);
+	kfree(req);
 
 	return 0;
 }
@@ -1241,7 +1247,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 	struct xio_observer		*observer;
 	struct xio_session		*session;
 	struct xio_connection		*connection;
-	struct xio_msg			msg;
+	struct xio_msg			*msg = NULL;
 	struct xio_msg			*pmsg;
 
 	if (!event_data) {
@@ -1263,9 +1269,16 @@ int xio_on_cancel_response(struct xio_session *sess,
 		}
 		session = observer->impl;
 
-		pmsg		= &msg;		/* fake a message */
-		msg.sn		= hdr.sn;
-		msg.status	= 0;
+		/* large object - allocate it */
+		msg		= kcalloc(1, sizeof(*msg), GFP_KERNEL);
+		if (msg == NULL) {
+			ERROR_LOG("msg allocation failed\n");
+			return -1;
+		}
+
+		pmsg		= msg;		/* fake a message */
+		msg->sn		= hdr.sn;
+		msg->status	= 0;
 	} else {
 		session		= event_data->cancel.task->session;
 		pmsg		= event_data->cancel.task->omsg;
@@ -1275,6 +1288,8 @@ int xio_on_cancel_response(struct xio_session *sess,
 	connection = xio_session_find_connection(session, conn);
 	if (connection == NULL) {
 		ERROR_LOG("failed to find session\n");
+		if (msg)
+			kfree(msg);
 		return -1;
 	}
 
@@ -1290,6 +1305,9 @@ int xio_on_cancel_response(struct xio_session *sess,
 				connection->cb_user_context);
 	else
 		ERROR_LOG("cancel is not supported\n");
+
+	if (msg)
+		kfree(msg);
 
 	return 0;
 }

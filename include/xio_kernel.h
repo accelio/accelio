@@ -50,7 +50,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor directives                                                   */
 /*---------------------------------------------------------------------------*/
-#define XIO_MAX_IOV			16	/* limit message fragments */
+#define XIO_MAX_IOV			256	/* limit message fragments */
 #define XIO_VERSION			0x0100
 
 

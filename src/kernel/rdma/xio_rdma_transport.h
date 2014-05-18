@@ -49,7 +49,7 @@
 
 #define MAX_SGE				(XIO_MAX_IOV + 1)
 
-#define MAX_SEND_WR			256
+#define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
@@ -57,7 +57,7 @@
 #define CQE_ALLOC_SIZE			(10*(MAX_SEND_WR+MAX_RECV_WR))
 
 #define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			8192
+#define SEND_BUF_SZ			9216
 #define MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
@@ -67,6 +67,10 @@
 					   * one for reply tx
 					   */
 #define CONN_SETUP_BUF_SIZE		4096
+
+#define NUM_START_PHANTOM_POOL_TASKS	0
+#define NUM_ALLOC_PHANTOM_POOL_TASKS	256
+#define NUM_MAX_PHANTOM_POOL_TASKS	32768
 
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
@@ -348,6 +352,7 @@ struct xio_rdma_transport {
 	struct xio_device		*dev;
 	struct ib_qp			*qp;
 	struct xio_rdma_mempool		*rdma_mempool;
+	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
 
 	struct list_head		trans_list_entry;
@@ -429,6 +434,12 @@ struct xio_rdma_transport {
 
 	struct xio_observer		observer; /* context observer */
 	uint16_t			handler_nesting;
+
+	/* too big to be on stack - use as temporaries */
+	union {
+		struct xio_msg		dummy_msg;
+		struct xio_work_req	dummy_wr;
+	};
 };
 
 /*

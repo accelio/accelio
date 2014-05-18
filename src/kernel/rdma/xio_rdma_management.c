@@ -622,18 +622,23 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 	/* This address need to be dma mapped */
 	/* rxd->sge[0].addr	= uint64_from_ptr(buf); */
 	/* rxd->sge[0].length	= size; */
-	for (i = 0; i < XIO_MAX_IOV + 1; i++)
-		rxd->sge[i].lkey = srmr->lkey;
+	if (srmr) {
+		for (i = 0; i < XIO_MAX_IOV + 1; i++)
+			rxd->sge[i].lkey = srmr->lkey;
+	}
 
 	rxd->recv_wr.wr_id	= uint64_from_ptr(task);
 	rxd->recv_wr.sg_list	= rxd->sge;
-	rxd->recv_wr.num_sge	= 1;
+	rxd->recv_wr.num_sge	= size ? 1 : 0;
 	rxd->recv_wr.next	= NULL;
 
 	sg_init_table(rxd->sgl, XIO_MAX_IOV + 1);
+	if (size) {
+		sg_set_page(rxd->sgl, virt_to_page(buf), size, offset_in_page(buf));
+		rxd->nents  = 1;
+	} else
+		rxd->nents  = 0;
 
-	sg_set_page(rxd->sgl, virt_to_page(buf), size, offset_in_page(buf));
-	rxd->nents  = 1;
 	rxd->mapped = 0;
 }
 
@@ -649,19 +654,24 @@ static void xio_txd_init(struct xio_work_req *txd,
 	/* This address need to be dma mapped */
 	/* txd->sge[0].addr	= uint64_from_ptr(buf); */
 	/* txd->sge[0].length	= size; */
-	for (i = 0; i < XIO_MAX_IOV + 1; i++)
-		txd->sge[i].lkey = srmr->lkey;
+	if (srmr) {
+		for (i = 0; i < XIO_MAX_IOV + 1; i++)
+			txd->sge[i].lkey = srmr->lkey;
+	}
 
 	txd->send_wr.wr_id	= uint64_from_ptr(task);
 	txd->send_wr.next	= NULL;
 	txd->send_wr.sg_list	= txd->sge;
-	txd->send_wr.num_sge	= 1;
+	txd->send_wr.num_sge	= size ? 1 : 0;
 	txd->send_wr.opcode	= IB_WR_SEND;
 
 	sg_init_table(txd->sgl, XIO_MAX_IOV + 1);
 
-	sg_set_page(txd->sgl, virt_to_page(buf), size, offset_in_page(buf));
-	txd->nents  = 1;
+	if (size) {
+		sg_set_page(txd->sgl, virt_to_page(buf), size, offset_in_page(buf));
+		txd->nents  = 1;
+	} else
+		txd->nents  = 0;
 	txd->mapped = 0;
 
 	/* txd->send_wr.send_flags = IB_SEND_SIGNALED; */
@@ -1053,6 +1063,75 @@ static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 };
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_phantom_pool_slab_init_task					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_phantom_pool_slab_init_task(
+		struct xio_transport_base *transport_hndl,
+		void *slab_dd_data, int tid, struct xio_task *task)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)transport_hndl;
+
+	XIO_TO_RDMA_TASK(task, rdma_task);
+	rdma_task->ib_op = 0x200;
+	xio_rdma_task_init(
+			task,
+			rdma_hndl,
+			NULL,
+			0,
+			NULL);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_phantom_pool_create						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_phantom_pool_create(struct xio_rdma_transport *rdma_hndl)
+{
+	struct xio_tasks_pool_params	params;
+
+
+	memset(&params, 0, sizeof(params));
+
+	params.start_nr			   = NUM_START_PHANTOM_POOL_TASKS;
+	params.max_nr			   = NUM_MAX_PHANTOM_POOL_TASKS;
+	params.alloc_nr			   = NUM_ALLOC_PHANTOM_POOL_TASKS;
+	params.slab_dd_data_sz		   = sizeof(struct xio_rdma_tasks_slab);
+	params.task_dd_data_sz		   = sizeof(struct xio_rdma_task);
+	params.pool_hooks.context	   = rdma_hndl;
+	params.pool_hooks.slab_init_task   =
+		(void *)xio_rdma_phantom_pool_slab_init_task;
+	params.pool_hooks.slab_uninit_task = NULL;
+	params.pool_hooks.task_pre_put	   =
+		(void *)xio_rdma_task_pre_put;
+
+	/* initialize the tasks pool */
+	rdma_hndl->phantom_tasks_pool = xio_tasks_pool_create(&params);
+	if (rdma_hndl->phantom_tasks_pool == NULL) {
+		ERROR_LOG("xio_tasks_pool_create failed\n");
+		goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_phantom_pool_destroy					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_phantom_pool_destroy(struct xio_rdma_transport *rdma_hndl)
+{
+	if (!rdma_hndl->phantom_tasks_pool)
+		return -1;
+
+	xio_tasks_pool_destroy(rdma_hndl->phantom_tasks_pool);
+	return  0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_primary_pool_slab_pre_create				     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_slab_pre_create(
@@ -1108,6 +1187,9 @@ static int xio_rdma_primary_pool_post_create(
 	rdma_hndl->primary_pool_cls.pool = pool;
 
 	xio_rdma_rearm_rq(rdma_hndl);
+
+	/* late creation */
+	xio_rdma_phantom_pool_create(rdma_hndl);
 
 	return 0;
 }
@@ -1231,6 +1313,8 @@ static void xio_rdma_post_close(struct xio_transport_base *transport)
 
 	TRACE_LOG("rdma transport: [post_close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
+
+	xio_rdma_phantom_pool_destroy(rdma_hndl);
 
 	xio_release_qp(rdma_hndl);
 	/* Don't call rdma_destroy_id from event handler. see comment in

@@ -59,7 +59,7 @@ extern struct list_head		dev_list;
 
 #define MAX_SGE				(XIO_MAX_IOV + 1)
 
-#define MAX_SEND_WR			256
+#define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
@@ -67,7 +67,7 @@ extern struct list_head		dev_list;
 #define CQE_ALLOC_SIZE			(10*(MAX_SEND_WR+MAX_RECV_WR))
 
 #define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			8192
+#define SEND_BUF_SZ			9216
 #define MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
@@ -80,7 +80,9 @@ extern struct list_head		dev_list;
 
 #define NUM_START_PRIMARY_POOL_TASKS	32
 #define NUM_ALLOC_PRIMARY_POOL_TASKS	256
-
+#define NUM_START_PHANTOM_POOL_TASKS	0
+#define NUM_ALLOC_PHANTOM_POOL_TASKS	256
+#define NUM_MAX_PHANTOM_POOL_TASKS	32768
 
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
@@ -333,6 +335,7 @@ struct xio_rdma_transport {
 	struct xio_cq			*tcq;
 	struct ibv_qp			*qp;
 	struct xio_mempool		*rdma_mempool;
+	struct xio_tasks_pool		*phantom_tasks_pool;
 
 	struct list_head		trans_list_entry;
 
@@ -410,6 +413,12 @@ struct xio_rdma_transport {
 	struct xio_tasks_pool_cls	primary_pool_cls;
 
 	struct xio_rdma_setup_msg	setup_rsp;
+
+	/* too big to be on stack - use as temporaries */
+	union {
+		struct xio_msg		dummy_msg;
+		struct xio_work_req	dummy_wr;
+	};
 };
 
 struct xio_cm_channel {

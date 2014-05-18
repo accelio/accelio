@@ -45,6 +45,7 @@
 #include "xio_sessions_store.h"
 #include "xio_conns_store.h"
 #include "xio_conn.h"
+#include "xio_task.h"
 #include "xio_context.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
@@ -151,3 +152,6 @@ EXPORT_SYMBOL(xio_read_tlv);
 EXPORT_SYMBOL(xio_iov_length);
 EXPORT_SYMBOL(xio_iovex_length);
 
+EXPORT_SYMBOL(xio_tasks_pool_create);
+EXPORT_SYMBOL(xio_tasks_pool_destroy);
+EXPORT_SYMBOL(xio_tasks_pool_alloc_slab);

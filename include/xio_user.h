@@ -59,7 +59,7 @@ extern "C" {
  * @def XIO_MAX_IOV
  * @brief maximum size of data IO vector in message
  */
-#define XIO_MAX_IOV			16
+#define XIO_MAX_IOV			256
 
 /**
  * @def XIO_VERSION
