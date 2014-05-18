@@ -45,22 +45,22 @@
 
 #define XIO_16K_BLOCK_SZ	(16*1024)
 #define XIO_16K_MIN_NR		0
-#define XIO_16K_MAX_NR		1024
+#define XIO_16K_MAX_NR		(1024*24)
 #define XIO_16K_ALLOC_NR	128
 
 #define XIO_64K_BLOCK_SZ	(64*1024)
 #define XIO_64K_MIN_NR		0
-#define XIO_64K_MAX_NR		1024
+#define XIO_64K_MAX_NR		(1024*24)
 #define XIO_64K_ALLOC_NR	128
 
 #define XIO_256K_BLOCK_SZ	(256*1024)
 #define XIO_256K_MIN_NR		0
-#define XIO_256K_MAX_NR		1024
+#define XIO_256K_MAX_NR		(1024*24)
 #define XIO_256K_ALLOC_NR	128
 
 #define XIO_1M_BLOCK_SZ		(1024*1024)
 #define XIO_1M_MIN_NR		0
-#define XIO_1M_MAX_NR		1024
+#define XIO_1M_MAX_NR		(1024*24)
 #define XIO_1M_ALLOC_NR		128
 
 /*---------------------------------------------------------------------------*/
