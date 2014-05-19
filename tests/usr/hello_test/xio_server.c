@@ -498,7 +498,7 @@ int main(int argc, char *argv[])
 
 	/* prepare buffers for this test */
 	if (msg_api_init(&test_params.msg_params,
-			 test_config.hdr_len, test_config.data_len, 0) != 0)
+			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
 	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
