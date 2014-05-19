@@ -109,6 +109,10 @@ extern struct list_head		dev_list;
 
 #define xio_prefetch(p)            __builtin_prefetch(p)
 
+/* header flags */
+#define XIO_HEADER_FLAG_NONE		0x00
+#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
+
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
@@ -247,7 +251,8 @@ struct xio_rdma_task {
 	uint32_t			req_recv_num_sge;
 	uint16_t			sn;
 	uint16_t			more_in_batch;
-	uint32_t			pad;
+	uint8_t				rflags;
+	uint8_t				pad[3];
 
 
 	/* The buffer mapped with the 3 xio_work_req

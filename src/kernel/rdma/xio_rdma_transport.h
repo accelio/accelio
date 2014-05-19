@@ -97,6 +97,10 @@
 
 #define XIO_FRWR_LI_WRID 0xffffffffffffffffULL
 
+/* header flags */
+#define XIO_HEADER_FLAG_NONE		0x00
+#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
+
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/

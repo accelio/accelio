@@ -80,7 +80,7 @@ struct xio_task {
 	uint32_t		ltid;		/* local task id	*/
 	uint32_t		rtid;		/* remote task id	*/
 	uint32_t		omsg_flags;
-	uint32_t		pad;
+	uint32_t		imsg_flags;
 	struct xio_msg		imsg;		/* message to the user */
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */
