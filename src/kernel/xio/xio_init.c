@@ -92,8 +92,14 @@ struct dentry *xio_debugfs_root(void)
 	return xio_root;
 }
 
+void backport_dependency_symbol(void)
+{
+}
+
 module_init(xio_init_module);
 module_exit(xio_cleanup_module);
+
+EXPORT_SYMBOL(backport_dependency_symbol);
 
 EXPORT_SYMBOL(xio_context_create);
 EXPORT_SYMBOL(xio_context_destroy);

@@ -4,6 +4,7 @@ SHELL = /bin/sh
 INSTALL = @INSTALL@
 mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
+OFED_CFLAGS = @OFED_CFLAGS@
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h xio_rdma_utils.h \
@@ -48,7 +49,7 @@ distdir: $(DISTFILES)
 	cp -p $(DISTFILES) $(distdir)
 
 
-ccflags-y += -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include
+ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include
 obj-m := rdma.o
 rdma-objs := \
 	xio_rdma_datapath.o \
