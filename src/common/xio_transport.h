@@ -42,7 +42,6 @@
 /* forward declarations	                                                     */
 /*---------------------------------------------------------------------------*/
 struct xio_task;
-struct xio_tasks_pool;
 struct xio_observer;
 struct xio_observable;
 struct xio_tasks_pool_ops;
@@ -141,7 +140,9 @@ struct xio_tasks_pool_ops {
 	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
 				    void *slab_dd_data);
 	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,
-				    struct xio_tasks_pool *pool);
+				    void *pool, void *pool_dd_data);
+	int	(*pool_destroy)(struct xio_transport_base *trans_hndl,
+				void *pool, void *pool_dd_data);
 	int	(*task_pre_put)(struct xio_transport_base *trans_hndl,
 				struct xio_task *task);
 	int	(*task_post_get)(struct xio_transport_base *trans_hndl,

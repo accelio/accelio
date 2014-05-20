@@ -153,18 +153,26 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 		struct xio_tasks_pool_params *params)
 {
 	struct xio_tasks_pool	*q;
+	char			*buf;
 
 	/* pool */
-	q = kzalloc(sizeof(*q), GFP_KERNEL);
-	if (q == NULL) {
+	buf = kzalloc(sizeof(*q)+params->pool_dd_data_sz, GFP_KERNEL);
+	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
+	q		= (void *)buf;
+	q->dd_data	= (void *)(buf + params->pool_dd_data_sz);
+
 
 	INIT_LIST_HEAD(&q->stack);
 	INIT_LIST_HEAD(&q->slabs_list);
 
 	memcpy(&q->params, params, sizeof(*params));
+
+	if (q->params.pool_hooks.pool_pre_create)
+		q->params.pool_hooks.pool_pre_create(
+				q->params.pool_hooks.context, q, q->dd_data);
 
 	xio_tasks_pool_alloc_slab(q);
 	if (list_empty(&q->stack)) {
@@ -173,7 +181,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	}
 	if (q->params.pool_hooks.pool_post_create)
 		q->params.pool_hooks.pool_post_create(
-				q->params.pool_hooks.context, q);
+				q->params.pool_hooks.context, q, q->dd_data);
 
 
 	return q;
@@ -206,6 +214,10 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 		/* the tmp tasks are returned back to pool */
 		vfree(pslab->array[0]);
 	}
+	if (q->params.pool_hooks.pool_destroy)
+		q->params.pool_hooks.pool_destroy(
+				q->params.pool_hooks.context,
+				q, q->dd_data);
 
 	kfree(q);
 }

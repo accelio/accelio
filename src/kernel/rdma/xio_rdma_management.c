@@ -905,7 +905,7 @@ inline void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_post_create(
 		struct xio_transport_base *transport_hndl,
-		struct xio_tasks_pool *pool)
+		void *pool, void *pool_dd_data)
 {
 	struct xio_task *task;
 	struct xio_rdma_transport *rdma_hndl =
@@ -1179,7 +1179,7 @@ static int xio_rdma_primary_pool_slab_pre_create(
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_post_create(
 		struct xio_transport_base *transport_hndl,
-		struct xio_tasks_pool *pool)
+		void *pool, void *pool_dd_data)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;

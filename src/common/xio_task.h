@@ -96,7 +96,12 @@ struct xio_tasks_pool_hooks {
 				  int tid, struct xio_task *task);
 	int	(*slab_uninit_task)(void *slab_dd_data, struct xio_task *task);
 	int	(*slab_post_create)(void *context, void *slab_dd_data);
-	int	(*pool_post_create)(void *context, struct xio_tasks_pool *pool);
+	int	(*pool_pre_create)(void *context, void *pool,
+				    void *pool_dd_data);
+	int	(*pool_post_create)(void *context, void *pool,
+				    void *pool_dd_data);
+	int	(*pool_destroy)(void *context, void *pool,
+			        void *pool_dd_data);
 	int	(*task_pre_put)(void *context, struct xio_task *task);
 	int	(*task_post_get)(void *context, struct xio_task *task);
 };
@@ -105,9 +110,9 @@ struct xio_tasks_pool_params {
 	int				start_nr;
 	int				max_nr;
 	int				alloc_nr;
+	int				pool_dd_data_sz;
 	int				slab_dd_data_sz;
 	int				task_dd_data_sz;
-	int				pad;
 	struct xio_tasks_pool_hooks	pool_hooks;
 };
 
@@ -133,6 +138,7 @@ struct xio_tasks_pool {
 	int				curr_used;
 	int				curr_alloced;
 	int				node_id; /* numa node id */
+	void				*dd_data;
 };
 
 /*---------------------------------------------------------------------------*/
