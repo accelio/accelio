@@ -162,8 +162,10 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 		return NULL;
 	}
 	q		= (void *)buf;
-	q->dd_data	= (void *)(buf + params->pool_dd_data_sz);
-
+	if (params->pool_dd_data_sz)
+		q->dd_data	= (void *)(buf + params->pool_dd_data_sz);
+	else
+		q->dd_data	= NULL;
 
 	INIT_LIST_HEAD(&q->stack);
 	INIT_LIST_HEAD(&q->slabs_list);
