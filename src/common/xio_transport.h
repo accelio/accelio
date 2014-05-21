@@ -139,6 +139,8 @@ struct xio_tasks_pool_ops {
 	int	(*slab_uninit_task)(void *slab_dd_data, struct xio_task *task);
 	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
 				    void *slab_dd_data);
+	int	(*pool_pre_create)(struct xio_transport_base *trans_hndl,
+			void *pool, void *pool_dd_data);
 	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,
 				    void *pool, void *pool_dd_data);
 	int	(*pool_destroy)(struct xio_transport_base *trans_hndl,

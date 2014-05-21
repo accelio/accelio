@@ -641,8 +641,12 @@ static int xio_conn_initial_pool_create(struct xio_conn *conn)
 		(void *)conn->initial_pool_ops->slab_init_task;
 	params.pool_hooks.slab_uninit_task =
 		(void *)conn->initial_pool_ops->slab_uninit_task;
+	params.pool_hooks.pool_pre_create  =
+		(void *)conn->initial_pool_ops->pool_pre_create;
 	params.pool_hooks.pool_post_create =
 		(void *)conn->initial_pool_ops->pool_post_create;
+	params.pool_hooks.pool_destroy	   =
+		(void *)conn->initial_pool_ops->pool_destroy;
 	params.pool_hooks.task_pre_put	   =
 		(void *)conn->initial_pool_ops->task_pre_put;
 	params.pool_hooks.task_post_get	   =
@@ -735,8 +739,12 @@ static int xio_conn_primary_pool_create(struct xio_conn *conn)
 		(void *)conn->primary_pool_ops->slab_init_task;
 	params.pool_hooks.slab_uninit_task =
 		(void *)conn->primary_pool_ops->slab_uninit_task;
+	params.pool_hooks.pool_pre_create =
+		(void *)conn->primary_pool_ops->pool_pre_create;
 	params.pool_hooks.pool_post_create =
 		(void *)conn->primary_pool_ops->pool_post_create;
+	params.pool_hooks.pool_destroy =
+		(void *)conn->primary_pool_ops->pool_destroy;
 	params.pool_hooks.task_pre_put	   =
 		(void *)conn->primary_pool_ops->task_pre_put;
 	params.pool_hooks.task_post_get	   =
