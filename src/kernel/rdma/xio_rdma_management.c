@@ -1160,16 +1160,23 @@ static int xio_rdma_primary_pool_slab_pre_create(
 	INFO_LOG("kcache(%s) created(%p)\n",
 		 rdma_slab->name, rdma_slab->data_pool);
 
-	/* tasks may require fast registration for RDMA read and write */
-	if (rdma_hndl->dev->fastreg.alloc_rdma_reg_res(rdma_hndl)) {
-		kmem_cache_destroy(rdma_slab->data_pool);
-		xio_set_error(ENOMEM);
-		ERROR_LOG("fast reg init failed\n");
-		return -1;
-	}
-
 	DEBUG_LOG("pool buf:%p\n", rdma_slab->data_pool);
 	rdma_slab->count = 0;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_primary_pool_destroy					     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_primary_pool_destroy(
+		struct xio_transport_base *transport_hndl,
+		void *pool, void *pool_dd_data)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)transport_hndl;
+
+	rdma_hndl->dev->fastreg.free_rdma_reg_res(rdma_hndl);
 
 	return 0;
 }
@@ -1186,6 +1193,13 @@ static int xio_rdma_primary_pool_post_create(
 
 	rdma_hndl->primary_pool_cls.pool = pool;
 
+	/* tasks may require fast registration for RDMA read and write */
+	if (rdma_hndl->dev->fastreg.alloc_rdma_reg_res(rdma_hndl)) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("fast reg init failed\n");
+		return -1;
+	}
+
 	xio_rdma_rearm_rq(rdma_hndl);
 
 	/* late creation */
@@ -1201,14 +1215,10 @@ static int xio_rdma_primary_pool_slab_destroy(
 		struct xio_transport_base *transport_hndl,
 		void *slab_dd_data)
 {
-	struct xio_rdma_transport *rdma_hndl =
-		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
 	INFO_LOG("kcache(%s) freed\n", rdma_slab->name);
-
-	rdma_hndl->dev->fastreg.free_rdma_reg_res(rdma_hndl);
 
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
@@ -1300,6 +1310,7 @@ static struct xio_tasks_pool_ops primary_tasks_pool_ops = {
 	.slab_init_task		= xio_rdma_primary_pool_slab_init_task,
 	.slab_uninit_task	= xio_rdma_primary_pool_slab_uninit_task,
 	.pool_post_create	= xio_rdma_primary_pool_post_create,
+	.pool_destroy		= xio_rdma_primary_pool_destroy,
 	.task_pre_put		= xio_rdma_task_pre_put,
 };
 

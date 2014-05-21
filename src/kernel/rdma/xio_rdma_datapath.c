@@ -333,8 +333,6 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			rdma_hndl->rsps_in_flight_nr++;
 		list_move_tail(&task->tasks_list_entry,
 			       &rdma_hndl->in_flight_list);
-		if (req_nr == 16)
-			break;
 	}
 
 	if (req_nr) {

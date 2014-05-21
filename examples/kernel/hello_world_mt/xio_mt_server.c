@@ -300,8 +300,8 @@ int xio_portal_thread(void *data)
 	sdata = tdata->sdata;
 
 	cpu = raw_smp_processor_id();
-	tdata->rsp = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				  GFP_KERNEL, cpu_to_node(cpu));
+	tdata->rsp = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				  cpu_to_node(cpu));
 	if (!tdata->rsp)
 		goto cleanup0;
 
@@ -362,7 +362,7 @@ cleanup1:
 	for (i = 0; i < QUEUE_DEPTH; i++)
 		kfree(tdata->rsp[i].out.header.iov_base);
 
-	kfree(tdata->rsp);
+	vfree(tdata->rsp);
 
 cleanup0:
 	i = atomic_dec_return(&cleanup_complete.thread_count);
@@ -382,7 +382,7 @@ static void free_tdata(struct server_data *sdata)
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		if (sdata->tdata[i]) {
-			kfree(sdata->tdata[i]);
+			vfree(sdata->tdata[i]);
 			sdata->tdata[i] = NULL;
 		}
 	}
@@ -412,8 +412,8 @@ static int init_threads(struct server_data *sdata)
 		struct thread_data *tdata;
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
-		tdata = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				     GFP_KERNEL, cpu_to_node(cpu));
+		tdata = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				     cpu_to_node(cpu));
 		if (!tdata)
 			goto cleanup0;
 

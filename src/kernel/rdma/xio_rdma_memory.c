@@ -397,8 +397,11 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 
 	init_llist_head(&frwr->pool);
 	frwr->pool_size = 0;
-	/* a task can many need both RDMA read and write */
-	for (i = 0; i < rdma_hndl->num_tasks * 2; i++) {
+	/* There can be only max_tx_ready_tasks_num simultaniously inflight
+	 * request tasks at any given time, each of wich may need both RDMA
+	 * read and write (both data form server to client may be big)
+	 */
+	for (i = 0; i < rdma_hndl->max_tx_ready_tasks_num * 2; i++) {
 		desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 		if (!desc) {
 			ERROR_LOG("Failed to allocate a new fast_reg descriptor\n");
@@ -555,9 +558,10 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 
 	fdesc = get_fdesc(rdma_hndl);
 	if (!fdesc) {
-		ERROR_LOG("pool is empty!\n");
-		err = -ENOMEM;
-		goto err_reg;
+		/* We may have temporay pressure on pool */
+		DEBUG_LOG("pool is empty!\n");
+		/* fail to dummy, i.e. will use multiple RDMA  */
+		return xio_reg_rdma_mem_dummy(rdma_hndl, mdesc, cmd_dir);
 	}
 
 	page_list_len = xio_sg_to_page_vec(mdesc, dev->ib_dev,

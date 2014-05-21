@@ -214,7 +214,7 @@ static int xio_client_main(void *data)
 
 	atomic_add(2, &module_state);
 
-	session_data = kzalloc(sizeof(*session_data), GFP_KERNEL);
+	session_data = vzalloc(sizeof(*session_data));
 	if (!session_data) {
 		printk("session_data alloc failed\n");
 		return 0;
@@ -223,7 +223,7 @@ static int xio_client_main(void *data)
 	/* create thread context for the client */
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
 	if (!ctx) {
-		kfree(session_data);
+		vfree(session_data);
 		printk("context open filed\n");
 		return 0;
 	}
@@ -277,7 +277,7 @@ static int xio_client_main(void *data)
 	/* free the context */
 	xio_context_destroy(ctx);
 
-	kfree(session_data);
+	vfree(session_data);
 
 	printk("good bye\n");
 

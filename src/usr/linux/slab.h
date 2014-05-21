@@ -39,4 +39,19 @@ static inline void *kcalloc(size_t n, size_t size, gfp_t flags)
 	return ucalloc(n, size);
 }
 
+static inline void *vmalloc(unsigned long size)
+{
+	return umalloc(size);
+}
+
+static inline void *vzalloc(unsigned long size)
+{
+	return ucalloc(1, size);
+}
+
+static inline void vfree(const void *addr)
+{
+	ufree((void *) addr);
+}
+
 #endif /* _LINUX_SLAB_H */

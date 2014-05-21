@@ -106,9 +106,9 @@ static void process_response(struct thread_data *tdata, struct xio_msg *rsp)
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+	rsp->in.header.iov_base	 = NULL;
+	rsp->in.header.iov_len	 = 0;
+	rsp->in.data_iovlen	 = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -177,11 +177,10 @@ static int on_response(struct xio_session *session,
 {
 	struct thread_data *tdata;
 	struct xio_connection *connection;
-	int i;
+	struct xio_msg *req = rsp->user_context;
 	int ret = 0;
 
 	tdata = (struct thread_data *) cb_user_context;
-	i = rsp->request->sn % QUEUE_DEPTH;
 
 	/* process the incoming message */
 	process_response(tdata, rsp);
@@ -189,11 +188,15 @@ static int on_response(struct xio_session *session,
 	/* acknowledge XIO that response is no longer needed */
 	xio_release_response(rsp);
 
+	req->in.header.iov_base	 = NULL;
+	req->in.header.iov_len	 = 0;
+	req->in.data_iovlen	 = 0;
+
 	/* re-send the message */
 	rcu_read_lock();
 	connection = rcu_dereference(tdata->connection);
 	if (connection)
-		xio_send_request(connection, &tdata->req[i]);
+		xio_send_request(connection, req);
 	else
 		ret = -1;
 	rcu_read_unlock();
@@ -272,8 +275,8 @@ static int xio_client_thread(void *data)
 
 	/* no need to disable preemption */
 	cpu = raw_smp_processor_id();
-	tdata->req = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				  GFP_KERNEL, cpu_to_node(cpu));
+	tdata->req = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				  cpu_to_node(cpu));
 	if (!tdata->req)
 		goto cleanup0;
 
@@ -288,6 +291,7 @@ static int xio_client_thread(void *data)
 			goto cleanup1;
 
 		tdata->req[i].out.header.iov_len = strlen(msg);
+		tdata->req[i].user_context = &tdata->req[i];
 	}
 
 	/* create thread context for the client */
@@ -338,7 +342,7 @@ cleanup1:
 	for (i = 0; i < QUEUE_DEPTH; i++)
 		kfree(tdata->req[i].out.header.iov_base);
 
-	kfree(tdata->req);
+	vfree(tdata->req);
 
 cleanup0:
 	i = atomic_dec_return(&cleanup_complete.thread_count);
@@ -358,7 +362,7 @@ static void free_tdata(struct session_data *sdata)
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		if (sdata->tdata[i]) {
-			kfree(sdata->tdata[i]);
+			vfree(sdata->tdata[i]);
 			sdata->tdata[i] = NULL;
 		}
 	}
@@ -376,8 +380,8 @@ static int init_threads(struct session_data *sdata)
 		struct thread_data *tdata;
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
-		tdata = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				     GFP_KERNEL, cpu_to_node(cpu));
+		tdata = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				     cpu_to_node(cpu));
 		if (!tdata)
 			goto cleanup0;
 

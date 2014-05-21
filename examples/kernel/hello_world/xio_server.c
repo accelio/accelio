@@ -248,7 +248,7 @@ static int xio_server_main(void *data)
 
 	atomic_add(2, &module_state);
 
-	server_data = kzalloc(sizeof(*server_data), GFP_KERNEL);
+	server_data = vzalloc(sizeof(*server_data));
 	if (!server_data) {
 		printk("server_data alloc failed\n");
 		return 0;
@@ -257,7 +257,7 @@ static int xio_server_main(void *data)
 	/* create thread context for the server */
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
 	if (!ctx) {
-		kfree(server_data);
+		vfree(server_data);
 		printk("context open filed\n");
 		return 0;
 	}
@@ -296,7 +296,7 @@ static int xio_server_main(void *data)
 	/* free the context */
 	xio_context_destroy(ctx);
 
-	kfree(server_data);
+	vfree(server_data);
 
 	complete_and_exit(&cleanup_complete, 0);
 
