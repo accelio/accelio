@@ -1659,7 +1659,6 @@ static int xio_rdma_prep_req_out_data(
 	uint64_t		ulp_out_imm_len;
 	size_t			retval;
 	int			i;
-	int			small_zero_copy;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	/* calculate headers */
@@ -1677,11 +1676,9 @@ static int xio_rdma_prep_req_out_data(
 		xio_set_error(XIO_E_MSG_SIZE);
 		return -1;
 	}
-	small_zero_copy = task->omsg->flags & XIO_MSG_FLAG_SMALL_ZERO_COPY;
-
 	/* the data is outgoing via SEND */
-	if (!small_zero_copy && ((ulp_out_hdr_len + ulp_out_imm_len +
-	    MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz)) {
+	if ((ulp_out_hdr_len + ulp_out_imm_len +
+	    MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;

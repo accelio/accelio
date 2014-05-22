@@ -1570,7 +1570,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct ib_device *ib_dev = rdma_hndl->dev->ib_dev;
 	struct ib_mr *mr = rdma_hndl->dev->mr; /* Need fix for FMR/FRWR */
-	uint8_t	read_num_sge, write_num_sge;
+	uint16_t	read_num_sge, write_num_sge;
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -2000,7 +2000,6 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_out_imm_len;
 	size_t			retval;
-	int			small_zero_copy;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	/* calculate headers */
@@ -2017,11 +2016,9 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 			  xio_hdr_len);
 		return -1;
 	}
-	small_zero_copy = task->omsg->flags & XIO_MSG_FLAG_SMALL_ZERO_COPY;
-
 	/* the data is outgoing via SEND */
-	if (!small_zero_copy && ((ulp_out_hdr_len + ulp_out_imm_len +
-	     MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz)) {
+	if ((ulp_out_hdr_len + ulp_out_imm_len +
+	     MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
