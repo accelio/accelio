@@ -23,6 +23,8 @@ AC_ARG_ENABLE(kernel-module,
 AC_MSG_CHECKING([if ofed installed])
 MLNX_OFED=`if ofed_info 2>/dev/null | grep MLNX_OFED >/dev/null 2>/dev/null; then echo true; else echo false; fi`
 OFED_CFLAGS=
+XIO_SYMVERS=
+
 if test "$MLNX_OFED" = "true"; then
 	AC_MSG_RESULT(yes)
 
@@ -40,10 +42,12 @@ if test "$MLNX_OFED" = "true"; then
 	if test "$MLNX_OFED_IB_UBUNTU_INSTALLED" = "true"; then
 	OFED_VERS=`dpkg -s mlnx-ofed-kernel-dkms | awk -F\- '/Version/ {print $$1}' | sed -r 's/^Version: //' | awk -F'-' '{print $1}'`
 	OFED_CFLAGS=`echo -I/var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include -include /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include/linux/compat-2.6.h`
+	XIO_SYMVERS=`echo /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/Module.symvers`
 	fi
 
 	if test "$MLNX_OFED_IB_RH_INSTALLED" = "true"; then
 	OFED_CFLAGS=`echo -I/usr/src/ofa_kernel/default/include -include /usr/src/ofa_kernel/default/include/linux/compat-2.6.h`
+	XIO_SYMVERS=`echo /usr/src/ofa_kernel/default/Module.symvers`
 	fi
 else
 	AC_MSG_RESULT(no)
@@ -70,15 +74,18 @@ else
 	fi
 
 	OFED_CFLAGS=`echo $BACKPORT_INCLUDES -I/usr/src/ofa_kernel/include`
+	XIO_SYMVERS=`echo /usr/src/ofa_kernel/Module.symvers`
 	fi
 
 	if test "$OFED_COMPAT_RDMA_DEVEL_RPM_INSTALLED" = "true"; then
-		OFED_CFLAGS=`echo -I/usr/src/compat-rdma/include -include /usr/src/compat-rdma/include/linux/compat-2.6.h`
+	OFED_CFLAGS=`echo -I/usr/src/compat-rdma/include -include /usr/src/compat-rdma/include/linux/compat-2.6.h`
+	XIO_SYMVERS=`echo /usr/src/compat-rdma/Module.symvers`
 	fi
 fi
 
 AC_MSG_NOTICE([ofed include files directory is ${OFED_CFLAGS}])
 AC_SUBST(OFED_CFLAGS)
+AC_SUBST(XIO_SYMVERS)
 
 if test "$ENABLE_XIO_MODULE" = y; then
 	AC_MSG_CHECKING([kernel source directory])

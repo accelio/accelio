@@ -5,6 +5,7 @@ INSTALL = @INSTALL@
 mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
 OFED_CFLAGS = @OFED_CFLAGS@
+XIO_SYMVERS = @XIO_SYMVERS@
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h \
@@ -94,5 +95,6 @@ xio-objs := \
 	../../common/xio_observer.o \
 	../../common/xio_utils.o
 
+
 all-spec:
-	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` @KERNELMAKE_PARAMS@ modules
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` @KERNELMAKE_PARAMS@ KBUILD_EXTRA_SYMBOLS=$(XIO_SYMVERS) modules

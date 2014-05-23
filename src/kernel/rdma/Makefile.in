@@ -5,6 +5,7 @@ INSTALL = @INSTALL@
 mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
 OFED_CFLAGS = @OFED_CFLAGS@
+KSYMVERS = @RDMA_SYMVERS@
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h xio_rdma_utils.h \
@@ -59,7 +60,5 @@ rdma-objs := \
 	xio_rdma_verbs.o \
 	xio_rdma_utils.o
 
-XIOSYMS=`pwd`/../xio/Module.symvers
-
 all-spec:
-	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=$(XIOSYMS) @KERNELMAKE_PARAMS@ modules
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules
