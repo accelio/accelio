@@ -663,19 +663,17 @@ send_final_nop:
 static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 			       struct xio_task *task)
 {
-	struct xio_task		*task1, *task2;
+	struct xio_task		*task1 = NULL, *task2 = NULL;
 	struct xio_rdma_task	*rdma_task;
 	int			must_send = 0;
 	int			retval;
 
-	/* prefetch next buffer */
-	task1 = list_first_entry(&task->tasks_list_entry,
-			 struct xio_task,  tasks_list_entry);
-	xio_prefetch(task1->mbuf.buf.head);
-	task2 = list_first_entry(&task1->tasks_list_entry,
-			 struct xio_task,  tasks_list_entry);
-	xio_prefetch(task2->mbuf.buf.head);
 
+	if (!list_empty(&task->tasks_list_entry)) {
+		task1 = list_first_entry(&task->tasks_list_entry,
+					 struct xio_task, tasks_list_entry);
+		xio_prefetch(task1->mbuf.buf.head);
+	}
 
 	rdma_hndl->rqe_avail--;
 	rdma_hndl->sim_peer_credits--;
@@ -735,6 +733,13 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	if (must_send)
 		xio_rdma_xmit(rdma_hndl);
+
+	/* prefetch next buffer */
+	if (task1 && !list_empty(&task1->tasks_list_entry)) {
+		task2 = list_first_entry(&task1->tasks_list_entry,
+					 struct xio_task,  tasks_list_entry);
+		xio_prefetch(task2->mbuf.buf.head);
+	}
 
 	return retval;
 }
