@@ -1952,7 +1952,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	if (unlikely(++rdma_hndl->req_sig_cnt >= HARD_CQ_MOD ||
-		     task->is_control)) {
+		     task->is_control ||
+		     task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP)) {
 		/* avoid race between send completion and response arrival */
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
@@ -2130,7 +2131,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	rdma_task->txd.send_wr.send_flags = 0;
-	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->is_control) {
+	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->is_control ||
+		task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->rsp_sig_cnt = 0;
 	}

@@ -144,8 +144,10 @@ enum xio_session_flags {
 };
 
 enum xio_msg_flags {
-	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1,  /**< request read receipt   */
-	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = 0x2   /**< zero copy for transfers*/
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1,  /**< request read receipt    */
+	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = 0x2,  /**< zero copy for transfers */
+	XIO_MSG_FLAG_IMM_SEND_COMP	  = 0x4   /**< request an immediate    */
+						  /**< send completion         */
 };
 
 enum xio_session_event {
