@@ -40,7 +40,7 @@ if test "$MLNX_OFED" = "true"; then
 	fi
 
 	if test "$MLNX_OFED_IB_UBUNTU_INSTALLED" = "true"; then
-	OFED_VERS=`dpkg -s mlnx-ofed-kernel-dkms | awk -F\- '/Version/ {print $$1}' | sed -r 's/^Version: //' | awk -F'-' '{print $1}'`
+	OFED_VERS=`dpkg -s mlnx-ofed-kernel-dkms | awk -F\- '/Version/ {print $1}' | awk '{print $2}'`
 	OFED_CFLAGS=`echo -I/var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include -include /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include/linux/compat-2.6.h`
 	XIO_SYMVERS=`echo /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/Module.symvers`
 	fi
