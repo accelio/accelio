@@ -5,6 +5,9 @@ AC_PROG_INSTALL
 runver=`uname -r`
 bad_kernel_version=no
 ENABLE_XIO_MODULE=y
+# do not build against ofed until kernel module can be built out of kernel
+# tree
+ENABLE_OFED_BUILD=n
 KERNELCFLAGS=
 
 kernelsrc=
@@ -19,10 +22,12 @@ AC_ARG_ENABLE(kernel-module,
 	[  --enable-kernel-module  Compile kernel module ])
 
 #build against installed OFED
+RDMA_SYMVERS=`pwd`/../xio/Module.symvers
+
+if test "$ENABLE_OFED_BUILD" = "y"; then
 AC_MSG_CHECKING([if ofed installed])
 MLNX_OFED=`if ofed_info 2>/dev/null | grep MLNX_OFED >/dev/null 2>/dev/null; then echo true; else echo false; fi`
 OFED_CFLAGS=
-RDMA_SYMVERS=`pwd`/../xio/Module.symvers
 
 if test "$MLNX_OFED" = "true"; then
 	AC_MSG_RESULT(yes)
@@ -85,7 +90,7 @@ fi
 AC_MSG_NOTICE([ofed include files directory is ${OFED_CFLAGS}])
 AC_SUBST(OFED_CFLAGS)
 AC_SUBST(RDMA_SYMVERS)
-
+fi
 
 if test "$ENABLE_XIO_MODULE" = y; then
 	AC_MSG_CHECKING([kernel source directory])
