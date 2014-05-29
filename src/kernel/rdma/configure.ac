@@ -7,7 +7,7 @@ bad_kernel_version=no
 ENABLE_XIO_MODULE=y
 # do not build against ofed until kernel module can be built out of kernel
 # tree
-ENABLE_OFED_BUILD=n
+ENABLE_OFED_BUILD=y
 KERNELCFLAGS=
 
 kernelsrc=

@@ -4,6 +4,11 @@ SHELL = /bin/sh
 INSTALL = @INSTALL@
 mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
+OFED_CFLAGS = @OFED_CFLAGS@
+KSYMVERS = @RDMA_SYMVERS@
+
+NOSTDINC_FLAGS += @OFED_CFLAGS@
+
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	libxio.h\
@@ -51,7 +56,6 @@ obj-m := server.o client.o
 server-objs := xio_server.o
 client-objs := xio_client.o
 
-XIOSYMS=`pwd`/../../../src/kernel/xio/Module.symvers
-
 all-spec:
-	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=$(XIOSYMS) @KERNELMAKE_PARAMS@ modules
+	export NOSTDINC_FLAGS
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules

@@ -7,6 +7,8 @@ VERSION = @PACKAGE_VERSION@
 OFED_CFLAGS = @OFED_CFLAGS@
 KSYMVERS = @RDMA_SYMVERS@
 
+NOSTDINC_FLAGS += @OFED_CFLAGS@
+
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h xio_rdma_utils.h \
 	xio_rdma_transport.h xio_rdma_mempool.h \
@@ -61,4 +63,5 @@ rdma-objs := \
 	xio_rdma_utils.o
 
 all-spec:
+	export NOSTDINC_FLAGS
 	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules
