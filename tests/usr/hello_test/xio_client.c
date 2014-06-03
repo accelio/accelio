@@ -187,16 +187,24 @@ static void process_response(struct test_params *test_params,
 		size_t	data_len = 0;
 		int	i;
 
-
-		for (i = 0; i < rsp->out.data_iovlen; i++)
-			data_len += rsp->out.data_iov[i].iov_len;
+		if (rsp->out.data_type == XIO_DATA_TYPE_PTR) {
+			for (i = 0; i < rsp->out.data_iovlen; i++)
+				data_len += rsp->out.pdata_iov[i].iov_len;
+		} else {
+			for (i = 0; i < rsp->out.data_iovlen; i++)
+				data_len += rsp->out.data_iov[i].iov_len;
+		}
 
 		test_params->stat.txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		for (i = 0; i < rsp->in.data_iovlen; i++)
-			data_len += rsp->in.data_iov[i].iov_len;
-
+		if (rsp->in.data_type == XIO_DATA_TYPE_PTR) {
+			for (i = 0; i < rsp->in.data_iovlen; i++)
+				data_len += rsp->in.pdata_iov[i].iov_len;
+		} else {
+			for (i = 0; i < rsp->in.data_iovlen; i++)
+				data_len += rsp->in.data_iov[i].iov_len;
+		}
 		test_params->stat.rxlen = rsp->in.header.iov_len + data_len;
 
 		test_params->stat.start_time = get_cpu_usecs();
@@ -225,7 +233,7 @@ static void process_response(struct test_params *test_params,
 		printf("**** [%s] - message [%"PRIu64"] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.data_iov[0].iov_base);
+		       (char *)rsp->in.pdata_iov[0].iov_base);
 		test_params->stat.cnt = 0;
 		test_params->stat.start_time = get_cpu_usecs();
 	}
@@ -574,12 +582,22 @@ int main(int argc, char *argv[])
 	memset(&test_params, 0, sizeof(struct test_params));
 	test_params.stat.first_time = 1;
 
+	/* set accelio max message vector used */
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &test_config.in_iov_len, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &test_config.out_iov_len, sizeof(int));
+
 	/* prepare buffers for this test */
 	if (msg_api_init(&test_params.msg_params,
 			 test_config.hdr_len, test_config.data_len, 0) != 0)
 		return -1;
 
-	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
+	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
+					  test_config.in_iov_len,
+					  test_config.out_iov_len);
 	if (test_params.pool == NULL)
 		goto cleanup;
 

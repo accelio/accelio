@@ -160,7 +160,7 @@ static void process_request(struct xio_msg *msg)
 		printf("**** message [%"PRIu64"] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)msg->in.pdata_iov[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -316,14 +316,19 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 	int i;
-
 	if (test_params->xbuf == NULL)
 		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
 
 	for (i = 0; i < msg->in.data_iovlen; i++) {
-		msg->in.data_iov[i].iov_base = test_params->xbuf->addr;
-		// msg->in.data_iov[0].iov_len  = test_params->xbuf.length;
-		msg->in.data_iov[i].mr = test_params->xbuf->mr;
+		if (msg->in.data_iovlen > XIO_IOVLEN) {
+			msg->in.pdata_iov[i].iov_base = test_params->xbuf->addr;
+			// msg->in.pdata_iov[i].iov_len  = test_params->xbuf.length;
+			msg->in.pdata_iov[i].mr = test_params->xbuf->mr;
+		} else {
+			msg->in.data_iov[i].iov_base = test_params->xbuf->addr;
+			// msg->in.data_iov[i].iov_len  = test_params->xbuf.length;
+			msg->in.data_iov[i].mr = test_params->xbuf->mr;
+		}
 	}
 
 	return 0;
@@ -484,6 +489,7 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;
 	struct test_params	test_params;
 	char			url[256];
+	int			in_iov_len = XIO_MAX_IOV;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -494,6 +500,14 @@ int main(int argc, char *argv[])
 
 	xio_init();
 
+	/* set accelio max message vector used */
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &in_iov_len, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &test_config.iov_len, sizeof(int));
+
 	memset(&test_params, 0, sizeof(struct test_params));
 
 	/* prepare buffers for this test */
@@ -501,7 +515,8 @@ int main(int argc, char *argv[])
 			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
-	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
+	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
+					  0, test_config.iov_len);
 	if (test_params.pool == NULL)
 		goto cleanup;
 

@@ -42,6 +42,11 @@
 #include "xio_log.h"
 
 /*---------------------------------------------------------------------------*/
+/* externals								     */
+/*---------------------------------------------------------------------------*/
+extern struct xio_options g_options;
+
+/*---------------------------------------------------------------------------*/
 /* defines								     */
 /*---------------------------------------------------------------------------*/
 
@@ -116,7 +121,7 @@ void xio_set_error(int errnum);
 /**
  *  TLV magic
  */
-#define XIO_MAGIC		0x6F727063  /* ascii of 'orpc' */
+#define XIO_MAGIC		0x58494F50  /* ascii of 'XIOP' */
 
 /**
  *  TLV macros
@@ -129,6 +134,13 @@ void xio_set_error(int errnum);
 #define UNPACK_LVAL(src, trgt, attr) ((trgt)->attr = ntohl((src)->attr))
 #define UNPACK_LLVAL(src, trgt, attr) ((trgt)->attr = ntohll((src)->attr))
 
+/*---------------------------------------------------------------------------*/
+/* structures								     */
+/*---------------------------------------------------------------------------*/
+struct xio_options {
+	int			max_in_iovsz;
+	int			max_out_iovsz;
+};
 
 /*---------------------------------------------------------------------------*/
 /* message headers							     */
@@ -167,8 +179,10 @@ struct __attribute__((__packed__)) xio_session_cancel_hdr {
 };
 
 struct xio_msg;
+struct xio_vmsg;
 struct xio_iovec;
 struct xio_iovec_ex;
+
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
@@ -228,6 +242,16 @@ size_t		xio_iovex_length(const struct xio_iovec_ex *iov,
 				 unsigned long nr_segs);
 
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
+
+void		xio_msg_dump(struct xio_msg *xio_msg);
+
+void		xio_msg_map(struct xio_msg *xio_msg);
+
+void		xio_msg_unmap(struct xio_msg *xio_msg);
+
+void		xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg);
+
+void		xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg);
 
 #endif /*XIO_COMMON_H */
 

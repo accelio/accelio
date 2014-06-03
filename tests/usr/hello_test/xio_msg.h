@@ -96,10 +96,7 @@ void msg_write(struct msg_params *msg_params,
 /*---------------------------------------------------------------------------*/
 /* msg_pool_alloc							     */
 /*---------------------------------------------------------------------------*/
-struct msg_pool *msg_pool_alloc(int max,
-		size_t out_hdrlen, size_t out_datalen,
-		size_t in_hdrlen, size_t in_datalen);
-
+struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz);
 
 /*---------------------------------------------------------------------------*/
 /* msg_pool_get								     */

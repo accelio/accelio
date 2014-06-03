@@ -62,6 +62,8 @@ MODULE_LICENSE("Dual BSD/GPL");
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
 #define XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD		SEND_BUF_SZ
+#define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
+#define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		1024
 #define XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD		65536
 
@@ -78,6 +80,8 @@ struct xio_rdma_options			rdma_options = {
 	.enable_dma_latency		= XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY,
 	.rdma_buf_threshold		= XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD,
 	.rdma_buf_attr_rdonly		= 0,
+	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
+	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1022,6 +1026,24 @@ static int xio_rdma_initial_pool_slab_init_task(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 	void *buf;
+	char *ptr;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	/* fill xio_rdma_task */
+	ptr = (char *)rdma_task;
+	ptr += sizeof(struct xio_rdma_task);
+
+	/* fill xio_work_req */
+	rdma_task->txd.sge = (void *)ptr;
+	ptr += sizeof(struct ib_sge);
+	rdma_task->txd.sgl = (void *)ptr;
+	ptr += sizeof(struct scatterlist);
+
+	rdma_task->rxd.sge = (void *)ptr;
+	ptr += sizeof(struct ib_sge);
+	rdma_task->rxd.sgl = (void *)ptr;
+	ptr += sizeof(struct scatterlist);
+	/*****************************************/
 
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
@@ -1050,7 +1072,9 @@ static void xio_rdma_initial_pool_get_params(
 	*alloc_nr = 0;
 	*max_nr = NUM_CONN_SETUP_TASKS;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
-	*task_dd_sz = sizeof(struct xio_rdma_task);
+	*task_dd_sz = sizeof(struct xio_rdma_task) +
+		      2*sizeof(struct ib_sge) +
+		      2*sizeof(struct scatterlist);
 }
 
 static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
@@ -1071,8 +1095,20 @@ static int xio_rdma_phantom_pool_slab_init_task(
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
+	char *ptr;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	/* fill xio_rdma_task */
+	ptr = (char *)rdma_task;
+	ptr += sizeof(struct xio_rdma_task);
+
+	/* fill xio_work_req */
+	rdma_task->rdmad.sge = (void *)ptr;
+	ptr += rdma_hndl->max_sge*sizeof(struct ib_sge);
+	rdma_task->rdmad.sgl = (void *)ptr;
+	ptr += rdma_hndl->max_sge*sizeof(struct scatterlist);
+		/*****************************************/
+
 	rdma_task->ib_op = 0x200;
 	xio_rdma_task_init(
 			task,
@@ -1098,7 +1134,9 @@ static int xio_rdma_phantom_pool_create(struct xio_rdma_transport *rdma_hndl)
 	params.max_nr			   = NUM_MAX_PHANTOM_POOL_TASKS;
 	params.alloc_nr			   = NUM_ALLOC_PHANTOM_POOL_TASKS;
 	params.slab_dd_data_sz		   = sizeof(struct xio_rdma_tasks_slab);
-	params.task_dd_data_sz		   = sizeof(struct xio_rdma_task);
+	params.task_dd_data_sz		   = sizeof(struct xio_rdma_task) +
+				rdma_hndl->max_sge*(sizeof(struct ib_sge) +
+						    sizeof(struct scatterlist));
 	params.pool_hooks.context	   = rdma_hndl;
 	params.pool_hooks.slab_init_task   =
 		(void *)xio_rdma_phantom_pool_slab_init_task;
@@ -1263,7 +1301,50 @@ static int xio_rdma_primary_pool_slab_init_task(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	int  max_iovsz = max(rdma_options.max_out_iovsz,
+			     rdma_options.max_in_iovsz);
+	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	void *buf;
+	char *ptr;
+
+	/* fill xio_rdma_task */
+	ptr = (char *)rdma_task;
+	ptr += sizeof(struct xio_rdma_task);
+
+	/* fill xio_work_req */
+	rdma_task->txd.sge = (void *)ptr;
+	ptr += max_sge*sizeof(struct ib_sge);
+	rdma_task->txd.sgl = (void *)ptr;
+	ptr += max_sge*sizeof(struct scatterlist);
+	rdma_task->rxd.sge = (void *)ptr;
+	ptr += sizeof(struct ib_sge);
+	rdma_task->rxd.sgl = (void *)ptr;
+	ptr += sizeof(struct scatterlist);
+	rdma_task->rdmad.sge = (void *)ptr;
+	ptr += max_sge*sizeof(struct ib_sge);
+	rdma_task->rdmad.sgl = (void *)ptr;
+	ptr += max_sge*sizeof(struct scatterlist);
+
+
+	rdma_task->read_sge.sgl = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct scatterlist);
+	rdma_task->read_sge.mp_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
+
+	rdma_task->write_sge.sgl = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct scatterlist);
+	rdma_task->write_sge.mp_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
+
+
+
+	rdma_task->req_read_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_sge);
+	rdma_task->req_write_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_sge);
+	rdma_task->req_recv_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_sge);
+	/*****************************************/
 
 	rdma_task->ib_op = 0x200;
 
@@ -1295,12 +1376,21 @@ static void xio_rdma_primary_pool_get_params(
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
+	int  max_iovsz = max(rdma_options.max_out_iovsz,
+			     rdma_options.max_in_iovsz);
+	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
+
 
 	*start_nr = rdma_hndl->num_tasks;
 	*alloc_nr = 0;
 	*max_nr = rdma_hndl->num_tasks;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
-	*task_dd_sz = sizeof(struct xio_rdma_task);
+	*task_dd_sz = sizeof(struct xio_rdma_task) +
+		(max_sge + 1 + max_sge)*(sizeof(struct ib_sge) +
+					 sizeof(struct scatterlist)) +
+		 2 * max_iovsz * (sizeof(struct xio_rdma_mp_mem) +
+				  sizeof(struct scatterlist)) +
+		 3 * max_iovsz * sizeof(struct xio_sge);
 }
 
 static struct xio_tasks_pool_ops primary_tasks_pool_ops = {
@@ -2093,7 +2183,14 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	struct xio_vmsg *vmsg = &msg->in;
 	int		i;
 
-	if (vmsg->data_iovlen > XIO_MAX_IOV)
+	if ((vmsg->data_iovlen > rdma_options.max_in_iovsz) ||
+	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
+	    (vmsg->data_iovsz > rdma_options.max_in_iovsz)) {
+		return 0;
+	}
+
+	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
+	    vmsg->data_iovlen > XIO_IOVLEN)
 		return 0;
 
 	if ((vmsg->header.iov_base != NULL)  &&
@@ -2101,8 +2198,8 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 		return 0;
 
 	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if ((vmsg->data_iov[i].iov_base != NULL) &&
-		    (vmsg->data_iov[i].iov_len == 0))
+		if ((vmsg->pdata_iov[i].iov_base != NULL) &&
+		    (vmsg->pdata_iov[i].iov_len == 0))
 			return 0;
 	}
 
@@ -2117,7 +2214,13 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	struct xio_vmsg *vmsg = &msg->out;
 	int		i;
 
-	if (vmsg->data_iovlen > XIO_MAX_IOV)
+	if ((vmsg->data_iovlen > rdma_options.max_out_iovsz) ||
+	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
+	    (vmsg->data_iovsz > rdma_options.max_out_iovsz))
+		return 0;
+
+	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
+	    vmsg->data_iovlen > XIO_IOVLEN)
 		return 0;
 
 	if (((vmsg->header.iov_base != NULL)  &&
@@ -2127,15 +2230,15 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 			return 0;
 
 	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if ((vmsg->data_iov[i].iov_base == NULL) ||
-		    (vmsg->data_iov[i].iov_len == 0))
+		if ((vmsg->pdata_iov[i].iov_base == NULL) ||
+		    (vmsg->pdata_iov[i].iov_len == 0))
 				return 0;
 	}
 
 	return 1;
 }
 
-/* task pools managment */
+/* task pools management */
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_get_pools_ops						     */
 /*---------------------------------------------------------------------------*/

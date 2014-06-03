@@ -83,7 +83,9 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	/* slab data */
 	tasks_alloc_sz = alloc_nr*(sizeof(struct xio_task) +
-			 q->params.task_dd_data_sz);
+			  g_options.max_in_iovsz*sizeof(struct xio_iovec_ex) +
+			  g_options.max_out_iovsz*sizeof(struct xio_iovec_ex) +
+			  q->params.task_dd_data_sz);
 
 	tot_len = PAGE_ALIGN(slab_alloc_sz + tasks_alloc_sz);
 	buf = vmalloc(tot_len);
@@ -122,6 +124,21 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		s->array[i]->dd_data	= ((char *)data) +
 						sizeof(struct xio_task);
 
+		data = ((char *)data) + sizeof(struct xio_task) +
+					q->params.task_dd_data_sz;
+
+		s->array[i]->imsg.in.data_type = XIO_DATA_TYPE_PTR;
+		s->array[i]->imsg.in.pdata_iov  = data;
+		s->array[i]->imsg.in.data_iovsz = g_options.max_in_iovsz;
+
+		data = ((char *)data) + g_options.max_in_iovsz*sizeof(struct xio_iovec_ex);
+
+		s->array[i]->imsg.out.data_type = XIO_DATA_TYPE_PTR;
+		s->array[i]->imsg.out.pdata_iov  = data;
+		s->array[i]->imsg.out.data_iovsz = g_options.max_out_iovsz;
+
+		data = ((char *)data) + g_options.max_out_iovsz*sizeof(struct xio_iovec_ex);
+
 		if (q->params.pool_hooks.slab_init_task) {
 			retval = q->params.pool_hooks.slab_init_task(
 				q->params.pool_hooks.context,
@@ -130,8 +147,6 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 				s->array[i]);
 		}
 		list_add_tail(&s->array[i]->tasks_list_entry, &q->stack);
-		data = ((char *)data) + sizeof(struct xio_task) +
-					q->params.task_dd_data_sz;
 	}
 	q->curr_alloced += alloc_nr;
 	q->curr_free += alloc_nr;

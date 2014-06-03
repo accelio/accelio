@@ -56,6 +56,13 @@ extern "C" {
 /* preprocessor directives                                                   */
 /*---------------------------------------------------------------------------*/
 /**
+ * @def XIO_IOVLEN
+ * @brief array size of data IO vector in message
+ */
+#define XIO_IOVLEN			4
+
+
+/**
  * @def XIO_MAX_IOV
  * @brief maximum size of data IO vector in message
  */
@@ -88,6 +95,15 @@ enum xio_log_level {
 	XIO_LOG_LEVEL_DEBUG,		   /**< debugging logging level     */
 	XIO_LOG_LEVEL_TRACE,		   /**< tracing logging level       */
 	XIO_LOG_LEVEL_LAST
+};
+
+/**
+ * @enum xio_data_type
+ * @brief message data iovec allocation type
+ */
+enum xio_data_type {
+	XIO_DATA_TYPE_ARRAY = 0,
+	XIO_DATA_TYPE_PTR   = 1,
 };
 
 /**
@@ -136,7 +152,9 @@ enum xio_optname {
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
 
 	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
-	XIO_OPTNAME_MEM_ALLOCATOR         /**< set customed allocators hooks  */
+	XIO_OPTNAME_MEM_ALLOCATOR,        /**< set customed allocators hooks  */
+	XIO_OPTNAME_MAX_IN_IOVLEN,	  /**< set message's max in iovec     */
+	XIO_OPTNAME_MAX_OUT_IOVLEN        /**< set message's max out iovec    */
 };
 
 /**
@@ -413,8 +431,12 @@ struct xio_msg_pdata {
  */
 struct xio_vmsg {
 	struct xio_iovec	header;		/**< header's io vector	    */
+	enum xio_data_type	data_type;
+	int			pad;
+	size_t			data_iovsz;	/**< data iovecs alloced    */
 	size_t			data_iovlen;	/**< data iovecs count	    */
-	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];  /**< data io vector */
+	struct xio_iovec_ex	*pdata_iov;
+	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
 };
 
 /**

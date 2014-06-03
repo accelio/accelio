@@ -40,6 +40,12 @@
 
 #include "xio_transport.h"
 
+/*---------------------------------------------------------------------------*/
+/* externals								     */
+/*---------------------------------------------------------------------------*/
+extern struct xio_rdma_options	rdma_options;
+
+
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
@@ -130,6 +136,8 @@ struct xio_rdma_options {
 	int	enable_dma_latency;
 	int	rdma_buf_threshold;
 	int	rdma_buf_attr_rdonly;
+	int	max_in_iovsz;
+	int	max_out_iovsz;
 };
 
 struct xio_sge {
@@ -214,8 +222,8 @@ struct xio_work_req {
 		struct ib_send_wr	send_wr;
 		struct ib_recv_wr	recv_wr;
 	};
-	struct ib_sge			sge[XIO_MAX_IOV + 1];
-	struct scatterlist		sgl[XIO_MAX_IOV + 1];
+	struct ib_sge			*sge;
+	struct scatterlist		*sgl;
 	int				nents; /* number of sgl entries */
 	int				mapped; /* number of mapped entries */
 };
@@ -251,11 +259,11 @@ struct xio_rdma_task {
 	u32				req_write_num_sge;
 	u32				req_read_num_sge;
 	u32				req_recv_num_sge;
-	struct xio_sge			req_read_sge[XIO_MAX_IOV];
-	struct xio_sge			req_write_sge[XIO_MAX_IOV];
+	struct xio_sge			*req_read_sge;
+	struct xio_sge			*req_write_sge;
 	/* What this side got from the peer for SEND
 	*/
-	struct xio_sge			req_recv_sge[XIO_MAX_IOV];
+	struct xio_sge			*req_recv_sge;
 };
 
 struct xio_cq  {

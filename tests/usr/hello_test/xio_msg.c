@@ -224,43 +224,50 @@ void msg_write(struct msg_params *msg_params,
 	pmsg->header.iov_base		= msg_params->g_hdr;
 	pmsg->data_iovlen		= datalen ? data_iovlen : 0;
 
-	for (i = 0 ; i < pmsg->data_iovlen; i++) {
-		pmsg->data_iov[i].iov_base	= msg_params->g_data;
-		pmsg->data_iov[i].iov_len	= datalen;
-		pmsg->data_iov[i].mr		= msg_params->g_data_mr;
+	if (pmsg->data_iovlen > XIO_IOVLEN) {
+		for (i = 0; i < pmsg->data_iovlen; i++) {
+			pmsg->pdata_iov[i].iov_base	= msg_params->g_data;
+			pmsg->pdata_iov[i].iov_len	= datalen;
+			pmsg->pdata_iov[i].mr		= msg_params->g_data_mr;
+		}
+	} else {
+		for (i = 0; i < pmsg->data_iovlen; i++) {
+			pmsg->data_iov[i].iov_base	= msg_params->g_data;
+			pmsg->data_iov[i].iov_len	= datalen;
+			pmsg->data_iov[i].mr		= msg_params->g_data_mr;
+		}
 	}
 }
 
 /*---------------------------------------------------------------------------*/
 /* msg_pool_alloc							     */
 /*---------------------------------------------------------------------------*/
-struct msg_pool *msg_pool_alloc(int max,
-		size_t out_hdrlen, size_t out_datalen,
-		size_t in_hdrlen, size_t in_datalen)
+struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 {
 	struct msg_pool		*msg_pool;
-	struct xio_msg	*msg;
+	struct xio_msg		*msg;
 	size_t			len;
-	size_t			hdrlen;
-	size_t			datalen;
 	int			i;
 	uint8_t			*buf;
-	uint8_t			*header;
-	uint8_t			*data;
 
 
 	/* allocate the structures */
-	len = sizeof(struct msg_pool)+
+	len = sizeof(struct msg_pool) +
 		max*(2*sizeof(struct xio_msg *)+sizeof(struct xio_msg));
+
+	if (in_iovsz <= XIO_IOVLEN)
+		in_iovsz = 0;
+
+	if (out_iovsz <= XIO_IOVLEN)
+		out_iovsz = 0;
+
+	len += max*(in_iovsz + out_iovsz)*sizeof(struct xio_iovec_ex);
 
 	buf = calloc(len, sizeof(uint8_t));
 	if (!buf) {
 		fprintf(stderr, "Couldn't allocate message pool\n");
 		exit(1);
 	}
-
-	datalen = max*(out_datalen + in_datalen);
-	hdrlen	= max*(out_hdrlen + in_hdrlen);
 
 	/* pool */
 	msg_pool =  (struct msg_pool *)buf;
@@ -274,61 +281,30 @@ struct msg_pool *msg_pool_alloc(int max,
 	msg_pool->array = (struct xio_msg **)buf;
 	buf = buf + max * sizeof(struct xio_msg *);
 
-	/* header */
-	if (hdrlen) {
-		msg_pool->header = calloc(hdrlen, sizeof(uint8_t));
-		if (!buf) {
-			fprintf(stderr, "Couldn't allocate message pool\n");
-			exit(1);
-		}
-	}
-	/* data */
-	if (datalen) {
-		datalen = ALIGNHUGEPAGE(datalen);
-		msg_pool->data = alloc_mem_buf(datalen, &msg_pool->shmid);
-		if (!msg_pool->data) {
-			fprintf(stderr, "Couldn't allocate data buffers\n");
-			free(buf);
-			exit(1);
-		}
-		memset(msg_pool->data, 0, datalen);
-		msg_pool->mr = xio_reg_mr(msg_pool->data, datalen);
-	}
-
-	data = msg_pool->data;
-	header = msg_pool->header;
-
 	for (i = 0; i < max; i++) {
 		msg_pool->array[i] = (struct xio_msg *)buf;
 		buf = buf + sizeof(struct xio_msg);
 
 		msg = msg_pool->array[i];
-		msg_pool->stack[i] = msg;
 
-		if (out_hdrlen) {
-			msg->out.header.iov_base = header;
-			msg->out.header.iov_len = out_hdrlen;
-			header = header + out_hdrlen;
+		if (in_iovsz) {
+			msg->in.data_type  = XIO_DATA_TYPE_PTR;
+			msg->in.data_iovsz = in_iovsz;
+			msg->in.pdata_iov  = (void *)buf;
+			buf = buf + in_iovsz*sizeof(struct xio_iovec_ex);
+		} else {
+			msg->in.data_type  = XIO_DATA_TYPE_ARRAY;
 		}
-		if (out_datalen) {
-			msg->out.data_iov[0].iov_base = data;
-			msg->out.data_iov[0].iov_len = out_datalen;
-			msg->out.data_iov[0].mr = msg_pool->mr;
-			data = data + out_datalen;
-			msg->out.data_iovlen = 1;
+
+		if (out_iovsz) {
+			msg->out.data_type  = XIO_DATA_TYPE_PTR;
+			msg->out.data_iovsz = out_iovsz;
+			msg->out.pdata_iov  = (void *)buf;
+			buf = buf + out_iovsz*sizeof(struct xio_iovec_ex);
+		} else {
+			msg->out.data_type  = XIO_DATA_TYPE_ARRAY;
 		}
-		if (in_hdrlen) {
-			msg->in.header.iov_base = header;
-			msg->in.header.iov_len = in_hdrlen;
-			header = header + in_hdrlen;
-		}
-		if (in_datalen) {
-			msg->in.data_iov[0].iov_base = data;
-			msg->in.data_iov[0].iov_len = in_datalen;
-			msg->in.data_iov[0].mr = msg_pool->mr;
-			data = data + in_datalen;
-			msg->in.data_iovlen = 1;
-		}
+		msg_pool->stack[i] = msg;
 	}
 	msg_pool->stack_ptr = msg_pool->stack;
 	msg_pool->stack_end = msg_pool->stack_ptr + max;

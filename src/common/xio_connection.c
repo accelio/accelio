@@ -111,6 +111,7 @@ static struct xio_transition xio_transition_table[][2] = {
 		  },
 };
 
+
 /*---------------------------------------------------------------------------*/
 /* xio_connection_next_transit					     */
 /*---------------------------------------------------------------------------*/
@@ -354,6 +355,7 @@ int xio_connection_send(struct xio_connection *connection,
 	xio_session_write_header(task, &hdr);
 
 	/* send it */
+	xio_msg_map(msg);
 	retval = xio_conn_send(connection->conn, task);
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
@@ -656,6 +658,7 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
+		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -689,12 +692,11 @@ int xio_send_request(struct xio_connection *connection,
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->data_iov,
+			     xio_iovex_length(vmsg->pdata_iov,
 					      vmsg->data_iovlen));
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
-
 		xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg, pdata);
 
 		pmsg = pmsg->next;
@@ -718,6 +720,7 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg = msg;
 	int			valid;
+	int			retval = 0;
 
 	while (pmsg) {
 		task	   = container_of(msg->request, struct xio_task, imsg);
@@ -743,12 +746,9 @@ int xio_send_response(struct xio_msg *msg)
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_FLUSHED);
-			if (pmsg->next == NULL) {
-				pmsg = pmsg->next;
-				continue;
-			} else {
-				return -1;
-			}
+			pmsg = pmsg->next;
+			retval = -1;
+			continue;
 		}
 
 		if (unlikely((xio_session_not_queueing(connection->session) &&
@@ -761,7 +761,7 @@ int xio_send_response(struct xio_msg *msg)
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
 			     get_cycles() - task->imsg.timestamp);
 
-
+		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -773,7 +773,7 @@ int xio_send_response(struct xio_msg *msg)
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->data_iov,
+			     xio_iovex_length(vmsg->pdata_iov,
 					      vmsg->data_iovlen));
 
 		pmsg->flags = XIO_MSG_RSP_FLAG_LAST;
@@ -789,6 +789,9 @@ int xio_send_response(struct xio_msg *msg)
 
 		pmsg = pmsg->next;
 	}
+	if (retval)
+		return retval;
+
 	/* do not xmit until connection is assigned */
 	if (connection && xio_is_connection_online(connection))
 		return xio_connection_xmit(connection);
@@ -860,6 +863,7 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
+		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -886,7 +890,7 @@ int xio_send_msg(struct xio_connection *connection,
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->data_iov,
+			     xio_iovex_length(vmsg->pdata_iov,
 			     vmsg->data_iovlen));
 
 		pmsg->sn = xio_session_get_sn(connection->session);

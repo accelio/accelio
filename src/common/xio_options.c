@@ -44,6 +44,16 @@
 #include "xio_transport.h"
 #include "xio_log.h"
 
+#define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
+#define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
+
+
+/* xio options */
+struct xio_options			g_options = {
+	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
+	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
+};
+
 /*---------------------------------------------------------------------------*/
 /* xio_set_opt								     */
 /*---------------------------------------------------------------------------*/
@@ -70,6 +80,42 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			return xio_set_mem_allocator(
 					(struct xio_mem_allocator *)optval);
 		break;
+	case XIO_OPTNAME_MAX_IN_IOVLEN:
+		if (optlen == sizeof(int)) {
+			struct xio_transport *rdma_transport =
+						xio_get_transport("rdma");
+
+			if (*((int *)optval) > XIO_IOVLEN &&
+			    *((int *)optval) <= XIO_MAX_IOV) {
+				g_options.max_in_iovsz = *((int *)optval);
+				if (rdma_transport &&
+				    rdma_transport->set_opt)
+					return rdma_transport->set_opt(
+							xio_obj, optname,
+							optval, optlen);
+			}
+			return 0;
+
+		}
+		break;
+	case XIO_OPTNAME_MAX_OUT_IOVLEN:
+		if (optlen == sizeof(int)) {
+			struct xio_transport *rdma_transport =
+						xio_get_transport("rdma");
+
+
+			if (*((int *)optval) > XIO_IOVLEN &&
+			    *((int *)optval) <= XIO_MAX_IOV) {
+				g_options.max_out_iovsz = *((int *)optval);
+				if (rdma_transport &&
+				    rdma_transport->set_opt)
+					return rdma_transport->set_opt(
+							xio_obj, optname,
+							optval, optlen);
+			}
+			return 0;
+		}
+		break;
 	default:
 		break;
 	}
@@ -89,6 +135,16 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(enum xio_log_level);
 		return 0;
 		break;
+	case XIO_OPTNAME_MAX_IN_IOVLEN:
+		*optlen = sizeof(int);
+		*((int *)optval) = g_options.max_in_iovsz;
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_OUT_IOVLEN:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.max_in_iovsz;
+		 return 0;
+		 break;
 	default:
 		break;
 	}

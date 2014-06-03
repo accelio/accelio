@@ -50,6 +50,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor directives                                                   */
 /*---------------------------------------------------------------------------*/
+#define XIO_IOVLEN			4
 #define XIO_MAX_IOV			256	/* limit message fragments */
 #define XIO_VERSION			0x0100
 
@@ -58,7 +59,7 @@
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
 /**
- * @enum xio_log_leve
+ * @enum xio_log_level
  * @brief logging levels
  */
 enum xio_log_level {
@@ -69,6 +70,11 @@ enum xio_log_level {
 	XIO_LOG_LEVEL_DEBUG,
 	XIO_LOG_LEVEL_TRACE,
 	XIO_LOG_LEVEL_LAST
+};
+
+enum xio_data_type {
+	XIO_DATA_TYPE_ARRAY = 0,
+	XIO_DATA_TYPE_PTR   = 1,
 };
 
 enum xio_session_type {
@@ -99,7 +105,9 @@ enum xio_optname {
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
 
 	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
-	XIO_OPTNAME_MEM_ALLOCATOR         /**< set customed allocators hooks  */
+	XIO_OPTNAME_MEM_ALLOCATOR,         /**< set customed allocators hooks  */
+	XIO_OPTNAME_MAX_IN_IOVLEN,	  /**< set message's max in iovec     */
+	XIO_OPTNAME_MAX_OUT_IOVLEN        /**< set message's max out iovec    */
 };
 
 /*  A number random enough not to collide with different errno ranges.       */
@@ -276,9 +284,13 @@ struct xio_msg_pdata {
 };
 
 struct xio_vmsg {
-	struct xio_iovec	header;		/* header's iovec */
-	size_t			data_iovlen;	/* number of items in vector  */
-	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];
+	struct xio_iovec	header;		/**< header's io vector	    */
+	enum xio_data_type	data_type;
+	int			pad;
+	size_t			data_iovsz;	/**< data iovecs alloced    */
+	size_t			data_iovlen;	/**< data iovecs count	    */
+	struct xio_iovec_ex	*pdata_iov;
+	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
 };
 
 struct xio_msg {

@@ -677,7 +677,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	xio_stat_add(stats, XIO_STAT_RX_BYTES,
 		     vmsg->header.iov_len +
-		     xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen));
+		     xio_iovex_length(vmsg->pdata_iov, vmsg->data_iovlen));
+
+	xio_msg_cp_ptr2vec(&msg->in);
+	xio_msg_cp_ptr2vec(&msg->out);
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg)
@@ -789,8 +792,10 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			struct xio_vmsg *vmsg = &msg->in;
 			xio_stat_add(stats, XIO_STAT_RX_BYTES,
 				     vmsg->header.iov_len +
-				     xio_iovex_length(vmsg->data_iov,
+				     xio_iovex_length(vmsg->pdata_iov,
 						      vmsg->data_iovlen));
+			xio_msg_cp_ptr2vec(&msg->in);
+			xio_msg_cp_ptr2vec(&msg->out);
 
 			if (connection->ses_ops.on_msg)
 				connection->ses_ops.on_msg(
@@ -1162,9 +1167,12 @@ int xio_on_assign_in_buf(struct xio_session *session,
 	}
 
 	if (connection->ses_ops.assign_data_in_buf) {
+		xio_msg_cp_ptr2vec(&task->imsg.in);
 		connection->ses_ops.assign_data_in_buf(&task->imsg,
-		connection->cb_user_context);
+					connection->cb_user_context);
 		event_data->assign_in_buf.is_assigned = 1;
+		/* copy the task message to pointer */
+		xio_msg_cp_vec2ptr(&task->imsg.in);
 		return 0;
 	}
 	event_data->assign_in_buf.is_assigned = 0;

@@ -150,6 +150,8 @@ struct xio_rdma_options {
 	int			enable_dma_latency;
 	int			rdma_buf_threshold;
 	int			rdma_buf_attr_rdonly;
+	int			max_in_iovsz;
+	int			max_out_iovsz;
 };
 
 struct xio_sge {
@@ -235,7 +237,7 @@ struct xio_work_req {
 		struct ibv_send_wr	send_wr;
 		struct ibv_recv_wr	recv_wr;
 	};
-	struct ibv_sge			sge[XIO_MAX_IOV + 1];
+	struct ibv_sge			*sge;
 };
 
 
@@ -263,17 +265,17 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	struct xio_mempool_obj		read_sge[XIO_MAX_IOV];
-	struct xio_mempool_obj		write_sge[XIO_MAX_IOV];
+	struct xio_mempool_obj		*read_sge;
+	struct xio_mempool_obj		*write_sge;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
-	struct xio_sge			req_read_sge[XIO_MAX_IOV];
-	struct xio_sge			req_write_sge[XIO_MAX_IOV];
+	struct xio_sge			*req_read_sge;
+	struct xio_sge			*req_write_sge;
 
 	/* What this side got from the peer for SEND
 	*/
-	struct xio_sge			req_recv_sge[XIO_MAX_IOV];
+	struct xio_sge			*req_recv_sge;
 };
 
 struct xio_cq  {

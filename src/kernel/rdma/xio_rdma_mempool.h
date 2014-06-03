@@ -60,8 +60,8 @@ struct xio_rdma_mp_mem {
 
 struct xio_rdma_mem_desc {
 	/* sgl for dma mapping */
-	struct scatterlist	sgl[XIO_MAX_IOV];
-	struct xio_rdma_mp_mem	mp_sge[XIO_MAX_IOV];
+	struct scatterlist	*sgl;
+	struct xio_rdma_mp_mem	*mp_sge;
 	u32			num_sge;
 	unsigned int		nents;
 	unsigned int		mapped;

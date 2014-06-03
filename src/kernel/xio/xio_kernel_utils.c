@@ -223,4 +223,39 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 	return cpu_to_node(cpu_id);
 }
 
+void xio_msg_dump(struct xio_msg *xio_msg)
+{
+	int i;
+
+	ERROR_LOG("*********************************************\n");
+	ERROR_LOG("type:0x%x\n", xio_msg->type);
+	ERROR_LOG("status:%d\n", xio_msg->status);
+	if (xio_msg->type == XIO_MSG_TYPE_REQ)
+		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
+	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
+		ERROR_LOG("response:%p, serial number:%lld\n",
+			  xio_msg->request,
+			  ((xio_msg->request) ? xio_msg->request->sn : -1));
+
+	ERROR_LOG("in header: length:%zd, address:%p\n",
+		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
+	ERROR_LOG("in data type:%d iovsz:%zd\n",xio_msg->in.data_type,
+		  xio_msg->in.data_iovsz);
+	ERROR_LOG("in data size:%zd\n", xio_msg->in.data_iovlen);
+	for (i = 0; i < xio_msg->in.data_iovlen; i++)
+		ERROR_LOG("in data[%d]: length:%zd, address:%p\n", i,
+			  xio_msg->in.pdata_iov[i].iov_len,
+			  xio_msg->in.pdata_iov[i].iov_base);
+
+	ERROR_LOG("out header: length:%zd, address:%p\n",
+		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
+	ERROR_LOG("out data type:%d iovsz:%zd\n",xio_msg->out.data_type,
+		  xio_msg->out.data_iovsz);
+	ERROR_LOG("out data size:%zd\n", xio_msg->out.data_iovlen);
+	for (i = 0; i < xio_msg->out.data_iovlen; i++)
+		ERROR_LOG("out data[%d]: length:%zd, address:%p\n", i,
+			  xio_msg->out.pdata_iov[i].iov_len,
+			  xio_msg->out.pdata_iov[i].iov_base);
+	ERROR_LOG("*********************************************\n");
+}
 
