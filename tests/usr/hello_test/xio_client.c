@@ -340,11 +340,20 @@ static int on_response(struct xio_session *session,
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
 	msg->in.data_iovlen = test_config.in_iov_len ;
-	for (j = 0; j < test_config.in_iov_len; j++) {
-		msg->in.data_iov[j].iov_base = NULL;
-		msg->in.data_iov[j].iov_len  = ONE_MB;
-		msg->in.data_iov[j].mr = NULL;
+	if (msg->in.data_iovlen  > XIO_IOVLEN) {
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			msg->in.pdata_iov[j].iov_base = NULL;
+			msg->in.pdata_iov[j].iov_len  = ONE_MB;
+			msg->in.pdata_iov[j].mr = NULL;
+		}
+	} else {
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			msg->in.data_iov[j].iov_base = NULL;
+			msg->in.data_iov[j].iov_len  = ONE_MB;
+			msg->in.data_iov[j].mr = NULL;
+		}
 	}
+
 	msg->sn = 0;
 	msg->more_in_batch = 0;
 
@@ -636,10 +645,18 @@ int main(int argc, char *argv[])
 		msg->in.header.iov_len = 0;
 
 		msg->in.data_iovlen = test_config.in_iov_len;
-		for (j = 0; j < test_config.in_iov_len; j++) {
-			msg->in.data_iov[j].iov_base = NULL;
-			msg->in.data_iov[j].iov_len  = ONE_MB;
-			msg->in.data_iov[j].mr = NULL;
+		if (msg->in.data_iovlen  > XIO_IOVLEN) {
+			for (j = 0; j < test_config.in_iov_len; j++) {
+				msg->in.pdata_iov[j].iov_base = NULL;
+				msg->in.pdata_iov[j].iov_len  = ONE_MB;
+				msg->in.pdata_iov[j].mr = NULL;
+			}
+		} else {
+			for (j = 0; j < test_config.in_iov_len; j++) {
+				msg->in.data_iov[j].iov_base = NULL;
+				msg->in.data_iov[j].iov_len  = ONE_MB;
+				msg->in.data_iov[j].mr = NULL;
+			}
 		}
 
 		/* assign buffers to the message */

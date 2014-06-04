@@ -62,6 +62,8 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
+#define PEER_MAX_IN_IOVLEN	256
+#define PEER_MAX_OUT_IOVLEN	256
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -489,7 +491,9 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;
 	struct test_params	test_params;
 	char			url[256];
-	int			in_iov_len = XIO_MAX_IOV;
+	int			in_iov_len = PEER_MAX_OUT_IOVLEN;
+	int			out_iov_len = PEER_MAX_IN_IOVLEN;
+
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -504,9 +508,11 @@ int main(int argc, char *argv[])
 	xio_set_opt(NULL,
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
 		    &in_iov_len, sizeof(int));
+	/* should be more then client assign in the in */
 	xio_set_opt(NULL,
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
-		    &test_config.iov_len, sizeof(int));
+		    &out_iov_len, sizeof(int));
+		    //&test_config.iov_len, sizeof(int));
 
 	memset(&test_params, 0, sizeof(struct test_params));
 

@@ -2108,6 +2108,11 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	size_t				data_len;
 	struct xio_vmsg			*vmsg = &task->omsg->in;
 
+	if (vmsg->data_iovlen == 0) {
+			rdma_task->recv_num_sge = 0;;
+			rdma_task->read_num_sge = 0;
+			return 0;
+	}
 	data_len = xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen);
 	hdr_len  = vmsg->header.iov_len;
 
@@ -2127,11 +2132,17 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 		}
 		rdma_task->read_num_sge = rdma_task->read_sge.nents;
 	}
+	if (rdma_task->read_num_sge > rdma_hndl->peer_max_out_iovsz) {
+		ERROR_LOG("request in iovlen %d is bigger then peer max out iovlen %d\n",
+			   rdma_task->read_num_sge, rdma_hndl->peer_max_out_iovsz);
+		goto cleanup;
+	}
 	return 0;
 
 cleanup:
 	rdma_task->read_num_sge = 0;
 	rdma_task->recv_num_sge = 0;
+	xio_set_error(EMSGSIZE);
 
 	return -1;
 }
@@ -3093,6 +3104,8 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(msg, tmp_msg, sq_depth);
 	PACK_SVAL(msg, tmp_msg, rq_depth);
 	PACK_SVAL(msg, tmp_msg, credits);
+	PACK_LVAL(msg, tmp_msg, max_in_iovsz);
+	PACK_LVAL(msg, tmp_msg, max_out_iovsz);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3129,6 +3142,8 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_msg, msg, sq_depth);
 	UNPACK_SVAL(tmp_msg, msg, rq_depth);
 	UNPACK_SVAL(tmp_msg, msg, credits);
+	UNPACK_LVAL(tmp_msg, msg, max_in_iovsz);
+	UNPACK_LVAL(tmp_msg, msg, max_out_iovsz);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3152,6 +3167,9 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	req.sq_depth		= rdma_hndl->sq_depth;
 	req.rq_depth		= rdma_hndl->rq_depth;
 	req.credits		= 0;
+	req.max_in_iovsz	= rdma_options.max_in_iovsz;
+	req.max_out_iovsz	= rdma_options.max_out_iovsz;
+
 
 	xio_rdma_write_setup_msg(rdma_hndl, task, &req);
 
@@ -3206,6 +3224,9 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->setup_rsp.credits = rdma_hndl->credits;
 	xio_rdma_write_setup_msg(rdma_hndl, task, &rdma_hndl->setup_rsp);
 	rdma_hndl->credits = 0;
+	rdma_hndl->setup_rsp.max_in_iovsz	= rdma_options.max_in_iovsz;
+	rdma_hndl->setup_rsp.max_out_iovsz	= rdma_options.max_out_iovsz;
+
 
 	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
 
@@ -3278,6 +3299,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 				      (u64)rdma_hndl->max_send_buf_sz);
 		rsp->sq_depth	= min(req.sq_depth, (u16)rdma_hndl->rq_depth);
 		rsp->rq_depth	= min(req.rq_depth, (u16)rdma_hndl->sq_depth);
+		rsp->max_in_iovsz	= req.max_in_iovsz;
+		rsp->max_out_iovsz	= req.max_out_iovsz;
 	}
 
 	/* save the values */
@@ -3286,6 +3309,9 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->sq_depth		= rsp->sq_depth;
 	rdma_hndl->membuf_sz		= rsp->buffer_sz;
 	rdma_hndl->max_send_buf_sz	= rsp->buffer_sz;
+	rdma_hndl->peer_max_in_iovsz	= rsp->max_in_iovsz;
+	rdma_hndl->peer_max_out_iovsz	= rsp->max_out_iovsz;
+
 
 	/* initialize send window */
 	rdma_hndl->sn = 0;

@@ -57,7 +57,7 @@ extern struct list_head		dev_list;
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_SGE				(XIO_MAX_IOV + 1)
+#define MAX_SGE				(XIO_IOVLEN + 1)
 
 #define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
 #define MAX_RECV_WR			256
@@ -214,6 +214,8 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint16_t		rq_depth;
 	uint16_t		pad;
 	uint64_t		buffer_sz;
+	uint32_t		max_in_iovsz;
+	uint32_t		max_out_iovsz;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -406,6 +408,9 @@ struct xio_rdma_transport {
 	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
+
+	uint32_t			peer_max_in_iovsz;
+	uint32_t			peer_max_out_iovsz;
 
 	/* connection's flow control */
 	size_t				alloc_sz;

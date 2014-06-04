@@ -199,6 +199,8 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	u16		rq_depth;
 	u16		pad;
 	u64		buffer_sz;
+	u32		max_in_iovsz;
+	u32		max_out_iovsz;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -429,6 +431,9 @@ struct xio_rdma_transport {
 	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
+
+	uint32_t			peer_max_in_iovsz;
+	uint32_t			peer_max_out_iovsz;
 
 	/* connection's flow control */
 	size_t				alloc_sz;

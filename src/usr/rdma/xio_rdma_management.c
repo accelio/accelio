@@ -774,6 +774,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	int				retval = 0;
 	struct	xio_cq			*tcq;
 
+
 	/* find device */
 	pthread_rwlock_rdlock(&dev_lock);
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
@@ -808,7 +809,7 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.recv_cq		  = tcq->cq;
 	qp_init_attr.cap.max_send_wr	  = MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr	  = MAX_RECV_WR + EXTRA_RQE;
-	qp_init_attr.cap.max_send_sge	  = min(MAX_SGE,
+	qp_init_attr.cap.max_send_sge	  = min(rdma_options.max_out_iovsz + 1,
 						dev->device_attr.max_sge);
 	qp_init_attr.cap.max_recv_sge	  = 1;
 	qp_init_attr.cap.max_inline_data  = MAX_INLINE_DATA;
@@ -831,7 +832,8 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	if (ibv_query_qp(rdma_hndl->qp, &qp_attr, 0, &qp_init_attr) != 0)
 		ERROR_LOG("ibv_query_qp failed. (errno=%d %m)\n", errno);
 	rdma_hndl->max_inline_data = qp_attr.cap.max_inline_data;
-	rdma_hndl->max_sge	   = min(MAX_SGE, dev->device_attr.max_sge);
+	rdma_hndl->max_sge	   = min(rdma_options.max_out_iovsz + 1,
+					 dev->device_attr.max_sge);
 
 	list_add(&rdma_hndl->trans_list_entry, &tcq->trans_list);
 

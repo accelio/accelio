@@ -561,7 +561,8 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.cap.max_send_wr		= MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr		= MAX_RECV_WR + EXTRA_RQE;
 	qp_init_attr.cap.max_inline_data	= MAX_INLINE_DATA;
-	qp_init_attr.cap.max_send_sge		= min(MAX_SGE, dev->device_attr.max_sge);
+	qp_init_attr.cap.max_send_sge		= min(rdma_options.max_out_iovsz + 1,
+						      dev->device_attr.max_sge);
 	qp_init_attr.cap.max_recv_sge		= 1;
 	qp_init_attr.cap.max_inline_data	= MAX_INLINE_DATA;
 
@@ -589,7 +590,8 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 		ERROR_LOG("ib_query_qp failed. (err=%d)\n", retval);
 
 	rdma_hndl->max_inline_data = qp_attr.cap.max_inline_data;
-	rdma_hndl->max_sge	   = min(MAX_SGE, dev->device_attr.max_sge);
+	rdma_hndl->max_sge	   = min(rdma_options.max_out_iovsz + 1,
+					 dev->device_attr.max_sge);
 
 	list_add(&rdma_hndl->trans_list_entry, &tcq->trans_list);
 
