@@ -1,11 +1,16 @@
 #!/bin/bash
 
+# Arguments Check
+if [ $# -ne 2 ]; then
+        echo "[$0] Missing Parameters!"
+        echo "Usage: $0 [Server IP] [Port]"
+        exit 1
+fi
 
 export LD_LIBRARY_PATH=../../../src/usr/
 
-server_ip=192.168.20.126
-#server_ip=192.168.20.236
-port=1234
+server_ip=$1
+port=$2
 
 ./xio_oneway_server -c 7 -p ${port} -n 0 -w 1024 ${server_ip}
 #./xio_oneway_server -c 1 -p ${port} -n 768 -w 512 ${server_ip}
