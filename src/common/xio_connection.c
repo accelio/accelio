@@ -642,12 +642,13 @@ int xio_send_request(struct xio_connection *connection,
 	struct xio_statistics	*stats;
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg;
+	int			retval = 0;
+
 
 	if (connection  == NULL || msg == NULL) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
-
 
 	if (unlikely(xio_session_not_queueing(connection->session) &&
 		     !xio_is_connection_online(connection))) {
@@ -679,12 +680,9 @@ int xio_send_request(struct xio_connection *connection,
 			xio_set_error(ESHUTDOWN);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_FLUSHED);
-			if (pmsg->next == NULL) {
-				pmsg = pmsg->next;
-				continue;
-			} else {
-				return -1;
-			}
+			pmsg = pmsg->next;
+			retval = -1;
+			continue;
 		}
 
 		vmsg = &pmsg->out;
@@ -701,6 +699,9 @@ int xio_send_request(struct xio_connection *connection,
 
 		pmsg = pmsg->next;
 	}
+	if (retval)
+		return retval;
+
 
 	/* do not xmit until connection is assigned */
 	if (xio_is_connection_online(connection))
@@ -742,10 +743,13 @@ int xio_send_response(struct xio_msg *msg)
 		     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		     connection->state != XIO_CONNECTION_STATE_INIT) ||
 		     connection->in_close)) {
+			/* we discard the response as connection is not active
+			 * anymore
+			 */
 			xio_set_error(ESHUTDOWN);
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
-						     XIO_E_MSG_FLUSHED);
+						     XIO_E_MSG_DISCARDED);
 			pmsg = pmsg->next;
 			retval = -1;
 			continue;
