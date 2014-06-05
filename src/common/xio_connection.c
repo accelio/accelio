@@ -1511,9 +1511,14 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 			reason = close_reason;
 			break;
 		}
-		xio_session_notify_teardown(
-			session,
-			reason);
+		/* last chance to teardown */
+		spin_lock(&session->connections_list_lock);
+		destroy_session = (session->connections_nr == 0);
+		spin_unlock(&session->connections_list_lock);
+		if (destroy_session)
+			xio_session_notify_teardown(
+				session,
+				reason);
 	}
 
 	return 0;
