@@ -620,16 +620,17 @@ static void xio_release_qp(struct xio_rdma_transport *rdma_hndl)
 /* xio_rxd_init								     */
 /*---------------------------------------------------------------------------*/
 static void xio_rxd_init(struct xio_work_req *rxd,
-			   struct xio_task *task,
-			   void *buf, unsigned size,
-			   struct ib_mr *srmr)
+			 size_t rxd_nr,
+			 struct xio_task *task,
+			 void *buf, unsigned size,
+			 struct ib_mr *srmr)
 {
 	int i;
 	/* This address need to be dma mapped */
 	/* rxd->sge[0].addr	= uint64_from_ptr(buf); */
 	/* rxd->sge[0].length	= size; */
 	if (srmr) {
-		for (i = 0; i < XIO_MAX_IOV + 1; i++)
+		for (i = 0; i < rxd_nr; i++)
 			rxd->sge[i].lkey = srmr->lkey;
 	}
 
@@ -638,7 +639,7 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 	rxd->recv_wr.num_sge	= size ? 1 : 0;
 	rxd->recv_wr.next	= NULL;
 
-	sg_init_table(rxd->sgl, XIO_MAX_IOV + 1);
+	sg_init_table(rxd->sgl, rxd_nr);
 	if (size) {
 		sg_set_page(rxd->sgl, virt_to_page(buf), size, offset_in_page(buf));
 		rxd->nents  = 1;
@@ -652,6 +653,7 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 /* xio_txd_init								     */
 /*---------------------------------------------------------------------------*/
 static void xio_txd_init(struct xio_work_req *txd,
+			 size_t txd_nr,
 			 struct xio_task *task,
 			 void *buf, unsigned size,
 			 struct ib_mr *srmr)
@@ -661,7 +663,7 @@ static void xio_txd_init(struct xio_work_req *txd,
 	/* txd->sge[0].addr	= uint64_from_ptr(buf); */
 	/* txd->sge[0].length	= size; */
 	if (srmr) {
-		for (i = 0; i < XIO_MAX_IOV + 1; i++)
+		for (i = 0; i < txd_nr; i++)
 			txd->sge[i].lkey = srmr->lkey;
 	}
 
@@ -671,7 +673,7 @@ static void xio_txd_init(struct xio_work_req *txd,
 	txd->send_wr.num_sge	= size ? 1 : 0;
 	txd->send_wr.opcode	= IB_WR_SEND;
 
-	sg_init_table(txd->sgl, XIO_MAX_IOV + 1);
+	sg_init_table(txd->sgl, txd_nr);
 
 	if (size) {
 		sg_set_page(txd->sgl, virt_to_page(buf), size, offset_in_page(buf));
@@ -687,6 +689,7 @@ static void xio_txd_init(struct xio_work_req *txd,
 /* xio_rdmad_init							     */
 /*---------------------------------------------------------------------------*/
 static void xio_rdmad_init(struct xio_work_req *rdmad,
+			   size_t rdmad_nr,
 			   struct xio_task *task)
 {
 	rdmad->send_wr.wr_id = uint64_from_ptr(task);
@@ -695,7 +698,7 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 	rdmad->send_wr.next = NULL;
 	rdmad->send_wr.send_flags = IB_SEND_SIGNALED;
 
-	sg_init_table(rdmad->sgl, XIO_MAX_IOV + 1);
+	sg_init_table(rdmad->sgl, rdmad_nr);
 
 	rdmad->nents  = 1;
 	rdmad->mapped = 0;
@@ -713,22 +716,25 @@ static int xio_rdma_task_init(struct xio_task *task,
 			      struct xio_rdma_transport *rdma_hndl,
 			      void *buf,
 			      unsigned long size,
-			      struct ib_mr *srmr)
+			      struct ib_mr *srmr,
+			      size_t txd_nr,
+			      size_t rxd_nr,
+			      size_t rdmad_nr)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	rdma_task->rdma_hndl = rdma_hndl;
 	rdma_task->buf = buf;
 
-	xio_rxd_init(&rdma_task->rxd, task, buf, size, srmr);
-	xio_txd_init(&rdma_task->txd, task, buf, size, srmr);
-	xio_rdmad_init(&rdma_task->rdmad, task);
+	if (rxd_nr)
+		xio_rxd_init(&rdma_task->rxd, rxd_nr ,task, buf, size, srmr);
+	if (txd_nr)
+		xio_txd_init(&rdma_task->txd, txd_nr, task, buf, size, srmr);
+	if (rdmad_nr)
+		xio_rdmad_init(&rdma_task->rdmad, rdmad_nr, task);
 
 	/* initialize the mbuf */
 	xio_mbuf_init(&task->mbuf, buf, size, 0);
-
-	sg_init_table(rdma_task->read_sge.sgl, XIO_MAX_IOV);
-	sg_init_table(rdma_task->write_sge.sgl, XIO_MAX_IOV);
 
 	return 0;
 }
@@ -1059,7 +1065,10 @@ static int xio_rdma_initial_pool_slab_init_task(
 				  rdma_hndl,
 				  buf,
 				  rdma_slab->buf_size,
-				  rdma_hndl->dev->mr);
+				  rdma_hndl->dev->mr,
+				  1,	/* txd_nr */
+				  1,    /* rxd_nr */
+				  0);	/* rdmad_nr */
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1117,7 +1126,10 @@ static int xio_rdma_phantom_pool_slab_init_task(
 			rdma_hndl,
 			NULL,
 			0,
-			NULL);
+			NULL,
+			0,			/* txd_nr */
+			0,			/* rxd_nr */
+			rdma_hndl->max_sge);	/* rdmad_nr */
 
 	return 0;
 }
@@ -1308,6 +1320,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	void *buf;
 	char *ptr;
+	int ret;
 
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
@@ -1359,11 +1372,20 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	rdma_slab->count++;
 
-	return xio_rdma_task_init(task,
-				  rdma_hndl,
-				  buf,
-				  rdma_slab->buf_size,
-				  rdma_hndl->dev->mr);
+	ret = xio_rdma_task_init(task,
+				 rdma_hndl,
+				 buf,
+				 rdma_slab->buf_size,
+				 rdma_hndl->dev->mr,
+				 max_sge,	/* txd_nr */
+				 1,		/* rxd_nr */
+				 max_sge);	/* rdmad_nr */
+
+	if (ret)
+		return ret;
+
+	sg_init_table(rdma_task->read_sge.sgl, max_iovsz);
+	sg_init_table(rdma_task->write_sge.sgl, max_iovsz);
 
 	return 0;
 }
