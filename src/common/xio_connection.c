@@ -1576,9 +1576,16 @@ int xio_connection_disconnected(struct xio_connection *connection)
 			connection->session, connection,
 			connection->close_reason);
 
-	if (connection->conn)
+	if (connection->conn) {
+		if (connection->session->lead_connection &&
+		    connection->session->lead_connection->conn == connection->conn)
+			connection->session->lead_connection = NULL;
+		if (connection->session->redir_connection &&
+		    connection->session->redir_connection->conn == connection->conn)
+		connection->session->redir_connection = NULL;
 		xio_conn_close(connection->conn,
 			       &connection->session->observer);
+	}
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
