@@ -57,10 +57,10 @@ else
 	AC_MSG_RESULT(no)
 
 	# Whether or not the OFED kernel-ib-devel RPM has been installed.
-	OFED_KERNEL_IB_DEVEL_RPM_INSTALLED=`if rpm -q kernel-ib-devel 2>/dev/null | grep -q $$(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
+	OFED_KERNEL_IB_DEVEL_RPM_INSTALLED=`if rpm -q kernel-ib-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
 
 	# Whether or not the OFED compat-rdma-devel RPM has been installed.
-	OFED_COMPAT_RDMA_DEVEL_RPM_INSTALLED=`if rpm -q compat-rdma-devel 2>/dev/null | grep -q $$(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
+	OFED_COMPAT_RDMA_DEVEL_RPM_INSTALLED=`if rpm -q compat-rdma-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
 
 	if test "$OFED_KERNEL_IB_DEVEL_RPM_INSTALLED" = "true"; then
 	# Read OFED's config.mk, which contains the definition of the variable
