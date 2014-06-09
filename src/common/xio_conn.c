@@ -309,8 +309,8 @@ static int xio_conn_read_setup_req(struct xio_task *task,
 
 	/* fill request */
 	UNPACK_SVAL(tmp_req, req, version);
-	UNPACK_SVAL(req, tmp_req, flags);
-	UNPACK_LVAL(req, tmp_req, cid);
+	UNPACK_SVAL(tmp_req, req, flags);
+	UNPACK_LVAL(tmp_req, req, cid);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_conn_setup_req));
 
@@ -373,7 +373,7 @@ static int xio_conn_read_setup_rsp(struct xio_task *task,
 static int xio_conn_send_setup_req(struct xio_conn *conn)
 {
 	struct xio_task	*task;
-	struct xio_conn_setup_req req;
+	struct xio_conn_setup_req req = {0};
 	int    retval = 0;
 
 	TRACE_LOG("send setup request\n");
@@ -2181,6 +2181,8 @@ static void xio_conn_client_reconnect_failed(void *data)
 					   conn,
 					   xio_conn_client_reconnect_timeout,
 					   &conn->close_time_hndl);
+		if (retval)
+			ERROR_LOG("adding delayed work failed\n");
 	} else {
 		/* retries number exceeded */
 		conn->state = XIO_CONN_STATE_DISCONNECTED;
