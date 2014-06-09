@@ -94,7 +94,10 @@ struct xio_tasks_pool_hooks {
 	int	(*slab_destroy)(void *context, void *slab_dd_data);
 	int	(*slab_init_task)(void *context, void *slab_dd_data,
 				  int tid, struct xio_task *task);
-	int	(*slab_uninit_task)(void *slab_dd_data, struct xio_task *task);
+	int	(*slab_uninit_task)(void *context, void *slab_dd_data,
+				    struct xio_task *task);
+	int	(*slab_remap_task)(void *old_context, void *new_context,
+				   void *slab_dd_data, struct xio_task *task);
 	int	(*slab_post_create)(void *context, void *slab_dd_data);
 	int	(*pool_pre_create)(void *context, void *pool,
 				    void *pool_dd_data);
@@ -200,6 +203,11 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 /* xio_tasks_pool_destroy						     */
 /*---------------------------------------------------------------------------*/
 void xio_tasks_pool_destroy(struct xio_tasks_pool *q);
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_remap							     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_alloc_slab						     */

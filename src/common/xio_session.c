@@ -922,6 +922,26 @@ int xio_on_conn_disconnected(struct xio_session *session,
 	return 0;
 }
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_conn_reconnected			                             */
+/*---------------------------------------------------------------------------*/
+int xio_on_conn_reconnected(struct xio_session *session,
+			    struct xio_conn *conn)
+{
+	struct xio_connection		*connection;
+
+	if (session->lead_connection && session->lead_connection->conn == conn)
+		connection = session->lead_connection;
+	else
+		connection = xio_session_find_connection(session, conn);
+
+	if (connection)
+		xio_connection_restart(connection);
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_conn_closed							     */
 /*---------------------------------------------------------------------------*/
@@ -1348,8 +1368,8 @@ struct xio_session *xio_session_init(
 
 	XIO_OBSERVER_INIT(&session->observer, session,
 			  (type == XIO_SESSION_SERVER) ?
-					xio_on_conn_event_server :
-					xio_on_conn_event_client);
+					xio_server_on_conn_event :
+					xio_client_on_conn_event);
 
 	INIT_LIST_HEAD(&session->connections_list);
 

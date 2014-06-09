@@ -569,9 +569,9 @@ int xio_on_server_conn_established(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event_server						     */
+/* xio_server_on_conn_event						     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_server(void *observer, void *sender, int event,
+int xio_server_on_conn_event(void *observer, void *sender, int event,
 			     void *event_data)
 {
 	struct xio_session	*session = observer;
@@ -618,6 +618,11 @@ int xio_on_conn_event_server(void *observer, void *sender, int event,
 		DEBUG_LOG("session: [notification] - connection disconnected" \
 			 " session:%p, conn:%p\n", observer, sender);
 		xio_on_conn_disconnected(session, conn, event_data);
+		break;
+	case XIO_CONN_EVENT_RECONNECTED:
+		DEBUG_LOG("session: [notification] - connection reconnected" \
+			 " session:%p, conn:%p\n", observer, sender);
+		xio_on_conn_reconnected(session, conn);
 		break;
 	case XIO_CONN_EVENT_CLOSED:
 		DEBUG_LOG("session: [notification] - connection closed. " \

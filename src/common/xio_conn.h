@@ -60,6 +60,7 @@ enum xio_conn_event {
 	XIO_CONN_EVENT_NEW_CONNECTION,
 	XIO_CONN_EVENT_ESTABLISHED,
 	XIO_CONN_EVENT_DISCONNECTED,
+	XIO_CONN_EVENT_RECONNECTED,
 	XIO_CONN_EVENT_CLOSED,
 	XIO_CONN_EVENT_REFUSED,
 	XIO_CONN_EVENT_NEW_MESSAGE,
@@ -80,7 +81,7 @@ enum xio_conn_state {
 	XIO_CONN_STATE_REJECTED,
 	XIO_CONN_STATE_CLOSED,
 	XIO_CONN_STATE_DISCONNECTED,
-
+	XIO_CONN_STATE_RECONNECT
 };
 
 /*---------------------------------------------------------------------------*/
@@ -138,13 +139,21 @@ struct xio_conn {
 
 	int				cid;
 	enum xio_conn_state		state;
-	int				is_first_req;
+	short				is_first_req;
+	short				reconnect_retries;
 	int				is_listener;
 	int				pad;
 	xio_delayed_work_handle_t	close_time_hndl;
 
 	struct list_head		observers_htbl;
 	struct list_head		tx_queue;
+
+	/* Client side for reconnect */
+	int				server_cid;
+	int				server_cid_pad;
+	struct xio_transport_base	*new_transport_hndl;
+	char				*portal_uri;
+	char				*out_if_addr;
 
 	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
 };
@@ -315,6 +324,28 @@ static inline struct xio_server *xio_conn_get_server(struct xio_conn *conn)
 {
 	return conn->server_observer->impl;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_state_get							     */
+/*---------------------------------------------------------------------------*/
+static inline enum xio_conn_state xio_conn_state_get(struct xio_conn *conn)
+{
+	return conn->state;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_state_set							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_conn_state_set(struct xio_conn *conn,
+				      enum xio_conn_state state)
+{
+	conn->state = state;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_conn_update_task							     */
+/*---------------------------------------------------------------------------*/
+int xio_conn_update_task(struct xio_conn *conn, struct xio_task *task);
 
 #endif /*XIO_CONNECTION_H */
 

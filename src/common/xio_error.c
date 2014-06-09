@@ -106,6 +106,8 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Message flushed";
 	case XIO_E_MSG_DISCARDED:
 		return "Message discarded";
+	case XIO_E_STATE:
+		return "Operation not permitted in current state";
 	default:
 		return "Unknown error";
 	};

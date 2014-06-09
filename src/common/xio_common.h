@@ -159,9 +159,15 @@ struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		receipt_result;
 };
 
+/* setup flags */
+#define XIO_CID			1
+
+#define XIO_RECONNECT		(XIO_CID)
+
 struct __attribute__((__packed__)) xio_conn_setup_req {
 	uint16_t		version;
-	uint16_t		pad;
+	uint16_t		flags;
+	uint32_t		cid;
 };
 
 
@@ -169,7 +175,7 @@ struct __attribute__((__packed__)) xio_conn_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;
-	uint16_t		pad;
+	uint16_t		flags;
 };
 
 struct __attribute__((__packed__)) xio_session_cancel_hdr {

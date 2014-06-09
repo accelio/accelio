@@ -305,6 +305,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 		xio_rdma_write_sn(task, rdma_hndl->sn, rdma_hndl->ack_sn,
 				  rdma_hndl->credits);
+		rdma_task->sn = rdma_hndl->sn;
 
 		/* set the length */
 		rdma_task->txd.sgl[0].length = xio_mbuf_data_length(&task->mbuf);
@@ -1726,6 +1727,8 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			   sizeof(struct xio_req_hdr));
 
+	rdma_task->sn = req_hdr->sn;
+
 	/* params for SEND */
 	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
 		UNPACK_LLVAL(tmp_sge, &rdma_task->req_recv_sge[i], addr);
@@ -2364,7 +2367,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			/* Only header */
 			rdma_task->txd.nents = 1;
 			/* no data at all */
-			task->omsg->out.pdata_iov[0].iov_base	= NULL;
+			/* task->omsg->out.pdata_iov[0].iov_base = NULL; */
 			task->omsg->out.data_iovlen		= 0;
 		}
 	} else {
@@ -2533,6 +2536,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
 			  rdma_hndl->exp_sn, rsp_hdr.sn);
 	}
+	/* read the sn */
+	rdma_task->sn = rsp_hdr.sn;
 
 	task->imsg.more_in_batch = rdma_task->more_in_batch;
 
@@ -2587,7 +2592,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			 */
 			xio_unmap_desc(rdma_hndl,
 				       &rdma_sender_task->write_sge,
-				       DMA_FROM_DEVICE);
+				       DMA_TO_DEVICE);
 		}
 		if (rsp_hdr.ulp_imm_len) {
 			imsg->in.pdata_iov[0].iov_base	= ulp_hdr +
@@ -2648,7 +2653,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		 */
 		xio_unmap_desc(rdma_hndl,
 			       &rdma_sender_task->read_sge,
-			       DMA_TO_DEVICE);
+			       DMA_FROM_DEVICE);
 		imsg->in.pdata_iov[0].iov_base
 				= sg_virt(&rdma_sender_task->read_sge.sgl[0]);
 		imsg->in.pdata_iov[0].iov_len	= rsp_hdr.ulp_imm_len;
@@ -3084,7 +3089,10 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task,
 				     struct xio_rdma_setup_msg *msg)
 {
-	struct xio_rdma_setup_msg	*tmp_msg;
+	struct xio_rdma_setup_msg *tmp_msg;
+	struct xio_rkey_tbl_pack *ptbl;
+	struct xio_rkey_tbl *tbl;
+	int i;
 
 	/* set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
@@ -3106,6 +3114,7 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(msg, tmp_msg, credits);
 	PACK_LVAL(msg, tmp_msg, max_in_iovsz);
 	PACK_LVAL(msg, tmp_msg, max_out_iovsz);
+	PACK_SVAL(msg, tmp_msg, rkey_tbl_size);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3113,6 +3122,19 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			     64);
 #endif
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rdma_setup_msg));
+
+	if (!msg->rkey_tbl_size)
+		return;
+
+	tbl = rdma_hndl->rkey_tbl;
+	ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	for (i = 0; i < rdma_hndl->rkey_tbl_size; i++) {
+		PACK_LVAL(tbl, ptbl, old_rkey);
+		PACK_LVAL(tbl, ptbl, new_rkey);
+		tbl++;
+		xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rkey_tbl_pack));
+		ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3123,6 +3145,9 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_rdma_setup_msg *msg)
 {
 	struct xio_rdma_setup_msg *tmp_msg;
+	struct xio_rkey_tbl_pack *ptbl;
+	struct xio_rkey_tbl *tbl;
+	int i;
 
 	/* set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
@@ -3144,6 +3169,7 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_msg, msg, credits);
 	UNPACK_LVAL(tmp_msg, msg, max_in_iovsz);
 	UNPACK_LVAL(tmp_msg, msg, max_out_iovsz);
+	UNPACK_SVAL(tmp_msg, msg, rkey_tbl_size);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -3151,6 +3177,29 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			     64);
 #endif
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rdma_setup_msg));
+
+	if (!msg->rkey_tbl_size)
+		return;
+
+	rdma_hndl->peer_rkey_tbl = kcalloc(msg->rkey_tbl_size, sizeof(*tbl),
+				   GFP_KERNEL);
+	if (!rdma_hndl->peer_rkey_tbl) {
+		ERROR_LOG("calloc failed. (errno=%m)\n");
+		xio_strerror(ENOMEM);
+		msg->rkey_tbl_size = -1;
+		return;
+	}
+
+	tbl = rdma_hndl->peer_rkey_tbl;
+	ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	for (i = 0; i < msg->rkey_tbl_size; i++) {
+		UNPACK_LVAL(ptbl, tbl, old_rkey);
+		UNPACK_LVAL(ptbl, tbl, new_rkey);
+		tbl++;
+		xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rkey_tbl_pack));
+		ptbl = xio_mbuf_get_curr_ptr(&task->mbuf);
+	}
+	rdma_hndl->peer_rkey_tbl_size = msg->rkey_tbl_size;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3169,7 +3218,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	req.credits		= 0;
 	req.max_in_iovsz	= rdma_options.max_in_iovsz;
 	req.max_out_iovsz	= rdma_options.max_out_iovsz;
-
+	req.rkey_tbl_size	= rdma_hndl->rkey_tbl_size;
 
 	xio_rdma_write_setup_msg(rdma_hndl, task, &req);
 

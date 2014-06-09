@@ -214,6 +214,11 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	return 0;
 }
 
+int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
+{
+	ERROR_LOG("unsupported\n");
+	return -1;
+}
 /*
  * xio_get_nodeid(cpuid) - This will return the node to which selected cpu
  * belongs

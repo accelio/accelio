@@ -157,6 +157,10 @@ struct xio_connection *xio_server_create_accepted_connection(
 		struct xio_session *session,
 		struct xio_conn *conn);
 
+int xio_session_reconnect(
+		struct xio_session  *session,
+		struct xio_connection  *connection);
+
 /*---------------------------------------------------------------------------*/
 /* xio_session_is_valid_in_req						     */
 /*---------------------------------------------------------------------------*/

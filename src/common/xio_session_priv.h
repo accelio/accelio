@@ -205,7 +205,7 @@ int xio_on_server_conn_established(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_on_conn_event_server				                     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_server(void *observer, void *sender, int event,
+int xio_server_on_conn_event(void *observer, void *sender, int event,
 				    void *event_data);
 
 /* Client API */
@@ -276,7 +276,7 @@ int xio_on_client_conn_established(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_on_conn_event_client						     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_client(void *observer, void *sender, int event,
+int xio_client_on_conn_event(void *observer, void *sender, int event,
 			     void *event_data);
 
 /* Should be in xio_ connection.h but it doesn't compile if moved there */
@@ -304,5 +304,7 @@ static inline void xio_connection_set_conn(struct xio_connection *connection,
 	connection->conn = conn;
 }
 
+int xio_on_conn_reconnected(struct xio_session *session,
+			    struct xio_conn *conn);
 
 #endif /* XIO_SESSION_PRIV_H */

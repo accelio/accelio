@@ -423,9 +423,10 @@ int xio_connection_flush_msgs(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_notify_msgs_flush					     */
+/* xio_connection_notify_req_msgs_flush					     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_notify_msgs_flush(struct xio_connection *connection)
+static void xio_connection_notify_req_msgs_flush(struct xio_connection
+						 *connection)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
@@ -436,6 +437,15 @@ int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 					     XIO_E_MSG_FLUSHED);
 
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_notify_rsp_msgs_flush					     */
+/*---------------------------------------------------------------------------*/
+static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
+						 *connection)
+{
+	struct xio_msg		*pmsg, *tmp_pmsg;
 
 	xio_msg_list_foreach_safe(pmsg, &connection->rsps_msgq,
 				  tmp_pmsg, pdata) {
@@ -449,6 +459,16 @@ int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 		xio_session_notify_msg_error(connection, pmsg,
 					     XIO_E_MSG_FLUSHED);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_notify_msgs_flush					     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_notify_msgs_flush(struct xio_connection *connection)
+{
+	xio_connection_notify_req_msgs_flush(connection);
+
+	xio_connection_notify_rsp_msgs_flush(connection);
 
 	connection->is_flushed = 1;
 
@@ -505,6 +525,89 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 				  "type 0x%x ltid:%d\n",
 				  ptask,
 				  ptask->tlv_type, ptask->ltid);
+		}
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_restart_tasks						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_restart_tasks(struct xio_connection *connection)
+{
+	struct xio_task	*ptask, *pnext_task;
+	int is_req;
+
+	if (!connection->conn)
+		return 0;
+
+	/* tasks in io_tasks_lists belongs to the application and should not be
+	 * touched, the application is assumed to retransmit
+	 */
+
+	/* task in post_io_tasks_list are responses freed by the application
+	 * but there TX complete was yet arrived, in reconnect use case the
+	 * TX complete will never happen, so free them
+	 */
+	if (!list_empty(&connection->post_io_tasks_list)) {
+		TRACE_LOG("post_io_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->post_io_tasks_list,
+					 tasks_list_entry) {
+			TRACE_LOG("post_io_list: task %p" \
+				  "type 0x%x ltid:%d\n",
+				  ptask,
+				  ptask->tlv_type, ptask->ltid);
+			xio_tasks_pool_put(ptask);
+		}
+	}
+
+	/* task in pre_send_list are either response or requests, or receipt
+	 * repeat the logic of xio_connection_send w.r.t release logic
+	 */
+
+	if (!list_empty(&connection->pre_send_list)) {
+		TRACE_LOG("pre_send_list not empty!\n");
+		list_for_each_entry_safe(ptask, pnext_task,
+					 &connection->pre_send_list,
+					 tasks_list_entry) {
+			TRACE_LOG("pre_send_list: task %p, " \
+				  "type 0x%x ltid:%d\n",
+				  ptask,
+				  ptask->tlv_type, ptask->ltid);
+			if (IS_RESPONSE(ptask->tlv_type) &&
+			    ((ptask->omsg_flags &
+			     (XIO_MSG_RSP_FLAG_FIRST |
+			      XIO_MSG_RSP_FLAG_LAST)) ==
+					     XIO_MSG_RSP_FLAG_FIRST))
+				/* this is a receipt message */
+				is_req = 1;
+			else
+				is_req = IS_REQUEST(ptask->tlv_type);
+
+			if (is_req)
+				xio_tasks_pool_put(ptask);
+			else
+				list_move(&ptask->tasks_list_entry,
+					  &connection->io_tasks_list);
+		}
+	}
+
+	if (list_empty(&connection->io_tasks_list))
+		return 0;
+
+	/* Tasks may need to be updated by the transport layer, e.g.
+	 * if tasks in io_tasks_lists need to perform RDMA write then
+	 * the r_keys may be changed if the underling device was changed
+	 * in case of bonding for example
+	 */
+	list_for_each_entry(ptask,
+			    &connection->io_tasks_list,
+			    tasks_list_entry) {
+		if (xio_conn_update_task(connection->conn, ptask)) {
+			ERROR_LOG("update_task failed: task %p", ptask);
+			return -1;
 		}
 	}
 
@@ -631,6 +734,33 @@ int xio_connection_remove_msg_from_queue(struct xio_connection *connection,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_restart						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_restart(struct xio_connection *connection)
+{
+	int retval;
+
+	retval = xio_connection_flush_msgs(connection);
+	if (retval)
+		return retval;
+
+	retval = xio_connection_restart_tasks(connection);
+	if (retval)
+		return retval;
+
+	/* Notify user on responses */
+	xio_connection_notify_rsp_msgs_flush(connection);
+
+	/* restart transmission */
+	retval = xio_connection_xmit(connection);
+	if (retval)
+		return retval;
+
+	return 0;
+}
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_send_request							     */

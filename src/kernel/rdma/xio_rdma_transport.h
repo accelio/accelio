@@ -115,8 +115,9 @@ enum xio_transport_state {
 	XIO_STATE_LISTEN,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
+	XIO_STATE_RECONNECT,
 	XIO_STATE_CLOSED,
-	XIO_STATE_DESTROYED,
+	XIO_STATE_DESTROYED
 };
 
 enum xio_ib_op_code {
@@ -197,7 +198,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	u16		credits;	/* peer send credits	*/
 	u16		sq_depth;
 	u16		rq_depth;
-	u16		pad;
+	u16		rkey_tbl_size;
 	u64		buffer_sz;
 	u32		max_in_iovsz;
 	u32		max_out_iovsz;
@@ -255,9 +256,7 @@ struct xio_rdma_task {
 	struct xio_rdma_mem_desc	read_sge;
 	struct xio_rdma_mem_desc	write_sge;
 
-	/* What this side got from the peer for RDMA R/W
-	 * Currently limited to 1
-	 */
+	/* What this side got from the peer for RDMA R/W */
 	u32				req_write_num_sge;
 	u32				req_read_num_sge;
 	u32				req_recv_num_sge;
@@ -285,7 +284,6 @@ struct xio_cq  {
 						       * attached to this cq
 						       */
 	struct list_head		cq_list_entry;	/* on device cq list */
-	struct xio_observer		observer;	/* context observer */
 	struct dentry			*tcq_dentry;	/* debugfs */
 	u64				events;
 	u64				wqes;
@@ -345,6 +343,7 @@ struct xio_device {
 	int				cqs_used;
 	int				port_num;
 	struct ib_event_handler		event_handler;
+	struct kref			kref; /* 1 + #xio_rdma_transport */
 };
 
 struct xio_rdma_tasks_slab {
@@ -356,6 +355,16 @@ struct xio_rdma_tasks_slab {
 			 */
 	int				buf_size;
 	int				count;
+};
+
+struct __attribute__((__packed__)) xio_rkey_tbl_pack {
+	uint32_t			old_rkey;
+	uint32_t			new_rkey;
+};
+
+struct xio_rkey_tbl {
+	uint32_t			old_rkey;
+	uint32_t			new_rkey;
 };
 
 struct xio_rdma_transport {
@@ -447,8 +456,16 @@ struct xio_rdma_transport {
 
 	struct xio_rdma_setup_msg	setup_rsp;
 
-	struct xio_observer		observer; /* context observer */
+	/* for reconnect */
+	struct xio_rkey_tbl		*rkey_tbl;
+	struct xio_rkey_tbl		*peer_rkey_tbl;
+
 	uint16_t			handler_nesting;
+
+	/* for reconnect */
+	uint16_t			rkey_tbl_size;
+	uint16_t			peer_rkey_tbl_size;
+	uint16_t			pad2[2];
 
 	/* too big to be on stack - use as temporaries */
 	union {
@@ -551,5 +568,16 @@ struct xio_task *xio_rdma_primary_task_lookup(
 void xio_rdma_task_free(struct xio_rdma_transport *rdma_hndl,
 			struct xio_task *task);
 
+static inline void xio_device_get(struct xio_device *dev)
+{
+	kref_get(&dev->kref);
+}
+
+void xio_device_down(struct kref *kref);
+
+static inline void xio_device_put(struct xio_device *dev)
+{
+	kref_put(&dev->kref, xio_device_down);
+}
 
 #endif  /* XIO_RDMA_TRANSPORT_H */
