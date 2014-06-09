@@ -1317,16 +1317,19 @@ static void xio_on_connection_disconnected(struct xio_conn *conn,
 					   event_data)
 {
 	int ret;
+	int enable_reconnect = 0;
 
 	/* Try to reconnect */
-	if (conn->transport_hndl->is_client)
-		ret = xio_conn_client_reconnect(conn);
-	else
-		ret = xio_conn_server_reconnect(conn);
+	if (enable_reconnect) {
+		if (conn->transport_hndl->is_client)
+			ret = xio_conn_client_reconnect(conn);
+		else
+			ret = xio_conn_server_reconnect(conn);
 
-	if (!ret) {
-		TRACE_LOG("reconnect attempt conn:%p\n", conn);
-		return;
+		if (!ret) {
+			TRACE_LOG("reconnect attempt conn:%p\n", conn);
+			return;
+		}
 	}
 
 	/* Can't reconnect */
