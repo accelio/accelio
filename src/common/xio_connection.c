@@ -1567,6 +1567,16 @@ int xio_connection_release_hello(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_teardown							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_session_teardown(void *_session)
+{
+	struct xio_session *session = _session;
+
+	xio_session_notify_teardown(session, session->teardown_reason);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_connection_post_destroy						     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_post_destroy(struct xio_connection *connection)
@@ -1574,6 +1584,7 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 	int			retval;
 	int			reason;
 	struct xio_session	*session;
+	struct xio_context	*ctx;
 	int			destroy_session = 0;
 	int			state;
 	int			close_reason;
@@ -1583,6 +1594,7 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 		return -1;
 	}
 	session = connection->session;
+	ctx = connection->ctx;
 	state = session->state;
 	close_reason = connection->close_reason;
 
@@ -1649,10 +1661,14 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 		spin_lock(&session->connections_list_lock);
 		destroy_session = (session->connections_nr == 0);
 		spin_unlock(&session->connections_list_lock);
-		if (destroy_session)
-			xio_session_notify_teardown(
-				session,
-				reason);
+		if (destroy_session) {
+			session->teardown_reason = reason;
+			retval = xio_ctx_add_work(
+					ctx,
+					session,
+					xio_session_teardown,
+					&session->teardown_work);
+		}
 	}
 
 	return 0;
