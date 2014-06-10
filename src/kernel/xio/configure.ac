@@ -21,7 +21,6 @@ AC_ARG_WITH(kernel-build,
 AC_ARG_ENABLE(kernel-module,
 	[  --enable-kernel-module  Compile kernel module ])
 
-
 #build against installed OFED
 if test "$ENABLE_OFED_BUILD" = "y"; then
 AC_MSG_CHECKING([if ofed installed])
@@ -55,6 +54,8 @@ if test "$MLNX_OFED" = "true"; then
 	fi
 else
 	AC_MSG_RESULT(no)
+	XIO_SYMVERS=`echo ../compat/Module.symvers`
+
 
 	# Whether or not the OFED kernel-ib-devel RPM has been installed.
 	OFED_KERNEL_IB_DEVEL_RPM_INSTALLED=`if rpm -q kernel-ib-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`

@@ -55,6 +55,7 @@ if test "$MLNX_OFED" = "true"; then
 	fi
 else
 	AC_MSG_RESULT(no)
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS ../compat/Module.symvers`
 
 	# Whether or not the OFED kernel-ib-devel RPM has been installed.
 	OFED_KERNEL_IB_DEVEL_RPM_INSTALLED=`if rpm -q kernel-ib-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
