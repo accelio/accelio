@@ -144,6 +144,7 @@ EXPORT_SYMBOL(xio_modify_connection);
 EXPORT_SYMBOL(xio_query_connection);
 
 EXPORT_SYMBOL(xio_query_session);
+EXPORT_SYMBOL(xio_modify_session);
 
 EXPORT_SYMBOL(xio_send_request);
 EXPORT_SYMBOL(xio_send_response);

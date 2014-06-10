@@ -1551,6 +1551,25 @@ int xio_query_session(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_modify_session							     */
+/*---------------------------------------------------------------------------*/
+int xio_modify_session(struct xio_session *session,
+		       struct xio_session_attr *attr,
+		       int attr_mask)
+{
+	if (!session || !attr) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("invalid parameters\n");
+		return -1;
+	}
+
+	if (attr_mask & XIO_SESSION_ATTR_USER_CTX)
+		session->user_context = attr->user_context;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_get_connection							     */
 /*---------------------------------------------------------------------------*/
 struct xio_connection *xio_get_connection(

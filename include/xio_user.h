@@ -1038,6 +1038,19 @@ int xio_query_session(struct xio_session *session,
 		      int attr_mask);
 
 /**
+ * modify session parameters
+ *
+ * @param[in] session	The xio session handle
+ * @param[in] attr	The session attributes structure
+ * @param[in] attr_mask attribute mask to query
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_modify_session(struct xio_session *session,
+		       struct xio_session_attr *attr,
+		       int attr_mask);
+
+/**
  * creates connection handle
  *
  * @param[in] session	The xio session handle

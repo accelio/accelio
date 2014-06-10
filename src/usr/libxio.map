@@ -30,6 +30,7 @@ XIO_1.0 {
 		xio_session_create;		
 		xio_session_destroy;
 		xio_query_session;		
+		xio_modify_session;		
 		xio_connect;		
 		xio_disconnect;
 		xio_connection_destroy;
