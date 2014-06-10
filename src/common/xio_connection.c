@@ -49,6 +49,8 @@
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_INFLIGHT_BUDGET	64
 #define XIO_CONNECTION_APP_BUDGET	256
+#define XIO_CONNECTION_TIMEOUT		60000
+
 
 #define		IS_APPLICATION_MSG(msg) \
 		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
@@ -401,6 +403,12 @@ int xio_connection_flush_msgs(struct xio_connection *connection)
 			connection->in_flight_reqs_budget++;
 		if (pmsg->type == XIO_ONE_WAY_REQ)
 			connection->in_flight_sends_budget++;
+		if (connection->in_flight_reqs_budget > 1000 ||
+		    connection->in_flight_sends_budget > 1000) {
+			ERROR_LOG("in_flight_reqs_budget:%d, in_flight_sends_budget:%d\n",
+				  connection->in_flight_reqs_budget,
+				  connection->in_flight_sends_budget);
+		}
 	}
 
 	if (!xio_msg_list_empty(&connection->rsps_msgq))
@@ -1075,6 +1083,10 @@ static void xio_connection_release(struct kref *kref)
 		xio_ctx_del_delayed_work(connection->ctx,
 					&connection->fin_delayed_work);
 
+	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
+		xio_ctx_del_delayed_work(connection->ctx,
+					&connection->fin_timeout_work);
+
 	if (xio_is_work_pending(&connection->fin_work))
 		xio_ctx_del_work(connection->ctx,
 				 &connection->fin_work);
@@ -1203,11 +1215,43 @@ int xio_poll_completions(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_fin_req_timeout							     */
+/*---------------------------------------------------------------------------*/
+static void xio_fin_req_timeout(void *data)
+{
+	struct xio_connection *connection = data;
+
+	ERROR_LOG("connection close timeout. session:%p, connection:%p\n",
+		 connection->session, connection);
+
+	DEBUG_LOG("connection %p state change: current_state:%s, " \
+		  "next_state:%s\n",
+		  connection,
+		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
+
+	connection->state = XIO_CONNECTION_STATE_CLOSED;
+
+	/* flush all messages from in flight message queue to in queue */
+	xio_connection_flush_msgs(connection);
+
+	/* flush all messages back to user */
+	xio_connection_notify_msgs_flush(connection);
+
+	if (!connection->disable_notify)
+		xio_session_notify_connection_teardown(connection->session,
+						       connection);
+	else
+		xio_connection_destroy(connection);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_send_fin_req							     */
 /*---------------------------------------------------------------------------*/
 static int xio_send_fin_req(struct xio_connection *connection)
 {
 	struct xio_msg *msg;
+	int		retval;
 
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
@@ -1224,6 +1268,17 @@ static int xio_send_fin_req(struct xio_connection *connection)
 
 	TRACE_LOG("send fin request. session:%p, connection:%p\n",
 		  connection->session, connection);
+
+	/* trigger the timer */
+	retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				XIO_CONNECTION_TIMEOUT, connection,
+				xio_fin_req_timeout,
+				&connection->fin_timeout_work);
+	if (retval != 0) {
+		ERROR_LOG("xio_ctx_timer_add failed.\n");
+		return retval;
+	}
 
 	/* do not xmit until connection is assigned */
 	return xio_connection_xmit(connection);

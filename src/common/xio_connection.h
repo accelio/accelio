@@ -100,6 +100,7 @@ struct xio_connection {
 	xio_work_handle_t		hello_work;
 	xio_work_handle_t		fin_work;
 	xio_delayed_work_handle_t	fin_delayed_work;
+	xio_delayed_work_handle_t	fin_timeout_work;
 
 	struct list_head		io_tasks_list;
 	struct list_head		post_io_tasks_list;

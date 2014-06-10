@@ -513,6 +513,11 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 	DEBUG_LOG("got fin response. session:%p, connection:%p\n",
 		  connection->session, connection);
 
+	/* cancel the timer */
+	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
+		xio_ctx_del_delayed_work(connection->ctx,
+					&connection->fin_timeout_work);
+
 	xio_connection_release_fin(connection, task->sender_task->omsg);
 
 	/* recycle the task */
