@@ -118,7 +118,8 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
 	struct xio_rdma_transport *rdma_hndl;
-	struct xio_cq *tcq;
+	struct xio_device *dev;
+	struct xio_cq *tcq, *next;
 
 	if (!trans_hndl) {
 		TRACE_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
@@ -127,14 +128,20 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	rdma_hndl = (struct xio_rdma_transport *)trans_hndl;
 
-	if (!rdma_hndl->tcq) {
-		TRACE_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
-		return 0;
+	/* Should be set by now */
+	dev = rdma_hndl->dev;
+	if (!dev) {
+		ERROR_LOG("failed to find device\n");
+		return -1;
 	}
 
-	tcq = rdma_hndl->tcq;
-
-	xio_cq_release(tcq);
+	read_lock_bh(&dev->cq_lock);
+ 	list_for_each_entry_safe(tcq, next, &dev->cq_list, cq_list_entry) {
+		if (tcq->ctx == ctx) {
+			xio_cq_release(tcq);
+		}
+	}
+	read_unlock_bh(&dev->cq_lock);
 
 	return 0;
 }
@@ -264,15 +271,9 @@ cleanup0:
 static void xio_cq_release(struct xio_cq *tcq)
 {
 	struct xio_rdma_transport *rdma_hndl, *tmp_rdma_hndl;
-	int retval, i;
+	int retval;
 
-	i = atomic_dec_return(&tcq->refcnt);
-	if (i)
-		return;
-
-	write_lock_bh(&tcq->dev->cq_lock);
 	list_del_init(&tcq->cq_list_entry);
-	write_unlock_bh(&tcq->dev->cq_lock);
 
 	/* clean all redundant connections attached to this cq */
 	list_for_each_entry_safe(rdma_hndl, tmp_rdma_hndl, &tcq->trans_list,
@@ -413,9 +414,11 @@ static void xio_device_release(struct xio_device *dev)
 
 	(void)ib_unregister_event_handler(&dev->event_handler);
 
+	read_lock_bh(&dev->cq_lock);
 	list_for_each_entry_safe(tcq, next, &dev->cq_list, cq_list_entry) {
 		xio_cq_release(tcq);
 	}
+	read_unlock_bh(&dev->cq_lock);
 
 	/* ib_dereg_mr & ib_dealloc_pd will be called from xio_device_down
 	 *  (kerf)
