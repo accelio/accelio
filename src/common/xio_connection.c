@@ -1547,6 +1547,16 @@ int xio_query_connection(struct xio_connection *connection,
 	if (attr_mask & XIO_CONNECTION_ATTR_CTX)
 		attr->ctx = connection->ctx;
 
+	if (attr_mask & XIO_CONNECTION_ATTR_PROTO)
+		attr->proto = xio_conn_get_proto(connection->conn);
+
+	if (connection->session &&
+	    connection->session->type == XIO_SESSION_SERVER) {
+		if (attr_mask & XIO_CONNECTION_ATTR_SRC_ADDR)
+			xio_conn_get_src_addr(connection->conn, &attr->src_addr,
+					      sizeof(attr->src_addr));
+	}
+
 	return 0;
 }
 

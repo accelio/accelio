@@ -2154,6 +2154,7 @@ static struct xio_transport_base *xio_rdma_open(
 	}
 
 	rdma_hndl->base.portal_uri	= NULL;
+	rdma_hndl->base.proto		= XIO_PROTO_RDMA;
 	atomic_set(&rdma_hndl->base.refcnt, 1);
 	rdma_hndl->transport		= transport;
 	rdma_hndl->cm_id		= NULL;
