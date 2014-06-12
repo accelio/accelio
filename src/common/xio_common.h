@@ -238,6 +238,9 @@ size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
 size_t		memcpyv(struct xio_iovec *dst, int dsize,
 			struct xio_iovec *src, int ssize);
 
+size_t		memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
+			   struct xio_iovec_ex *src, int ssize);
+
 size_t		memclonev(struct xio_iovec *dst, int dsize,
 			  struct xio_iovec *src, int ssize);
 
