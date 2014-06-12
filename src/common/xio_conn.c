@@ -1085,14 +1085,14 @@ static void xio_on_context_close(struct xio_conn *conn,
 	/* remove the conn from table */
 	xio_conns_store_remove(conn->cid);
 
-	/* shut down the context and its dependent without waiting */
-	if (conn->transport->context_shutdown)
-		conn->transport->context_shutdown(conn->transport_hndl, ctx);
-
 	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
 		xio_ctx_del_delayed_work(ctx,
 					 &conn->close_time_hndl);
 	}
+
+	/* shut down the context and its dependent without waiting */
+	if (conn->transport->context_shutdown)
+		conn->transport->context_shutdown(conn->transport_hndl, ctx);
 
 	/* at that stage the conn->transport_hndl no longer exist */
 	conn->transport_hndl = NULL;
