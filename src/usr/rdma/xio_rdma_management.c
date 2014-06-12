@@ -1297,7 +1297,11 @@ static int xio_rdma_task_pre_put(
 			rdma_task->write_sge[i].cache = NULL;
 		}
 	}
-	rdma_task->write_num_sge = 0;
+	rdma_task->write_num_sge	= 0;
+	rdma_task->req_write_num_sge	= 0;
+	rdma_task->rsp_write_num_sge	= 0;
+	rdma_task->req_read_num_sge	= 0;
+	rdma_task->req_recv_num_sge	= 0;
 
 	rdma_task->txd.send_wr.num_sge = 1;
 	rdma_task->ib_op = XIO_IB_NULL;
@@ -1617,6 +1621,8 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	rdma_task->req_recv_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
+	rdma_task->rsp_write_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
 	rdma_task->ib_op = 0x200;
@@ -1652,7 +1658,7 @@ static void xio_rdma_primary_pool_get_params(
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		(max_sge + 1 + max_sge)*sizeof(struct ibv_sge) +
 		 2 * max_iovsz * sizeof(struct xio_mempool_obj) +
-		 3 * max_iovsz * sizeof(struct xio_sge);
+		 4 * max_iovsz * sizeof(struct xio_sge);
 
 }
 

@@ -1313,7 +1313,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	LIST_HEAD(tmp_list);
 
 	lsize = vmsg->data_iovlen;
-	liov  = vmsg->data_iov;
+	liov  = vmsg->pdata_iov;
 
 	r = 0;
 	rlen  = rsg_list[r].length;
@@ -1774,6 +1774,11 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_rsp_hdr *rsp_hdr)
 {
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
+	uint32_t			*wr_len;
+	int				i;
+	size_t				hdr_len;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1789,12 +1794,28 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, tid);
 	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
 	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
+	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, write_num_sge);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_hdr_len);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_pad_len);
 	/* remain_data_len not in use */
 	PACK_LLVAL(rsp_hdr, tmp_rsp_hdr, ulp_imm_len);
 
-	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rsp_hdr));
+	if (rsp_hdr->write_num_sge) {
+		wr_len = (uint32_t *)((uint8_t *)tmp_rsp_hdr +
+			  sizeof(struct xio_rsp_hdr));
+
+		/* params for RDMA WRITE */
+		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
+			*wr_len = htonl(rdma_task->rsp_write_sge[i].length);
+			wr_len++;
+		}
+	}
+
+	hdr_len	= sizeof(struct xio_rsp_hdr);
+	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
+
+	xio_mbuf_inc(&task->mbuf, hdr_len);
+
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
 			     task->mbuf.tlv.head, 64);
@@ -1810,6 +1831,11 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_rsp_hdr *rsp_hdr)
 {
 	struct xio_rsp_hdr		*tmp_rsp_hdr;
+	uint32_t			*wr_len;
+	int				i;
+	size_t				hdr_len;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1831,12 +1857,29 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
+	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, write_num_sge);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_pad_len);
 	/* remain_data_len not in use */
 	UNPACK_LLVAL(tmp_rsp_hdr, rsp_hdr, ulp_imm_len);
 
-	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_rsp_hdr));
+	if (rsp_hdr->write_num_sge) {
+		wr_len = (void *)((uint8_t *)tmp_rsp_hdr +
+				sizeof(struct xio_rsp_hdr));
+
+		/* params for RDMA WRITE */
+		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
+			rdma_task->rsp_write_sge[i].length = ntohl(*wr_len);
+			wr_len++;
+		}
+		rdma_task->rsp_write_num_sge = rsp_hdr->write_num_sge;
+	}
+
+
+	hdr_len	= sizeof(struct xio_rsp_hdr);
+	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
+
+	xio_mbuf_inc(&task->mbuf, hdr_len);
 
 	return 0;
 }
@@ -1935,6 +1978,7 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	rsp_hdr.tid		= task->rtid;
 	rsp_hdr.opcode		= rdma_task->ib_op;
 	rsp_hdr.flags		= 0;
+	rsp_hdr.write_num_sge	= rdma_task->rsp_write_num_sge;
 	rsp_hdr.ulp_hdr_len	= ulp_hdr_len;
 	rsp_hdr.ulp_pad_len	= ulp_pad_len;
 	rsp_hdr.ulp_imm_len	= ulp_imm_len;
@@ -2013,7 +2057,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 	/* calculate headers */
 	ulp_out_hdr_len	= vmsg->header.iov_len;
-	ulp_out_imm_len	= xio_iovex_length(vmsg->data_iov,
+	ulp_out_imm_len	= xio_iovex_length(vmsg->pdata_iov,
 					   vmsg->data_iovlen);
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
@@ -2116,7 +2160,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 			rdma_task->read_num_sge = 0;
 			return 0;
 	}
-	data_len = xio_iovex_length(vmsg->data_iov, vmsg->data_iovlen);
+	data_len = xio_iovex_length(vmsg->pdata_iov, vmsg->data_iovlen);
 	hdr_len  = vmsg->header.iov_len;
 
 	/* requester may insist on RDMA for small buffers to eliminate copy
@@ -2322,7 +2366,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* calculate headers */
 	ulp_hdr_len = task->omsg->out.header.iov_len;
-	ulp_imm_len = xio_iovex_length(task->omsg->out.data_iov,
+	ulp_imm_len = xio_iovex_length(task->omsg->out.pdata_iov,
 				       task->omsg->out.data_iovlen);
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
@@ -2512,7 +2556,7 @@ static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
 static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				struct xio_task *task)
 {
-	int			retval = 0;
+	int			retval = 0, i;
 	union xio_transport_event_data event_data;
 	struct xio_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
@@ -2608,10 +2652,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			/* deep copy */
 			if (imsg->in.data_iovlen) {
 				size_t idata_len  = xio_iovex_length(
-					imsg->in.data_iov,
+					imsg->in.pdata_iov,
 					imsg->in.data_iovlen);
 				size_t odata_len  = xio_iovex_length(
-					omsg->in.data_iov,
+					omsg->in.pdata_iov,
 					omsg->in.data_iovlen);
 
 				if (idata_len > odata_len) {
@@ -2622,29 +2666,29 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				}
 				if (omsg->in.pdata_iov[0].iov_base)  {
 					/* user provided buffer so do copy */
-					omsg->in.data_iovlen = memcpyv(
-					  (struct xio_iovec *)omsg->in.data_iov,
+					omsg->in.data_iovlen = memcpyv_ex(
+					  omsg->in.pdata_iov,
 					  omsg->in.data_iovlen,
-					  (struct xio_iovec *)imsg->in.data_iov,
+					  imsg->in.pdata_iov,
 					  imsg->in.data_iovlen);
 				} else {
 					/* use provided only length - set user
 					 * pointers */
-					omsg->in.data_iovlen =  memclonev(
-					(struct xio_iovec *)omsg->in.data_iov,
-					omsg->in.data_iovlen,
-					(struct xio_iovec *)imsg->in.data_iov,
-					imsg->in.data_iovlen);
+					omsg->in.data_iovlen =  memclonev_ex(
+							omsg->in.pdata_iov,
+							omsg->in.data_iovlen,
+							imsg->in.pdata_iov,
+							imsg->in.data_iovlen);
 				}
 			} else {
 				omsg->in.data_iovlen = imsg->in.data_iovlen;
 			}
 		} else {
 			omsg->in.data_iovlen =
-				memclonev((struct xio_iovec *)omsg->in.data_iov,
-					  rdma_options.max_in_iovsz,
-					  (struct xio_iovec *)imsg->in.data_iov,
-					  imsg->in.data_iovlen);
+				memclonev_ex(omsg->in.pdata_iov,
+					     rdma_options.max_in_iovsz,
+					     imsg->in.pdata_iov,
+					     imsg->in.data_iovlen);
 		}
 		break;
 	case XIO_IB_RDMA_WRITE:
@@ -2654,10 +2698,20 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		xio_unmap_desc(rdma_hndl,
 			       &rdma_sender_task->read_sge,
 			       DMA_FROM_DEVICE);
-		imsg->in.pdata_iov[0].iov_base
-				= sg_virt(&rdma_sender_task->read_sge.sgl[0]);
-		imsg->in.pdata_iov[0].iov_len	= rsp_hdr.ulp_imm_len;
-		imsg->in.data_iovlen		= 1;
+		if (rdma_task->rsp_write_num_sge > rdma_sender_task->read_num_sge) {
+			ERROR_LOG("local in data_iovec is too small %d < %d\n",
+				  rdma_sender_task->read_num_sge,
+				  rdma_task->rsp_write_num_sge);
+			goto partial_msg;
+		}
+
+		for (i = 0; i < rdma_task->rsp_write_num_sge; i++) {
+			imsg->in.pdata_iov[i].iov_base
+				= sg_virt(&rdma_sender_task->read_sge.sgl[i]);
+			imsg->in.pdata_iov[i].iov_len	=
+				rdma_task->rsp_write_sge[i].length;
+		}
+		imsg->in.data_iovlen = rdma_task->rsp_write_num_sge;
 
 		if (omsg->in.pdata_iov[0].iov_base) {
 			/* user provided buffer */
@@ -2666,14 +2720,16 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				 * data was copied directly to user buffer
 				 * need to update the buffer length
 				 */
-				omsg->in.pdata_iov[0].iov_len =
-						imsg->in.pdata_iov[0].iov_len;
+				for (i = 0; i < imsg->in.data_iovlen; i++)
+					omsg->in.pdata_iov[i].iov_len =
+						imsg->in.pdata_iov[i].iov_len;
+				omsg->in.data_iovlen = imsg->in.data_iovlen;
 			} else {
 				/* Bounce buffer */
-				omsg->in.data_iovlen = memcpyv(
-					(struct xio_iovec *)omsg->in.data_iov,
+				omsg->in.data_iovlen = memcpyv_ex(
+					omsg->in.pdata_iov,
 					omsg->in.data_iovlen,
-					(struct xio_iovec *)imsg->in.data_iov,
+					imsg->in.pdata_iov,
 					imsg->in.data_iovlen);
 
 				/* put bounce buffer back to pool */
@@ -2684,15 +2740,15 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		} else {
 			/* use provided only length - set user
 			 * pointers */
-			omsg->in.data_iovlen = memclonev(
-					(struct xio_iovec *)omsg->in.data_iov,
+			omsg->in.data_iovlen = memclonev_ex(
+					omsg->in.pdata_iov,
 					omsg->in.data_iovlen,
-					(struct xio_iovec *)imsg->in.data_iov,
+					imsg->in.pdata_iov,
 					imsg->in.data_iovlen);
 		}
 		break;
 	default:
-		ERROR_LOG("%s unexpectd op 0x%x\n", __func__, rsp_hdr.opcode);
+		ERROR_LOG("%s unexpected op 0x%x\n", __func__, rsp_hdr.opcode);
 		break;
 	}
 partial_msg:
@@ -2889,6 +2945,21 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_set_rsp_write_sge						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_set_rsp_write_sge(struct xio_task *task,
+					 struct xio_vmsg *vmsg)
+{
+	int	i;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	for (i = 0; i < vmsg->data_iovlen; i++)
+		rdma_task->rsp_write_sge[i].length = vmsg->pdata_iov[i].iov_len;
+
+	rdma_task->rsp_write_num_sge = vmsg->data_iovlen;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_sched_rdma_wr_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
@@ -2940,6 +3011,9 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 		task->omsg->status = EINVAL;
 		goto cleanup;
 	}
+	/* prepare response to peer */
+	xio_set_rsp_write_sge(task, &task->omsg->out);
+
 	/* xio_prep_rdma_op used splice to transfer "tasks_used"  to
 	 * tx_ready_list
 	 */

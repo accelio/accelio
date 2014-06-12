@@ -201,6 +201,8 @@ struct __attribute__((__packed__)) xio_rsp_hdr {
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[3];
 
+	uint16_t		write_num_sge;
+	uint16_t		pad1;
 	uint32_t		status;		/* status		*/
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
@@ -252,12 +254,13 @@ struct xio_rdma_task {
 	uint32_t			read_num_sge;
 	uint32_t			write_num_sge;
 	uint32_t			req_write_num_sge;
+	uint32_t			rsp_write_num_sge;
 	uint32_t			req_read_num_sge;
 	uint32_t			req_recv_num_sge;
 	uint16_t			sn;
 	uint16_t			more_in_batch;
 	uint8_t				rflags;
-	uint8_t				pad[3];
+	uint8_t				pad[7];
 
 
 	/* The buffer mapped with the 3 xio_work_req
@@ -279,6 +282,11 @@ struct xio_rdma_task {
 	/* What this side got from the peer for SEND
 	*/
 	struct xio_sge			*req_recv_sge;
+
+	/* What this side writes to the peer on RDMA W
+	 */
+	struct xio_sge			*rsp_write_sge;
+
 };
 
 struct xio_cq  {

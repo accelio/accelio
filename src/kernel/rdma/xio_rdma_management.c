@@ -962,7 +962,11 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 	rdma_task->read_num_sge = 0;
 
 	xio_rdma_mempool_free(&rdma_task->write_sge);
-	rdma_task->write_num_sge = 0;
+	rdma_task->write_num_sge	= 0;
+	rdma_task->req_write_num_sge	= 0;
+	rdma_task->rsp_write_num_sge	= 0;
+	rdma_task->req_read_num_sge	= 0;
+	rdma_task->req_recv_num_sge	= 0;
 
 	rdma_task->txd.send_wr.num_sge = 1;
 	rdma_task->ib_op = XIO_IB_NULL;
@@ -1474,6 +1478,8 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	rdma_task->req_recv_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
+	rdma_task->rsp_write_sge = (void *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
 	rdma_task->ib_op = 0x200;
@@ -1529,7 +1535,7 @@ static void xio_rdma_primary_pool_get_params(
 					 sizeof(struct scatterlist)) +
 		 2 * max_iovsz * (sizeof(struct xio_rdma_mp_mem) +
 				  sizeof(struct scatterlist)) +
-		 3 * max_iovsz * sizeof(struct xio_sge);
+		 4 * max_iovsz * sizeof(struct xio_sge);
 }
 
 static struct xio_tasks_pool_ops primary_tasks_pool_ops = {
