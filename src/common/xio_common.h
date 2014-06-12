@@ -241,6 +241,10 @@ size_t		memcpyv(struct xio_iovec *dst, int dsize,
 size_t		memclonev(struct xio_iovec *dst, int dsize,
 			  struct xio_iovec *src, int ssize);
 
+size_t		memclonev_ex(struct xio_iovec_ex *dst, int dsize,
+			  struct xio_iovec_ex *src, int ssize);
+
+
 size_t		xio_iov_length(const struct xio_iovec *iov,
 			       unsigned long nr_segs);
 

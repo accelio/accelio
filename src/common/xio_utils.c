@@ -201,6 +201,27 @@ size_t memclonev(struct xio_iovec *dst, int dsize,
 	return sz;
 }
 
+/*---------------------------------------------------------------------------*/
+/* memclonev_ex								     */
+/*---------------------------------------------------------------------------*/
+size_t memclonev_ex(struct xio_iovec_ex *dst, int dsize,
+		    struct xio_iovec_ex *src, int ssize)
+{
+	int			nr = 0;
+	int			sz;
+
+	sz = (dsize < ssize) ? dsize : ssize;
+
+	while (nr < sz) {
+		dst[nr].iov_base = src[nr].iov_base;
+		dst[nr].iov_len = src[nr].iov_len;
+		nr++;
+	}
+
+	return sz;
+}
+
+
 /*
  * Total number of bytes covered by an iovec.
  */
