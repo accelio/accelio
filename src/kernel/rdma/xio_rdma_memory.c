@@ -622,9 +622,9 @@ void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
 	int i;
 
 	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
-		memmove(ptr, vmsg->data_iov[i].iov_base,
-			vmsg->data_iov[i].iov_len);
-		ptr += vmsg->data_iov[i].iov_len;
+		memmove(ptr, vmsg->pdata_iov[i].iov_base,
+			vmsg->pdata_iov[i].iov_len);
+		ptr += vmsg->pdata_iov[i].iov_len;
 	}
 }
 
@@ -653,7 +653,7 @@ int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl, int *nents)
 		return 0;
 	}
 
-	niov = &vmsg->data_iov[0];
+	niov = &vmsg->pdata_iov[0];
 	start_addr = niov->iov_base;
 	total_len = niov->iov_len;
 	sg = sgl;

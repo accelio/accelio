@@ -80,7 +80,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	}
 
 	lsize = vmsg->data_iovlen;
-	liov  = vmsg->data_iov;
+	liov  = vmsg->pdata_iov;
 
 	r = 0;
 	rlen  = rsg_list[r].length;
