@@ -120,6 +120,9 @@ EXPORT_SYMBOL(xio_unreg_transport);
 
 EXPORT_SYMBOL(memcpyv);
 EXPORT_SYMBOL(memclonev);
+EXPORT_SYMBOL(memcpyv_ex);
+EXPORT_SYMBOL(memclonev_ex);
+
 
 EXPORT_SYMBOL(xio_context_add_event);
 EXPORT_SYMBOL(xio_context_stop_loop);
