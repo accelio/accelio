@@ -155,12 +155,15 @@ int main(int argc, char *argv[])
 		"\0"
 	};
 
+	int max_iterations = atoi(argv[3]);
+
 	struct params params  = {
 		.argc = argc,
 		.argv = argvv
 	};
 	pthread_t stid, ctid;
 	struct	 program_vars vars;
+	vars.test_num = 0;
 
 start:
 	rand_params(&vars);
@@ -208,7 +211,8 @@ start:
 
 	vars.test_num++;
 
-	goto start;
+	if (!max_iterations || vars.test_num != max_iterations)
+		goto start;
 
 	return 0;
 }
