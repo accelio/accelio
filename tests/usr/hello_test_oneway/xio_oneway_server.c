@@ -59,8 +59,7 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_OUTSTANDING_REQS	50
-#define TEST_DISCONNECT		0
-#define DISCONNECT_NR		12000000
+#define EXIT abort()
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
@@ -73,6 +72,8 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
+	uint16_t	finite_run;
+	uint16_t	padding[3];
 };
 
 struct ow_test_params {
@@ -243,7 +244,7 @@ static int on_new_session(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(ow_params->pool, msg);
-			return 0;
+			EXIT;
 		}
 		ow_params->nsent++;
 	}
@@ -258,9 +259,11 @@ static int on_client_message(struct xio_session *session,
 			int more_in_batch,
 			void *cb_prv_data)
 {
-	if (msg->status)
+	if (msg->status) {
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(msg->status));
+		EXIT;
+	}
 
 	/* process message */
 	process_request(msg);
@@ -311,6 +314,7 @@ static int on_message_delivered(struct xio_session *session,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(ow_params->pool, new_msg);
+		EXIT;
 	}
 	ow_params->nsent++;
 
@@ -465,7 +469,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			EXIT;
 		}
 	}
 	if (optind == argc - 1) {
@@ -535,7 +539,8 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit1;
+//		goto exit1;
+		EXIT;
 	}
 
 	/* create a url and bind to server */
@@ -555,7 +560,7 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(ow_params.ctx);
 
-exit1:
+//exit1:
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
 
