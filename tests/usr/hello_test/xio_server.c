@@ -64,6 +64,8 @@
 #define DISCONNECT_NR		12000000
 #define PEER_MAX_IN_IOVLEN	256
 #define PEER_MAX_OUT_IOVLEN	256
+#define EXIT abort()
+
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -244,9 +246,11 @@ static int on_request(struct xio_session *session,
 	struct xio_msg	*rsp;
 	struct test_params *test_params = cb_user_context;
 
-	if (req->status)
+	if (req->status){
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(req->status));
+		EXIT;
+	}
 
 	/* process request */
 	process_request(req);
@@ -266,6 +270,7 @@ static int on_request(struct xio_session *session,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(test_params->pool, req);
+		EXIT;
 	}
 	test_params->nsent++;
 
@@ -451,6 +456,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
+			exit(-1);
 			break;
 		}
 	}
@@ -531,7 +537,8 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit1;
+//		goto exit1;
+		EXIT;
 	}
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
@@ -551,7 +558,7 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-exit1:
+//exit1:
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 
