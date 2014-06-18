@@ -63,6 +63,8 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
+#define DISCONNECT_FACTOR	3
+#define EXIT abort()
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -71,6 +73,8 @@ struct xio_test_config {
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		conn_idx;
+	uint16_t		finite_run;
+	uint16_t		padding[3];
 };
 
 /*---------------------------------------------------------------------------*/
@@ -80,6 +84,11 @@ static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
 static struct xio_context	*ctx;
+static uint64_t nrecv;
+static uint64_t nsent;
+static uint64_t	disconnect_nr;
+
+
 
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
@@ -201,6 +210,7 @@ static void process_response(struct xio_msg *rsp)
 		data_len = data_len/1024;
 		print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		disconnect_nr = print_counter * DISCONNECT_FACTOR;
 	}
 
 	if (++cnt == print_counter) {
@@ -283,6 +293,17 @@ static int on_response(struct xio_session *session,
 	/* message is no longer needed */
 	xio_release_response(rsp);
 
+	nrecv++;
+	if (test_config.finite_run){
+		if ( nrecv == disconnect_nr){
+			xio_disconnect(conn);
+			return 0;
+		}	
+
+		if (nrecv > disconnect_nr || nsent == disconnect_nr)
+			return 0;
+	}
+
 	/* reset message */
 	rsp->in.header.iov_base = NULL;
 	rsp->in.header.iov_len = 0;
@@ -309,6 +330,7 @@ static int on_response(struct xio_session *session,
 			msg_pool_put(pool, rsp);
 			return 0;
 		}
+		nsent ++;
 	} while (0);
 
 	return 0;
@@ -433,6 +455,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -457,12 +483,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "index",	.has_arg = 1, .val = 'i'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:i:vh";
+		static char *short_options = "c:p:n:w:i:f:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -488,6 +515,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 			break;
 		case 'i':
 			test_config->conn_idx =
+				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'f':
+			test_config->finite_run =
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
 		case 'v':
@@ -531,6 +562,7 @@ static void print_test_config(
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 /*---------------------------------------------------------------------------*/
@@ -552,6 +584,7 @@ int main(int argc, char *argv[])
 		0
 	};
 
+	nrecv = 0;
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
@@ -620,6 +653,7 @@ int main(int argc, char *argv[])
 			msg_pool_put(pool, msg);
 			return 0;
 		}
+		nsent++;
 		i++;
 		if (i == 256)
 			break;

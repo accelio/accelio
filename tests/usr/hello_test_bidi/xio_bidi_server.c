@@ -73,6 +73,7 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
+	uint32_t	finite_run;
 };
 
 
@@ -286,6 +287,9 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
+		if (test_config.finite_run){
+			xio_context_stop_loop(ctx, 0);  /* exit */
+		}
 		break;
 	default:
 		break;
@@ -553,12 +557,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
+			{ .name = "finite-run",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:svh";
+		static char *short_options = "c:p:n:w:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -581,6 +586,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 		case 'w':
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'f':
+			test_config->finite_run =
+			(uint32_t)strtol(optarg, NULL, 0);
 			break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
@@ -622,6 +631,7 @@ static void print_test_config(
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
