@@ -59,8 +59,9 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
-#define TEST_DISCONNECT		0
-#define DISCONNECT_NR		12000000
+//will disconnect after DISCONNECT_FACTOR*print counter msgs
+#define DISCONNECT_FACTOR	3
+#define EXIT abort()
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -68,6 +69,8 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
+	uint16_t	finite_run;
+	uint16_t	padding;
 };
 
 struct test_params {
@@ -79,6 +82,9 @@ struct test_params {
 	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		nrecv;
+	uint16_t 		finite_run;
+	uint16_t		padding[3];
+	uint64_t 		disconnect_nr;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -249,12 +255,10 @@ static int on_request(struct xio_session *session,
 
 	xio_release_msg(req);
 
-#if  TEST_DISCONNECT
-	if (test_params->nrecv == DISCONNECT_NR) {
+	if (test_params->finite_run && test_params->nrecv == test_params->disconnect_nr) {
 		xio_disconnect(test_params->connection);
 		return 0;
 	}
-#endif
 
 	return 0;
 }
@@ -337,6 +341,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -360,12 +368,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
+			{ .name = "finite-run",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:svh";
+		static char *short_options = "c:p:n:w:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -389,6 +398,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
+		case 'f':
+			test_config->finite_run =
+					(uint16_t)strtol(optarg, NULL, 0);
+		break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
 			exit(0);
@@ -401,7 +414,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -429,6 +442,7 @@ static void print_test_config(
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %x\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -451,6 +465,8 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	memset(&test_params, 0, sizeof(struct test_params));
+	test_params.finite_run = test_config.finite_run;
+	test_params.disconnect_nr = PRINT_COUNTER * DISCONNECT_FACTOR;
 
 	/* prepare buffers for this test */
 	if (msg_api_init(&test_params.msg_params,
@@ -466,7 +482,8 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit1;
+		EXIT;
+//		goto exit1;
 	}
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
@@ -486,7 +503,7 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-exit1:
+//exit1:
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 
