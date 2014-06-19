@@ -59,6 +59,8 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define POLLING_TIMEOUT		25
+#define PRINT_COUNTER	4000000
+#define EXIT abort()
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -66,8 +68,10 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
+	uint16_t        finite_run;
+	uint16_t        padding;
 };
-#define PRINT_COUNTER	4000000
+
 
 
 /*---------------------------------------------------------------------------*/
@@ -175,6 +179,11 @@ static int on_session_event(struct xio_session *session,
 		case XIO_SESSION_TEARDOWN_EVENT:
 		process_request(NULL);
 		xio_session_destroy(session);
+		if (test_config.finite_run) {
+			xio_context_stop_loop(ctx, 0); /* exit */
+			printf("1\n");
+		}
+
 		break;
 	default:
 		break;
@@ -209,9 +218,11 @@ static int on_request(struct xio_session *session,
 {
 	struct xio_msg	*rsp;
 
-	if (req->status)
+	if (req->status) {
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(req->status));
+		EXIT;
+	}
 
 
 	/* process request */
@@ -231,6 +242,7 @@ static int on_request(struct xio_session *session,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(pool, req);
+		EXIT;
 	}
 
 	return 0;
@@ -327,6 +339,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -350,12 +366,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:svh";
+		static char *short_options = "c:p:n:w:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -378,7 +395,11 @@ int parse_cmdline(struct xio_test_config *test_config,
 		case 'w':
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
-			break;
+		break;
+		case 'f':
+			test_config->finite_run =
+					(uint32_t)strtol(optarg, NULL, 0);
+		break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
 			exit(0);
@@ -391,7 +412,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -419,6 +440,7 @@ static void print_test_config(
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -455,6 +477,7 @@ int main(int argc, char *argv[])
 	if (server) {
 		printf("listen to %s\n", url);
 		xio_context_run_loop(ctx, XIO_INFINITE);
+		printf("2\n");
 
 		/* normal exit phase */
 		fprintf(stdout, "exit signaled\n");

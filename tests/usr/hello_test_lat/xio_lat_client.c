@@ -64,6 +64,8 @@
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
 #define POLLING_TIMEOUT		25
+#define DISCONNECT_FACTOR	3
+#define EXIT abort()
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -72,6 +74,8 @@ struct xio_test_config {
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		conn_idx;
+	uint16_t		finite_run;
+	uint16_t		padding[3];
 };
 
 /*---------------------------------------------------------------------------*/
@@ -81,6 +85,8 @@ static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
 static struct xio_context	*ctx;
+static uint64_t nrecv;
+static uint64_t 		disconnect_nr;
 
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
@@ -177,6 +183,7 @@ static void process_response(struct xio_msg *rsp)
 
 		start_time = get_cpu_usecs();
 		first_time = 0;
+		disconnect_nr = print_counter * DISCONNECT_FACTOR;
 	}
 
 	if (++cnt == print_counter) {
@@ -251,13 +258,26 @@ static int on_response(struct xio_session *session,
 {
 	process_response(msg);
 
-	if (msg->status)
+	if (msg->status) {
 		printf("**** message completed with error. [%s]\n",
 				xio_strerror(msg->status));
+		EXIT;
+	}
 
 	/* message is no longer needed */
 	xio_release_response(msg);
 
+	nrecv++;
+
+	if (test_config.finite_run) {
+		if (nrecv == disconnect_nr){
+			xio_disconnect(conn);
+			return 0;
+		}
+		if (nrecv > disconnect_nr){
+			return 0;
+		}
+	}
 
 	/* reset message */
 	msg->in.header.iov_base = NULL;
@@ -286,11 +306,9 @@ static int on_response(struct xio_session *session,
 				       session,
 				       xio_strerror(xio_errno()));
 			msg_pool_put(pool, msg);
-			return 0;
+			EXIT;
 		}
 	} while (0);
-
-
 
 	return 0;
 }
@@ -345,6 +363,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -369,12 +391,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "index",	.has_arg = 1, .val = 'i'},
+			{ .name = "finite_run",	.has_arg = 1, .val = 'i'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:i:vh";
+		static char *short_options = "c:p:n:w:f:i:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -402,6 +425,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 			test_config->conn_idx =
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
+		case 'f':
+			test_config->finite_run =
+				(uint16_t)strtol(optarg, NULL, 0);
+			break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
 			exit(0);
@@ -414,7 +441,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -443,6 +470,7 @@ static void print_test_config(
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %x\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 /*---------------------------------------------------------------------------*/
@@ -454,7 +482,6 @@ int main(int argc, char *argv[])
 	int			error;
 	int			retval;
 	char			url[256];
-	struct xio_context	*ctx;
 	struct xio_msg		*msg;
 	int			i = 0;
 
@@ -479,7 +506,8 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit1;
+		EXIT;
+//		goto exit1;
 	}
 
 	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
@@ -493,7 +521,8 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit3;
+		EXIT;
+//		goto exit3;
 	}
 	/* connect the session  */
 	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
@@ -533,7 +562,7 @@ int main(int argc, char *argv[])
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(pool, msg);
-			return 0;
+			EXIT;
 		}
 		i++;
 		if (i == 1)
@@ -546,14 +575,15 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit4;
+		EXIT;
+//		goto exit4;
 	}
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
 
-exit4:
+//exit4:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
@@ -561,9 +591,9 @@ exit4:
 			error, xio_strerror(error));
 	}
 
-exit3:
+//exit3:
 	xio_context_destroy(ctx);
-exit1:
+//exit1:
 
 	fprintf(stdout, "exit complete\n");
 
