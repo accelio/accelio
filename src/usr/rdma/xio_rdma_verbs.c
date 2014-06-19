@@ -282,6 +282,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 			}
 			/* Remove the item from the list. */
 			list_del(&tmr_elem->dm_list_entry);
+			list_del(&tmr_elem->xm_list_entry);
 			ufree(tmr_elem);
 		}
 		ufree(tmr);
@@ -305,15 +306,17 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 
 	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
 					 xm_list_entry) {
-		retval = ibv_dereg_mr(tmr_elem->mr);
-		if (retval != 0) {
-			xio_set_error(errno);
-			ERROR_LOG("ibv_dereg_mr failed, %m\n");
+		if (tmr_elem->mr) {
+			retval = ibv_dereg_mr(tmr_elem->mr);
+			if (retval != 0) {
+				xio_set_error(errno);
+				ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			}
 		}
 		/* Remove the item from the lists. */
 		list_del(&tmr_elem->dm_list_entry);
 		list_del(&tmr_elem->xm_list_entry);
-		free(tmr_elem);
+		ufree(tmr_elem);
 	}
 
 	return 0;
