@@ -939,6 +939,7 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
 static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 {
 	int		err = 0;
+	int		stop = 0;
 	int		wclen = max_wc, i, numwc  = 0;
 	int		last_recv = -1;
 	int		timeouts_num = 0;
@@ -951,7 +952,8 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			wclen = tcq->wc_array_len;
 
 		if (xio_context_is_loop_stopping(tcq->ctx) && polled) {
-				err = 1; /* same as in budget */
+				err = 0; /* same as in budget */
+				stop = 1;
 				break;
 		}
 		err = ibv_poll_cq(tcq->cq, wclen, tcq->wc_array);
@@ -970,7 +972,8 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 					break;
 			}
 			if (xio_context_is_loop_stopping(tcq->ctx)) {
-				err = 1; /* same as in budget */
+				err = 0; /* same as in budget */
+				stop = 1;
 				break;
 			}
 
@@ -1005,7 +1008,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 		wclen = max_wc - numwc;
 	}
 
-	return err;
+	return stop ? -1 : err;
 }
 
 /*---------------------------------------------------------------------------*/
