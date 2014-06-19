@@ -181,7 +181,6 @@ static int on_session_event(struct xio_session *session,
 		xio_session_destroy(session);
 		if (test_config.finite_run) {
 			xio_context_stop_loop(ctx, 0); /* exit */
-			printf("1\n");
 		}
 
 		break;
@@ -477,7 +476,6 @@ int main(int argc, char *argv[])
 	if (server) {
 		printf("listen to %s\n", url);
 		xio_context_run_loop(ctx, XIO_INFINITE);
-		printf("2\n");
 
 		/* normal exit phase */
 		fprintf(stdout, "exit signaled\n");
