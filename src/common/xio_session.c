@@ -737,9 +737,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	msg->sn = hdr.serial_num;
 
-	/* one way messages do not have sender task */
 	omsg		= sender_task->omsg;
-	omsg->request	= msg;
 	omsg->next	= NULL;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
@@ -748,7 +746,15 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	task->connection = connection;
 
-	xio_connection_remove_in_flight(connection, omsg);
+	/* remove only if not response with "read receipt" */
+	if (!((hdr.flags &
+	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+	     XIO_MSG_RSP_FLAG_FIRST)) {
+		xio_connection_remove_in_flight(connection, omsg);
+	} else {
+		connection->in_flight_reqs_budget++;
+	}
+
 	omsg->type = task->tlv_type;
 
 	/* store the task in io queue */
@@ -757,7 +763,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	/* remove the message from in flight queue */
 
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
-		/* on way message with "read receipt" */
+		/* one way message with "read receipt" */
 		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
@@ -776,6 +782,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
 			if (connection->ses_ops.on_msg_delivered) {
 				omsg->receipt_res = hdr.receipt_result;
+				omsg->sn	  = hdr.serial_num;
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
@@ -805,6 +812,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			xio_msg_cp_ptr2vec(&msg->in);
 			xio_msg_cp_ptr2vec(&msg->out);
 
+			omsg->request	= msg;
 			if (connection->ses_ops.on_msg)
 				connection->ses_ops.on_msg(
 					connection->session,

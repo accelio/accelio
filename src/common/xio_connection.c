@@ -464,6 +464,14 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 					pmsg, pdata);
 			continue;
 		}
+		/* this is read receipt  */
+		if (IS_RESPONSE(pmsg->type) &&
+		    ((pmsg->flags &
+		      (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+				 XIO_MSG_RSP_FLAG_FIRST))
+			continue;
+		if (!IS_APPLICATION_MSG(pmsg))
+			continue;
 		xio_session_notify_msg_error(connection, pmsg,
 					     XIO_E_MSG_FLUSHED);
 	}
