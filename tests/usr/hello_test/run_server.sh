@@ -2,9 +2,9 @@
 
 
 # Arguments Check
-if [ $# -ne 2 ]; then
+if [ $# -lt 2 ]; then
         echo "[$0] Missing Parameters!"
-        echo "Usage: $0 [Server IP] [Port]"
+        echo "Usage: $0 Server-IP Port [data_len. default=1024]"
         exit 1
 fi
 
@@ -16,13 +16,13 @@ core=1
 ovec=0
 hdrlen=0
 
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 0		-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 512		-l ${ovec} ${server_ip}
-./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 1024	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 4096	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 16384	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 32768	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 65536	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 131072	-l ${ovec} ${server_ip}
-#./xio_server -c ${core} -p ${port} -n ${hdrlen} -w 1048576	-l ${ovec} ${server_ip}
+if [ -z "$3" ]
+then
+	data_len="1024"
+else
+	data_len=$3
+fi
+
+./xio_server -c ${core} -p ${port} -n ${hdrlen} -w ${data_len}	-l ${ovec} ${server_ip}
+
 
