@@ -802,6 +802,14 @@ int xio_send_request(struct xio_connection *connection,
 		return -1;
 	}
 
+	if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
+		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+		      connection->state != XIO_CONNECTION_STATE_INIT) ||
+		      connection->in_close)) {
+		xio_set_error(ESHUTDOWN);
+		return -1;
+	}
+
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
@@ -817,18 +825,6 @@ int xio_send_request(struct xio_connection *connection,
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid out message\n");
 			return -1;
-		}
-
-		if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
-			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			     connection->state != XIO_CONNECTION_STATE_INIT) ||
-			     connection->in_close)) {
-			xio_set_error(ESHUTDOWN);
-			xio_session_notify_msg_error(connection, pmsg,
-						     XIO_E_MSG_FLUSHED);
-			pmsg = pmsg->next;
-			retval = -1;
-			continue;
 		}
 
 		vmsg = &pmsg->out;
@@ -1011,6 +1007,13 @@ int xio_send_msg(struct xio_connection *connection,
 		xio_set_error(EAGAIN);
 		return -1;
 	}
+	if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
+		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+		      connection->state != XIO_CONNECTION_STATE_INIT) ||
+		      connection->in_close)) {
+			xio_set_error(ESHUTDOWN);
+			return -1;
+	}
 
 	while (pmsg) {
 		xio_msg_map(pmsg);
@@ -1020,21 +1023,6 @@ int xio_send_msg(struct xio_connection *connection,
 			ERROR_LOG("invalid out message\n");
 			return -1;
 		}
-		if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
-			     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			     connection->state != XIO_CONNECTION_STATE_INIT) ||
-			     connection->in_close)) {
-			xio_set_error(ESHUTDOWN);
-			xio_session_notify_msg_error(connection, pmsg,
-						     XIO_E_MSG_FLUSHED);
-			if (pmsg->next == NULL) {
-				pmsg = pmsg->next;
-				continue;
-			} else {
-				return -1;
-			}
-		}
-
 		vmsg	= &pmsg->out;
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
