@@ -62,7 +62,7 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_THREADS		4
-
+#define EXIT abort()
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -226,9 +226,11 @@ static int on_request(struct xio_session *session,
 	struct xio_msg		*rsp;
 	struct thread_data	*tdata = cb_prv_data;
 
-	if (req->status)
+	if (req->status) {
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(req->status));
+		EXIT;
+	}
 
 	/* process request */
 	process_request(tdata, req);
@@ -247,6 +249,7 @@ static int on_request(struct xio_session *session,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, req);
+		EXIT;
 	}
 
 
@@ -549,7 +552,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			EXIT;
 		}
 	}
 	if (optind == argc - 1) {

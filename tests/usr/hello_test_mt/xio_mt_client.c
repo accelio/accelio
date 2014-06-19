@@ -66,6 +66,8 @@
 #define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
 #define MAX_THREADS		4
+#define DISCONNECT_FACTOR	3
+#define EXIT abort()
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -75,6 +77,8 @@ struct xio_test_config {
 	uint32_t		data_len;
 	uint32_t		conn_idx;
 	int			poll_timeout;
+	uint16_t		finite_run;
+	uint16_t		padding;
 };
 
 struct thread_stat_data {
@@ -96,6 +100,11 @@ struct thread_data {
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	pthread_t		thread_id;
+	uint64_t	disconnect_nr;
+	uint64_t		nrecv;
+	uint64_t		nsent;
+	uint16_t		finite_run;
+	uint16_t		padding[3];
 };
 
 /* private session data */
@@ -206,6 +215,7 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 					     PRINT_COUNTER/data_len :
 					     PRINT_COUNTER);
 		tdata->stat.print_counter /=  MAX_THREADS;
+		tdata->disconnect_nr = tdata->stat.print_counter * DISCONNECT_FACTOR;
 	}
 	if (++tdata->stat.cnt == tdata->stat.print_counter) {
 		char		timeb[40];
@@ -291,7 +301,8 @@ static void *worker_thread(void *data)
 					tdata->session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(tdata->pool, msg);
-			break;
+			tdata->nsent++;
+			EXIT;
 		}
 	}
 
@@ -356,14 +367,29 @@ static int on_response(struct xio_session *session,
 {
 	struct thread_data  *tdata = cb_user_context;
 
+	tdata->nrecv++;
+
 	process_response(tdata, msg);
 
-	if (msg->status)
+	if (msg->status) {
 		printf("**** message completed with error. [%s]\n",
 		       xio_strerror(msg->status));
+		EXIT;
+	}
 
 	/* message is no longer needed */
 	xio_release_response(msg);
+
+	if (tdata->finite_run) {
+		if (tdata->nrecv ==  tdata->disconnect_nr) {
+			xio_disconnect(tdata->conn);
+			return 0;
+		}
+		if (tdata->nsent == tdata->disconnect_nr) {
+			printf ("already sent more that needed\n");
+			return 0;
+		}
+	}
 
 	/* reset message */
 	msg->in.header.iov_base = NULL;
@@ -387,6 +413,7 @@ static int on_response(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, msg);
+		tdata->nsent++;
 		return 0;
 	}
 
@@ -462,6 +489,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet polling timeout in microseconds " \
 			"(default %d)\n", XIO_DEF_POLL);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -487,12 +518,13 @@ int parse_cmdline(struct xio_test_config *test_config,
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "index",	.has_arg = 1, .val = 'i'},
 			{ .name = "timeout",	.has_arg = 1, .val = 't'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:i:t:vh";
+		static char *short_options = "c:p:n:w:i:t:f:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -520,6 +552,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 			test_config->conn_idx =
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
+		case 'f':
+			test_config->finite_run =
+					(uint32_t)strtol(optarg, NULL, 0);
+			break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
 			exit(0);
@@ -536,7 +572,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -566,6 +602,7 @@ static void print_test_config(
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" Poll timeout		: %d\n", test_config_p->poll_timeout);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -608,7 +645,8 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto cleanup;
+		EXIT;
+//		goto cleanup;
 	}
 
 	/* spawn threads to handle connection */
@@ -618,6 +656,7 @@ int main(int argc, char *argv[])
 		sess_data.tdata[i].cid			= i+1;
 		sess_data.tdata[i].stat.first_time	= 1;
 		sess_data.tdata[i].stat.print_counter	= PRINT_COUNTER;
+		sess_data.tdata[i].finite_run = test_config.finite_run;
 
 		/* all threads are working on the same session */
 		sess_data.tdata[i].session	= sess_data.session;
@@ -629,10 +668,12 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++)
 		pthread_join(sess_data.tdata[i].thread_id, NULL);
 
+	fprintf (stdout, "joined all threads\n");
+
 	/* close the session */
 	xio_session_destroy(sess_data.session);
 
-cleanup:
+//cleanup:
 
 	return 0;
 }
