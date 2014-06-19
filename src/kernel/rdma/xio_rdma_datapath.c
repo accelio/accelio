@@ -2911,7 +2911,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				      rdma_hndl->max_sge,
 				      &tasks_used);
 	if (retval) {
-		ERROR_LOG("failed to invalidate input iovecs\n");
+		ERROR_LOG("failed to validate input iovecs\n");
 		ERROR_LOG("rdma read is ignored\n");
 		task->imsg.status = EINVAL;
 		return -1;
@@ -2959,7 +2959,7 @@ static inline void xio_set_rsp_write_sge(struct xio_task *task,
 	rdma_task->rsp_write_num_sge = vmsg->data_iovlen;
 }
 
-/*---------------------------------------------------------------------------*/
+/*-----------------------------------/----------------------------------------*/
 /* xio_sched_rdma_wr_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
@@ -3115,11 +3115,11 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		if (retval == 0)
 			return 0;
 		ERROR_LOG("scheduling rdma read failed\n");
-		goto cleanup;
 		break;
 	default:
 		ERROR_LOG("unexpected opcode\n");
-		goto cleanup;
+		xio_set_error(XIO_E_MSG_INVALID);
+		imsg->status = XIO_E_MSG_INVALID;
 		break;
 	}
 
@@ -3137,7 +3137,6 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 			       &rdma_hndl->rdma_rd_in_flight_list);
 		return 0;
 	}
-
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
 	event_data.msg.task	= task;

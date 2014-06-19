@@ -2879,15 +2879,15 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				  "local peer provided buffer size %zd bytes\n",
 				  rlen, llen);
 			ERROR_LOG("rdma read is ignored\n");
-			task->imsg.status = EINVAL;
+			task->imsg.status = XIO_E_PARTIAL_MSG;
 			return -1;
 		}
 	} else {
 		if (rdma_hndl->rdma_mempool == NULL) {
-				xio_set_error(XIO_E_NO_BUFS);
 				ERROR_LOG(
 					"message /read/write failed - " \
 					"library's memory pool disabled\n");
+				task->imsg.status = XIO_E_NO_BUFS;
 				goto cleanup;
 		}
 
@@ -2934,10 +2934,10 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			rdma_hndl->max_sge,
 			&tasks_used);
 	if (retval) {
-		ERROR_LOG("failed to invalidate input iovecs\n");
+		ERROR_LOG("failed to validate input iovecs\n");
 		ERROR_LOG("rdma read is ignored\n");
 		task->imsg.status = EINVAL;
-		return -1;
+		goto cleanup;
 	}
 
 	retval = xio_prep_rdma_op(task, rdma_hndl,
@@ -2955,7 +2955,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("failed to allocate tasks\n");
 		ERROR_LOG("rdma read is ignored\n");
 		task->imsg.status = EINVAL;
-		return -1;
+		goto cleanup;
 	}
 
 	/* prepare the in side of the message */
@@ -2965,10 +2965,12 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 
 	return 0;
 cleanup:
+	xio_set_error(task->imsg.status);
 	for (i = 0; i < rdma_task->read_num_sge; i++)
 		xio_mempool_free(&rdma_task->read_sge[i]);
 
 	rdma_task->read_num_sge = 0;
+
 	return -1;
 }
 
@@ -3201,11 +3203,11 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		if (retval == 0)
 			return 0;
 		ERROR_LOG("scheduling rdma read failed\n");
-		goto cleanup;
 		break;
 	default:
 		ERROR_LOG("unexpected opcode\n");
-		goto cleanup;
+		xio_set_error(XIO_E_MSG_INVALID);
+		imsg->status = XIO_E_MSG_INVALID;
 		break;
 	};
 
@@ -3223,7 +3225,6 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 			       &rdma_hndl->rdma_rd_in_flight_list);
 		return 0;
 	}
-
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
 	event_data.msg.task	= task;
