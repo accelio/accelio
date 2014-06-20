@@ -66,7 +66,7 @@ struct xio_task {
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
 	struct xio_session	*session;
-	struct xio_conn		*conn;
+	struct xio_nexus	*nexus;
 	struct xio_connection	*connection;
 
 	void			*pool;

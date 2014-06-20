@@ -694,8 +694,8 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	case XIO_CREDIT_NOP:
 		xio_rdma_on_recv_nop(rdma_hndl, task);
 		break;
-	case XIO_CONN_SETUP_REQ:
-	case XIO_CONN_SETUP_RSP:
+	case XIO_NEXUS_SETUP_REQ:
+	case XIO_NEXUS_SETUP_RSP:
 		xio_rdma_on_setup_msg(rdma_hndl, task);
 		break;
 	case XIO_CANCEL_REQ:
@@ -3263,10 +3263,10 @@ static void xio_rdma_write_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	/* jump after connection setup header */
 	if (rdma_hndl->base.is_client)
 		xio_mbuf_inc(&task->mbuf,
-			     sizeof(struct xio_conn_setup_req));
+			     sizeof(struct xio_nexus_setup_req));
 	else
 		xio_mbuf_inc(&task->mbuf,
-			     sizeof(struct xio_conn_setup_rsp));
+			     sizeof(struct xio_nexus_setup_rsp));
 
 	tmp_msg = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -3317,10 +3317,10 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	/* jump after connection setup header */
 	if (rdma_hndl->base.is_client)
 		xio_mbuf_inc(&task->mbuf,
-			     sizeof(struct xio_conn_setup_rsp));
+			     sizeof(struct xio_nexus_setup_rsp));
 	else
 		xio_mbuf_inc(&task->mbuf,
-			     sizeof(struct xio_conn_setup_req));
+			     sizeof(struct xio_nexus_setup_req));
 
 	tmp_msg = xio_mbuf_get_curr_ptr(&task->mbuf);
 
@@ -3771,10 +3771,10 @@ int xio_rdma_send(struct xio_transport_base *transport,
 	int	retval = -1;
 
 	switch (task->tlv_type) {
-	case XIO_CONN_SETUP_REQ:
+	case XIO_NEXUS_SETUP_REQ:
 		retval = xio_rdma_send_setup_req(rdma_hndl, task);
 		break;
-	case XIO_CONN_SETUP_RSP:
+	case XIO_NEXUS_SETUP_RSP:
 		retval = xio_rdma_send_setup_rsp(rdma_hndl, task);
 		break;
 	default:

@@ -42,9 +42,9 @@
 #include "libxio.h"
 #include "xio_observer.h"
 #include "xio_common.h"
-#include "xio_sessions_store.h"
-#include "xio_conns_store.h"
-#include "xio_conn.h"
+#include "xio_sessions_cache.h"
+#include "xio_nexus_cache.h"
+#include "xio_nexus.h"
 #include "xio_task.h"
 #include "xio_context.h"
 
@@ -73,8 +73,8 @@ static int __init xio_init_module(void)
 		pr_err("debugfs not initialized\n");
 	}
 
-	sessions_store_construct();
-	conns_store_construct();
+	sessions_cache_construct();
+	nexus_cache_construct();
 
 	return 0;
 }

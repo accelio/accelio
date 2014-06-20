@@ -36,104 +36,128 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "xio_os.h"
-#include "libxio.h"
-#include "xio_common.h"
 #include "xio_hash.h"
-#include "xio_observer.h"
-#include "xio_transport.h"
 #include "xio_task.h"
-#include "xio_session.h"
-#include "xio_sessions_store.h"
+#include "xio_observer.h"
+#include "xio_nexus.h"
+#include "xio_nexus_cache.h"
 
-static HT_HEAD(, xio_session, HASHTABLE_PRIME_SMALL)  sessions_store;
-static spinlock_t ss_lock;
+
+static HT_HEAD(, xio_nexus, HASHTABLE_PRIME_SMALL)  nexus_cache;
+static spinlock_t cs_lock;
 
 /*---------------------------------------------------------------------------*/
-/* sessions_store_add							     */
+/* xio_nexus_cache_add				                             */
 /*---------------------------------------------------------------------------*/
-static int sessions_store_add(struct xio_session *session,
-			      uint32_t session_id)
+static int nexus_cache_add(struct xio_nexus *nexus,
+			      int nexus_id)
 {
-	struct xio_session *s;
+	struct xio_nexus *c;
 	struct xio_key_int32  key = {
-		session_id
+		nexus_id
 	};
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	if (s != NULL)
+
+	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);
+	if (c != NULL)
 		return -1;
 
-	HT_INSERT(&sessions_store, &key, session, sessions_htbl);
+	HT_INSERT(&nexus_cache, &key, nexus, nexus_htbl);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_remove				                     */
+/* xio_nexus_cache_remove				                     */
 /*---------------------------------------------------------------------------*/
-int xio_sessions_store_remove(uint32_t session_id)
+int xio_nexus_cache_remove(int nexus_id)
 {
-	struct xio_session *s;
+	struct xio_nexus *c;
 	struct xio_key_int32  key;
 
-	spin_lock(&ss_lock);
-	key.id = session_id;
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	if (s == NULL) {
-		spin_unlock(&ss_lock);
+	spin_lock(&cs_lock);
+	key.id = nexus_id;
+	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);
+	if (c == NULL) {
+		spin_unlock(&cs_lock);
 		return -1;
 	}
 
-	HT_REMOVE(&sessions_store, s, xio_session, sessions_htbl);
-	spin_unlock(&ss_lock);
+	HT_REMOVE(&nexus_cache, c, xio_nexus, nexus_htbl);
+	spin_unlock(&cs_lock);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_lookup						     */
+/* xio_nexus_cache_lookup			                             */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_sessions_store_lookup(uint32_t session_id)
+struct xio_nexus *xio_nexus_cache_lookup(int nexus_id)
 {
-	struct xio_session *s;
+	struct xio_nexus *c;
 	struct xio_key_int32  key;
 
-	spin_lock(&ss_lock);
-	key.id = session_id;
-	HT_LOOKUP(&sessions_store, &key, s, sessions_htbl);
-	spin_unlock(&ss_lock);
+	spin_lock(&cs_lock);
+	key.id = nexus_id;
+	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);
+	spin_unlock(&cs_lock);
 
-	return s;
+	return c;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_sessions_store_add			                             */
+/* xio_nexus_cache_add				                             */
 /*---------------------------------------------------------------------------*/
-int xio_sessions_store_add(struct xio_session *session,
-		uint32_t *session_id)
+int xio_nexus_cache_add(struct xio_nexus *nexus,
+			int *nexus_id)
 {
-	static uint32_t sid;  /* = 0 global session provider */
+	static int cid;  /* = 0 global nexus provider */
 	int retval;
 
-	spin_lock(&ss_lock);
-	retval = sessions_store_add(session, sid);
+	spin_lock(&cs_lock);
+	retval = nexus_cache_add(nexus, cid);
 	if (retval == 0)
-		*session_id = sid++;
-	spin_unlock(&ss_lock);
+		*nexus_id = cid++;
+	spin_unlock(&cs_lock);
 
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* sessions_store_construct				                     */
+/* xio_nexus_cache_find				                             */
 /*---------------------------------------------------------------------------*/
-void sessions_store_construct(void)
+struct xio_nexus *xio_nexus_cache_find(
+		struct xio_context *ctx,
+		const char *portal_uri)
 {
-	HT_INIT(&sessions_store, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
-	spin_lock_init(&ss_lock);
+	struct xio_nexus *nexus;
+
+	spin_lock(&cs_lock);
+	HT_FOREACH(nexus, &nexus_cache, nexus_htbl) {
+		if (nexus->transport_hndl->portal_uri) {
+			if (
+		(strcmp(nexus->transport_hndl->portal_uri, portal_uri) == 0) &&
+		(nexus->transport_hndl->ctx == ctx)) {
+				spin_unlock(&cs_lock);
+				return nexus;
+			}
+		}
+	}
+	spin_unlock(&cs_lock);
+	return  NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* nexus_cache_construct				                     */
+/*---------------------------------------------------------------------------*/
+void nexus_cache_construct(void)
+{
+	HT_INIT(&nexus_cache, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
+	spin_lock_init(&cs_lock);
 }
 
 /*
-void sessions_store_destruct(void)
+void nexus_cache_destruct(void)
 {
 }
 */
+

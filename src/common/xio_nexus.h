@@ -35,8 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_CONN_H
-#define XIO_CONN_H
+#ifndef XIO_NEXUS_H
+#define XIO_NEXUS_H
 
 #include "xio_hash.h"
 #include "xio_context.h"
@@ -46,48 +46,48 @@
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
 /*---------------------------------------------------------------------------*/
-#define XIO_CONN_CLOSE_TIMEOUT	60000
+#define XIO_NEXUS_CLOSE_TIMEOUT	60000
 
 /*---------------------------------------------------------------------------*/
 /* typedefs								     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn;
+struct xio_nexus;
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
-enum xio_conn_event {
-	XIO_CONN_EVENT_NEW_CONNECTION,
-	XIO_CONN_EVENT_ESTABLISHED,
-	XIO_CONN_EVENT_DISCONNECTED,
-	XIO_CONN_EVENT_RECONNECTED,
-	XIO_CONN_EVENT_CLOSED,
-	XIO_CONN_EVENT_REFUSED,
-	XIO_CONN_EVENT_NEW_MESSAGE,
-	XIO_CONN_EVENT_SEND_COMPLETION,
-	XIO_CONN_EVENT_ASSIGN_IN_BUF,
-	XIO_CONN_EVENT_CANCEL_REQUEST,
-	XIO_CONN_EVENT_CANCEL_RESPONSE,
-	XIO_CONN_EVENT_ERROR,
-	XIO_CONN_EVENT_MESSAGE_ERROR
+enum xio_nexus_event {
+	XIO_NEXUS_EVENT_NEW_CONNECTION,
+	XIO_NEXUS_EVENT_ESTABLISHED,
+	XIO_NEXUS_EVENT_DISCONNECTED,
+	XIO_NEXUS_EVENT_RECONNECTED,
+	XIO_NEXUS_EVENT_CLOSED,
+	XIO_NEXUS_EVENT_REFUSED,
+	XIO_NEXUS_EVENT_NEW_MESSAGE,
+	XIO_NEXUS_EVENT_SEND_COMPLETION,
+	XIO_NEXUS_EVENT_ASSIGN_IN_BUF,
+	XIO_NEXUS_EVENT_CANCEL_REQUEST,
+	XIO_NEXUS_EVENT_CANCEL_RESPONSE,
+	XIO_NEXUS_EVENT_ERROR,
+	XIO_NEXUS_EVENT_MESSAGE_ERROR
 };
 
-enum xio_conn_state {
-	XIO_CONN_STATE_INIT,
-	XIO_CONN_STATE_OPEN,
-	XIO_CONN_STATE_LISTEN,
-	XIO_CONN_STATE_CONNECTING,
-	XIO_CONN_STATE_CONNECTED,
-	XIO_CONN_STATE_REJECTED,
-	XIO_CONN_STATE_CLOSED,
-	XIO_CONN_STATE_DISCONNECTED,
-	XIO_CONN_STATE_RECONNECT
+enum xio_nexus_state {
+	XIO_NEXUS_STATE_INIT,
+	XIO_NEXUS_STATE_OPEN,
+	XIO_NEXUS_STATE_LISTEN,
+	XIO_NEXUS_STATE_CONNECTING,
+	XIO_NEXUS_STATE_CONNECTED,
+	XIO_NEXUS_STATE_REJECTED,
+	XIO_NEXUS_STATE_CLOSED,
+	XIO_NEXUS_STATE_DISCONNECTED,
+	XIO_NEXUS_STATE_RECONNECT
 };
 
 /*---------------------------------------------------------------------------*/
 /* structs	                                                             */
 /*---------------------------------------------------------------------------*/
-union xio_conn_event_data {
+union xio_nexus_event_data {
 	struct {
 		struct xio_task		*task;
 		enum xio_wc_op		op;
@@ -104,8 +104,8 @@ union xio_conn_event_data {
 		int			pad;
 	} msg_error;
 	struct {
-		struct xio_conn		*child_conn;
-	} new_connection;
+		struct xio_nexus	*child_nexus;
+	} new_nexus;
 	struct {
 		enum xio_status		reason;
 	} error;
@@ -122,7 +122,7 @@ union xio_conn_event_data {
 /**
  * Connection data type
  */
-struct xio_conn {
+struct xio_nexus {
 	struct xio_transport		*transport;
 	struct xio_transport_base	*transport_hndl;
 
@@ -138,7 +138,7 @@ struct xio_conn {
 	struct kref			kref;
 
 	int				cid;
-	enum xio_conn_state		state;
+	enum xio_nexus_state		state;
 	short				is_first_req;
 	short				reconnect_retries;
 	int				is_listener;
@@ -155,197 +155,197 @@ struct xio_conn {
 	char				*portal_uri;
 	char				*out_if_addr;
 
-	HT_ENTRY(xio_conn, xio_key_int32) conns_htbl;
+	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_close							     */
+/* xio_nexus_close							     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_close(struct xio_conn *conn, struct xio_observer *observer);
+void xio_nexus_close(struct xio_nexus *nexus, struct xio_observer *observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_open							     */
+/* xio_nexus_open							     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn *xio_conn_open(struct xio_context *ctx,
+struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 			       const char *portal_uri,
 			       struct xio_observer *observer,
 			       uint32_t oid);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_connect							     */
+/* xio_nexus_connect							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_connect(struct xio_conn *conn, const char *portal_uri,
+int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		     struct xio_observer *observer,
 		     const char *out_if);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_listen							     */
+/* xio_nexus_listen							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_listen(struct xio_conn *conn, const char *portal_uri,
+int xio_nexus_listen(struct xio_nexus *nexus, const char *portal_uri,
 		    uint16_t *src_port, int backlog);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_accept							     */
+/* xio_nexus_accept							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_accept(struct xio_conn *conn);
+int xio_nexus_accept(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
 /* xio_handler_init							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_reject(struct xio_conn *conn);
+int xio_nexus_reject(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_poll							     */
+/* xio_nexus_poll							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_poll(struct xio_conn *conn,
+int xio_nexus_poll(struct xio_nexus *nexus,
 		  long min_nr, long nr, struct timespec *timeout);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_send							     */
+/* xio_nexus_send							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_send(struct xio_conn *conn, struct xio_task *task);
+int xio_nexus_send(struct xio_nexus *nexus, struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_cancel_req							     */
+/* xio_nexus_cancel_req							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_cancel_req(struct xio_conn *conn,
+int xio_nexus_cancel_req(struct xio_nexus *nexus,
 			struct xio_msg *req, uint64_t stag,
 			void *ulp_msg, size_t ulp_msg_sz);
 /*---------------------------------------------------------------------------*/
-/* xio_conn_cancel_rsp							     */
+/* xio_nexus_cancel_rsp							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_cancel_rsp(struct xio_conn *conn,
+int xio_nexus_cancel_rsp(struct xio_nexus *nexus,
 			struct xio_task *task, enum xio_status result,
 			void *ulp_msg, size_t ulp_msg_sz);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_set_opt							     */
+/* xio_nexus_set_opt							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_set_opt(struct xio_conn *conn, int optname,
+int xio_nexus_set_opt(struct xio_nexus *nexus, int optname,
 		     const void *optval, int optlen);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_opt							     */
+/* xio_nexus_get_opt							     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_get_opt(struct xio_conn *conn, int optname,
+int xio_nexus_get_opt(struct xio_nexus *nexus, int optname,
 		     void *optval, int *optlen);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_primary_task						     */
+/* xio_nexus_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
-struct xio_task *xio_conn_get_primary_task(struct xio_conn *conn);
+struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_primary_free_tasks						     */
+/* xio_nexus_primary_free_tasks						     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_primary_free_tasks(struct xio_conn *conn);
+int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_add_server_observer						     */
+/* xio_nexus_add_server_observer					     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_set_server_observer(struct xio_conn *conn,
+static inline void xio_nexus_set_server_observer(struct xio_nexus *nexus,
 					       struct xio_observer *observer)
 {
-	conn->server_observer = observer;
+	nexus->server_observer = observer;
 }
 /*---------------------------------------------------------------------------*/
-/* xio_conn_reg_observer						     */
+/* xio_nexus_reg_observer						     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_reg_observer(struct xio_conn *conn,
+void xio_nexus_reg_observer(struct xio_nexus *nexus,
 			   struct xio_observer *observer,
 			   uint32_t oid);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_unreg_observer						     */
+/* xio_nexus_unreg_observer						     */
 /*---------------------------------------------------------------------------*/
-void xio_conn_unreg_observer(struct xio_conn *conn,
+void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 			     struct xio_observer *observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_observer_lookup						     */
+/* xio_nexus_observer_lookup						     */
 /*---------------------------------------------------------------------------*/
-struct xio_observer *xio_conn_observer_lookup(struct xio_conn *conn,
+struct xio_observer *xio_nexus_observer_lookup(struct xio_nexus *nexus,
 					      uint32_t id);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_notify_observer						     */
+/* xio_nexus_notify_observer						     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_notify_observer(struct xio_conn *conn,
+static inline void xio_nexus_notify_observer(struct xio_nexus *nexus,
 			      struct xio_observer *observer,
 			      int event, void *event_data)
 {
-	xio_observable_notify_observer(&conn->observable, observer,
+	xio_observable_notify_observer(&nexus->observable, observer,
 				       event, event_data);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_src_addr						     */
+/* xio_nexus_get_src_addr						     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_get_src_addr(struct xio_conn *conn,
+int xio_nexus_get_src_addr(struct xio_nexus *nexus,
 			  struct sockaddr_storage *sa, socklen_t len);
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_validators_cls						     */
+/* xio_nexus_get_validators_cls						     */
 /*---------------------------------------------------------------------------*/
 static inline
-struct xio_transport_msg_validators_cls *xio_conn_get_validators_cls(
-						struct xio_conn *conn)
+struct xio_transport_msg_validators_cls *xio_nexus_get_validators_cls(
+						struct xio_nexus *nexus)
 {
-	return &conn->transport->validators_cls;
+	return &nexus->transport->validators_cls;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_proto							     */
+/* xio_nexus_get_proto							     */
 /*---------------------------------------------------------------------------*/
-static inline int xio_conn_get_proto(struct xio_conn *conn)
+static inline int xio_nexus_get_proto(struct xio_nexus *nexus)
 {
-	return conn->transport_hndl->proto;
+	return nexus->transport_hndl->proto;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_addref							     */
+/* xio_nexus_addref							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_addref(struct xio_conn *conn)
+static inline void xio_nexus_addref(struct xio_nexus *nexus)
 {
 
-	if (xio_is_delayed_work_pending(&conn->close_time_hndl)) {
-		kref_init(&conn->kref);
-		xio_ctx_del_delayed_work(conn->transport_hndl->ctx,
-					 &conn->close_time_hndl);
+	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
+		kref_init(&nexus->kref);
+		xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+					 &nexus->close_time_hndl);
 	} else {
-		kref_get(&conn->kref);
+		kref_get(&nexus->kref);
 	}
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_get_server							     */
+/* xio_nexus_get_server							     */
 /*---------------------------------------------------------------------------*/
-static inline struct xio_server *xio_conn_get_server(struct xio_conn *conn)
+static inline struct xio_server *xio_nexus_get_server(struct xio_nexus *nexus)
 {
-	return conn->server_observer->impl;
+	return nexus->server_observer->impl;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_state_get							     */
+/* xio_nexus_state_get							     */
 /*---------------------------------------------------------------------------*/
-static inline enum xio_conn_state xio_conn_state_get(struct xio_conn *conn)
+static inline enum xio_nexus_state xio_nexus_state_get(struct xio_nexus *nexus)
 {
-	return conn->state;
+	return nexus->state;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_state_set							     */
+/* xio_nexus_state_set							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_conn_state_set(struct xio_conn *conn,
-				      enum xio_conn_state state)
+static inline void xio_nexus_state_set(struct xio_nexus *nexus,
+				      enum xio_nexus_state state)
 {
-	conn->state = state;
+	nexus->state = state;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conn_update_task							     */
+/* xio_nexus_update_task						     */
 /*---------------------------------------------------------------------------*/
-int xio_conn_update_task(struct xio_conn *conn, struct xio_task *task);
+int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task);
 
-#endif /*XIO_CONNECTION_H */
+#endif /*XIO_NEXUS_H */
 

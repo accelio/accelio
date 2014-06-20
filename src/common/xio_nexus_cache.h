@@ -35,37 +35,37 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_CONNECTIONS_STORE_H
-#define XIO_CONNECTIONS_STORE_H
+#ifndef XIO_NEXUS_CACHE_H
+#define XIO_NEXUS_CACHE_H
 
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn_mgr;
-struct xio_conn;
+struct xio_nexus_mgr;
+struct xio_nexus;
 
 struct xio_session;
 
 /*---------------------------------------------------------------------------*/
-/* conns_store_construct						     */
+/* nexus_cache_construct						     */
 /*---------------------------------------------------------------------------*/
-void conns_store_construct(void);
+void nexus_cache_construct(void);
 
-int xio_conns_store_add(
-		struct xio_conn *conn,
-		int *conn_id);
+int xio_nexus_cache_add(
+		struct xio_nexus *nexus,
+		int *nexus_id);
 
-int xio_conns_store_remove(
+int xio_nexus_cache_remove(
 		int session_id);
 
-struct xio_conn *xio_conns_store_lookup(
-		int conn_id);
+struct xio_nexus *xio_nexus_cache_lookup(
+		int nexus_id);
 
-struct xio_conn *xio_conns_store_find(
+struct xio_nexus *xio_nexus_cache_find(
 		struct xio_context *ctx,
 		const char *portal_uri);
 
 
-#endif /*XIO_CONNECTIONS_STORE_H */
+#endif /*XIO_NEXUS_CACHE_H */
 

@@ -35,8 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_SESSIONS_STORE_H
-#define XIO_SESSIONS_STORE_H
+#ifndef XIO_SESSIONS_CACHE_H
+#define XIO_SESSIONS_CACHE_H
 
 
 /*---------------------------------------------------------------------------*/
@@ -45,16 +45,16 @@
 struct xio_session;
 
 /*---------------------------------------------------------------------------*/
-/* sessions_store_construct				                     */
+/* sessions_cache_construct				                     */
 /*---------------------------------------------------------------------------*/
-void sessions_store_construct(void);
+void sessions_cache_construct(void);
 
-int xio_sessions_store_add(struct xio_session *session, uint32_t *session_id);
+int xio_sessions_cache_add(struct xio_session *session, uint32_t *session_id);
 
-int xio_sessions_store_remove(uint32_t session_id);
+int xio_sessions_cache_remove(uint32_t session_id);
 
-struct xio_session *xio_sessions_store_lookup(uint32_t session_id);
+struct xio_session *xio_sessions_cache_lookup(uint32_t session_id);
 
 
-#endif /*XIO_SESSIONS_STORE_H */
+#endif /*XIO_SESSIONS_CACHE_H */
 

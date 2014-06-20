@@ -36,128 +36,104 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "xio_os.h"
+#include "libxio.h"
+#include "xio_common.h"
 #include "xio_hash.h"
-#include "xio_task.h"
 #include "xio_observer.h"
-#include "xio_conn.h"
-#include "xio_conns_store.h"
+#include "xio_transport.h"
+#include "xio_task.h"
+#include "xio_session.h"
+#include "xio_sessions_cache.h"
 
-
-static HT_HEAD(, xio_conn, HASHTABLE_PRIME_SMALL)  conns_store;
-static spinlock_t cs_lock;
+static HT_HEAD(, xio_session, HASHTABLE_PRIME_SMALL)  sessions_cache;
+static spinlock_t ss_lock;
 
 /*---------------------------------------------------------------------------*/
-/* xio_conns_store_add				                             */
+/* sessions_cache_add							     */
 /*---------------------------------------------------------------------------*/
-static int conns_store_add(struct xio_conn *conn,
-			      int conn_id)
+static int sessions_cache_add(struct xio_session *session,
+			      uint32_t session_id)
 {
-	struct xio_conn *c;
+	struct xio_session *s;
 	struct xio_key_int32  key = {
-		conn_id
+		session_id
 	};
-
-	HT_LOOKUP(&conns_store, &key, c, conns_htbl);
-	if (c != NULL)
+	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
+	if (s != NULL)
 		return -1;
 
-	HT_INSERT(&conns_store, &key, conn, conns_htbl);
+	HT_INSERT(&sessions_cache, &key, session, sessions_htbl);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conns_store_remove				                     */
+/* xio_sessions_cache_remove				                     */
 /*---------------------------------------------------------------------------*/
-int xio_conns_store_remove(int conn_id)
+int xio_sessions_cache_remove(uint32_t session_id)
 {
-	struct xio_conn *c;
+	struct xio_session *s;
 	struct xio_key_int32  key;
 
-	spin_lock(&cs_lock);
-	key.id = conn_id;
-	HT_LOOKUP(&conns_store, &key, c, conns_htbl);
-	if (c == NULL) {
-		spin_unlock(&cs_lock);
+	spin_lock(&ss_lock);
+	key.id = session_id;
+	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
+	if (s == NULL) {
+		spin_unlock(&ss_lock);
 		return -1;
 	}
 
-	HT_REMOVE(&conns_store, c, xio_conn, conns_htbl);
-	spin_unlock(&cs_lock);
+	HT_REMOVE(&sessions_cache, s, xio_session, sessions_htbl);
+	spin_unlock(&ss_lock);
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conns_store_lookup			                             */
+/* xio_sessions_cache_lookup						     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn *xio_conns_store_lookup(int conn_id)
+struct xio_session *xio_sessions_cache_lookup(uint32_t session_id)
 {
-	struct xio_conn *c;
+	struct xio_session *s;
 	struct xio_key_int32  key;
 
-	spin_lock(&cs_lock);
-	key.id = conn_id;
-	HT_LOOKUP(&conns_store, &key, c, conns_htbl);
-	spin_unlock(&cs_lock);
+	spin_lock(&ss_lock);
+	key.id = session_id;
+	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
+	spin_unlock(&ss_lock);
 
-	return c;
+	return s;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conns_store_add				                             */
+/* xio_sessions_cache_add			                             */
 /*---------------------------------------------------------------------------*/
-int xio_conns_store_add(struct xio_conn *conn,
-			int *conn_id)
+int xio_sessions_cache_add(struct xio_session *session,
+		uint32_t *session_id)
 {
-	static int cid;  /* = 0 global conn provider */
+	static uint32_t sid;  /* = 0 global session provider */
 	int retval;
 
-	spin_lock(&cs_lock);
-	retval = conns_store_add(conn, cid);
+	spin_lock(&ss_lock);
+	retval = sessions_cache_add(session, sid);
 	if (retval == 0)
-		*conn_id = cid++;
-	spin_unlock(&cs_lock);
+		*session_id = sid++;
+	spin_unlock(&ss_lock);
 
 	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_conns_store_find				                             */
+/* sessions_cache_construct				                     */
 /*---------------------------------------------------------------------------*/
-struct xio_conn *xio_conns_store_find(
-		struct xio_context *ctx,
-		const char *portal_uri)
+void sessions_cache_construct(void)
 {
-	struct xio_conn *conn;
-
-	spin_lock(&cs_lock);
-	HT_FOREACH(conn, &conns_store, conns_htbl) {
-		if (conn->transport_hndl->portal_uri) {
-			if (
-		(strcmp(conn->transport_hndl->portal_uri, portal_uri) == 0) &&
-		(conn->transport_hndl->ctx == ctx)) {
-				spin_unlock(&cs_lock);
-				return conn;
-			}
-		}
-	}
-	spin_unlock(&cs_lock);
-	return  NULL;
-}
-
-/*---------------------------------------------------------------------------*/
-/* conns_store_construct				                     */
-/*---------------------------------------------------------------------------*/
-void conns_store_construct(void)
-{
-	HT_INIT(&conns_store, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
-	spin_lock_init(&cs_lock);
+	HT_INIT(&sessions_cache, xio_int32_hash, xio_int32_cmp, xio_int32_cp);
+	spin_lock_init(&ss_lock);
 }
 
 /*
-void conns_store_destruct(void)
+void sessions_cache_destruct(void)
 {
 }
 */
-

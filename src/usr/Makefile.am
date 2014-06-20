@@ -45,8 +45,8 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_workqueue_priv.h		\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
-			../common/xio_conn.h			\
-			../common/xio_conns_store.h		\
+			../common/xio_nexus.h			\
+			../common/xio_nexus_cache.h		\
 			../common/xio_context.h			\
 			../common/xio_hash.h			\
 			../common/xio_mbuf.h			\
@@ -55,7 +55,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_server.h			\
 			../common/xio_session.h			\
 			../common/xio_session_priv.h		\
-			../common/xio_sessions_store.h		\
+			../common/xio_sessions_cache.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
 			../common/xio_transport.h		\
@@ -96,10 +96,10 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_session.c		\
 			../common/xio_session_server.c	\
 			../common/xio_session_client.c	\
-			../common/xio_sessions_store.c	\
+			../common/xio_sessions_cache.c	\
 			../common/xio_observer.c	\
-			../common/xio_conn.c		\
-			../common/xio_conns_store.c	\
+			../common/xio_nexus.c		\
+			../common/xio_nexus_cache.c	\
 			../common/xio_transport.c	\
 			../common/xio_connection.c	
 	

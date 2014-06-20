@@ -82,7 +82,7 @@ void xio_set_error(int errnum);
 #define XIO_NOP			1
 
 #define XIO_CREDIT		(1 << 6)
-#define XIO_CONN_SETUP		(1 << 7)
+#define XIO_NEXUS_SETUP		(1 << 7)
 #define XIO_SESSION_SETUP	(1 << 8)
 #define XIO_CONNECTION_HELLO	(1 << 9)
 #define XIO_FIN			(1 << 10)
@@ -92,8 +92,8 @@ void xio_set_error(int errnum);
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
 #define XIO_CREDIT_NOP		(XIO_CREDIT | XIO_NOP)
-#define XIO_CONN_SETUP_REQ	(XIO_CONN_SETUP | XIO_REQUEST)
-#define XIO_CONN_SETUP_RSP	(XIO_CONN_SETUP | XIO_RESPONSE)
+#define XIO_NEXUS_SETUP_REQ	(XIO_NEXUS_SETUP | XIO_REQUEST)
+#define XIO_NEXUS_SETUP_RSP	(XIO_NEXUS_SETUP | XIO_RESPONSE)
 #define XIO_SESSION_SETUP_REQ	(XIO_SESSION_SETUP | XIO_REQUEST)
 #define XIO_SESSION_SETUP_RSP	(XIO_SESSION_SETUP | XIO_RESPONSE)
 #define XIO_ONE_WAY_REQ		XIO_MSG_TYPE_ONE_WAY
@@ -111,7 +111,7 @@ void xio_set_error(int errnum);
 #define IS_NOP(type)			((type) & XIO_NOP)
 #define IS_MESSAGE(type)		((type) & XIO_MESSAGE)
 #define IS_SESSION_SETUP(type)		((type) & XIO_SESSION_SETUP)
-#define IS_CONN_SETUP(type)		((type) & XIO_CONN_SETUP)
+#define IS_NEXUS_SETUP(type)		((type) & XIO_NEXUS_SETUP)
 #define IS_ONE_WAY(type)		((type) & XIO_ONE_WAY)
 #define IS_FIN(type)			((type) & XIO_FIN)
 #define IS_CANCEL(type)			((type) & XIO_CANCEL)
@@ -164,14 +164,14 @@ struct __attribute__((__packed__)) xio_session_hdr {
 
 #define XIO_RECONNECT		(XIO_CID)
 
-struct __attribute__((__packed__)) xio_conn_setup_req {
+struct __attribute__((__packed__)) xio_nexus_setup_req {
 	uint16_t		version;
 	uint16_t		flags;
 	uint32_t		cid;
 };
 
 
-struct __attribute__((__packed__)) xio_conn_setup_rsp {
+struct __attribute__((__packed__)) xio_nexus_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;

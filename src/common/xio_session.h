@@ -138,20 +138,20 @@ struct xio_session *xio_find_session(
 
 struct xio_connection *xio_session_find_connection(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
 
 struct xio_connection *xio_session_alloc_connection(
 		struct xio_session *session,
 		struct xio_context *ctx,
-		uint32_t conn_idx,
-		void *conn_user_context);
+		uint32_t connection_idx,
+		void	 *connection_user_context);
 
 int xio_session_free_connection(
 		struct xio_connection *connection);
 
-struct xio_connection  *xio_session_assign_conn(
+struct xio_connection  *xio_session_assign_nexus(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
 
 void xio_session_assign_ops(
 		struct xio_session *session,
@@ -159,7 +159,7 @@ void xio_session_assign_ops(
 
 struct xio_connection *xio_server_create_accepted_connection(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
 
 int xio_session_reconnect(
 		struct xio_session  *session,

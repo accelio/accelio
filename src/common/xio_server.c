@@ -43,13 +43,13 @@
 #include "xio_transport.h"
 #include "xio_task.h"
 #include "xio_context.h"
+#include "xio_nexus.h"
 #include "xio_session.h"
-#include "xio_conn.h"
 #include "xio_connection.h"
 
 
 struct xio_server {
-	struct xio_conn			*listener;
+	struct xio_nexus		*listener;
 	struct xio_observer		observer;
 	char				*uri;
 	struct xio_context		*ctx;
@@ -59,23 +59,23 @@ struct xio_server {
 	void				*cb_private_data;
 };
 
-static int xio_on_conn_event(void *observer, void *notifier, int event,
-			void *event_data);
+static int xio_on_nexus_event(void *observer, void *notifier, int event,
+			      void *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_new_conn							     */
+/* xio_on_new_nexus							     */
 /*---------------------------------------------------------------------------*/
-static int xio_on_new_conn(struct xio_server *server,
-			   struct xio_conn *conn,
-			   union xio_conn_event_data *event_data)
+static int xio_on_new_nexus(struct xio_server *server,
+			   struct xio_nexus *nexus,
+			   union xio_nexus_event_data *event_data)
 {
 	int		retval;
 
 	/* set the server as observer */
-	xio_conn_set_server_observer(event_data->new_connection.child_conn,
+	xio_nexus_set_server_observer(event_data->new_nexus.child_nexus,
 				     &server->observer);
 
-	retval = xio_conn_accept(event_data->new_connection.child_conn);
+	retval = xio_nexus_accept(event_data->new_nexus.child_nexus);
 	if (retval != 0) {
 		ERROR_LOG("failed to accept connection\n");
 		return -1;
@@ -86,9 +86,9 @@ static int xio_on_new_conn(struct xio_server *server,
 
 /* first message after new connection are going trough the server */
 static int xio_on_new_message(struct xio_server *server,
-			      struct xio_conn *conn,
+			      struct xio_nexus *nexus,
 			      int event,
-			      union xio_conn_event_data *event_data)
+			      union xio_nexus_event_data *event_data)
 {
 	struct xio_session		*session;
 	struct xio_connection		*connection;
@@ -120,11 +120,11 @@ static int xio_on_new_message(struct xio_server *server,
 			return -1;
 		}
 		DEBUG_LOG("server [new session]: server:%p, " \
-			  "session:%p, conn:%p ,session_id:%d\n",
-			  server, session, conn, session->session_id);
+			  "session:%p, nexus:%p ,session_id:%d\n",
+			  server, session, nexus, session->session_id);
 
 		/* get transport class routines */
-		session->validators_cls = xio_conn_get_validators_cls(conn);
+		session->validators_cls = xio_nexus_get_validators_cls(nexus);
 
 		connection =
 			xio_session_alloc_connection(session,
@@ -134,7 +134,7 @@ static int xio_on_new_message(struct xio_server *server,
 			ERROR_LOG("server failed to allocate new connection\n");
 			goto cleanup;
 		}
-		connection = xio_session_assign_conn(session, conn);
+		connection = xio_session_assign_nexus(session, nexus);
 		if (!connection) {
 			ERROR_LOG("server failed to assign new connection\n");
 			goto cleanup1;
@@ -156,14 +156,14 @@ static int xio_on_new_message(struct xio_server *server,
 		task->session = session;
 
 		DEBUG_LOG("server [new connection]: server:%p, " \
-			  "session:%p, conn:%p, session_id:%d\n",
-			   server, session, conn, session->session_id);
+			  "session:%p, nexus:%p, session_id:%d\n",
+			   server, session, nexus, session->session_id);
 
 		connection = xio_session_alloc_connection(task->session,
 						  server->ctx, 0,
 						  server->cb_private_data);
 
-		connection = xio_session_assign_conn(task->session, conn);
+		connection = xio_session_assign_nexus(task->session, nexus);
 
 		/* copy the server attributes to the connection */
 		xio_connection_set_ops(connection, &server->ops);
@@ -180,7 +180,7 @@ static int xio_on_new_message(struct xio_server *server,
 	}
 
 	/* route the message to the session */
-	xio_conn_notify_observer(conn, &session->observer, event, event_data);
+	xio_nexus_notify_observer(nexus, &session->observer, event, event_data);
 
 	return 0;
 
@@ -194,41 +194,41 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event				                             */
+/* xio_on_nexus_event				                             */
 /*---------------------------------------------------------------------------*/
-static int xio_on_conn_event(void *observer, void *notifier, int event,
+static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			void *event_data)
 {
 	struct xio_server	*server = observer;
-	struct xio_conn	*conn	= notifier;
+	struct xio_nexus	*nexus	= notifier;
 	int			retval  = 0;
 
 	switch (event) {
-	case XIO_CONN_EVENT_NEW_MESSAGE:
-	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
+	case XIO_NEXUS_EVENT_NEW_MESSAGE:
+	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 		TRACE_LOG("server: [notification] - new message. " \
-			  "server:%p, conn:%p\n", observer, notifier);
+			  "server:%p, nexus:%p\n", observer, notifier);
 
-		xio_on_new_message(server, conn, event, event_data);
+		xio_on_new_message(server, nexus, event, event_data);
 		break;
-	case XIO_CONN_EVENT_NEW_CONNECTION:
+	case XIO_NEXUS_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("server: [notification] - new connection. " \
-			  "server:%p, conn:%p\n", observer, notifier);
-		xio_on_new_conn(server, conn, event_data);
+			  "server:%p, nexus:%p\n", observer, notifier);
+		xio_on_new_nexus(server, nexus, event_data);
 		break;
 
-	case XIO_CONN_EVENT_DISCONNECTED:
-	case XIO_CONN_EVENT_CLOSED:
-	case XIO_CONN_EVENT_ESTABLISHED:
+	case XIO_NEXUS_EVENT_DISCONNECTED:
+	case XIO_NEXUS_EVENT_CLOSED:
+	case XIO_NEXUS_EVENT_ESTABLISHED:
 		break;
 
-	case XIO_CONN_EVENT_ERROR:
+	case XIO_NEXUS_EVENT_ERROR:
 		ERROR_LOG("server: [notification] - connection error. " \
-			  "server:%p, conn:%p\n", observer, notifier);
+			  "server:%p, nexus:%p\n", observer, notifier);
 		break;
 	default:
 		ERROR_LOG("server: [notification] - unexpected event :%d. " \
-			  "server:%p, conn:%p\n", event, observer, notifier);
+			  "server:%p, nexus:%p\n", event, observer, notifier);
 		break;
 	}
 
@@ -273,18 +273,18 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	server->session_flags = session_flags;
 	memcpy(&server->ops, ops, sizeof(*ops));
 
-	XIO_OBSERVER_INIT(&server->observer, server, xio_on_conn_event);
+	XIO_OBSERVER_INIT(&server->observer, server, xio_on_nexus_event);
 
-	server->listener = xio_conn_open(ctx, uri, NULL, 0);
+	server->listener = xio_nexus_open(ctx, uri, NULL, 0);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
 
-	xio_conn_set_server_observer(server->listener,
+	xio_nexus_set_server_observer(server->listener,
 				     &server->observer);
 
-	retval = xio_conn_listen(server->listener,
+	retval = xio_nexus_listen(server->listener,
 				 uri, src_port, backlog);
 	if (retval != 0) {
 		ERROR_LOG("connection listen failed\n");
@@ -294,7 +294,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	return server;
 
 cleanup1:
-	xio_conn_close(server->listener, NULL);
+	xio_nexus_close(server->listener, NULL);
 cleanup:
 	kfree(server->uri);
 	kfree(server);
@@ -309,7 +309,7 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
-	xio_conn_close(server->listener, NULL);
+	xio_nexus_close(server->listener, NULL);
 	kfree(server->uri);
 	kfree(server);
 

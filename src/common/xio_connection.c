@@ -41,7 +41,7 @@
 #include "xio_task.h"
 #include "xio_msg_list.h"
 #include "xio_observer.h"
-#include "xio_conn.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_session.h"
 #include "xio_context.h"
@@ -231,7 +231,7 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		}
 
 		connection->session	= session;
-		connection->conn	= NULL;
+		connection->nexus	= NULL;
 		connection->ctx		= ctx;
 		connection->conn_idx	= conn_idx;
 		connection->in_flight_reqs_budget = XIO_CONNECTION_INFLIGHT_BUDGET;
@@ -288,7 +288,7 @@ int xio_connection_send(struct xio_connection *connection,
 	    ((msg->flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
 	    XIO_MSG_RSP_FLAG_FIRST)) {
 		/* this is a receipt message */
-		task = xio_conn_get_primary_task(connection->conn);
+		task = xio_nexus_get_primary_task(connection->nexus);
 		if (task == NULL) {
 			ERROR_LOG("tasks pool is empty\n");
 			return -ENOMEM;
@@ -306,7 +306,7 @@ int xio_connection_send(struct xio_connection *connection,
 		is_req			= 1;
 	} else {
 		if (IS_REQUEST(msg->type)) {
-			task = xio_conn_get_primary_task(connection->conn);
+			task = xio_nexus_get_primary_task(connection->nexus);
 			if (task == NULL) {
 				ERROR_LOG("tasks pool is empty\n");
 				return -ENOMEM;
@@ -343,7 +343,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->tlv_type		= msg->type;
 	task->session		= connection->session;
 	task->stag		= uint64_from_ptr(task->session);
-	task->conn		= connection->conn;
+	task->nexus		= connection->nexus;
 	task->connection	= connection;
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
@@ -358,7 +358,7 @@ int xio_connection_send(struct xio_connection *connection,
 
 	/* send it */
 	xio_msg_map(msg);
-	retval = xio_conn_send(connection->conn, task);
+	retval = xio_nexus_send(connection->nexus, task);
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
 		goto cleanup;
@@ -498,7 +498,7 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 {
 	struct xio_task		*ptask, *pnext_task;
 
-	if (!(connection->conn))
+	if (!(connection->nexus))
 		return 0;
 
 	if (!list_empty(&connection->post_io_tasks_list)) {
@@ -555,7 +555,7 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 	struct xio_task	*ptask, *pnext_task;
 	int is_req;
 
-	if (!connection->conn)
+	if (!connection->nexus)
 		return 0;
 
 	/* tasks in io_tasks_lists belongs to the application and should not be
@@ -621,7 +621,7 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 	list_for_each_entry(ptask,
 			    &connection->io_tasks_list,
 			    tasks_list_entry) {
-		if (xio_conn_update_task(connection->conn, ptask)) {
+		if (xio_nexus_update_task(connection->nexus, ptask)) {
 			ERROR_LOG("update_task failed: task %p", ptask);
 			return -1;
 		}
@@ -1204,8 +1204,8 @@ int xio_poll_completions(struct xio_connection *connection,
 			long min_nr, long nr,
 			 struct timespec *timeout)
 {
-	if (connection->conn)
-		return xio_conn_poll(connection->conn, min_nr, nr, timeout);
+	if (connection->nexus)
+		return xio_nexus_poll(connection->nexus, min_nr, nr, timeout);
 	else
 		return 0;
 }
@@ -1442,7 +1442,7 @@ int xio_cancel_request(struct xio_connection *connection,
 		uint64_from_ptr(connection->session);
 
 	/* cancel request on tx */
-	xio_conn_cancel_req(connection->conn, req, stag, &hdr, sizeof(hdr));
+	xio_nexus_cancel_req(connection->nexus, req, stag, &hdr, sizeof(hdr));
 
 	return 0;
 }
@@ -1461,7 +1461,7 @@ int xio_connection_send_cancel_response(struct xio_connection *connection,
 	hdr.responder_session_id = htonl(connection->session->session_id);
 	hdr.requester_session_id = htonl(connection->session->peer_session_id);
 
-	xio_conn_cancel_rsp(connection->conn, task, result, &hdr, sizeof(hdr));
+	xio_nexus_cancel_rsp(connection->nexus, task, result, &hdr, sizeof(hdr));
 
 	return 0;
 }
@@ -1544,12 +1544,12 @@ int xio_query_connection(struct xio_connection *connection,
 		attr->ctx = connection->ctx;
 
 	if (attr_mask & XIO_CONNECTION_ATTR_PROTO)
-		attr->proto = xio_conn_get_proto(connection->conn);
+		attr->proto = xio_nexus_get_proto(connection->nexus);
 
 	if (connection->session &&
 	    connection->session->type == XIO_SESSION_SERVER) {
 		if (attr_mask & XIO_CONNECTION_ATTR_SRC_ADDR)
-			xio_conn_get_src_addr(connection->conn, &attr->src_addr,
+			xio_nexus_get_src_addr(connection->nexus, &attr->src_addr,
 					      sizeof(attr->src_addr));
 	}
 
@@ -1661,24 +1661,24 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 
 	DEBUG_LOG("xio_connection_post_destroy. session:%p, connection:%p " \
 		  "conn:%p nr:%d\n",
-		  session, connection, connection->conn,
+		  session, connection, connection->nexus,
 		  session->connections_nr);
 
 
 	xio_connection_flush_tasks(connection);
 
 	/* remove the connection from the session's connections list */
-	if (connection->conn)
-		xio_conn_close(connection->conn, &session->observer);
+	if (connection->nexus)
+		xio_nexus_close(connection->nexus, &session->observer);
 
 	/* leading connection */
 	if (session->lead_connection &&
-	    session->lead_connection->conn == connection->conn) {
+	    session->lead_connection->nexus == connection->nexus) {
 		retval = xio_connection_close(session->lead_connection);
 		session->lead_connection = NULL;
 		TRACE_LOG("lead connection is closed\n");
 	} else if (session->redir_connection &&
-		   session->redir_connection->conn == connection->conn) {
+		   session->redir_connection->nexus == connection->nexus) {
 		retval = xio_connection_close(session->redir_connection);
 		session->redir_connection = NULL;
 		TRACE_LOG("redirected connection is closed\n");
@@ -1751,7 +1751,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 
 	DEBUG_LOG("xio_connection_destroy. session:%p, connection:%p " \
 		  "conn:%p nr:%d\n",
-		  session, connection, connection->conn,
+		  session, connection, connection->nexus,
 		  session->connections_nr);
 
 	if (connection->state == XIO_CONNECTION_STATE_CLOSE_WAIT)  {
@@ -1783,14 +1783,14 @@ int xio_connection_disconnected(struct xio_connection *connection)
 			connection->session, connection,
 			connection->close_reason);
 
-	if (connection->conn) {
+	if (connection->nexus) {
 		if (connection->session->lead_connection &&
-		    connection->session->lead_connection->conn == connection->conn)
+		    connection->session->lead_connection->nexus == connection->nexus)
 			connection->session->lead_connection = NULL;
 		if (connection->session->redir_connection &&
-		    connection->session->redir_connection->conn == connection->conn)
+		    connection->session->redir_connection->nexus == connection->nexus)
 		connection->session->redir_connection = NULL;
-		xio_conn_close(connection->conn,
+		xio_nexus_close(connection->nexus,
 			       &connection->session->observer);
 	}
 

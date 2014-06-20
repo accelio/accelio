@@ -44,10 +44,10 @@
 #include "xio_task.h"
 #include "xio_context.h"
 #include "xio_transport.h"
-#include "xio_sessions_store.h"
+#include "xio_sessions_cache.h"
 #include "xio_hash.h"
 #include "xio_session.h"
-#include "xio_conn.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
 
@@ -203,14 +203,14 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 int xio_session_accept_connection(struct xio_session *session)
 {
 	struct xio_connection	*connection, *tmp_connection;
-	struct xio_conn		*conn;
+	struct xio_nexus		*nexus;
 	int			retval = 0;
 	char			*portal;
 
 	list_for_each_entry_safe(connection, tmp_connection,
 				 &session->connections_list,
 				 connections_list_entry) {
-		if (connection->conn == NULL) {
+		if (connection->nexus == NULL) {
 			if (connection->conn_idx == 0) {
 				portal = session->portals_array[
 						session->last_opened_portal++];
@@ -222,24 +222,24 @@ int xio_session_accept_connection(struct xio_session *session)
 					   session->portals_array_len);
 				portal = session->portals_array[pid];
 			}
-			conn = xio_conn_open(connection->ctx, portal,
+			nexus = xio_nexus_open(connection->ctx, portal,
 					     &session->observer,
 					     session->session_id);
 
-			if (conn == NULL) {
+			if (nexus == NULL) {
 				ERROR_LOG("failed to open connection to %s\n",
 					  portal);
 				retval = -1;
 				break;
 			}
-			connection = xio_session_assign_conn(session, conn);
+			connection = xio_session_assign_nexus(session, nexus);
 			if (connection == NULL) {
 				ERROR_LOG("failed to assign connection\n");
 				retval = -1;
 				break;
 			}
 			DEBUG_LOG("reconnecting to %s\n", portal);
-			retval = xio_conn_connect(conn, portal,
+			retval = xio_nexus_connect(nexus, portal,
 						  &session->observer, NULL);
 			if (retval != 0) {
 				ERROR_LOG("connection connect failed\n");
@@ -257,7 +257,7 @@ int xio_session_accept_connection(struct xio_session *session)
 /*---------------------------------------------------------------------------*/
 int xio_session_redirect_connection(struct xio_session *session)
 {
-	struct xio_conn		*conn, *tmp_conn;
+	struct xio_nexus		*nexus, *tmp_nexus;
 	int			retval;
 	char			*service;
 
@@ -265,19 +265,19 @@ int xio_session_redirect_connection(struct xio_session *session)
 	if (session->last_opened_service == session->services_array_len)
 		session->last_opened_service = 0;
 
-	conn = xio_conn_open(session->lead_connection->ctx, service, NULL, 0);
-	if (conn == NULL) {
+	nexus = xio_nexus_open(session->lead_connection->ctx, service, NULL, 0);
+	if (nexus == NULL) {
 		ERROR_LOG("failed to open connection to %s\n",
 			  service);
 		return -1;
 	}
 	/* initialize the redirected connection */
-	tmp_conn = session->lead_connection->conn;
+	tmp_nexus = session->lead_connection->nexus;
 	session->redir_connection = session->lead_connection;
-	xio_connection_set_conn(session->redir_connection, conn);
+	xio_connection_set_nexus(session->redir_connection, nexus);
 
 	ERROR_LOG("connection redirected to %s\n", service);
-	retval = xio_conn_connect(conn, service, &session->observer, NULL);
+	retval = xio_nexus_connect(nexus, service, &session->observer, NULL);
 	if (retval != 0) {
 		ERROR_LOG("connection connect failed\n");
 		goto cleanup;
@@ -291,12 +291,12 @@ int xio_session_redirect_connection(struct xio_session *session)
 			session->lead_connection->ctx,
 			session->lead_connection->conn_idx,
 			session->lead_connection->cb_user_context);
-	xio_connection_set_conn(session->lead_connection, tmp_conn);
+	xio_connection_set_nexus(session->lead_connection, tmp_nexus);
 
 	return 0;
 
 cleanup:
-	xio_conn_close(conn, &session->observer);
+	xio_nexus_close(nexus, &session->observer);
 
 	return -1;
 }
@@ -308,14 +308,14 @@ int xio_on_session_rejected(struct xio_session *session)
 {
 	struct xio_connection *pconnection, *tmp_connection;
 
-	/* also send disconnect to connections that do no have conn */
+	/* also send disconnect to connections that do no have nexus */
 	list_for_each_entry_safe(pconnection, tmp_connection,
 				 &session->connections_list,
 				 connections_list_entry) {
 		session->disable_teardown   = 0;
 		pconnection->disable_notify = 0;
 		pconnection->close_reason = XIO_E_SESSION_REJECTED;
-		if (pconnection->conn)
+		if (pconnection->nexus)
 			xio_disconnect_initial_connection(pconnection);
 		else
 			xio_connection_disconnected(pconnection);
@@ -538,7 +538,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			xio_prep_portal(connection);
 
 			/* insert the connection into list */
-			xio_session_assign_conn(session, connection->conn);
+			xio_session_assign_nexus(session, connection->nexus);
 			session->lead_connection = NULL;
 			session->redir_connection = NULL;
 			session->disable_teardown = 0;
@@ -584,9 +584,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				session->lead_connection->conn_idx,
 				session->lead_connection->cb_user_context);
 
-			xio_connection_set_conn(tmp_connection,
-						connection->conn);
-			connection->conn = NULL;
+			xio_connection_set_nexus(tmp_connection,
+						connection->nexus);
+			connection->nexus = NULL;
 			session->lead_connection = tmp_connection;
 
 			/* close the lead/redirected connection */
@@ -597,7 +597,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 					XIO_CONNECTION_STATE_ONLINE;
 			xio_disconnect(session->lead_connection);
 
-			/* temporary disable teardown - on cached conns close
+			/* temporary disable teardown - on cached nexuss close
 			 * callback may jump immediately and since there are no
 			 * connections. teardown may notified
 			 */
@@ -667,11 +667,11 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_refused							     */
+/* xio_on_nexus_refused							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_refused(struct xio_session *session,
-			struct xio_conn *conn,
-			union xio_conn_event_data *event_data)
+int xio_on_nexus_refused(struct xio_session *session,
+			struct xio_nexus *nexus,
+			union xio_nexus_event_data *event_data)
 {
 	struct xio_connection *connection,
 			      *curr_connection, *next_connection;
@@ -696,7 +696,7 @@ int xio_on_conn_refused(struct xio_session *session,
 		}
 		break;
 	default:
-		connection = xio_session_find_connection(session, conn);
+		connection = xio_session_find_connection(session, nexus);
 		xio_connection_refused(connection);
 		break;
 	}
@@ -705,11 +705,11 @@ int xio_on_conn_refused(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_client_conn_established					     */
+/* xio_on_client_nexus_established					     */
 /*---------------------------------------------------------------------------*/
-int xio_on_client_conn_established(struct xio_session *session,
-				   struct xio_conn *conn,
-				   union xio_conn_event_data *event_data)
+int xio_on_client_nexus_established(struct xio_session *session,
+				   struct xio_nexus *nexus,
+				   union xio_nexus_event_data *event_data)
 {
 	int				retval = 0;
 	struct xio_connection		*connection;
@@ -767,10 +767,10 @@ int xio_on_client_conn_established(struct xio_session *session,
 		}
 		break;
 	case XIO_SESSION_STATE_ACCEPTED:
-		connection = xio_session_find_connection(session, conn);
+		connection = xio_session_find_connection(session, nexus);
 		if (connection == NULL) {
 			ERROR_LOG("failed to find connection session:%p," \
-				  "conn:%p\n", session, conn);
+				  "nexus:%p\n", session, nexus);
 			return -1;
 		}
 		session->disable_teardown = 0;
@@ -780,15 +780,15 @@ int xio_on_client_conn_established(struct xio_session *session,
 
 		break;
 	case XIO_SESSION_STATE_ONLINE:
-		connection = xio_session_find_connection(session, conn);
+		connection = xio_session_find_connection(session, nexus);
 		if (connection == NULL)  {
 			ERROR_LOG("failed to find connection\n");
 			return -1;
 		}
 		DEBUG_LOG("connection established: " \
-			  "connection:%p, session:%p, conn:%p\n",
+			  "connection:%p, session:%p, nexus:%p\n",
 			   connection, connection->session,
-			   connection->conn);
+			   connection->nexus);
 		/* now try to send */
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
@@ -802,86 +802,86 @@ int xio_on_client_conn_established(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_client_on_conn_event						     */
+/* xio_client_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
-int xio_client_on_conn_event(void *observer, void *sender, int event,
+int xio_client_on_nexus_event(void *observer, void *sender, int event,
 			     void *event_data)
 {
 	struct xio_session	*session = observer;
-	struct xio_conn	*conn	= sender;
+	struct xio_nexus	*nexus	= sender;
 	int			retval  = 0;
 
 
 	switch (event) {
-	case XIO_CONN_EVENT_NEW_MESSAGE:
+	case XIO_NEXUS_EVENT_NEW_MESSAGE:
 /*
 		TRACE_LOG("session: [notification] - new message. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 
-*/		xio_on_new_message(session, conn, event_data);
+*/		xio_on_new_message(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_SEND_COMPLETION:
+	case XIO_NEXUS_EVENT_SEND_COMPLETION:
 /*		TRACE_LOG("session: [notification] - send_completion. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 */
-		xio_on_send_completion(session, conn, event_data);
+		xio_on_send_completion(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
+	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 */
-		xio_on_assign_in_buf(session, conn, event_data);
+		xio_on_assign_in_buf(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_CANCEL_REQUEST:
+	case XIO_NEXUS_EVENT_CANCEL_REQUEST:
 		DEBUG_LOG("session: [notification] - cancel request. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_cancel_request(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_cancel_request(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_CANCEL_RESPONSE:
+	case XIO_NEXUS_EVENT_CANCEL_RESPONSE:
 		DEBUG_LOG("session: [notification] - cancel response. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_cancel_response(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_cancel_response(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ESTABLISHED:
-		DEBUG_LOG("session: [notification] - conn established. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_client_conn_established(session, conn, event_data);
+	case XIO_NEXUS_EVENT_ESTABLISHED:
+		DEBUG_LOG("session: [notification] - nexus established. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_client_nexus_established(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_DISCONNECTED:
-		DEBUG_LOG("session: [notification] - conn disconnected" \
-			 " session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_disconnected(session, conn, event_data);
+	case XIO_NEXUS_EVENT_DISCONNECTED:
+		DEBUG_LOG("session: [notification] - nexus disconnected" \
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_disconnected(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_RECONNECTED:
+	case XIO_NEXUS_EVENT_RECONNECTED:
 		DEBUG_LOG("session: [notification] - connection reconnected" \
-			 " session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_reconnected(session, conn);
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_reconnected(session, nexus);
 		break;
-	case XIO_CONN_EVENT_CLOSED:
-		DEBUG_LOG("session: [notification] - conn closed. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_closed(session, conn, event_data);
+	case XIO_NEXUS_EVENT_CLOSED:
+		DEBUG_LOG("session: [notification] - nexus closed. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_closed(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_REFUSED:
-		DEBUG_LOG("session: [notification] - conn refused. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_refused(session, conn, event_data);
+	case XIO_NEXUS_EVENT_REFUSED:
+		DEBUG_LOG("session: [notification] - nexus refused. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_refused(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ERROR:
-		DEBUG_LOG("session: [notification] - conn error. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_error(session, conn, event_data);
+	case XIO_NEXUS_EVENT_ERROR:
+		DEBUG_LOG("session: [notification] - nexus error. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_error(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_MESSAGE_ERROR:
-		DEBUG_LOG("session: [notification] - conn message error. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_message_error(session, conn, event_data);
+	case XIO_NEXUS_EVENT_MESSAGE_ERROR:
+		DEBUG_LOG("session: [notification] - nexus message error. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_message_error(session, nexus, event_data);
 		break;
 	default:
 		DEBUG_LOG("session: [notification] - unexpected event. " \
-			 "event:%d, session:%p, conn:%p\n",
+			 "event:%d, session:%p, nexus:%p\n",
 			 event, observer, sender);
-		xio_on_conn_error(session, conn, event_data);
+		xio_on_nexus_error(session, nexus, event_data);
 		break;
 	}
 
@@ -893,9 +893,9 @@ int xio_client_on_conn_event(void *observer, void *sender, int event,
 /*---------------------------------------------------------------------------*/
 struct xio_connection *xio_connect(struct xio_session  *session,
 				       struct xio_context  *ctx,
-				       uint32_t conn_idx,
+				       uint32_t connection_idx,
 				       const char *out_if,
-				       void *conn_user_context)
+				       void *connection_user_context)
 {
 	struct xio_session	*psession = NULL;
 	struct xio_connection	*connection = NULL, *tmp_connection;
@@ -907,8 +907,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		xio_set_error(EINVAL);
 		return NULL;
 	}
-	/* lookup for session in store */
-	psession = xio_sessions_store_lookup(session->session_id);
+	/* lookup for session in cache */
+	psession = xio_sessions_cache_lookup(session->session_id);
 	if (psession == NULL) {
 		ERROR_LOG("failed to find session\n");
 		xio_set_error(EINVAL);
@@ -926,7 +926,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	}
 	if (session->state == XIO_SESSION_STATE_INIT) {
 		char portal[64];
-		struct xio_conn	*conn;
+		struct xio_nexus	*nexus;
 		/* extract portal from uri */
 		if (xio_uri_get_portal(session->uri, portal,
 				       sizeof(portal)) != 0) {
@@ -935,27 +935,27 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 				  session->uri);
 			goto cleanup;
 		}
-		conn = xio_conn_open(ctx, portal, &session->observer,
+		nexus = xio_nexus_open(ctx, portal, &session->observer,
 						  session->session_id);
-		if (conn == NULL) {
+		if (nexus == NULL) {
 			ERROR_LOG("failed to create connection\n");
 			goto cleanup;
 		}
 		/* initialize the lead connection */
 		session->lead_connection = xio_session_alloc_connection(
 				session, ctx,
-				conn_idx,
-				conn_user_context);
-		session->lead_connection->conn = conn;
+				connection_idx,
+				connection_user_context);
+		session->lead_connection->nexus = nexus;
 
 		connection  = session->lead_connection;
 
 		/* get transport class routines */
-		session->validators_cls = xio_conn_get_validators_cls(conn);
+		session->validators_cls = xio_nexus_get_validators_cls(nexus);
 
 		session->state = XIO_SESSION_STATE_CONNECT;
 
-		retval = xio_conn_connect(conn, portal,
+		retval = xio_nexus_connect(nexus, portal,
 					  &session->observer, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
@@ -965,39 +965,39 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	} else if ((session->state == XIO_SESSION_STATE_CONNECT) ||
 		   (session->state == XIO_SESSION_STATE_REDIRECTED)) {
 		connection  = xio_session_alloc_connection(session,
-						     ctx, conn_idx,
-						     conn_user_context);
+						     ctx, connection_idx,
+						     connection_user_context);
 	} else if (session->state == XIO_SESSION_STATE_ONLINE ||
 		   session->state == XIO_SESSION_STATE_ACCEPTED) {
-		struct xio_conn *conn;
+		struct xio_nexus *nexus;
 		char *portal;
-		if (conn_idx == 0) {
+		if (connection_idx == 0) {
 			portal = session->portals_array[
 					session->last_opened_portal++];
 			if (session->last_opened_portal ==
 			    session->portals_array_len)
 					session->last_opened_portal = 0;
 		} else {
-			int pid = (conn_idx % session->portals_array_len);
+			int pid = (connection_idx % session->portals_array_len);
 			portal = session->portals_array[pid];
 		}
 		connection  = xio_session_alloc_connection(session, ctx,
-						     conn_idx,
-						     conn_user_context);
-		conn = xio_conn_open(ctx, portal, &session->observer,
+						     connection_idx,
+						     connection_user_context);
+		nexus = xio_nexus_open(ctx, portal, &session->observer,
 				     session->session_id);
-		if (conn == NULL) {
+		if (nexus == NULL) {
 			ERROR_LOG("failed to open connection\n");
 			goto cleanup;
 		}
-		tmp_connection = xio_session_assign_conn(session, conn);
+		tmp_connection = xio_session_assign_nexus(session, nexus);
 		if (tmp_connection != connection) {
-			ERROR_LOG("failed to open connection conn:%p, %p %p\n",
-				  conn, tmp_connection, connection);
+			ERROR_LOG("failed to open connection nexus:%p, %p %p\n",
+				  nexus, tmp_connection, connection);
 			goto cleanup;
 		}
 		DEBUG_LOG("reconnecting to %s, ctx:%p\n", portal, ctx);
-		retval = xio_conn_connect(conn, portal,
+		retval = xio_nexus_connect(nexus, portal,
 					  &session->observer, out_if);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
