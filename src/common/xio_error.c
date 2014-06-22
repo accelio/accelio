@@ -108,6 +108,14 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Message discarded";
 	case XIO_E_STATE:
 		return "Operation not permitted in current state";
+	case XIO_E_NO_USER_BUFS:
+		return "User buffers not available";
+	case XIO_E_NO_USER_MR:
+		return "User mr not available";
+	case XIO_E_USER_BUF_OVERFLOW:
+		return "Local user buffers overflow";
+	case XIO_E_REM_USER_BUF_OVERFLOW:
+		return "Remote user buffers overflow";
 	default:
 		return "Unknown error";
 	};
@@ -121,7 +129,7 @@ const char *xio_strerror(int errnum)
 	if (errnum < XIO_BASE_STATUS)
 		return strerror(errnum);
 
-	if (errnum >= XIO_E_NOT_SUPPORTED && errnum <= XIO_E_MSG_DISCARDED)
+	if (errnum >= XIO_E_NOT_SUPPORTED && errnum < XIO_E_LAST_STATUS)
 		return xio_gen_status_str(errnum);
 
 	return "Unknown error";

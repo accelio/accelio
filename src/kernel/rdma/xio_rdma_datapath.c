@@ -2840,13 +2840,13 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		if (task->imsg.in.data_iovlen == 0) {
 			WARN_LOG("application has not provided buffers\n");
 			WARN_LOG("rdma read is ignored\n");
-			task->imsg.status = XIO_E_PARTIAL_MSG;
+			task->imsg.status = XIO_E_NO_USER_BUFS;
 			return -1;
 		}
 		if (rdma_task->req_write_num_sge != task->imsg.in.data_iovlen) {
 			WARN_LOG("application provided invalid iovec length\n");
 			WARN_LOG("rdma read is ignored\n");
-			task->imsg.status = EINVAL;
+			task->imsg.status = XIO_E_NO_USER_MR;
 			return -1;
 		}
 
@@ -2864,7 +2864,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				  "local peer provided buffer size %zd bytes\n",
 				  rlen, llen);
 			ERROR_LOG("rdma read is ignored\n");
-			task->imsg.status = EINVAL;
+			task->imsg.status = XIO_E_USER_BUF_OVERFLOW;
 			return -1;
 		}
 	} else {
@@ -2913,7 +2913,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to validate input iovecs\n");
 		ERROR_LOG("rdma read is ignored\n");
-		task->imsg.status = EINVAL;
+		task->imsg.status = XIO_E_MSG_INVALID;
 		return -1;
 	}
 
@@ -2930,7 +2930,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to allocate tasks\n");
 		ERROR_LOG("rdma read is ignored\n");
-		task->imsg.status = EINVAL;
+		task->imsg.status = XIO_E_WRITE_FAILED;
 		return -1;
 	}
 
@@ -2979,7 +2979,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (rlen < llen) {
 		ERROR_LOG("peer provided too small iovec\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = EINVAL;
+		task->omsg->status = XIO_E_REM_USER_BUF_OVERFLOW;
 		goto cleanup;
 	}
 	retval = xio_validate_rdma_op(&task->omsg->out,
@@ -2991,7 +2991,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to invalidate input iovecs\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = EINVAL;
+		task->omsg->status = XIO_E_MSG_INVALID;;
 		goto cleanup;
 	}
 
@@ -3008,7 +3008,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to allocate tasks\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = EINVAL;
+		task->omsg->status = XIO_E_READ_FAILED;
 		goto cleanup;
 	}
 	/* prepare response to peer */
