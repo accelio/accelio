@@ -1043,13 +1043,13 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		xio_unmap_work_req(dev, &rdma_task->rxd, DMA_FROM_DEVICE);
 
 	if (rdma_task->txd.mapped)
-		xio_unmap_work_req(dev, &rdma_task->rxd, DMA_TO_DEVICE);
+		xio_unmap_work_req(dev, &rdma_task->txd, DMA_TO_DEVICE);
 
 	if (rdma_task->rdmad.mapped) {
 		enum dma_data_direction direction =
 				(rdma_task->ib_op == XIO_IB_RDMA_WRITE) ?
 					DMA_TO_DEVICE : DMA_FROM_DEVICE;
-		xio_unmap_work_req(dev, &rdma_task->rxd, direction);
+		xio_unmap_work_req(dev, &rdma_task->rdmad, direction);
 	}
 
 	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
@@ -1367,7 +1367,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	if (rdma_task->rxd.mapped) {
 		xio_unmap_work_req(old_dev, &rdma_task->rxd,
 				   DMA_FROM_DEVICE);
-		if (xio_map_work_req(new_dev, &rdma_task->txd,
+		if (xio_map_work_req(new_dev, &rdma_task->rxd,
 				DMA_FROM_DEVICE)) {
 			ERROR_LOG("DMA map from device failed\n");
 			return -1;
@@ -1375,7 +1375,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	}
 
 	if (rdma_task->txd.mapped) {
-		xio_unmap_work_req(old_dev, &rdma_task->rxd,
+		xio_unmap_work_req(old_dev, &rdma_task->txd,
 				DMA_TO_DEVICE);
 		if (xio_map_work_req(new_dev, &rdma_task->txd,
 				     DMA_TO_DEVICE)) {
@@ -1388,9 +1388,9 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		enum dma_data_direction direction =
 				(rdma_task->ib_op == XIO_IB_RDMA_WRITE) ?
 					DMA_TO_DEVICE : DMA_FROM_DEVICE;
-		xio_unmap_work_req(old_dev, &rdma_task->rxd,
+		xio_unmap_work_req(old_dev, &rdma_task->rdmad,
 				   direction);
-		if (xio_map_work_req(new_dev, &rdma_task->txd,
+		if (xio_map_work_req(new_dev, &rdma_task->rdmad,
 				     direction)) {
 			ERROR_LOG("DMA map to/from device failed\n");
 			return -1;
