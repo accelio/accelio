@@ -42,13 +42,11 @@
 #include <inttypes.h>
 #include <string.h>
 #include <getopt.h>
-#include <time.h>
-#include <sys/time.h>
 #include <errno.h>
-#include <sched.h>
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_test_utils.h"
 
 #define MAX_HEADER_SIZE		32
 #define MAX_DATA_SIZE		32
@@ -63,13 +61,10 @@
 #define XIO_DEF_CONN_IDX	0
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_OUTSTANDING_REQS	50
-//will disconnect after DISCONNECT_FACTOR*print counter msgs
+/* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
-#define EXIT abort()
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
-#define USECS_IN_SEC		1000000
-#define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
 
 struct xio_test_config {
@@ -103,9 +98,9 @@ struct test_params {
 	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		nrecv;
-	uint16_t 		finite_run;
+	uint16_t		finite_run;
 	uint16_t		padding[3];
-	uint64_t 		disconnect_nr;
+	uint64_t		disconnect_nr;
 };
 
 
@@ -123,64 +118,7 @@ static struct xio_test_config  test_config = {
 	XIO_DEF_CONN_IDX
 };
 
-/**
- * Convert a timespec to a microsecond value.
- * @e NOTE: There is a loss of precision in the conversion.
- *
- * @param time_spec The timespec to convert.
- * @return The number of microseconds specified by the timespec.
- */
-static inline
-unsigned long long timespec_to_usecs(struct timespec *time_spec)
-{
-	unsigned long long retval = 0;
 
-	retval  = time_spec->tv_sec * USECS_IN_SEC;
-	retval += time_spec->tv_nsec / NSECS_IN_USEC;
-
-	return retval;
-}
-
-static inline unsigned long long get_cpu_usecs()
-{
-	struct timespec ts = {0, 0};
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-
-	return  timespec_to_usecs(&ts);
-}
-
-/*
- * Set CPU affinity to one core.
- */
-static void set_cpu_affinity(int cpu)
-{
-	cpu_set_t coremask;		/* core affinity mask */
-
-	CPU_ZERO(&coremask);
-	CPU_SET(cpu, &coremask);
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &coremask) != 0)
-		fprintf(stderr, "Unable to set affinity. %m\n");
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_time								     */
-/*---------------------------------------------------------------------------*/
-static void get_time(char *time, int len)
-{
-	struct timeval tv;
-	struct tm      t;
-	int	       n;
-
-	gettimeofday(&tv, NULL);
-	localtime_r(&tv.tv_sec, &t);
-	/* Format the date and time,
-	   down to a single second. */
-	n = snprintf(time, len,
-		  "%04d/%02d/%02d-%02d:%02d:%02d.%05ld",
-		   t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-		   t.tm_hour, t.tm_min, t.tm_sec, tv.tv_usec);
-	time[n] = 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
@@ -220,7 +158,8 @@ static void process_response(struct test_params *test_params,
 		data_len = data_len/1024;
 		test_params->stat.print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
-		test_params->disconnect_nr = test_params->stat.print_counter * DISCONNECT_FACTOR;
+		test_params->disconnect_nr =
+			test_params->stat.print_counter * DISCONNECT_FACTOR;
 	}
 	if (++test_params->stat.cnt == test_params->stat.print_counter) {
 		char		timeb[40];
@@ -231,12 +170,12 @@ static void process_response(struct test_params *test_params,
 		double txbw = (1.0*pps*test_params->stat.txlen/ONE_MB);
 		double rxbw = (1.0*pps*test_params->stat.rxlen/ONE_MB);
 
-		printf("transactions per second: %"PRIu64", bandwidth: " \
+		printf("transactions per second: %lu, bandwidth: " \
 		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, RX: %zd B\n",
 		       pps, txbw, rxbw,
 		       test_params->stat.txlen, test_params->stat.rxlen);
 		get_time(timeb, 40);
-		printf("**** [%s] - message [%"PRIu64"] %s - %s\n",
+		printf("**** [%s] - message [%zd] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
 		       (char *)rsp->in.pdata_iov[0].iov_base);
@@ -249,8 +188,8 @@ static void process_response(struct test_params *test_params,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 
@@ -260,16 +199,17 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("nsent:%"PRIu64", nrecv:%"PRIu64", " \
-		       "delta:%"PRIu64"\n",
-		        test_params->nsent, test_params->nrecv,
-			test_params->nsent-test_params->nrecv);
+		printf("nsent:%lu, nrecv:%lu, " \
+		       "delta:%lu\n",
+		       test_params->nsent, test_params->nrecv,
+		       test_params->nsent-test_params->nrecv);
 
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(test_params->ctx, XIO_INFINITE);  /* exit */
+		xio_context_stop_loop(test_params->ctx,
+				      XIO_INFINITE);  /* exit */
 		break;
 	default:
 		break;
@@ -281,8 +221,8 @@ static int on_session_event(struct xio_session *session,
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
-			struct xio_new_session_rsp *rsp,
-			void *cb_user_context)
+				  struct xio_new_session_rsp *rsp,
+				  void *cb_user_context)
 {
 	printf("**** [%p] session established\n", session);
 
@@ -292,9 +232,9 @@ static int on_session_established(struct xio_session *session,
 /* on_msg_delivered							     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_delivered(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_user_context)
+			    struct xio_msg *msg,
+			    int more_in_batch,
+			    void *cb_user_context)
 {
 	/*
 	printf("**** on message delivered\n");
@@ -307,9 +247,9 @@ static int on_msg_delivered(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *msg,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 	int j;
@@ -318,10 +258,10 @@ static int on_response(struct xio_session *session,
 
 	process_response(test_params, msg);
 
-	if (msg->status){
+	if (msg->status) {
 		printf("**** message completed with error. [%s]\n",
 		       xio_strerror(msg->status));
-		EXIT;
+		xio_assert(msg->status == 0);
 	}
 
 
@@ -348,7 +288,7 @@ static int on_response(struct xio_session *session,
 	}
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = test_config.in_iov_len ;
+	msg->in.data_iovlen = test_config.in_iov_len;
 	if (msg->in.data_iovlen  > XIO_IOVLEN) {
 		for (j = 0; j < test_config.in_iov_len; j++) {
 			msg->in.pdata_iov[j].iov_base = NULL;
@@ -381,7 +321,7 @@ static int on_response(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 		msg_pool_put(test_params->pool, msg);
-		EXIT;
+		xio_assert(xio_errno() == EAGAIN);
 	}
 	test_params->nsent++;
 
@@ -392,12 +332,12 @@ static int on_response(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_user_context)
+			enum xio_status error, struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+	printf("**** [%p] message %lu failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(test_params->pool, msg);
@@ -464,8 +404,7 @@ static void usage(const char *argv0, int status)
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(struct xio_test_config *test_config,
-		int argc, char **argv)
+int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 {
 	static struct option const long_options[] = {
 		{ .name = "cpu",		.has_arg = 1, .val = 'c'},
@@ -636,25 +575,24 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-//		goto exit1;
-		EXIT;
+		xio_assert(test_params.ctx != NULL);
 	}
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
 		test_config.server_port);
 	session = xio_session_create(XIO_SESSION_CLIENT,
-				   &attr, url, 0, 0, &test_params);
+				     &attr, url, 0, 0, &test_params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-//		goto exit2;
-		EXIT;
+		xio_assert(session != NULL);
 	}
 
 	/* connect the session  */
 	test_params.connection = xio_connect(session, test_params.ctx,
-				       test_config.conn_idx, NULL, &test_params);
+					     test_config.conn_idx,
+					     NULL, &test_params);
 
 	printf("**** starting ...\n");
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
@@ -696,8 +634,7 @@ int main(int argc, char *argv[])
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(test_params.pool, msg);
-			EXIT;
-//			goto exit3;
+			xio_assert(xio_errno() == EAGAIN);
 		}
 		test_params.nsent++;
 	}
@@ -708,26 +645,22 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-//		goto exit3;
-		EXIT;
+		xio_assert(retval == 0);
 	}
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
-//exit3:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
 		fprintf(stderr, "session close failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		EXIT;
+		xio_assert(retval == 0);
 	}
 
-//exit2:
 	xio_context_destroy(test_params.ctx);
 
-//exit1:
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 cleanup:

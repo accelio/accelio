@@ -83,7 +83,7 @@ void msg_api_free(struct msg_params *msg_params);
 /* msg_alloc								     */
 /*---------------------------------------------------------------------------*/
 struct xio_msg *msg_alloc(size_t out_hdrlen, size_t out_datalen,
-		size_t in_hdrlen, size_t in_datalen);
+			  size_t in_hdrlen, size_t in_datalen);
 
 /*---------------------------------------------------------------------------*/
 /* msg_write								     */

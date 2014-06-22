@@ -42,13 +42,11 @@
 #include <inttypes.h>
 #include <string.h>
 #include <getopt.h>
-#include <sched.h>
 #include <pthread.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_test_utils.h"
 
 #define MAX_POOL_SIZE		512
 
@@ -62,7 +60,6 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_THREADS		4
-#define EXIT abort()
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -122,58 +119,8 @@ static struct xio_test_config  test_config = {
 	XIO_DEF_POLL
 };
 
-/*
- * Set CPU affinity to one core.
- */
-void set_cpu_affinity(int cpu)
-{
-	cpu_set_t coremask;		/* core affinity mask */
-
-	CPU_ZERO(&coremask);
-	CPU_SET(cpu, &coremask);
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &coremask) != 0)
-		fprintf(stderr, "Unable to set affinity. %m\n");
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_ip								     */
-/*---------------------------------------------------------------------------*/
-static inline char *get_ip(const struct sockaddr *ip)
-{
-	if (ip->sa_family == AF_INET) {
-		static char addr[INET_ADDRSTRLEN];
-		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
-		return (char *)inet_ntop(AF_INET, &(v4->sin_addr),
-					 addr, INET_ADDRSTRLEN);
-	}
-	if (ip->sa_family == AF_INET6) {
-		static char addr[INET6_ADDRSTRLEN];
-		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
-		return (char *)inet_ntop(AF_INET6, &(v6->sin6_addr),
-					 addr, INET6_ADDRSTRLEN);
-	}
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_port								     */
-/*---------------------------------------------------------------------------*/
-static inline uint16_t get_port(const struct sockaddr *ip)
-{
-	if (ip->sa_family == AF_INET) {
-		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
-		return ntohs(v4->sin_port);
-	}
-	if (ip->sa_family == AF_INET6) {
-		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
-		return ntohs(v6->sin6_port);
-	}
-	return 0;
-}
-
-
 static struct portals_vec *portals_get(struct server_data *server_data,
-				const char *uri, void *user_context)
+				       const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
 	int			i;
@@ -206,7 +153,7 @@ static void process_request(struct thread_data *tdata, struct xio_msg *msg)
 	}
 
 	if (++tdata->stat.cnt == PRINT_COUNTER) {
-		printf("thread [%d] - message [%"PRIu64"] %s - %s\n",
+		printf("thread [%d] - message [%lu] %s - %s\n",
 		       tdata->affinity,
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
@@ -218,10 +165,8 @@ static void process_request(struct thread_data *tdata, struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 /* on_request								     */
 /*---------------------------------------------------------------------------*/
-static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_prv_data)
+static int on_request(struct xio_session *session, struct xio_msg *req,
+		      int more_in_batch, void *cb_prv_data)
 {
 	struct xio_msg		*rsp;
 	struct thread_data	*tdata = cb_prv_data;
@@ -229,7 +174,7 @@ static int on_request(struct xio_session *session,
 	if (req->status) {
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(req->status));
-		EXIT;
+		xio_assert(req->status == 0);
 	}
 
 	/* process request */
@@ -249,7 +194,7 @@ static int on_request(struct xio_session *session,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, req);
-		EXIT;
+		xio_assert(0);
 	}
 
 
@@ -260,8 +205,8 @@ static int on_request(struct xio_session *session,
 /* on_send_response_complete						     */
 /*---------------------------------------------------------------------------*/
 static int on_send_response_complete(struct xio_session *session,
-			struct xio_msg *msg,
-			void *cb_prv_data)
+				     struct xio_msg *msg,
+				     void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
@@ -275,12 +220,12 @@ static int on_send_response_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_prv_data)
+		 enum xio_status error, struct xio_msg  *msg,
+		 void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
@@ -349,7 +294,8 @@ static void *portal_server_cb(void *data)
 				     0, 0);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout, tdata->affinity);
+	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
+					tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
@@ -387,8 +333,8 @@ cleanup:
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 	int		   i;
@@ -421,8 +367,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;
@@ -495,8 +441,7 @@ static void usage(const char *argv0, int status)
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(struct xio_test_config *test_config,
-		int argc, char **argv)
+int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 {
 	while (1) {
 		int c;
@@ -552,7 +497,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			EXIT;
+			xio_assert(0);
 		}
 	}
 	if (optind == argc - 1) {
@@ -625,7 +570,8 @@ int main(int argc, char *argv[])
 		test_config.server_port);
 
 	/* bind a listener server to a portal/url */
-	server = xio_bind(server_data.ctx, &server_ops, url, NULL, 0, &server_data);
+	server = xio_bind(server_data.ctx, &server_ops, url,
+			  NULL, 0, &server_data);
 	if (server == NULL)
 		goto cleanup;
 

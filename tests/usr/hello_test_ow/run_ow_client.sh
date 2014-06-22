@@ -26,6 +26,6 @@ else
 	data_len=$4
 fi
 
-./xio_ow_client -c 8 -p ${port} -n 0 -w ${data_len} ${server_ip} -f ${finite_run}
+./xio_ow_client -c 1 -p ${port} -n 0 -w ${data_len} ${server_ip} -f ${finite_run}
 
 

@@ -42,12 +42,10 @@
 #include <inttypes.h>
 #include <string.h>
 #include <getopt.h>
-#include <sched.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_test_utils.h"
 
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
@@ -59,7 +57,6 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_OUTSTANDING_REQS	50
-#define EXIT abort()
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
@@ -98,55 +95,6 @@ static struct xio_test_config  test_config = {
 	XIO_DEF_DATA_SIZE
 };
 
-/*
- * Set CPU affinity to one core.
- */
-static void set_cpu_affinity(int cpu)
-{
-	cpu_set_t coremask;		/* core affinity mask */
-
-	CPU_ZERO(&coremask);
-	CPU_SET(cpu, &coremask);
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &coremask) != 0)
-		fprintf(stderr, "Unable to set affinity. %m\n");
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_ip								     */
-/*---------------------------------------------------------------------------*/
-static inline char *get_ip(const struct sockaddr *ip)
-{
-	if (ip->sa_family == AF_INET) {
-		static char addr[INET_ADDRSTRLEN];
-		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
-		return (char *)inet_ntop(AF_INET, &(v4->sin_addr),
-					 addr, INET_ADDRSTRLEN);
-	}
-	if (ip->sa_family == AF_INET6) {
-		static char addr[INET6_ADDRSTRLEN];
-		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
-		return (char *)inet_ntop(AF_INET6, &(v6->sin6_addr),
-					 addr, INET6_ADDRSTRLEN);
-	}
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_port								     */
-/*---------------------------------------------------------------------------*/
-static inline uint16_t get_port(const struct sockaddr *ip)
-{
-	if (ip->sa_family == AF_INET) {
-		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
-		return ntohs(v4->sin_port);
-	}
-	if (ip->sa_family == AF_INET6) {
-		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
-		return ntohs(v6->sin6_port);
-	}
-	return 0;
-}
-
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
@@ -160,7 +108,7 @@ static void process_request(struct xio_msg *msg)
 	}
 
 	if (++cnt == PRINT_COUNTER) {
-		printf("**** message [%"PRIu64"] %s - %s\n",
+		printf("**** message [%lu] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
 		       (char *)msg->in.data_iov[0].iov_base);
@@ -172,8 +120,8 @@ static void process_request(struct xio_msg *msg)
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct ow_test_params *ow_params = cb_user_context;
 
@@ -203,8 +151,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	int			i = 0;
 	struct ow_test_params	*ow_params = cb_user_context;
@@ -228,8 +176,8 @@ static int on_new_session(struct xio_session *session,
 
 		/* assign buffers to the message */
 		msg_write(&ow_params->msg_params, msg,
-			  NULL, test_config.hdr_len,
-			  NULL, test_config.data_len);
+			  test_config.hdr_len,
+			  1, test_config.data_len);
 
 		/* ask for read receipt since the message needed to be
 		 * recycled to the pool */
@@ -244,7 +192,7 @@ static int on_new_session(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(ow_params->pool, msg);
-			EXIT;
+			xio_assert(0);
 		}
 		ow_params->nsent++;
 	}
@@ -255,14 +203,14 @@ static int on_new_session(struct xio_session *session,
 /* on_client_message							     */
 /*---------------------------------------------------------------------------*/
 static int on_client_message(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_prv_data)
+			     struct xio_msg *msg,
+			     int more_in_batch,
+			     void *cb_prv_data)
 {
 	if (msg->status) {
 		printf("**** request completed with error. [%s]\n",
 		       xio_strerror(msg->status));
-		EXIT;
+		xio_assert(msg->status == 0);
 	}
 
 	/* process message */
@@ -277,9 +225,9 @@ static int on_client_message(struct xio_session *session,
 /* on_message_delivered							     */
 /*---------------------------------------------------------------------------*/
 static int on_message_delivered(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_user_context)
+				struct xio_msg *msg,
+				int more_in_batch,
+				void *cb_user_context)
 {
 	struct xio_msg *new_msg;
 	struct ow_test_params *ow_params = cb_user_context;
@@ -306,15 +254,15 @@ static int on_message_delivered(struct xio_session *session,
 
 	/* fill response */
 	msg_write(&ow_params->msg_params, new_msg,
-		  NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	new_msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 	if (xio_send_msg(ow_params->connection, new_msg) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(ow_params->pool, new_msg);
-		EXIT;
+		xio_assert(0);
 	}
 	ow_params->nsent++;
 
@@ -326,12 +274,12 @@ static int on_message_delivered(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_user_context)
+		 enum xio_status error, struct xio_msg  *msg,
+		 void *cb_user_context)
 {
 	struct ow_test_params *ow_params = cb_user_context;
 
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(ow_params->pool, msg);
@@ -415,8 +363,7 @@ static void usage(const char *argv0, int status)
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(struct xio_test_config *test_config,
-		int argc, char **argv)
+int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 {
 	int c;
 	static struct option const long_options[] = {
@@ -469,7 +416,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			EXIT;
+			xio_assert(0);
 		}
 	}
 	if (optind == argc - 1) {
@@ -506,7 +453,7 @@ static void print_test_config(
 int main(int argc, char *argv[])
 {
 	struct xio_server	*server;
-	struct ow_test_params 	ow_params;
+	struct ow_test_params	ow_params;
 	char			url[256];
 	int			error;
 
@@ -530,7 +477,7 @@ int main(int argc, char *argv[])
 			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
-	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
+	ow_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
 	if (ow_params.pool == NULL)
 		goto cleanup;
 
@@ -539,14 +486,14 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-//		goto exit1;
-		EXIT;
+		xio_assert(ow_params.ctx != NULL);
 	}
 
 	/* create a url and bind to server */
 	sprintf(url, "rdma://*:%d", test_config.server_port);
 
-	server = xio_bind(ow_params.ctx, &server_ops, url, NULL, 0, &ow_params);
+	server = xio_bind(ow_params.ctx, &server_ops,
+			  url, NULL, 0, &ow_params);
 	if (server) {
 		printf("listen to %s\n", url);
 		xio_context_run_loop(ow_params.ctx, XIO_INFINITE);
@@ -560,7 +507,6 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(ow_params.ctx);
 
-//exit1:
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
 
