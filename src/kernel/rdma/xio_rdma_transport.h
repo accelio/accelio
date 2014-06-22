@@ -291,6 +291,7 @@ struct xio_cq  {
 						       * attached to this cq
 						       */
 	struct list_head		cq_list_entry;	/* on device cq list */
+	struct xio_observer		observer;	/* context observer */
 	struct dentry			*tcq_dentry;	/* debugfs */
 	u64				events;
 	u64				wqes;

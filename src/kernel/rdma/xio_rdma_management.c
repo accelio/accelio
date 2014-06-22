@@ -100,7 +100,7 @@ static void xio_cq_event_callback(struct ib_event *cause, void *context)
 	ERROR_LOG("got cq event %d ctx(%p)\n", cause->event, context);
 }
 
-static void xio_cq_release(struct xio_cq *tcq);
+static void xio_cq_release(struct xio_cq *tcq, int do_lock);
 
 static void xio_add_one(struct ib_device *ib_dev);
 static void xio_del_one(struct ib_device *ib_dev);
@@ -118,8 +118,7 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
 	struct xio_rdma_transport *rdma_hndl;
-	struct xio_device *dev;
-	struct xio_cq *tcq, *next;
+	struct xio_cq *tcq;
 
 	if (!trans_hndl) {
 		TRACE_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
@@ -127,18 +126,30 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 	}
 
 	rdma_hndl = (struct xio_rdma_transport *)trans_hndl;
+	/* Note xio_rdma_post_close releases rdma_hndl */
+	tcq = rdma_hndl->tcq;
+	xio_rdma_flush_all_tasks(rdma_hndl);
+	xio_rdma_post_close(trans_hndl);
 
-	/* Should be set by now */
-	dev = rdma_hndl->dev;
-	if (!dev) {
-		ERROR_LOG("failed to find device\n");
-		return -1;
+	if (!rdma_hndl->tcq) {
+		TRACE_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
+		return 0;
 	}
 
- 	list_for_each_entry_safe(tcq, next, &dev->cq_list, cq_list_entry) {
-		if (tcq->ctx == ctx) {
-			xio_cq_release(tcq);
-		}
+	xio_cq_release(tcq, 1);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_context_event							     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_context_event(void *observer, void *sender,
+				int event, void *event_data)
+{
+	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+		TRACE_LOG("context: [close] ctx:%p\n", sender);
+		xio_cq_release((struct xio_cq *) observer, 1);
 	}
 
 	return 0;
@@ -193,8 +204,6 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		goto cleanup1;
 	}
 
-	atomic_set(&tcq->refcnt, 1);
-
 	tcq->ctx	= ctx;
 	tcq->dev	= dev;
 	tcq->max_cqe	= dev->device_attr.max_cqe;
@@ -247,6 +256,13 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	list_add(&tcq->cq_list_entry, &dev->cq_list);
 	write_unlock_bh(&dev->cq_lock);
 
+	/* One reference count for the context and one for the rdma handle */
+	atomic_set(&tcq->refcnt, 2);
+
+	/* set the tcq to be the observer for context events */
+	XIO_OBSERVER_INIT(&tcq->observer, tcq, xio_on_context_event);
+	xio_context_reg_observer(ctx, &tcq->observer);
+
 	return tcq;
 
 cleanup4:
@@ -266,18 +282,28 @@ cleanup0:
 /*---------------------------------------------------------------------------*/
 /* xio_cq_release							     */
 /*---------------------------------------------------------------------------*/
-static void xio_cq_release(struct xio_cq *tcq)
+static void xio_cq_release(struct xio_cq *tcq, int do_lock)
 {
+	struct xio_device *dev;
 	struct xio_rdma_transport *rdma_hndl, *tmp_rdma_hndl;
-	int retval;
+	int retval, count;
 
-	read_lock_bh(&tcq->dev->cq_lock);
- 	list_del_init(&tcq->cq_list_entry);
-	read_unlock_bh(&tcq->dev->cq_lock);
+	count = atomic_dec_return(&tcq->refcnt);
+	if (count > 0)
+		return;
+
+	dev = tcq->dev;
+
+	if (do_lock)
+		write_lock_bh(&dev->cq_lock);
+	list_del_init(&tcq->cq_list_entry);
+	if (do_lock)
+		write_unlock_bh(&dev->cq_lock);
 
 	/* clean all redundant connections attached to this cq */
 	list_for_each_entry_safe(rdma_hndl, tmp_rdma_hndl, &tcq->trans_list,
 				 trans_list_entry) {
+		ERROR_LOG("tcq->trans_list not empty\n");
 		xio_rdma_flush_all_tasks(rdma_hndl);
 		xio_rdma_post_close((struct xio_transport_base *)rdma_hndl);
 	}
@@ -414,9 +440,11 @@ static void xio_device_release(struct xio_device *dev)
 
 	(void)ib_unregister_event_handler(&dev->event_handler);
 
+	write_lock_bh(&dev->cq_lock);
 	list_for_each_entry_safe(tcq, next, &dev->cq_list, cq_list_entry) {
-		xio_cq_release(tcq);
+		xio_cq_release(tcq, 0);
 	}
+	write_unlock_bh(&dev->cq_lock);
 
 	/* ib_dereg_mr & ib_dealloc_pd will be called from xio_device_down
 	 *  (kerf)
@@ -1715,6 +1743,8 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 	child_hndl->cm_id	= cm_id;
 	child_hndl->qp		= cm_id->qp;
 	child_hndl->tcq		= parent_hndl->tcq;
+	atomic_inc(&child_hndl->tcq->refcnt);
+
 	/* Can we set it ? is it a new cm_id */
 	cm_id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
