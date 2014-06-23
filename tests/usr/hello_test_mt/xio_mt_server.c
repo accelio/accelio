@@ -107,6 +107,8 @@ struct server_data {
 	struct thread_data	*tdata;
 };
 
+static struct msg_params msg_prms;
+
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
@@ -187,8 +189,9 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp->more_in_batch	= 0;
 
 	/* fill response */
-	msg_write(rsp, "hello world response header", test_config.hdr_len,
-		  "hello world response data", test_config.data_len);
+	msg_write(&msg_prms, rsp,
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	if (xio_send_response(rsp) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
@@ -289,9 +292,7 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* prepare data for the cuurent thread */
-	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE,
-				     test_config.hdr_len, test_config.data_len,
-				     0, 0);
+	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
@@ -558,7 +559,8 @@ int main(int argc, char *argv[])
 
 	set_cpu_affinity(test_config.cpu);
 
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 1) != 0)
+	if (msg_api_init(&msg_prms,
+			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
 	/* create thread context for the client */
@@ -603,6 +605,8 @@ cleanup:
 	xio_context_destroy(server_data.ctx);
 
 	free(server_data.tdata);
+
+	msg_api_free(&msg_prms);
 
 	return 0;
 }

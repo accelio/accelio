@@ -121,6 +121,8 @@ static struct xio_test_config  test_config = {
 	XIO_DEF_POLL
 };
 
+static struct msg_params msg_params;
+
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
 /*---------------------------------------------------------------------------*/
@@ -196,9 +198,7 @@ static void *worker_thread(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* prepare data for the cuurent thread */
-	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE,
-				     test_config.hdr_len, test_config.data_len,
-				     0, 0);
+	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 	if (tdata->pool == NULL) {
 		fprintf(stderr, "failed to alloc pool\n");
 		return NULL;
@@ -227,8 +227,9 @@ static void *worker_thread(void *data)
 		msg->in.data_iov[0].mr = NULL;
 
 		/* create "hello world" message */
-		msg_write(msg, NULL,
-			  test_config.hdr_len, NULL, test_config.data_len);
+		msg_write(&msg_params, msg,
+			  test_config.hdr_len,
+			  1, test_config.data_len);
 
 		/* send first message */
 		if (xio_send_request(tdata->conn, msg) == -1) {
@@ -341,8 +342,9 @@ static int on_response(struct xio_session *session,
 	msg->more_in_batch = 0;
 
 	/* recycle the message and fill new request */
-	msg_write(msg, NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+	msg_write(&msg_params, msg,
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	if (xio_send_request(tdata->conn, msg) == -1) {
 		if (xio_errno() != EAGAIN)
@@ -571,7 +573,9 @@ int main(int argc, char *argv[])
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
+	/* prepare buffers for this test */
+	if (msg_api_init(&msg_params,
+			 test_config.hdr_len, test_config.data_len, 0) != 0)
 		return -1;
 
 	sprintf(url, "rdma://%s:%d", test_config.server_addr,
@@ -608,6 +612,8 @@ int main(int argc, char *argv[])
 
 	/* close the session */
 	xio_session_destroy(sess_data.session);
+
+	msg_api_free(&msg_params);
 
 	return 0;
 }
