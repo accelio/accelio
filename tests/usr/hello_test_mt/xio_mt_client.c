@@ -221,7 +221,7 @@ static void *worker_thread(void *data)
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 0;
+		msg->in.data_iovlen = 1;
 		msg->in.data_iov[0].iov_base = NULL;
 		msg->in.data_iov[0].iov_len  = ONE_MB;
 		msg->in.data_iov[0].mr = NULL;
@@ -333,7 +333,7 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
+	msg->in.data_iovlen = 1;
 	msg->in.data_iov[0].iov_base = NULL;
 	msg->in.data_iov[0].iov_len  = ONE_MB;
 	msg->in.data_iov[0].mr = NULL;
