@@ -72,6 +72,7 @@ static struct completion cleanup_complete;
 struct server_data {
 	struct xio_context	*ctx;
 	struct xio_session	*session;
+	struct xio_connection	*connection;
 	uint64_t		cnt;
 	struct xio_msg	rsp[QUEUE_DEPTH];	/* global message */
 };
@@ -140,8 +141,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		server_data->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		server_data->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		server_data->session = NULL;
@@ -168,7 +173,10 @@ static int on_new_session(struct xio_session *session,
 	server_data->session = session;
 
 	/* Automatically accept the request */
-	xio_accept(session, NULL, 0, NULL, 0);
+	if (server_data->connection == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -209,18 +217,16 @@ struct xio_session_ops server_ops = {
 static void xio_module_down(void *data)
 {
 	struct server_data *server_data;
-	struct xio_connection *connection;
 	struct xio_session *session;
 
 	server_data = (struct server_data *) data;
 	if (!server_data->session)
 		goto stop_loop_now;
 
-	connection = xio_get_connection(server_data->session, server_data->ctx);
-	if (!connection)
+	if (!server_data->connection)
 		goto destroy_session;
 
-	xio_connection_destroy(connection);
+	xio_connection_destroy(server_data->connection);
 	return;
 
 destroy_session:

@@ -117,6 +117,50 @@ static void process_request(struct xio_msg *msg)
 }
 
 /*---------------------------------------------------------------------------*/
+/* on_new_connection_event						     */
+/*---------------------------------------------------------------------------*/
+static int on_new_connection_event(struct xio_connection *connection,
+				   void *conn_prv_data)
+{
+	struct ow_test_params	*ow_params = conn_prv_data;
+	struct xio_msg		*msg;
+	int			i = 0;
+
+	ow_params->connection = connection;
+
+	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
+		/* pick message from the pool */
+		msg = msg_pool_get(ow_params->pool);
+		if (msg == NULL)
+			break;
+
+		/* assign buffers to the message */
+		msg_write(&ow_params->msg_params, msg,
+			  test_config.hdr_len,
+			  1, test_config.data_len);
+
+		/* ask for read receipt since the message needed to be
+		 * recycled to the pool */
+		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+
+		/* send the message */
+		if (xio_send_msg(ow_params->connection, msg) == -1) {
+			printf("**** sent %d messages\n", i);
+			if (xio_errno() != EAGAIN)
+				printf("**** [%p] Error - xio_send_msg " \
+				       "failed. %s\n",
+					connection,
+					xio_strerror(xio_errno()));
+			msg_pool_put(ow_params->pool, msg);
+			xio_assert(0);
+		}
+		ow_params->nsent++;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
@@ -131,6 +175,10 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		on_new_connection_event(event_data->conn,
+					event_data->conn_user_context);
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
 		ow_params->connection = NULL;
@@ -154,48 +202,17 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	int			i = 0;
 	struct ow_test_params	*ow_params = cb_user_context;
-	struct xio_msg		*msg;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
 	       get_port((struct sockaddr *)&req->src_addr));
 
-	xio_accept(session, NULL, 0, NULL, 0);
-
 	if (ow_params->connection == NULL)
-		ow_params->connection = xio_get_connection(session,
-							   ow_params->ctx);
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
-	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
-		/* pick message from the pool */
-		msg = msg_pool_get(ow_params->pool);
-		if (msg == NULL)
-			break;
-
-		/* assign buffers to the message */
-		msg_write(&ow_params->msg_params, msg,
-			  test_config.hdr_len,
-			  1, test_config.data_len);
-
-		/* ask for read receipt since the message needed to be
-		 * recycled to the pool */
-		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-
-		/* send the message */
-		if (xio_send_msg(ow_params->connection, msg) == -1) {
-			printf("**** sent %d messages\n", i);
-			if (xio_errno() != EAGAIN)
-				printf("**** [%p] Error - xio_send_msg " \
-				       "failed. %s\n",
-					session,
-					xio_strerror(xio_errno()));
-			msg_pool_put(ow_params->pool, msg);
-			xio_assert(0);
-		}
-		ow_params->nsent++;
-	}
 	return 0;
 }
 

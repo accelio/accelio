@@ -169,51 +169,15 @@ static void process_request(struct xio_msg *req)
 }
 
 /*---------------------------------------------------------------------------*/
-/* on_session_event							     */
+/* on_new_connection_event						     */
 /*---------------------------------------------------------------------------*/
-static int on_session_event(struct xio_session *session,
-			    struct xio_session_event_data *event_data,
-			    void *cb_prv_data)
-{
-	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       session, event_data->conn,
-	       xio_strerror(event_data->reason));
-
-	switch (event_data->event) {
-	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		xio_connection_destroy(event_data->conn);
-		break;
-	case XIO_SESSION_TEARDOWN_EVENT:
-		process_request(NULL);
-		xio_session_destroy(session);
-		if (test_config.finite_run)
-			xio_context_stop_loop(ctx, 0);  /* exit */
-		break;
-	default:
-		break;
-	};
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* on_new_session							     */
-/*---------------------------------------------------------------------------*/
-static int on_new_session(struct xio_session *session,
-			  struct xio_new_session_req *session_data,
-			  void *cb_prv_data)
+static int on_new_connection_event(struct xio_connection *connection,
+				   void *conn_prv_data)
 {
 	struct xio_msg	*req;
 	int		i = 0;
 
-	printf("**** [%p] on_new_session :%s:%d\n", session,
-	       get_ip((struct sockaddr *)&session_data->src_addr),
-	       get_port((struct sockaddr *)&session_data->src_addr));
-
-	xio_accept(session, NULL, 0, NULL, 0);
-
-	conn = xio_get_connection(session, ctx);
+	conn = connection;
 
 	printf("**** starting ...\n");
 	while (1) {
@@ -241,7 +205,7 @@ static int on_new_session(struct xio_session *session,
 			if (xio_errno() != EAGAIN)
 				printf("**** [%p] Error - xio_send_msg " \
 				       "failed. %s\n",
-					session,
+					connection,
 					xio_strerror(xio_errno()));
 			msg_pool_put(pool, req);
 			return 0;
@@ -250,6 +214,59 @@ static int on_new_session(struct xio_session *session,
 		if (i == 256)
 			break;
 	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* on_session_event							     */
+/*---------------------------------------------------------------------------*/
+static int on_session_event(struct xio_session *session,
+			    struct xio_session_event_data *event_data,
+			    void *cb_prv_data)
+{
+	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
+	       xio_session_event_str(event_data->event),
+	       session, event_data->conn,
+	       xio_strerror(event_data->reason));
+
+	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		on_new_connection_event(event_data->conn,
+					event_data->conn_user_context);
+		break;
+	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
+		xio_connection_destroy(event_data->conn);
+		conn = NULL;
+		break;
+	case XIO_SESSION_TEARDOWN_EVENT:
+		process_request(NULL);
+		xio_session_destroy(session);
+		if (test_config.finite_run)
+			xio_context_stop_loop(ctx, 0);  /* exit */
+		break;
+	default:
+		break;
+	};
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* on_new_session							     */
+/*---------------------------------------------------------------------------*/
+static int on_new_session(struct xio_session *session,
+			  struct xio_new_session_req *session_data,
+			  void *cb_prv_data)
+{
+	printf("**** [%p] on_new_session :%s:%d\n", session,
+	       get_ip((struct sockaddr *)&session_data->src_addr),
+	       get_port((struct sockaddr *)&session_data->src_addr));
+
+	if (conn == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }

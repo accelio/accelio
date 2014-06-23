@@ -63,6 +63,7 @@ struct thread_data {
 	int			pad;
 	struct xio_msg		rsp[QUEUE_DEPTH];
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	pthread_t		thread_id;
 };
 
@@ -138,10 +139,8 @@ static int on_request(struct xio_session *session,
 	tdata->nsent++;
 
 #if  TEST_DISCONNECT
-	if (tdata->nsent == DISCONNECT_NR) {
-		struct xio_connection *connection =
-			xio_get_connection(session,tdata->ctx);
-		xio_disconnect(connection);
+	if (tdata->nsent == DISCONNECT_NR && tdata->connection) {
+		xio_disconnect(tdata->connection);
 		return 0;
 	}
 #endif
@@ -226,6 +225,7 @@ static int on_session_event(struct xio_session *session,
 		void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
+	struct thread_data *tdata = event_data->conn_user_context;
 	int		   i;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
@@ -234,8 +234,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		tdata->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);

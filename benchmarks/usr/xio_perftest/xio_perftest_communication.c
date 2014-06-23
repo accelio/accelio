@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <errno.h>
 
 #include "libxio.h"
 #include "xio_perftest_parameters.h"
@@ -58,6 +59,20 @@ struct control_context {
 	int			failed;
 };
 
+/*---------------------------------------------------------------------------*/
+/* on_new_connection_event						     */
+/*---------------------------------------------------------------------------*/
+static int on_new_connection_event(struct xio_connection *connection,
+				   void *conn_prv_data)
+{
+	struct perf_comm *comm = conn_prv_data;
+
+	comm->control_ctx->conn = connection;
+
+	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* on_session_event							     */
@@ -69,6 +84,10 @@ static int on_session_event(struct xio_session *session,
 	struct perf_comm *comm = cb_user_context;
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		on_new_connection_event(event_data->conn,
+					event_data->conn_user_context);
+		break;
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
@@ -76,6 +95,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		comm->control_ctx->conn = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
@@ -117,11 +137,10 @@ static int on_new_session(struct xio_session *session,
 {
 	struct perf_comm *comm = cb_user_context;
 
-	xio_accept(session, NULL, 0, NULL, 0);
-	comm->control_ctx->conn = xio_get_connection(
-					session, comm->control_ctx->ctx);
-
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	if (comm->control_ctx->conn == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -150,12 +169,8 @@ static int on_msg_send_complete(struct xio_session *session,
 	struct perf_comm *comm = conn_user_context;
 
 	comm->control_ctx->reply  = NULL;
-	if (comm->control_ctx->disconnect) {
-		struct xio_connection *conn = xio_get_connection(
-				session,
-				comm->control_ctx->ctx);
-		xio_disconnect(conn);
-	}
+	if (comm->control_ctx->disconnect)
+		xio_disconnect(comm->control_ctx->conn);
 
 	return 0;
 }

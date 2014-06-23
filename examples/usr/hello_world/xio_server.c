@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <errno.h>
 
 #include "libxio.h"
 
@@ -50,6 +51,7 @@
 /* server private data */
 struct server_data {
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	uint64_t		nsent;
 	uint64_t		cnt;
 	struct xio_msg		rsp[QUEUE_DEPTH];	/* global message */
@@ -117,8 +119,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		server_data->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		server_data->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -138,10 +144,15 @@ static int on_new_session(struct xio_session *session,
 			struct xio_new_session_req *req,
 			void *cb_user_context)
 {
-	/* automaticly accept the request */
+	struct server_data *server_data = cb_user_context;
+
+	/* automatically accept the request */
 	printf("new session event. session:%p\n", session);
 
-	xio_accept(session, NULL, 0, NULL, 0);
+	if (server_data->connection == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -168,9 +179,7 @@ static int on_request(struct xio_session *session,
 
 #if  TEST_DISCONNECT
 	if (server_data->nsent == DISCONNECT_NR) {
-		struct xio_connection *connection =
-			xio_get_connection(session, server_data->ctx);
-		xio_disconnect(connection);
+		xio_disconnect(server_data->connection);
 		return 0;
 	}
 #endif

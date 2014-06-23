@@ -137,6 +137,7 @@ static int on_session_event(struct xio_session *session,
 		conn_attr.user_context = cb_user_context;
 		xio_modify_connection(event_data->conn, &conn_attr,
 				      XIO_CONNECTION_ATTR_USER_CTX);
+		test_params->connection = event_data->conn;
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 		xio_disconnect(event_data->conn);
@@ -147,6 +148,7 @@ static int on_session_event(struct xio_session *session,
 		       test_params->nsent,  test_params->ncomp,
 		       test_params->nsent-test_params->ncomp);
 		xio_connection_destroy(event_data->conn);
+		test_params->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -172,12 +174,10 @@ static int on_new_session(struct xio_session *session,
 	       get_ip((struct sockaddr *)&req->src_addr),
 	       get_port((struct sockaddr *)&req->src_addr));
 
-	xio_accept(session, NULL, 0, NULL, 0);
-
 	if (test_params->connection == NULL)
-		test_params->connection = xio_get_connection(session,
-							     test_params->ctx);
-
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }

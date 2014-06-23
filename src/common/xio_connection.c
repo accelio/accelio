@@ -158,15 +158,6 @@ char *xio_connection_state_str(enum xio_connection_state state)
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_get_connection_context						     */
-/*---------------------------------------------------------------------------*/
-struct xio_context *xio_get_connection_context(
-					struct xio_connection *connection)
-{
-	return connection->ctx;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_is_connection_online						     */
 /*---------------------------------------------------------------------------*/
 static int xio_is_connection_online(struct xio_connection *connection)

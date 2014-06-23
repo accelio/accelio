@@ -1589,6 +1589,13 @@ struct xio_connection *xio_get_connection(
 		struct xio_session *session,
 		struct xio_context *ctx)
 {
+	ERROR_LOG("%s function have been deprecated. "			\
+		  "That means it have been replaced by new function or" \
+		  "is no longer supported, and may be removed"		\
+		  "from future versions. "				\
+		  "All code that uses the functions should"		\
+		  "be converted to use its replacement if one exists.\n",
+		  __func__);
 	return  xio_session_find_connection_by_ctx(session, ctx);
 }
 
