@@ -115,6 +115,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		retval = q->params.pool_hooks.slab_pre_create(
 				q->params.pool_hooks.context,
 				alloc_nr,
+				q->dd_data,
 				s->dd_data);
 
 	for (i = 0; i < alloc_nr; i++) {
@@ -143,6 +144,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		if (q->params.pool_hooks.slab_init_task) {
 			retval = q->params.pool_hooks.slab_init_task(
 				q->params.pool_hooks.context,
+				q->dd_data,
 				s->dd_data,
 				i,
 				s->array[i]);
@@ -157,6 +159,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	if (q->params.pool_hooks.slab_post_create)
 		retval = q->params.pool_hooks.slab_post_create(
 				q->params.pool_hooks.context,
+				q->dd_data,
 				s->dd_data);
 
 	return retval;
@@ -225,6 +228,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 			for (i = 0; i < pslab->nr; i++)
 				q->params.pool_hooks.slab_uninit_task(
 						q->params.pool_hooks.context,
+						q->dd_data,
 						pslab->dd_data,
 						pslab->array[i]);
 		}
@@ -232,6 +236,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 		if (q->params.pool_hooks.slab_destroy)
 			q->params.pool_hooks.slab_destroy(
 				q->params.pool_hooks.context,
+				q->dd_data,
 				pslab->dd_data);
 
 		/* the tmp tasks are returned back to pool */
@@ -267,6 +272,7 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 				q->params.pool_hooks.slab_remap_task(
 						q->params.pool_hooks.context,
 						new_context,
+						q->dd_data,
 						pslab->dd_data,
 						pslab->array[i]);
 		}

@@ -126,23 +126,27 @@ struct xio_tasks_pool_ops {
 				int *start_nr,
 				int *max_nr,
 				int *alloc_nr,
+				int *pool_dd_size,
 				int *slab_dd_size,
 				int *task_dd_size);
 
 	int	(*slab_pre_create)(struct xio_transport_base *trans_hndl,
-				   int alloc_nr, void *slab_dd_data);
+				   int alloc_nr,
+				   void *pool_dd_data, void *slab_dd_data);
 	int	(*slab_destroy)(struct xio_transport_base *trans_hndl,
-				void *slab_dd_data);
+				 void *pool_dd_data,void *slab_dd_data);
 	int	(*slab_init_task)(struct xio_transport_base *trans_hndl,
-				  void *slab_dd_data, int tid,
-				  struct xio_task *task);
+				  void *pool_dd_data, void *slab_dd_data,
+				  int tid, struct xio_task *task);
 	int	(*slab_uninit_task)(struct xio_transport_base *trans_hndl,
-				    void *slab_dd_data, struct xio_task *task);
+				    void *pool_dd_data, void *slab_dd_data,
+				    struct xio_task *task);
 	int	(*slab_remap_task)(struct xio_transport_base *old_th,
 				   struct xio_transport_base *new_th,
-				   void *slab_dd_data, struct xio_task *task);
+				   void *pool_dd_data, void *slab_dd_data,
+				   struct xio_task *task);
 	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
-				    void *slab_dd_data);
+				    void *pool_dd_data, void *slab_dd_data);
 	int	(*pool_pre_create)(struct xio_transport_base *trans_hndl,
 			void *pool, void *pool_dd_data);
 	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,

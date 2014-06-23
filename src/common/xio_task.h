@@ -90,15 +90,27 @@ struct xio_task {
 struct xio_tasks_pool_hooks {
 	void	*context;
 	int	(*slab_pre_create)(void *context, int alloc_nr,
+				   void *pool_dd_data,
 				   void *slab_dd_data);
-	int	(*slab_destroy)(void *context, void *slab_dd_data);
-	int	(*slab_init_task)(void *context, void *slab_dd_data,
+	int	(*slab_destroy)(void *context,
+				void *pool_dd_data,
+				void *slab_dd_data);
+	int	(*slab_init_task)(void *context,
+				  void *pool_dd_data,
+				  void *slab_dd_data,
 				  int tid, struct xio_task *task);
-	int	(*slab_uninit_task)(void *context, void *slab_dd_data,
+	int	(*slab_uninit_task)(void *context,
+				    void *pool_dd_data,
+			            void *slab_dd_data,
 				    struct xio_task *task);
-	int	(*slab_remap_task)(void *old_context, void *new_context,
-				   void *slab_dd_data, struct xio_task *task);
-	int	(*slab_post_create)(void *context, void *slab_dd_data);
+	int	(*slab_remap_task)(void *old_context,
+			           void *new_context,
+				   void *pool_dd_data,
+				   void *slab_dd_data,
+				   struct xio_task *task);
+	int	(*slab_post_create)(void *context,
+				    void *pool_dd_data,
+				    void *slab_dd_data);
 	int	(*pool_pre_create)(void *context, void *pool,
 				    void *pool_dd_data);
 	int	(*pool_post_create)(void *context, void *pool,

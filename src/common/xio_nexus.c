@@ -820,6 +820,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	int				max_nr;
 	int				task_dd_sz;
 	int				slab_dd_sz;
+	int				pool_dd_sz;
 	struct xio_tasks_pool_cls	pool_cls;
 	struct xio_tasks_pool_params	params;
 
@@ -838,6 +839,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 						&start_nr,
 						&max_nr,
 						&alloc_nr,
+						&pool_dd_sz,
 						&slab_dd_sz,
 						&task_dd_sz);
 
@@ -846,6 +848,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	params.start_nr			   = start_nr;
 	params.max_nr			   = max_nr;
 	params.alloc_nr			   = alloc_nr;
+	params.pool_dd_data_sz		   = pool_dd_sz;
 	params.slab_dd_data_sz		   = slab_dd_sz;
 	params.task_dd_data_sz		   = task_dd_sz;
 	params.pool_hooks.context	   = nexus->transport_hndl;
@@ -920,6 +923,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	int				max_nr;
 	int				task_dd_sz;
 	int				slab_dd_sz;
+	int				pool_dd_sz;
 	struct xio_tasks_pool_cls	pool_cls;
 	struct xio_tasks_pool_params	params;
 
@@ -938,6 +942,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 						&start_nr,
 						&max_nr,
 						&alloc_nr,
+						&pool_dd_sz,
 						&slab_dd_sz,
 						&task_dd_sz);
 
@@ -946,6 +951,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	params.start_nr			   = start_nr;
 	params.max_nr			   = max_nr;
 	params.alloc_nr			   = alloc_nr;
+	params.pool_dd_data_sz		   = pool_dd_sz;
 	params.slab_dd_data_sz		   = slab_dd_sz;
 	params.task_dd_data_sz		   = task_dd_sz;
 	params.pool_hooks.context	   = nexus->transport_hndl;

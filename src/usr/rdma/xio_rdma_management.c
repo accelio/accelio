@@ -1156,7 +1156,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
-		int alloc_nr, void *slab_dd_data)
+		int alloc_nr, void *pool_dd_data, void *slab_dd_data)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
@@ -1315,7 +1315,8 @@ static int xio_rdma_task_pre_put(
 /* xio_rdma_initial_pool_slab_destroy					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_slab_destroy(
-		struct xio_transport_base *transport_hndl, void *slab_dd_data)
+		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data, void *slab_dd_data)
 {
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
@@ -1331,6 +1332,7 @@ static int xio_rdma_initial_pool_slab_destroy(
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_slab_init_task(
 		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data,
 		void *slab_dd_data, int tid, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
@@ -1370,11 +1372,12 @@ static int xio_rdma_initial_pool_slab_init_task(
 static void xio_rdma_initial_pool_get_params(
 		struct xio_transport_base *transport_hndl,
 		int *start_nr, int *max_nr, int *alloc_nr,
-		int *slab_dd_sz, int *task_dd_sz)
+		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
 	*start_nr = NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 0;
 	*max_nr = NUM_CONN_SETUP_TASKS;
+	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		      2*sizeof(struct ibv_sge);
@@ -1393,6 +1396,7 @@ static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_phantom_pool_slab_init_task(
 		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data,
 		void *slab_dd_data, int tid, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
@@ -1433,6 +1437,7 @@ static int xio_rdma_phantom_pool_create(struct xio_rdma_transport *rdma_hndl)
 	params.start_nr			   = NUM_START_PHANTOM_POOL_TASKS;
 	params.max_nr			   = NUM_MAX_PHANTOM_POOL_TASKS;
 	params.alloc_nr			   = NUM_ALLOC_PHANTOM_POOL_TASKS;
+	params.pool_dd_data_sz		   = 0;
 	params.slab_dd_data_sz		   = sizeof(struct xio_rdma_tasks_slab);
 	params.task_dd_data_sz		   = sizeof(struct xio_rdma_task) +
 				rdma_hndl->max_sge*sizeof(struct ibv_sge);
@@ -1474,7 +1479,7 @@ static int xio_rdma_phantom_pool_destroy(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
-		int alloc_nr, void *slab_dd_data)
+		int alloc_nr, void *pool_dd_data, void *slab_dd_data)
 {
 	struct xio_mr_elem *tmr_elem;
 
@@ -1564,7 +1569,8 @@ static int xio_rdma_primary_pool_post_create(
 /* xio_rdma_primary_pool_slab_destroy					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_slab_destroy(
-		struct xio_transport_base *transport_hndl, void *slab_dd_data)
+		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data, void *slab_dd_data)
 {
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
@@ -1584,6 +1590,7 @@ static int xio_rdma_primary_pool_slab_destroy(
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_slab_init_task(
 		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data,
 		void *slab_dd_data, int tid, struct xio_task *task)
 {
 	struct xio_rdma_transport *rdma_hndl =
@@ -1643,7 +1650,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 static void xio_rdma_primary_pool_get_params(
 		struct xio_transport_base *transport_hndl,
 		int *start_nr, int *max_nr, int *alloc_nr,
-		int *slab_dd_sz, int *task_dd_sz)
+		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
@@ -1654,6 +1661,7 @@ static void xio_rdma_primary_pool_get_params(
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = rdma_hndl->num_tasks;
+	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		(max_sge + 1 + max_sge)*sizeof(struct ibv_sge) +
