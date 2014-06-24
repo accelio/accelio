@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Get Running Directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd $DIR
+
 
 # Arguments Check
 if [ $# -lt 2 ]; then
