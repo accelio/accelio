@@ -110,6 +110,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	q->curr_idx = s->end_idx + 1;
 	s->nr = alloc_nr;
 
+	INIT_LIST_HEAD(&s->slabs_list_entry);
+
 	if (q->params.pool_hooks.slab_pre_create)
 		retval = q->params.pool_hooks.slab_pre_create(
 				q->params.pool_hooks.context,
@@ -179,11 +181,11 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
-	q		= (void *)buf;
+	q = (void *)buf;
 	if (params->pool_dd_data_sz)
-		q->dd_data	= (void *)(buf + params->pool_dd_data_sz);
+		q->dd_data = (void *)(q + 1);
 	else
-		q->dd_data	= NULL;
+		q->dd_data = NULL;
 
 	INIT_LIST_HEAD(&q->stack);
 	INIT_LIST_HEAD(&q->slabs_list);
@@ -217,7 +219,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {
-		list_del(&pslab->slabs_list_entry);
+		list_del_init(&pslab->slabs_list_entry);
 
 		if (q->params.pool_hooks.slab_uninit_task) {
 			for (i = 0; i < pslab->nr; i++)
@@ -255,7 +257,7 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {
-		list_del(&pslab->slabs_list_entry);
+		list_del_init(&pslab->slabs_list_entry);
 
 		if (q->params.pool_hooks.slab_remap_task) {
 			for (i = 0; i < pslab->nr; i++)

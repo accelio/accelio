@@ -183,7 +183,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	}
 	q		= (void *)buf;
 	if (params->pool_dd_data_sz)
-		q->dd_data	= (void *)(buf + params->pool_dd_data_sz);
+		q->dd_data = (void *)(q + 1);
 	else
 		q->dd_data = NULL;
 

@@ -365,6 +365,10 @@ struct xio_rdma_tasks_slab {
 	int				count;
 };
 
+struct xio_rdma_tasks_pool {
+	struct xio_device		*dev;
+};
+
 struct __attribute__((__packed__)) xio_rkey_tbl_pack {
 	uint32_t			old_rkey;
 	uint32_t			new_rkey;
@@ -383,6 +387,7 @@ struct xio_rdma_transport {
 	struct xio_rdma_mempool		*rdma_mempool;
 	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
+	struct xio_ev_data		event_data;
 
 	struct list_head		trans_list_entry;
 
