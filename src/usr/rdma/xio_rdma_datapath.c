@@ -1655,7 +1655,7 @@ static int xio_rdma_write_send_data(
 				goto cleanup;
 			}
 
-			/* get the crresopnding key of the
+			/* get the corresponding key of the
 			 * outgoing adapter */
 			mr = xio_rdma_mr_lookup(iov->mr,
 					rdma_hndl->tcq->dev);
@@ -1720,6 +1720,9 @@ static int xio_rdma_prep_req_out_data(
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_req_hdr);
+	xio_hdr_len += sizeof(struct xio_sge)*(rdma_task->recv_num_sge +
+					       rdma_task->read_num_sge +
+					       vmsg->data_iovlen);
 
 	if (rdma_hndl->max_send_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
@@ -1729,8 +1732,8 @@ static int xio_rdma_prep_req_out_data(
 		return -1;
 	}
 	/* the data is outgoing via SEND */
-	if ((ulp_out_hdr_len + ulp_out_imm_len +
-	    MAX_HDR_SZ) < rdma_hndl->max_send_buf_sz) {
+	if (vmsg->data_iovlen < rdma_hndl->max_sge &&
+	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
@@ -2104,6 +2107,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 					   task->omsg->out.data_iovlen);
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
+	xio_hdr_len += rdma_task->rsp_write_num_sge*sizeof(struct xio_sge);
+
 	small_zero_copy = task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY;
 
 	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
@@ -2117,6 +2122,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	 * insisted on RDMA operation and provided resources.
 	 */
 	if ((ulp_imm_len == 0) || (!small_zero_copy &&
+	    (task->omsg->out.data_iovlen < rdma_hndl->max_sge) &&
 	    ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< rdma_hndl->max_send_buf_sz))) {
 		/*
