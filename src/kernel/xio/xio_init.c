@@ -137,6 +137,7 @@ EXPORT_SYMBOL(xio_session_event_str);
 
 EXPORT_SYMBOL(xio_bind);
 EXPORT_SYMBOL(xio_accept);
+EXPORT_SYMBOL(xio_reject);
 EXPORT_SYMBOL(xio_unbind);
 EXPORT_SYMBOL(xio_connect);
 EXPORT_SYMBOL(xio_disconnect);
