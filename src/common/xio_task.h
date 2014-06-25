@@ -166,6 +166,7 @@ static void xio_task_reset(struct xio_task *task)
 	task->tlv_type			= 0xdead;
 	task->omsg_flags		= 0;
 	task->state			= XIO_TASK_STATE_INIT;
+	xio_mbuf_reset(&task->mbuf);
 }
 
 /*---------------------------------------------------------------------------*/
