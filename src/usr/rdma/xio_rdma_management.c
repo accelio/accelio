@@ -1599,7 +1599,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 	void *buf = rdma_slab->data_pool + tid*rdma_slab->buf_size;
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
-			     rdma_options.max_in_iovsz);
+			     rdma_options.max_in_iovsz) + 1;
 	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	char *ptr;
 
@@ -1655,7 +1655,7 @@ static void xio_rdma_primary_pool_get_params(
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
-			     rdma_options.max_in_iovsz);
+			     rdma_options.max_in_iovsz) + 1;
 	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
