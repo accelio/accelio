@@ -208,6 +208,11 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			return;
 		}
 		work = ptr_from_int64(exp);
+		if (!work) {
+			ERROR_LOG("null work\n");
+			return;
+		}
+
 		/* scan for deleted work the may be inside the pipe */
 		for(i = 0; i < work_queue->deleted_works_nr; i++) {
 			if (work_queue->deleted_works[i] == exp) {

@@ -132,8 +132,7 @@ int msg_api_init(struct msg_params *msg_params,
 	const char	*rsp_hdr =  "hello world response header";
 	const char	*rsp_data = "hello world response data";
 	const char	*ptr;
-	int		len, i;
-	unsigned char	c;
+	int		len;
 
 	msg_params->g_hdr = NULL;
 	msg_params->g_data = NULL;
@@ -143,18 +142,10 @@ int msg_api_init(struct msg_params *msg_params,
 			goto cleanup;
 		ptr = (is_server) ? rsp_hdr : req_hdr;
 		len = strlen(ptr);
-		if (hdrlen < len)
-			len = hdrlen;
+		if (hdrlen <= len)
+			len = hdrlen - 1;
 		strncpy((char *)msg_params->g_hdr, ptr, len);
 		msg_params->g_hdr[len] = 0;
-		len++;
-
-		for (i = len, c = 65;  i < hdrlen; i++) {
-			msg_params->g_hdr[i] = c;
-			c++;
-			if (c > 122)
-				c = 65;
-		}
 	}
 	if (datalen) {
 		datalen = ALIGNHUGEPAGE(datalen);
@@ -164,19 +155,13 @@ int msg_api_init(struct msg_params *msg_params,
 			goto cleanup;
 		ptr = (is_server) ? rsp_data : req_data;
 		len = strlen(ptr);
-		if (datalen < len)
-			len = datalen;
+		if (datalen <= len)
+			len = datalen - 1;
 		strncpy((char *)msg_params->g_data, ptr, len);
 		msg_params->g_data[len] = 0;
-		len++;
 
-		for (i = len, c = 65;  i < datalen; i++) {
-			msg_params->g_data[i] = c;
-			c++;
-			if (c > 122)
-				c = 65;
-		}
-		msg_params->g_data_mr = xio_reg_mr(msg_params->g_data, datalen);
+		msg_params->g_data_mr =
+			xio_reg_mr(msg_params->g_data, datalen);
 	}
 	return 0;
 

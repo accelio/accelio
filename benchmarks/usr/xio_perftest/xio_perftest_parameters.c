@@ -312,10 +312,9 @@ int parse_cmdline(struct perf_parameters *user_param,
 				fprintf(stderr, "more threads then cpus\n");
 				return -1;
 			}
-
-		break;
+			break;
 		case 'w':
-			if (optarg) {
+			if (optarg && !user_param->portals_arr) {
 				user_param->portals_arr =
 					portals_arg_to_urls(
 						optarg,
@@ -336,7 +335,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
 		case 'o':
-			if (optarg)
+			if (optarg && !user_param->output_file)
 				user_param->output_file = strdup(optarg);
 		break;
 		case 'v':
@@ -356,7 +355,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 		}
 	}
 	if (optind == argc - 1) {
-		if (argv[optind]) {
+		if (argv[optind] && !user_param->server_addr ) {
 			user_param->server_addr = strdup(argv[optind]);
 			user_param->machine_type = CLIENT;
 		}

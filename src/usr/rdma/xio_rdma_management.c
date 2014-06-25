@@ -82,6 +82,8 @@ static LIST_HEAD(cm_list);
 
 static struct xio_dev_tdata		dev_tdata;
 
+static  int				cdl_fd = -1;
+
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
 	.enable_mem_pool		= XIO_OPTVAL_DEF_ENABLE_MEM_POOL,
@@ -1822,7 +1824,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 
 	/* initiator is dst, target is src */
 	memcpy(&child_hndl->base.peer_addr,
-	       &child_hndl->cm_id->route.addr.dst_addr,
+	       &child_hndl->cm_id->route.addr.dst_storage,
 	       sizeof(child_hndl->base.peer_addr));
 	child_hndl->base.proto = XIO_PROTO_RDMA;
 
@@ -2098,7 +2100,7 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 	if (!channel->cm_channel) {
 		ERROR_LOG("rdma_create_event_channel failed " \
 				"(errno=%d %m)\n", errno);
-		return NULL;
+		goto free;
 	}
 	/* turn the file descriptor to non blocking */
 	retval = fcntl(channel->cm_channel->fd, F_GETFL, 0);
@@ -2134,6 +2136,9 @@ static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx)
 
 cleanup:
 	rdma_destroy_event_channel(channel->cm_channel);
+free:
+	ufree(channel);
+
 	return NULL;
 }
 
@@ -2689,27 +2694,28 @@ static int xio_rdma_get_opt(void  *xio_obj,
 /*---------------------------------------------------------------------------*/
 /* xio_set_cpu_latency							     */
 /*---------------------------------------------------------------------------*/
-static int xio_set_cpu_latency()
+static int xio_set_cpu_latency(int *fd)
 {
 	int32_t latency = 0;
-	int fd;
 
 	if (!rdma_options.enable_dma_latency)
 		return 0;
 
 	DEBUG_LOG("setting latency to %d us\n", latency);
-	fd = open("/dev/cpu_dma_latency", O_WRONLY);
+	*fd = open("/dev/cpu_dma_latency", O_WRONLY);
 	if (fd < 0) {
 		ERROR_LOG(
 		 "open /dev/cpu_dma_latency %m - need root permissions\n");
 		return -1;
 	}
-	if (write(fd, &latency, sizeof(latency)) != sizeof(latency)) {
+	if (write(*fd, &latency, sizeof(latency)) != sizeof(latency)) {
 		ERROR_LOG(
 		 "write to /dev/cpu_dma_latency %m - need root permissions\n");
+		close(*fd);
+		*fd = -1;
 		return -1;
 	}
-	return -1;
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2726,7 +2732,7 @@ static void xio_rdma_init()
 	pthread_rwlock_init(&cm_lock, NULL);
 
 	/* set cpu latency until process is down */
-	xio_set_cpu_latency();
+	xio_set_cpu_latency(&cdl_fd);
 
 	retval = xio_device_thread_init();
 	if (retval != 0) {
@@ -2761,6 +2767,9 @@ static int xio_rdma_transport_init(struct xio_transport *transport)
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_release()
 {
+	if (cdl_fd >= 0)
+		close(cdl_fd);
+
 	xio_rdma_mempool_array_release();
 
 	/* free all redundant registered memory */

@@ -473,6 +473,7 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
 	}
 
 	*len = mr_num;
+	*htbl = tbl;
 	return 0;
 
 cleanup:

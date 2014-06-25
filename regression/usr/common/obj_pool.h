@@ -125,8 +125,10 @@ static inline struct obj_pool *obj_pool_init(int max, size_t size,
 	elems_alloc_sz = max*size;
 
 	data = calloc(elems_alloc_sz, sizeof(uint8_t));
-	if (data == NULL)
+	if (data == NULL) {
+		free(q);
 		return NULL;
+	}
 
 	for (i = 0; i < max; i++) {
 		q->array[i]		= data;
