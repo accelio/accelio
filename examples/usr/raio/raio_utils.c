@@ -325,7 +325,7 @@ int unpack_fstat_answer(char *buf, size_t len __attribute__ ((unused)),
 		return -1;
 	}
 
-	buffer = unpack_stat64(stbuf, buffer);
+	unpack_stat64(stbuf, buffer);
 
 	return 0;
 }

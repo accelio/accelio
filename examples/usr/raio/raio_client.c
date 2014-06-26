@@ -213,7 +213,8 @@ int parse_cmdline(int argc, char **argv)
 
 		switch (c) {
 		case 'a':
-			server_addr = strdup(optarg);
+			if (server_addr == NULL)
+				server_addr = strdup(optarg);
 			if (server_addr == NULL)
 				goto cleanup;
 			break;
@@ -222,7 +223,8 @@ int parse_cmdline(int argc, char **argv)
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'f':
-			file_path = strdup(optarg);
+			if (file_path == NULL)
+				file_path = strdup(optarg);
 			if (file_path == NULL)
 				goto cleanup;
 			break;

@@ -306,7 +306,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 				unuma_free(region->buf);
 			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 				ufree(region->buf);
-
+			region->buf = NULL;
 			goto cleanup2;
 		}
 	}
@@ -350,10 +350,12 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	return block;
 
 cleanup2:
-	ufree(region->buf);
+	if (region->buf)
+		ufree(region->buf);
 
 cleanup1:
-	ufree(region);
+	if (region)
+		ufree(region);
 	return NULL;
 }
 

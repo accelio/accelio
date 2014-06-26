@@ -359,7 +359,7 @@ int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 
 	xio_context_run_loop(comm->control_ctx->ctx, XIO_INFINITE);
 
-	if (comm->control_ctx->failed)
+	if (comm->control_ctx->failed || !comm->control_ctx->reply)
 		goto cleanup;
 
 	if (osize)

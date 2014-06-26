@@ -166,7 +166,15 @@ static int xio_on_new_message(struct xio_server *server,
 						  server->ctx, 0,
 						  server->cb_private_data);
 
+		if (!connection) {
+			ERROR_LOG("server failed to allocate new connection\n");
+			goto cleanup;
+		}
 		connection = xio_session_assign_nexus(task->session, nexus);
+		if (!connection) {
+			ERROR_LOG("server failed to assign new connection\n");
+			goto cleanup1;
+		}
 
 		/* copy the server attributes to the connection */
 		xio_connection_set_ops(connection, &server->ops);

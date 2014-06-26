@@ -69,11 +69,11 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		strncpy(host, cp, len);
 		host[len] = 0;
 		tp++;
-		if (tp == NULL) {
+		if (*tp == 0) {
 			strcpy(port, "0");
 		} else if (*tp == ':') {
 			tp++;
-			if (tp && *tp)
+			if (*tp)
 				strcpy(port, tp);
 			else
 				strcpy(port, "0");
@@ -87,7 +87,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		if (*cp == ':') {
 			strcpy(host, "0.0.0.0");
 			cp++;
-			if (cp && *cp)
+			if (*cp)
 				strcpy(port, cp);
 			else
 				strcpy(port, "0");

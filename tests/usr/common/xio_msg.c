@@ -65,6 +65,7 @@ static void *alloc_mem_buf(size_t pool_size, int *shmid)
 {
 	int	shmemid = 0;
 	void	*buf = NULL;
+	int	pagesz;
 
 	/* allocate memory */
 	shmemid = shmget(IPC_PRIVATE, pool_size,
@@ -100,7 +101,11 @@ static void *alloc_mem_buf(size_t pool_size, int *shmid)
 
 failed_huge_page:
 	*shmid = -1;
-	buf = memalign(sysconf(_SC_PAGESIZE), pool_size);
+	pagesz = sysconf(_SC_PAGESIZE);
+	if (pagesz < 0)
+		return NULL;
+
+	buf = memalign(pagesz, pool_size);
 	if (!buf)
 		return NULL;
 
@@ -148,13 +153,16 @@ void msg_api_free(struct msg_params *msg_params)
 int msg_api_init(struct msg_params *msg_params,
 		 size_t hdrlen, size_t datalen, int is_server)
 {
-	int pagesize = sysconf(_SC_PAGESIZE);
 	const char	*req_hdr = "hello world request header";
 	const char	*req_data = "hello world request data";
 	const char	*rsp_hdr =  "hello world response header";
 	const char	*rsp_data = "hello world response data";
 	const char	*ptr;
 	int		len;
+	int		pagesize = sysconf(_SC_PAGESIZE);
+
+	if (pagesize < 0)
+		return -1;
 
 	msg_params->g_hdr = NULL;
 	msg_params->g_data = NULL;

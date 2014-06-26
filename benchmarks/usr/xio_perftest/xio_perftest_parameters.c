@@ -96,7 +96,8 @@ static int tokenize_host_port(char *token, char *host, uint16_t *port)
 /*---------------------------------------------------------------------------*/
 /* portals_arg_to_urls							     */
 /*---------------------------------------------------------------------------*/
-static char **portals_arg_to_urls(char *transport, char *portals_arg, uint32_t *urls_vec_len)
+static char **portals_arg_to_urls(char *transport,
+				  char *portals_arg, uint32_t *urls_vec_len)
 {
 	char		*token;
 	char		delim[] = ";";
@@ -274,7 +275,7 @@ void destroy_perf_params(struct perf_parameters *user_param)
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
 int parse_cmdline(struct perf_parameters *user_param,
-		int argc, char **argv)
+		  int argc, char **argv)
 {
 	int	max_cpus;
 	char	*portals = NULL;
@@ -324,7 +325,6 @@ int parse_cmdline(struct perf_parameters *user_param,
 		case 'p':
 			if (!optarg)
 				goto invalid_cmdline;
-				return -1;
 
 			errno = 0;
 			l = strtol(optarg, NULL, 0);
@@ -441,20 +441,27 @@ int parse_cmdline(struct perf_parameters *user_param,
 			fprintf(stderr, "failed to parse portals\n");
 			goto invalid_cmdline;
 		}
-		free(portals);
 	}
 
 	if (force_dependencies(user_param))
 		goto invalid_cmdline;
 
+	if (portals) {
+		free(portals);
+		portals = NULL;
+	}
+
 	return 0;
 
 invalid_cmdline:
+	if (portals)
+		free(portals);
+
 	destroy_perf_params(user_param);
-		fprintf(stderr,
-			"Invalid Command line. Please check command rerun\n");
-		usage(argv[0], -1);
-		exit(-1);
+	fprintf(stderr,
+		"Invalid Command line. Please check command rerun\n");
+	usage(argv[0], -1);
+	exit(-1);
 }
 
 /*************************************************************

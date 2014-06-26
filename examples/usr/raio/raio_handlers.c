@@ -240,6 +240,7 @@ reject:
 				     overall_size);
 
 	pd->rsp.request = req;
+	sd->fd		= fd;
 
 	xio_send_response(&pd->rsp);
 
@@ -270,8 +271,10 @@ static int raio_handle_close(void *prv_session_data,
 		goto reject;
 	}
 
-	if (!sd->is_null)
-		retval = close(fd);
+	if (!sd->is_null && sd->fd == fd) {
+		retval = close(sd->fd);
+		sd->fd = -1;
+	}
 
 reject:
 	if (retval != 0) {
@@ -315,6 +318,8 @@ static int raio_handle_fstat(void *prv_session_data,
 	int				fd = -1;
 	int				retval = 0;
 	struct stat64			stbuf;
+
+	memset(&stbuf, 0 , sizeof(stbuf));
 
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data);
