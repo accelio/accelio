@@ -191,7 +191,7 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 	int64_t			exp;
 	ssize_t			s;
 	xio_work_handle_t	*work;
-	int			i, found;
+	int			i, found = 0;
 
 
 	/* drain the pipe data */

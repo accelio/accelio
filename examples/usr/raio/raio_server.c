@@ -304,18 +304,18 @@ static int on_new_connection(struct xio_session *session,
 	struct raio_session_data	*session_entry;
 	struct raio_connection_data	*connection_entry;
 
-	connection_entry = calloc(1, sizeof(*connection_entry));
-	connection_entry->connection = connection;
-
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
 		if (session_entry->session == session) {
+			connection_entry = calloc(1, sizeof(*connection_entry));
+			if (connection_entry == NULL)
+				return -1;
+			connection_entry->connection = connection;
 			TAILQ_INSERT_HEAD(&session_entry->conns_list,
 					  connection_entry, conns_list_entry);
 			break;
 		}
 	}
-
 	return 0;
 }
 

@@ -421,15 +421,13 @@ int run_client_test(struct perf_parameters *user_param)
 	tdata = calloc(user_param->threads_num, sizeof(*tdata));
 	if (tdata == NULL) {
 		fprintf(fd, "malloc failed\n");
-		return -1;
+		goto cleanup1;
 	}
 
 	comm = create_comm_struct(user_param);
 	if (establish_connection(comm)) {
 		fprintf(stderr, "failed to establish connection\n");
-		free(tdata);
-		destroy_comm_struct(comm);
-		return -1;
+		goto cleanup2;
 	}
 
 	if (user_param->output_file) {
@@ -437,9 +435,7 @@ int run_client_test(struct perf_parameters *user_param)
 		if (fd == NULL) {
 			fprintf(fd, "file open failed. %s\n",
 				user_param->output_file);
-			free(sess_data.tdata);
-			destroy_comm_struct(comm);
-			return -1;
+			goto cleanup2;
 		}
 		fprintf(fd, "size, threads, tps, bw[Mbps], lat[usec]\n");
 		fflush(fd);
@@ -559,10 +555,12 @@ cleanup:
 
 	ctx_close_connection(comm);
 
+cleanup2:
 	destroy_comm_struct(comm);
 
 	free(tdata);
 
+cleanup1:
 	xio_shutdown();
 
 	return 0;

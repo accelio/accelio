@@ -304,7 +304,8 @@ int unpack_close_answer(char *buf, size_t len)
 /*---------------------------------------------------------------------------*/
 /* unpack_fstat_answer				                             */
 /*---------------------------------------------------------------------------*/
-int unpack_fstat_answer(char *buf, size_t len, struct stat64 *stbuf)
+int unpack_fstat_answer(char *buf, size_t len __attribute__ ((unused)),
+			struct stat64 *stbuf)
 {
 	struct raio_answer ans;
 	const char *buffer;

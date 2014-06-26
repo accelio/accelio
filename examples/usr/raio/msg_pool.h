@@ -35,88 +35,98 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef MSG_POOL_H
-#define MSG_POOL_H
+#ifndef MSG_API_H
+#define MSG_API_H
+
+#include "libxio.h"
+
+struct msg_params {
+		uint8_t		*g_hdr;
+		uint8_t		*g_data;
+		struct xio_mr	*g_data_mr;
+		int		g_shmid;
+		int		pad;
+};
+
+struct msg_pool {
+	/* pool of msgs */
+	struct xio_msg				**array;
+	/* LIFO */
+	struct xio_msg				**stack;
+
+	struct xio_msg				**stack_ptr;
+	struct xio_msg				**stack_end;
+	void					*header;
+	void					*data;
+
+	struct xio_mr				*mr;
+	/* max number of elements */
+	size_t					max;
+	int					shmid;
+	int					pad;
+};
 
 
-#include <libxio.h>
+/*---------------------------------------------------------------------------*/
+/* msg_api_init								     */
+/*---------------------------------------------------------------------------*/
+int msg_api_init(struct msg_params *msg_params,
+		 size_t hdrlen,
+		 size_t datalen, int is_server);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*---------------------------------------------------------------------------*/
+/* msg_api_free								     */
+/*---------------------------------------------------------------------------*/
+void msg_api_free(struct msg_params *msg_params);
 
+/*---------------------------------------------------------------------------*/
+/* msg_alloc								     */
+/*---------------------------------------------------------------------------*/
+struct xio_msg *msg_alloc(size_t out_hdrlen, size_t out_datalen,
+			  size_t in_hdrlen, size_t in_datalen);
 
+/*---------------------------------------------------------------------------*/
+/* msg_write								     */
+/*---------------------------------------------------------------------------*/
+void msg_write(struct msg_params *msg_params,
+	       struct xio_msg *msg,
+	       size_t hdrlen,
+	       size_t data_iovlen, size_t datalen);
 
-/**
- * msg_pool_create - creates pool for xio messages
- *
- * @msg_size:	pointer to event loop
- * @num_of_msgs: the added file descrptor
- *
- * RETURNS: pointer to the new created pool
- */
-struct msg_pool *msg_pool_create(size_t hdr_size, size_t data_size,
-				 int num_of_msgs);
+/*---------------------------------------------------------------------------*/
+/* msg_pool_alloc							     */
+/*---------------------------------------------------------------------------*/
+struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz);
 
-/**
- * msg_pool_delete - deletes pool of xio messages
- *
- * @pool: pointer to the pool
- *
- * RETURNS: void
- */
-void msg_pool_delete(struct msg_pool *pool);
-
-/**
- * msg_pool_get - gets one message from pool
- *
- * @pool: pointer to the pool
- *
- * RETURNS: xio message
- */
+/*---------------------------------------------------------------------------*/
+/* msg_pool_get								     */
+/*---------------------------------------------------------------------------*/
 struct xio_msg *msg_pool_get(struct msg_pool *pool);
 
-/**
- * msg_pool_put - puts one message from pool
- *
- * @pool: pointer to the pool
- * @msg: pointer to xio's message
- *
- * RETURNS: void
- */
+
+/*---------------------------------------------------------------------------*/
+/* msg_pool_put								     */
+/*---------------------------------------------------------------------------*/
 void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
 
-/**
- * msg_pool_get_array - gets array of messages from pool
- *
- * @pool: pointer to the pool
- * @vec: array of pointer to messages
- * @veclen: the array length
- *
- * RETURNS: number of messages filled in the array.
- */
-int msg_pool_get_array(struct msg_pool *pool, struct xio_msg **vec,
-		       int veclen);
+
+/*---------------------------------------------------------------------------*/
+/* msg_pool_free							     */
+/*---------------------------------------------------------------------------*/
+void msg_pool_free(struct msg_pool *pool);
 
 
-/**
- * msg_pool_put_array - puts array of messages back to pool
- *
- * @pool: pointer to the pool
- * @vec: array of pointer to messages
- * @veclen: the array length
- *
- * RETURNS: void
- */
-void msg_pool_put_array(struct msg_pool *pool, struct xio_msg **vec,
-			int veclen);
-
-void  msg_reset(struct xio_msg *msg);
-
-#ifdef __cplusplus
+/*---------------------------------------------------------------------------*/
+/* msg_reset								     */
+/*---------------------------------------------------------------------------*/
+static inline void msg_reset(struct xio_msg *msg)
+{
+	msg->in.header.iov_base = NULL;
+	msg->in.header.iov_len = 0;
+	msg->in.data_iovlen = 0;
+	msg->out.data_iovlen = 0;
+	msg->out.header.iov_len = 0;
 }
-#endif
 
 
-#endif /* MSG_POOL_H */
-
+#endif /* #define MSG_API_H */

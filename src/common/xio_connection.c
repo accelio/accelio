@@ -779,7 +779,6 @@ int xio_send_request(struct xio_connection *connection,
 	struct xio_statistics	*stats;
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg;
-	int			retval = 0;
 
 
 	if (connection  == NULL || msg == NULL) {
@@ -832,9 +831,6 @@ int xio_send_request(struct xio_connection *connection,
 
 		pmsg = pmsg->next;
 	}
-	if (retval)
-		return retval;
-
 
 	/* do not xmit until connection is assigned */
 	if (xio_is_connection_online(connection))

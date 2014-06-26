@@ -90,19 +90,22 @@ static int xio_on_new_message(struct xio_server *server,
 			      int event,
 			      union xio_nexus_event_data *event_data)
 {
-	struct xio_session		*session;
-	struct xio_connection		*connection;
-	struct xio_task			*task = event_data->msg.task;
+	struct xio_session		*session = NULL;
+	struct xio_connection		*connection = NULL;
+	struct xio_task			*task;
+	struct xio_session_attr		attr = { 0 };
+	uint32_t			tlv_type;
 
-
-	struct xio_session_attr attr = {
-		&server->ops,
-		NULL,
-		0
-	};
+	if (!server || !nexus || !event_data || !event_data->msg.task) {
+		ERROR_LOG("server [new session]: failed " \
+			  "invalid parameter\n");
+		return -1;
+	}
+	task		= event_data->msg.task;
+	attr.ses_ops	= &server->ops;
 
 	/* read the first message  type */
-	uint32_t tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
+	tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
@@ -180,15 +183,18 @@ static int xio_on_new_message(struct xio_server *server,
 	}
 
 	/* route the message to the session */
-	xio_nexus_notify_observer(nexus, &session->observer, event, event_data);
+	if (session)
+		xio_nexus_notify_observer(nexus, &session->observer, event, event_data);
 
 	return 0;
 
 cleanup1:
-	xio_session_free_connection(connection);
+	if (connection)
+		xio_session_free_connection(connection);
 
 cleanup:
-	xio_session_destroy(session);
+	if (session)
+		xio_session_destroy(session);
 
 	return -1;
 }

@@ -334,7 +334,8 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 int ctx_write_data(struct perf_comm *comm, void *data, int size)
 {
-	if (comm->control_ctx->failed)
+	if (!comm || !comm->control_ctx ||
+	    !comm->control_ctx->conn || !comm->control_ctx->failed)
 		return -1;
 
 	comm->control_ctx->msg.out.header.iov_base	= data;
@@ -343,9 +344,7 @@ int ctx_write_data(struct perf_comm *comm, void *data, int size)
 	comm->control_ctx->msg.in.header.iov_len	= 0;
 	comm->control_ctx->msg.in.data_iovlen		= 0;
 
-	xio_send_msg(comm->control_ctx->conn, &comm->control_ctx->msg);
-
-	return 0;
+	return xio_send_msg(comm->control_ctx->conn, &comm->control_ctx->msg);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -353,7 +352,7 @@ int ctx_write_data(struct perf_comm *comm, void *data, int size)
 /*---------------------------------------------------------------------------*/
 int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 {
-	if (comm->control_ctx->failed)
+	if (!comm || !comm->control_ctx || !comm->control_ctx->failed)
 		goto cleanup;
 
 	xio_context_run_loop(comm->control_ctx->ctx, XIO_INFINITE);

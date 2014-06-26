@@ -105,6 +105,9 @@ static inline struct obj_pool *obj_pool_init(int max, size_t size,
 	size_t pool_alloc_sz = sizeof(struct obj_pool) +
 				2*max*sizeof(void *);
 
+	if (max < 1)
+		return NULL;
+
 	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;

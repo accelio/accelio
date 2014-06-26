@@ -312,7 +312,7 @@ static int raio_handle_fstat(void *prv_session_data,
 {
 	struct raio_io_session_data	*sd = prv_session_data;
 	struct raio_io_portal_data	*pd = prv_portal_data;
-	int				fd;
+	int				fd = -1;
 	int				retval = 0;
 	struct stat64			stbuf;
 
@@ -402,7 +402,7 @@ static int raio_handle_setup(void *prv_session_data,
 		cpd->iodepth = iodepth;
 		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
 		cpd->io_us_free = calloc(cpd->io_u_free_nr, sizeof(struct raio_io_u));
-		cpd->rsp_pool = msg_pool_create(512, MAXBLOCKSIZE, cpd->io_u_free_nr);
+		cpd->rsp_pool = msg_pool_alloc(cpd->io_u_free_nr, 0, 1);
 		TAILQ_INIT(&cpd->io_u_free_list);
 
 		/* register each io_u in the free list */
@@ -702,7 +702,7 @@ static int raio_handle_close_comp(void *prv_session_data,
 	free(pd->io_us_free);
 	pd->io_us_free = NULL;
 	pd->io_u_free_nr = 0;
-	msg_pool_delete(pd->rsp_pool);
+	msg_pool_free(pd->rsp_pool);
 	pd->rsp_pool = NULL;
 
 	return 0;

@@ -1340,7 +1340,8 @@ int xio_on_cancel_response(struct xio_session *sess,
 	}
 
 	/* need to release the last reference since answer is not expected */
-	if (event_data->cancel.result == XIO_E_MSG_CANCELED)
+	if (event_data->cancel.result == XIO_E_MSG_CANCELED &&
+	    event_data->cancel.task)
 		xio_tasks_pool_put(event_data->cancel.task);
 
 	if (connection->ses_ops.on_cancel)

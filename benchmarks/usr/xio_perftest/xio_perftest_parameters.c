@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <errno.h>
 #include <getopt.h>
 #include "xio_perftest_parameters.h"
 
@@ -269,6 +270,10 @@ int parse_cmdline(struct perf_parameters *user_param,
 		int argc, char **argv)
 {
 	int	max_cpus;
+	long	l;
+
+	if (!user_param)
+		return -1;
 
 	init_perf_params(user_param);
 
@@ -297,20 +302,44 @@ int parse_cmdline(struct perf_parameters *user_param,
 
 		switch (c) {
 		case 'c':
-			user_param->cpu =
-				(uint16_t)strtol(optarg, NULL, 0);
+			if (!optarg)
+				goto invalid_cmdline;
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->cpu = (uint16_t)l;
 			break;
 		case 'p':
-			user_param->server_port =
-				(uint16_t)strtol(optarg, NULL, 0);
+			if (!optarg)
+				goto invalid_cmdline;
+				return -1;
+
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->server_port = (uint16_t)l;
 			break;
 		case 'n':
-			user_param->threads_num =
-				(uint32_t)strtol(optarg, NULL, 0);
+			if (!optarg)
+				goto invalid_cmdline;
+
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->threads_num = (uint32_t)l;
 			max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 			if (user_param->threads_num > max_cpus) {
 				fprintf(stderr, "more threads then cpus\n");
-				return -1;
+				goto invalid_cmdline;
 			}
 			break;
 		case 'w':
@@ -319,24 +348,45 @@ int parse_cmdline(struct perf_parameters *user_param,
 					portals_arg_to_urls(
 						optarg,
 						&user_param->portals_arr_len);
-				if (user_param->portals_arr == NULL) {
+				if (!user_param->portals_arr && *user_param->portals_arr) {
 					fprintf(stderr,
 						"failed to parse portals\n");
-					return -1;
+					goto invalid_cmdline;
 				}
-			}
+			} else
+				goto invalid_cmdline;
 			break;
 		case 't':
-			user_param->poll_timeout =
-				(uint32_t)strtol(optarg, NULL, 0);
+			if (!optarg)
+				goto invalid_cmdline;
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->poll_timeout = (uint32_t)l;
 			break;
 		case 'q':
-			user_param->queue_depth =
-				(uint32_t)strtol(optarg, NULL, 0);
+			if (!optarg)
+				goto invalid_cmdline;
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->queue_depth = (uint32_t)l;
 			break;
 		case 'o':
-			if (optarg && !user_param->output_file)
+			if (optarg && !user_param->output_file) {
 				user_param->output_file = strdup(optarg);
+				if (!user_param->output_file)
+					goto invalid_cmdline;
+
+			} else
+				goto invalid_cmdline;
+
 		break;
 		case 'v':
 			printf("version: %s\n", XIO_PERF_VERSION);
@@ -348,27 +398,33 @@ int parse_cmdline(struct perf_parameters *user_param,
 		break;
 		default:
 			fprintf(stderr, " invalid command or flag.\n");
-			fprintf(stderr,
-				" please check command line and run again.\n\n");
-			usage(argv[0], -1);
+			goto invalid_cmdline;
 			break;
 		}
 	}
 	if (optind == argc - 1) {
-		if (argv[optind] && !user_param->server_addr ) {
+		if (argv[optind] && !user_param->server_addr) {
 			user_param->server_addr = strdup(argv[optind]);
+			if (!user_param->server_addr)
+				goto invalid_cmdline;
+
 			user_param->machine_type = CLIENT;
 		}
 	} else if (optind < argc) {
-		fprintf(stderr,
-			" Invalid Command line.Please check command rerun\n");
-		exit(-1);
+		goto invalid_cmdline;
 	}
 
 	if (force_dependencies(user_param))
-		return -1;
+		goto invalid_cmdline;
 
 	return 0;
+
+invalid_cmdline:
+	destroy_perf_params(user_param);
+		fprintf(stderr,
+			"Invalid Command line. Please check command rerun\n");
+		usage(argv[0], -1);
+		exit(-1);
 }
 
 /*************************************************************

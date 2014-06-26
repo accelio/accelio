@@ -294,10 +294,8 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 		region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t));
 
-	if (region->buf == NULL) {
-		ufree(buf);
-		return NULL;
-	}
+	if (region->buf == NULL)
+		goto cleanup1;
 
 	if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
 		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
@@ -309,8 +307,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 				ufree(region->buf);
 
-			ufree(buf);
-			return NULL;
+			goto cleanup2;
 		}
 	}
 
@@ -351,6 +348,13 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	list_add(&region->mem_region_entry, &slot->mem_regions_list);
 
 	return block;
+
+cleanup2:
+	ufree(region->buf);
+
+cleanup1:
+	ufree(region);
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/

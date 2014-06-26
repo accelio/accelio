@@ -418,13 +418,14 @@ static int on_new_connection(struct xio_session *session,
 	struct session_entry	*session_entry;
 	struct connection_entry *connection_entry;
 
-	connection_entry = calloc(1, sizeof(*connection_entry));
-	connection_entry->connection = connection;
-
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
 		if (session_entry->session == session) {
+			connection_entry = calloc(1, sizeof(*connection_entry));
+			if (connection_entry == NULL)
+				return -1;
+			connection_entry->connection = connection;
 			TAILQ_INSERT_TAIL(&session_entry->conns_list,
 					  connection_entry, conns_list_entry);
 			break;
@@ -607,7 +608,7 @@ int server_main(int argc, char *argv[])
 	server_data->tdata = calloc(server_threads_num,
 				    sizeof(*server_data->tdata));
 	if (!server_data->tdata)
-		return -1;
+		goto cleanup;
 
 	server_data->threads_num = server_threads_num;
 	server_data->queue_depth = queue_depth;
@@ -629,7 +630,7 @@ int server_main(int argc, char *argv[])
 	server = xio_bind(server_data->ctx, &server_ops,
 			  url, NULL, 0, server_data);
 	if (server == NULL)
-		goto cleanup;
+		goto cleanup1;
 
 	/* initialize thread synchronization barrier */
 	pthread_barrier_init(&server_data->barr, NULL,
@@ -661,7 +662,8 @@ int server_main(int argc, char *argv[])
 
 	/* free the server */
 	xio_unbind(server);
-cleanup:
+
+cleanup1:
 	/* free the context */
 	xio_context_destroy(server_data->ctx);
 
@@ -670,6 +672,7 @@ cleanup:
 	pthread_spin_destroy(&server_data->lock);
 
 	free(server_data->tdata);
+cleanup:
 	free(server_data);
 
 	DEBUG("server: goodbye and good riddance\n");

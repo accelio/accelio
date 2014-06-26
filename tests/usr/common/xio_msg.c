@@ -61,10 +61,10 @@
 /*---------------------------------------------------------------------------*/
 /* alloc_mem_buf	                                                     */
 /*---------------------------------------------------------------------------*/
-static uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
+static void *alloc_mem_buf(size_t pool_size, int *shmid)
 {
-	int shmemid;
-	uint8_t *buf;
+	int	shmemid = 0;
+	void	*buf = NULL;
 
 	/* allocate memory */
 	shmemid = shmget(IPC_PRIVATE, pool_size,
@@ -79,8 +79,7 @@ static uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 
 	/* get pointer to allocated memory */
 	buf = shmat(shmemid, NULL, 0);
-
-	if (buf == (void *)-1) {
+	if (!buf || buf == (void *)-1) {
 		fprintf(stderr, "shmat failure (errno=%d %m)\n", errno);
 		shmctl(shmemid, IPC_RMID, NULL);
 		goto failed_huge_page;
@@ -91,23 +90,27 @@ static uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 	   not nicely. From checking shmctl man page it is unlikely that it
 	   will fail here.
 	*/
-	if (shmctl(shmemid, IPC_RMID, NULL))
+	if (shmctl(shmemid, IPC_RMID, NULL) != 0) {
 		fprintf(stderr,
-			"shmctl mark 'todo destroyed' failed (errno=%d %m)\n",
-			errno);
+			"shmctl mark 'todo destroyed' failed %m\n");
+	}
 
 	*shmid = shmemid;
 	return buf;
 
 failed_huge_page:
 	*shmid = -1;
-	return memalign(sysconf(_SC_PAGESIZE), pool_size);
+	buf = memalign(sysconf(_SC_PAGESIZE), pool_size);
+	if (!buf)
+		return NULL;
+
+	return buf;
 }
 
 /*---------------------------------------------------------------------------*/
 /* free_mem_buf								     */
 /*---------------------------------------------------------------------------*/
-inline void free_mem_buf(uint8_t *pool_buf, int shmid)
+inline void free_mem_buf(void *pool_buf, int shmid)
 {
 	if (shmid >= 0) {
 		if (shmdt(pool_buf) != 0) {
@@ -121,7 +124,26 @@ inline void free_mem_buf(uint8_t *pool_buf, int shmid)
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_alloc								     */
+/* msg_api_free								     */
+/*---------------------------------------------------------------------------*/
+void msg_api_free(struct msg_params *msg_params)
+{
+	if (msg_params->g_hdr) {
+		free(msg_params->g_hdr);
+		msg_params->g_hdr = NULL;
+	}
+	if (msg_params->g_data_mr) {
+		xio_dereg_mr(&msg_params->g_data_mr);
+		msg_params->g_data_mr = NULL;
+	}
+	if (msg_params->g_data) {
+		free_mem_buf(msg_params->g_data, msg_params->g_shmid);
+		msg_params->g_data = NULL;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* msg_api_init								     */
 /*---------------------------------------------------------------------------*/
 int msg_api_init(struct msg_params *msg_params,
 		 size_t hdrlen, size_t datalen, int is_server)
@@ -144,7 +166,8 @@ int msg_api_init(struct msg_params *msg_params,
 		len = strlen(ptr);
 		if (hdrlen <= len)
 			len = hdrlen - 1;
-		strncpy((char *)msg_params->g_hdr, ptr, len);
+		if (len)
+			strncpy((char *)msg_params->g_hdr, ptr, len);
 		msg_params->g_hdr[len] = 0;
 	}
 	if (datalen) {
@@ -157,42 +180,20 @@ int msg_api_init(struct msg_params *msg_params,
 		len = strlen(ptr);
 		if (datalen <= len)
 			len = datalen - 1;
-		strncpy((char *)msg_params->g_data, ptr, len);
+		if (len)
+			strncpy((char *)msg_params->g_data, ptr, len);
 		msg_params->g_data[len] = 0;
 
 		msg_params->g_data_mr =
 			xio_reg_mr(msg_params->g_data, datalen);
+		if (!msg_params->g_data_mr)
+			goto cleanup;
 	}
 	return 0;
 
 cleanup:
-	if (msg_params->g_hdr) {
-		free(msg_params->g_hdr);
-		msg_params->g_hdr = NULL;
-	}
-
-	if (msg_params->g_data) {
-		free_mem_buf(msg_params->g_data, msg_params->g_shmid);
-		msg_params->g_data = NULL;
-	}
-
+	msg_api_free(msg_params);
 	return -1;
-}
-
-void msg_api_free(struct msg_params *msg_params)
-{
-	if (msg_params->g_hdr) {
-		free(msg_params->g_hdr);
-		msg_params->g_hdr = NULL;
-	}
-	if (msg_params->g_data_mr) {
-		xio_dereg_mr(&msg_params->g_data_mr);
-		msg_params->g_data_mr = NULL;
-	}
-	if (msg_params->g_data) {
-		free_mem_buf(msg_params->g_data, msg_params->g_shmid);
-		msg_params->g_data = NULL;
-	}
 }
 
 /*---------------------------------------------------------------------------*/

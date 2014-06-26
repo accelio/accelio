@@ -1931,9 +1931,12 @@ static void on_cm_device_release(struct rdma_cm_event *ev,
 {
 	struct xio_device *dev;
 
+	if (!rdma_hndl->cm_id)
+		return;
+
 	dev = xio_find_device(rdma_hndl->cm_id->verbs);
-	if (dev) {
-		ERROR_LOG("device releases, device not found\n");
+	if (!dev) {
+		ERROR_LOG("device release, device not found\n");
 		return;
 	}
 
@@ -2703,7 +2706,7 @@ static int xio_set_cpu_latency(int *fd)
 
 	DEBUG_LOG("setting latency to %d us\n", latency);
 	*fd = open("/dev/cpu_dma_latency", O_WRONLY);
-	if (fd < 0) {
+	if (*fd < 0) {
 		ERROR_LOG(
 		 "open /dev/cpu_dma_latency %m - need root permissions\n");
 		return -1;
