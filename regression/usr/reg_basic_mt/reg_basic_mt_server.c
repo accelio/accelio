@@ -100,7 +100,7 @@ struct server_data {
 /* portals_get								     */
 /*---------------------------------------------------------------------------*/
 static struct portals_vec *portals_get(struct server_data *server_data,
-				const char *uri, void *user_context)
+				       const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
 	int			i;
@@ -177,9 +177,9 @@ static void msg_obj_init(void *user_context, void *obj)
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_user_context)
+		      struct xio_msg *req,
+		      int more_in_batch,
+		      void *cb_user_context)
 {
 	struct thread_data	*tdata  = cb_user_context;
 	struct xio_buf		**iobuf = req->in.data_iov[0].user_context;
@@ -278,8 +278,8 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 /* on_send_rsp_complete							     */
 /*---------------------------------------------------------------------------*/
 static int on_send_rsp_complete(struct xio_session *session,
-			struct xio_msg *rsp,
-			void *cb_prv_data)
+				struct xio_msg *rsp,
+				void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
@@ -304,8 +304,8 @@ static int on_send_rsp_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *rsp,
-		void *cb_prv_data)
+		 enum xio_status error, struct xio_msg  *rsp,
+		 void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
@@ -506,8 +506,8 @@ static int on_session_teardown(struct xio_session *session,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 	int		   i;
@@ -543,8 +543,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;

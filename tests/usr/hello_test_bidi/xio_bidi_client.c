@@ -102,7 +102,7 @@ static struct xio_test_config  test_config = {
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt = 0;
+	static int cnt;
 
 	if (req == NULL) {
 		cnt = 0;
@@ -123,7 +123,7 @@ static void process_request(struct xio_msg *req)
 /*---------------------------------------------------------------------------*/
 static void process_response(struct xio_msg *rsp)
 {
-	static uint64_t cnt = 0;
+	static uint64_t cnt;
 	static int first_time = 1;
 	static uint64_t start_time;
 	static size_t	txlen, rxlen;

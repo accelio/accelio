@@ -376,7 +376,7 @@ static void usage(const char *argv0, int status)
 	       XIO_DEF_PORT);
 
 	printf("\t-r, --transport=<type> ");
-	       printf("\t\tUse rdma/tcp as transport <type> (default %s)\n",
+	printf("\t\tUse rdma/tcp as transport <type> (default %s)\n",
 	       XIO_DEF_TRANSPORT);
 
 	printf("\t-n, --header-len=<number> ");

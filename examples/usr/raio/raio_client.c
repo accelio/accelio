@@ -164,13 +164,13 @@ static void usage(const char *argv0)
 	printf("\n");
 	printf("options:\n");
 	printf("%s -a <server_addr> -p <port> -f <file_path>  " \
-	      "-b <block_size> -l <loops>\n",
+	       "-b <block_size> -l <loops>\n",
 	      argv0);
 
 	exit(0);
 }
 
-static void free_cmdline_params()
+static void free_cmdline_params(void)
 {
 	if (file_path) {
 		free(file_path);
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
 
 	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
 	fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
-		file_path, flags);
+		       file_path, flags);
 	if (fd == -1) {
 		fprintf(stderr, "raio_open failed - file:%s:%d/%s " \
 			"flags:%x %m\n", server_addr, server_port,
@@ -391,7 +391,7 @@ int main(int argc, char *argv[])
 				nsubmit = min(nqueued, IODEPTH-npending);
 				if (nsubmit) {
 					nsubmit = raio_submit(io_ctx,
-							nsubmit , piocb);
+							      nsubmit , piocb);
 					if (nsubmit <= 0) {
 						fprintf(
 						  stderr,
@@ -437,7 +437,8 @@ int main(int argc, char *argv[])
 							      events[i].obj);
 					}
 					retval = raio_release(io_ctx,
-							ncomplete, events);
+							      ncomplete,
+							      events);
 					if (retval == -1) {
 						fprintf(stderr,
 							"\nraio_release failed: fd:%d %m\n",

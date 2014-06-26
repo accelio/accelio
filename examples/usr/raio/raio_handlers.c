@@ -401,7 +401,8 @@ static int raio_handle_setup(void *prv_session_data,
 		cpd = &sd->pd[i];
 		cpd->iodepth = iodepth;
 		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
-		cpd->io_us_free = calloc(cpd->io_u_free_nr, sizeof(struct raio_io_u));
+		cpd->io_us_free = calloc(cpd->io_u_free_nr,
+					 sizeof(struct raio_io_u));
 		cpd->rsp_pool = msg_pool_alloc(cpd->io_u_free_nr, 0, 1);
 		TAILQ_INIT(&cpd->io_u_free_list);
 
@@ -544,7 +545,7 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 	io_u->rsp->out.header.iov_len = sizeof(struct raio_answer) +
 					2*sizeof(uint32_t);
 
-	if ( io_u->iocmd.op == RAIO_CMD_PREAD) {
+	if (io_u->iocmd.op == RAIO_CMD_PREAD) {
 		if (iocmd->res != iocmd->bcount) {
 			if (iocmd->res < iocmd->bcount) {
 				io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
@@ -609,12 +610,12 @@ static int raio_handle_submit(void *prv_session_data,
 	io_u->iocmd.op			= iocb.raio_lio_opcode;
 	io_u->iocmd.bcount		= iocb.u.c.nbytes;
 
-	if ( io_u->iocmd.op == RAIO_CMD_PWRITE) {
-		io_u->iocmd.buf			= req->in.data_iov[0].iov_base;
-		io_u->iocmd.mr			= req->in.data_iov[0].mr;
+	if (io_u->iocmd.op == RAIO_CMD_PWRITE) {
+		io_u->iocmd.buf		= req->in.data_iov[0].iov_base;
+		io_u->iocmd.mr		= req->in.data_iov[0].mr;
 	} else {
-		io_u->iocmd.buf			= io_u->rsp->out.data_iov[0].iov_base;
-		io_u->iocmd.mr			= io_u->rsp->out.data_iov[0].mr;
+		io_u->iocmd.buf		= io_u->rsp->out.data_iov[0].iov_base;
+		io_u->iocmd.mr		= io_u->rsp->out.data_iov[0].mr;
 	}
 	io_u->iocmd.fsize		= sd->fsize;
 	io_u->iocmd.offset		= iocb.u.c.offset;
@@ -681,8 +682,8 @@ static int raio_handle_submit_comp(void *prv_session_data,
 /* raio_handle_close_comp				                     */
 /*---------------------------------------------------------------------------*/
 static int raio_handle_close_comp(void *prv_session_data,
-				    void *prv_portal_data,
-				    struct xio_msg *rsp)
+				  void *prv_portal_data,
+				  struct xio_msg *rsp)
 {
 	struct raio_io_portal_data *pd = prv_portal_data;
 	int			    j;
@@ -710,9 +711,8 @@ static int raio_handle_close_comp(void *prv_session_data,
 /*---------------------------------------------------------------------------*/
 /* raio_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
-int raio_handler_on_req(void *prv_session_data,
-			 void *prv_portal_data,
-			 struct xio_msg *req)
+int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
+			struct xio_msg *req)
 {
 	char			*buffer = req->in.header.iov_base;
 	char			*cmd_data;

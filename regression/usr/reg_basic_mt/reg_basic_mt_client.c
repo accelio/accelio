@@ -334,8 +334,8 @@ static int on_session_teardown(struct xio_session *session,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct client_data *client_data = cb_user_context;
 	int			i;
@@ -368,8 +368,8 @@ static int on_session_event(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *req,
-		void *cb_user_context)
+			enum xio_status error, struct xio_msg  *req,
+			void *cb_user_context)
 {
 	struct connection_entry	*conn_entry	= cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
@@ -391,9 +391,9 @@ static int on_msg_error(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *rsp,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *rsp,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct connection_entry	*conn_entry	= cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
@@ -469,8 +469,8 @@ static int on_response(struct xio_session *session,
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
-			struct xio_new_session_rsp *rsp,
-			void *cb_user_context)
+				  struct xio_new_session_rsp *rsp,
+				  void *cb_user_context)
 {
 	DEBUG("client session event: session established. session:%p\n",
 	      session);

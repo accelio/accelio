@@ -255,7 +255,8 @@ static void usage(const char *prog, int error)
 	printf("\t-a address, --addr ipaddress	" \
 	       "Use the specified ip address\n");
 	printf("\t-p port, --port port	Use the specified port\n");
-	printf("\t-r transport, --trans transport	Transport type (rdma/tcp)\n");
+	printf("\t-r transport, --trans transport	" \
+	       "Transport type (rdma/tcp)\n");
 	printf("\t-h, --help		This help text\n");
 	printf("\t-d, --debug		Debug mode: don't fork, " \
 	       "log traffic to stdout\n");

@@ -127,7 +127,7 @@ static void process_response(struct thread_data  *tdata,
 {
 	if (++tdata->cnt == PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
-		printf("thread [%d] - tid:%p  - message: [%"PRIu64"] - %s\n",
+		printf("thread [%d] - tid:%p  - message: [%lu] - %s\n",
 		       tdata->affinity,
 		      (void *)pthread_self(),
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
@@ -142,8 +142,8 @@ static void process_response(struct thread_data  *tdata,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
 	int			i;
@@ -172,9 +172,9 @@ static int on_session_event(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *rsp,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *rsp,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
 
@@ -231,7 +231,8 @@ int main(int argc, char *argv[])
 	};
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
 		exit(1);
 	}
 

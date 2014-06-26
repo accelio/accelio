@@ -456,9 +456,9 @@ int main(int argc, char *argv[])
 
 		/* free the server */
 		xio_unbind(server);
-	}else{
+	} else {
 		printf("**** Error - xio_bind failed. %s\n",
-				xio_strerror(xio_errno()));
+		       xio_strerror(xio_errno()));
 		xio_assert(0);
 	}
 

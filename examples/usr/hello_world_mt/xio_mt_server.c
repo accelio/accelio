@@ -74,7 +74,7 @@ struct server_data {
 };
 
 static struct portals_vec *portals_get(struct server_data *server_data,
-				const char *uri, void *user_context)
+				       const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
 	int			i;
@@ -103,11 +103,7 @@ static void process_request(struct thread_data *tdata,
 			    struct xio_msg *req)
 {
 	if (++tdata->cnt == PRINT_COUNTER) {
-		if (req->in.header.iov_base)
-			((char *)
-			 (req->in.header.iov_base))[req->in.header.iov_len]
-			  = 0;
-		printf("thread [%d] tid:%p - message: [%"PRIu64"] - %s\n",
+		printf("thread [%d] tid:%p - message: [%lu] - %s\n",
 		       tdata->affinity,
 		       (void *)pthread_self(),
 		       (req->sn + 1), (char *)req->in.header.iov_base);
@@ -122,9 +118,9 @@ static void process_request(struct thread_data *tdata,
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_user_context)
+		      struct xio_msg *req,
+		      int more_in_batch,
+		      void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
@@ -221,8 +217,8 @@ cleanup:
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 	struct thread_data *tdata = event_data->conn_user_context;
@@ -258,8 +254,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;
@@ -297,7 +293,8 @@ int main(int argc, char *argv[])
 	uint16_t		port = atoi(argv[2]);
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
 		exit(1);
 	}
 

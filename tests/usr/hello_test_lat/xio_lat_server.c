@@ -224,8 +224,8 @@ int on_msg_error(struct xio_session *session,
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	static int first_time = 1;
-	static char *buf = NULL;
-	static struct xio_mr *mr = NULL;
+	static char *buf;
+	static struct xio_mr *mr;
 
 	msg->in.data_iovlen = 1;
 
@@ -437,9 +437,9 @@ int main(int argc, char *argv[])
 
 		/* free the server */
 		xio_unbind(server);
-	}else{
+	} else {
 		printf("**** Error - xio_bind failed. %s\n",
-				xio_strerror(xio_errno()));
+		       xio_strerror(xio_errno()));
 		xio_assert(0);
 	}
 

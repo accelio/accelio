@@ -66,7 +66,7 @@ static void process_response(struct session_data *session_data,
 {
 	if (++session_data->cnt == PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
-		printf("message: [%"PRIu64"] - %s\n",
+		printf("message: [%lu] - %s\n",
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		session_data->cnt = 0;
 	}
@@ -79,8 +79,8 @@ static void process_response(struct session_data *session_data,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
 
@@ -107,9 +107,9 @@ static int on_session_event(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *rsp,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *rsp,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
@@ -166,7 +166,8 @@ int main(int argc, char *argv[])
 	memset(&session_data, 0, sizeof(session_data));
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
 		exit(1);
 	}
 
@@ -183,7 +184,7 @@ int main(int argc, char *argv[])
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	session = xio_session_create(XIO_SESSION_CLIENT,
-				   &attr, url, 0, 0, &session_data);
+				     &attr, url, 0, 0, &session_data);
 
 	/* connect the session  */
 	session_data.conn = xio_connect(session, session_data.ctx,

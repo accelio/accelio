@@ -96,7 +96,7 @@ static struct xio_test_config  test_config = {
 /*---------------------------------------------------------------------------*/
 static void process_response(struct xio_msg *rsp)
 {
-	static uint64_t cnt = 0;
+	static uint64_t cnt;
 	static int first_time = 1;
 	static uint64_t start_time;
 	static size_t	txlen, rxlen;
@@ -154,7 +154,7 @@ static void process_response(struct xio_msg *rsp)
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt = 0;
+	static int cnt;
 
 	if (req == NULL) {
 		cnt = 0;
@@ -596,9 +596,9 @@ int main(int argc, char *argv[])
 
 		/* free the server */
 		xio_unbind(server);
-	}else{
+	} else {
 		printf("**** Error - xio_bind failed. %s\n",
-				xio_strerror(xio_errno()));
+		       xio_strerror(xio_errno()));
 		xio_assert(0);
 	}
 

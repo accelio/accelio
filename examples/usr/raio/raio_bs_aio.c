@@ -107,7 +107,7 @@ static TAILQ_HEAD(, raio_bs_aio_info) raio_aio_dev_list =
 /* raio_aio_iocb_prep							     */
 /*---------------------------------------------------------------------------*/
 static void raio_aio_iocb_prep(struct raio_bs_aio_info *info, int idx,
-		struct raio_io_cmd *cmd)
+			       struct raio_io_cmd *cmd)
 {
 	struct iocb *iocb = &info->iocb_arr[idx];
 
@@ -205,13 +205,13 @@ static void raio_aio_complete_one(struct io_event *ep)
 		if (((long)ep->res) < 0) {
 			fprintf(stderr, "completion error: %s - ",
 				strerror(-ep->res));
-			fprintf(stderr, "fd:%d, buf:%p, count:%"PRIu64", " \
-				"offset:%"PRId64"\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%lu, " \
+				"offset:%ld\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 		} else  {
-			fprintf(stderr, "fd:%d, buf:%p, count:%"PRIu64", " \
-				"offset:%"PRId64"\n",
+			fprintf(stderr, "fd:%d, buf:%p, count:%lu, " \
+				"offset:%ld\n",
 				cmd->fd, cmd->buf, cmd->bcount,
 				cmd->offset);
 			fprintf(stderr, "fd:%d missing bytes got %ld\n",
@@ -294,7 +294,7 @@ static int raio_bs_aio_init(struct raio_bs *dev)
 }
 
 /*---------------------------------------------------------------------------*/
-/* raio_bs_aio_open                                                           */
+/* raio_bs_aio_open                                                          */
 /*---------------------------------------------------------------------------*/
 static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 {
@@ -318,9 +318,9 @@ static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 	}
 
 	ret = xio_context_add_ev_handler(dev->ctx,
-		afd,
-		XIO_POLLIN,
-		raio_aio_get_completions, info);
+					 afd,
+					 XIO_POLLIN,
+					 raio_aio_get_completions, info);
 	if (ret)
 		goto close_eventfd;
 	info->evt_fd = afd;

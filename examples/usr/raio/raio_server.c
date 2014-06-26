@@ -190,7 +190,6 @@ static int on_response_comp(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static void raio_session_disconnect(struct raio_session_data *session_data)
 {
-
 	struct raio_connection_data	*connection_entry,
 					*tmp_connection_entry;
 	TAILQ_FOREACH_SAFE(connection_entry, &session_data->conns_list,
@@ -486,7 +485,8 @@ int main(int argc, char *argv[])
 	int			max_cpus;
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
 		exit(1);
 	}
 

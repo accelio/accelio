@@ -53,7 +53,7 @@
 /* raio_bs_null_cmd_submit						     */
 /*---------------------------------------------------------------------------*/
 int raio_bs_null_cmd_submit(struct raio_bs *dev,
-		       struct raio_io_cmd *cmd)
+			    struct raio_io_cmd *cmd)
 {
 	cmd->res = cmd->bcount;
 	cmd->res2 = 0;

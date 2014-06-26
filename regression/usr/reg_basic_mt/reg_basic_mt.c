@@ -41,15 +41,15 @@
 #include <pthread.h>
 #include "reg_utils.h"
 
-extern int client_main(int argc, char *argv[]);
-extern int server_main(int argc, char *argv[]);
+extern int client_main(int argc, const char *argv[]);
+extern int server_main(int argc, const char *argv[]);
 
 char  REG_DEBUG = 0;
 
 struct params {
-	int	argc;
-	int	pad;
-	char	**argv;
+	int		argc;
+	int		pad;
+	const char	**argv;
 };
 
 struct program_vars {
@@ -141,20 +141,7 @@ void rand_params(struct program_vars *vars)
 
 int main(int argc, char *argv[])
 {
-	char *argvv[] = {
-		argv[0],
-		argv[1],	/* address */
-		argv[2],	/* port	   */
-		"\0",		/* queue depth */
-		"\0",		/* client_threads num */
-		"\0",		/* server threads num */
-		"\0",		/* client dlen */
-		"\0",		/* server dlen */
-		"\0",		/* client disconnect nr */
-		"\0",		/* server disconnect nr */
-		"\0"
-	};
-
+	static const char *argvv[11] = { 0 };
 	int max_iterations = atoi(argv[3]);
 
 	struct params params  = {
@@ -163,11 +150,17 @@ int main(int argc, char *argv[])
 	};
 	pthread_t stid, ctid;
 	struct	 program_vars vars;
+
+	if (argc == 1)
+		return 0;
+
 	vars.test_num = 0;
 
 start:
 	rand_params(&vars);
-
+	argvv[0] = argv[0];
+	argvv[1] = argv[1];	/* address */
+	argvv[2] = argv[2];	/* port */
 	argvv[3] = vars.queue_depth;
 	argvv[4] = vars.client_threads_num;
 	argvv[5] = vars.server_threads_num;

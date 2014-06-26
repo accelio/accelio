@@ -56,8 +56,8 @@ struct multi_completion {
 #include "libxio.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
-MODULE_DESCRIPTION("XIO hello MT client "
-	   "v" DRV_VERSION " (" DRV_RELDATE ")");
+MODULE_DESCRIPTION("XIO hello MT client "	\
+		   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
 static char xio_ip[64];
@@ -89,7 +89,7 @@ struct session_data {
 	struct xio_session *session;
 	int on_cpu[MAX_THREADS];
 	struct thread_data *tdata[MAX_THREADS];
-	spinlock_t lock;
+	spinlock_t	lock;	/* session data lock */
 	u16		port;
 };
 
@@ -102,8 +102,9 @@ static void process_response(struct thread_data *tdata, struct xio_msg *rsp)
 {
 	if (++tdata->cnt == HW_PRINT_COUNTER) {
 		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
-		printk("message: [%llu] - %s\n",
-		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
+		pr_info("message: [%llu] - %s\n",
+			(rsp->request->sn + 1),
+			(char *)rsp->in.header.iov_base);
 		tdata->cnt = 0;
 	}
 	rsp->in.header.iov_base	 = NULL;
@@ -115,8 +116,8 @@ static void process_response(struct thread_data *tdata, struct xio_msg *rsp)
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct session_data *sdata;
 	struct thread_data *tdata;
@@ -124,17 +125,17 @@ static int on_session_event(struct xio_session *session,
 	struct xio_connection_attr attr;
 	int i;
 
-	sdata = (struct session_data *) cb_user_context;
+	sdata = (struct session_data *)cb_user_context;
 
-	printk("session event: %s. reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       xio_strerror(event_data->reason));
+	pr_info("session event: %s. reason: %s\n",
+		xio_session_event_str(event_data->event),
+		xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_query_connection(event_data->conn, &attr,
 				     XIO_CONNECTION_ATTR_USER_CTX);
-		tdata = (struct thread_data *) attr.user_context;
+		tdata = (struct thread_data *)attr.user_context;
 		spin_lock(&sdata->lock);
 		rcu_assign_pointer(tdata->connection, NULL);
 		spin_unlock(&sdata->lock);
@@ -180,7 +181,7 @@ static int on_response(struct xio_session *session,
 	struct xio_msg *req = rsp->user_context;
 	int ret = 0;
 
-	tdata = (struct thread_data *) cb_user_context;
+	tdata = (struct thread_data *)cb_user_context;
 
 	/* process the incoming message */
 	process_response(tdata, rsp);
@@ -221,13 +222,13 @@ static void xio_thread_down(void *data)
 	struct xio_connection *connection;
 	struct xio_context *ctx;
 
-	tdata = (struct thread_data *) data;
+	tdata = (struct thread_data *)data;
 	sdata = tdata->sdata;
 
 	/* NULL assignment is done with preemption disabled */
 	spin_lock(&sdata->lock);
 	connection = rcu_dereference_protected(tdata->connection,
-					lockdep_is_held(&sdata->lock));
+					       lockdep_is_held(&sdata->lock));
 	if (!connection) {
 		spin_unlock(&sdata->lock);
 		goto stop_loop_now;
@@ -270,12 +271,12 @@ static int xio_client_thread(void *data)
 
 	atomic_inc(&cleanup_complete.thread_count);
 
-	tdata = (struct thread_data *) data;
+	tdata = (struct thread_data *)data;
 	sdata = tdata->sdata;
 
 	/* no need to disable preemption */
 	cpu = raw_smp_processor_id();
-	tdata->req = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+	tdata->req = vzalloc_node(sizeof(*tdata->req) * QUEUE_DEPTH,
 				  cpu_to_node(cpu));
 	if (!tdata->req)
 		goto cleanup0;
@@ -297,7 +298,7 @@ static int xio_client_thread(void *data)
 	/* create thread context for the client */
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, cpu);
 	if (!ctx) {
-		printk("context open failed\n");
+		pr_err("context open failed\n");
 		goto cleanup1;
 	}
 
@@ -308,7 +309,7 @@ static int xio_client_thread(void *data)
 
 	connection = xio_connect(sdata->session, ctx, 0, NULL, tdata);
 	if (!connection) {
-		printk("connection create failed\n");
+		pr_err("connection create failed\n");
 		goto cleanup2;
 	}
 
@@ -325,7 +326,7 @@ static int xio_client_thread(void *data)
 	xio_context_run_loop(ctx);
 
 	/* normal exit phase */
-	printk("exit signaled\n");
+	pr_info("exit signaled\n");
 
 cleanup2:
 	spin_lock(&sdata->lock);
@@ -335,7 +336,7 @@ cleanup2:
 	/* free the context */
 	xio_context_destroy(ctx);
 
-	printk("good bye\n");
+	pr_info("good bye\n");
 
 cleanup1:
 	/* free the message */
@@ -347,10 +348,10 @@ cleanup1:
 cleanup0:
 	i = atomic_dec_return(&cleanup_complete.thread_count);
 	if (i == 0) {
-		printk("Last thread finished");
+		pr_info("Last thread finished");
 		wake_up_interruptible(&cleanup_complete.wq);
 	} else {
-		printk("Wait for additional %d threads", i);
+		pr_info("Wait for additional %d threads", i);
 	}
 
 	return 0;
@@ -380,7 +381,7 @@ static int init_threads(struct session_data *sdata)
 		struct thread_data *tdata;
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
-		tdata = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+		tdata = vzalloc_node(sizeof(*tdata) * QUEUE_DEPTH,
 				     cpu_to_node(cpu));
 		if (!tdata)
 			goto cleanup0;
@@ -395,7 +396,7 @@ static int init_threads(struct session_data *sdata)
 		sdata->tasks[i] = kthread_create(xio_client_thread,
 						sdata->tdata[i], name);
 		if (IS_ERR(sdata->tasks[i])) {
-			printk("kthread_create_on_cpu failed err=%ld\n",
+			pr_err("kthread_create_on_cpu failed err=%ld\n",
 			       PTR_ERR(sdata->tasks[i]));
 			goto cleanup1;
 		}
@@ -439,20 +440,20 @@ static int xio_client_main(void *data)
 	u16 port;
 	int ret = 0;
 
-	argv = (char **) data;
+	argv = (char **)data;
 
 	init_waitqueue_head(&cleanup_complete.wq);
 	atomic_set(&cleanup_complete.thread_count, 0);
 
 	if (kstrtou16(argv[2], 10, &port)) {
-		printk("invalid port number %s\n", argv[2]);
+		pr_err("invalid port number %s\n", argv[2]);
 		ret = -EINVAL;
 		goto cleanup0;
 	}
 
 	sdata = kzalloc(sizeof(*sdata), GFP_KERNEL);
 	if (!sdata) {
-		printk("session_data allocation failed\n");
+		pr_err("session_data allocation failed\n");
 		ret = -ENOMEM;
 		goto cleanup0;
 	}
@@ -466,13 +467,13 @@ static int xio_client_main(void *data)
 				     &session_attr, url, 0, 0, sdata);
 
 	if (!session) {
-		printk("session creation failed\n");
+		pr_err("session creation failed\n");
 		ret = -1;
 		goto cleanup1;
 	}
 
 	if (init_threads(sdata)) {
-		printk("init threads failed\n");
+		pr_err("init threads failed\n");
 		ret = -1;
 		goto cleanup2;
 	}
@@ -499,7 +500,7 @@ cleanup1:
 cleanup0:
 	complete_and_exit(&main_complete, ret);
 
-	printk("Main thread finished\n");
+	pr_info("Main thread finished\n");
 
 	/* routine is defined as int */
 	return ret;
@@ -516,7 +517,7 @@ static void down_threads(struct session_data *sdata)
 		tdata = sdata->tdata[i];
 		down_event = &tdata->down_event;
 		down_event->handler = xio_thread_down;
-		down_event->data = (void *) tdata;
+		down_event->data = (void *)tdata;
 		rcu_read_lock();
 		ctx = rcu_dereference(tdata->ctx);
 		if (ctx)
@@ -531,7 +532,8 @@ ssize_t add_url_show(struct kobject *kobj,
 		     struct kobj_attribute *attr,
 		     char *buf)
 {
-	return sprintf(buf, "%s %s %s\n", xio_argv[0], xio_argv[1], xio_argv[2]);
+	return sprintf(buf, "%s %s %s\n",
+		       xio_argv[0], xio_argv[1], xio_argv[2]);
 }
 
 ssize_t add_url_store(struct kobject *kobj,
@@ -543,7 +545,7 @@ ssize_t add_url_store(struct kobject *kobj,
 	int ret;
 
 	if (sscanf(buf, "%d.%d.%d.%d %d", &d1, &d2, &d3, &d4, &p) != 5) {
-		printk("wrong portal %s\n", buf);
+		pr_err("wrong portal %s\n", buf);
 		return -EINVAL;
 	}
 
@@ -559,7 +561,7 @@ ssize_t add_url_store(struct kobject *kobj,
 	th = kthread_run(xio_client_main, xio_argv, xio_argv[0]);
 	if (IS_ERR(th)) {
 		ret = PTR_ERR(th);
-		printk("Couldn't create new session ret=%d\n", ret);
+		pr_err("Couldn't create new session ret=%d\n", ret);
 		complete(&main_complete);
 		return ret;
 	}
@@ -653,8 +655,8 @@ static int __init xio_hello_init_module(void)
 	xio_port[0] = '\0';
 
 	if (create_sysfs_files()) {
-		printk("sysfs create failed\n");
-		ret= -ENOSYS;
+		pr_err("sysfs create failed\n");
+		ret = -ENOSYS;
 		goto cleanup0;
 	}
 

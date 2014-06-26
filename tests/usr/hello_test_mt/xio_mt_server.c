@@ -305,9 +305,9 @@ static void *portal_server_cb(void *data)
 	printf("thread [%d] - listen:%s\n", tdata->affinity, tdata->portal);
 	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
 			  NULL, 0, tdata);
-	if (server == NULL){
+	if (server == NULL) {
 		printf("**** Error - xio_bind failed. %s\n",
-								xio_strerror(xio_errno()));
+		       xio_strerror(xio_errno()));
 		xio_assert(0);
 		goto cleanup;
 	}
