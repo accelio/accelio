@@ -96,7 +96,7 @@ static int tokenize_host_port(char *token, char *host, uint16_t *port)
 /*---------------------------------------------------------------------------*/
 /* portals_arg_to_urls							     */
 /*---------------------------------------------------------------------------*/
-static char **portals_arg_to_urls(char *portals_arg, uint32_t *urls_vec_len)
+static char **portals_arg_to_urls(char *transport, char *portals_arg, uint32_t *urls_vec_len)
 {
 	char		*token;
 	char		delim[] = ";";
@@ -118,7 +118,7 @@ static char **portals_arg_to_urls(char *portals_arg, uint32_t *urls_vec_len)
 	while (token != NULL && n < 1024) {
 		if (tokenize_host_port(token, host, &port))
 			goto cleanup;
-		sprintf(url, "rdma://%s:%d", host, port);
+		sprintf(url, "%s://%s:%d", transport, host, port);
 		array[n] = strdup(url);
 		n++;
 
@@ -162,6 +162,9 @@ void usage(const char *argv0, int status)
 	printf("\t-n, --threads_number=<length> ");
 	printf("\t\t\tSet the maximum number of threads in test " \
 			"(default %d)\n", XIO_DEF_THREADS_NUM);
+
+	printf("\t-r, --transport=<type>");
+	printf("\t\t\t\tSet the transport type to rdma/tcp (default rdma)\n");
 
 	printf("\t-w, --portals={\"addr:port,addr:port,...\"}");
 	printf("\tSet address and port of each portal in server\n");
@@ -240,6 +243,7 @@ static void init_perf_params(struct perf_parameters *user_param)
 	user_param->verb		= XIO_VERB;
 	user_param->machine_type	= SERVER;
 	user_param->output_file		= NULL;
+	user_param->transport		= NULL;
 	user_param->portals_arr		= NULL;
 	user_param->portals_arr_len     = 0;
 	user_param->server_addr		= NULL;
@@ -250,6 +254,9 @@ static void init_perf_params(struct perf_parameters *user_param)
 /*---------------------------------------------------------------------------*/
 void destroy_perf_params(struct perf_parameters *user_param)
 {
+	if (user_param->transport)
+		free(user_param->transport);
+
 	if (user_param->portals_arr) {
 		int i;
 		for (i = 0; i < user_param->portals_arr_len; i++)
@@ -270,6 +277,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 		int argc, char **argv)
 {
 	int	max_cpus;
+	char	*portals = NULL;
 	long	l;
 
 	if (!user_param)
@@ -284,6 +292,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 			{ .name = "cpu",	 .has_arg = 1, .val = 'c'},
 			{ .name = "port",	 .has_arg = 1, .val = 'p'},
 			{ .name = "threads",	 .has_arg = 1, .val = 'n'},
+			{ .name = "transport",	 .has_arg = 1, .val = 'r'},
 			{ .name = "portals",	 .has_arg = 1, .val = 'w'},
 			{ .name = "poll_time",   .has_arg = 1, .val = 't'},
 			{ .name = "queue_depth", .has_arg = 1, .val = 'q'},
@@ -293,7 +302,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:t:q:o:vh";
+		static char *short_options = "c:p:n:r:w:t:q:o:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -342,17 +351,21 @@ int parse_cmdline(struct perf_parameters *user_param,
 				goto invalid_cmdline;
 			}
 			break;
-		case 'w':
-			if (optarg && !user_param->portals_arr) {
-				user_param->portals_arr =
-					portals_arg_to_urls(
-						optarg,
-						&user_param->portals_arr_len);
-				if (!user_param->portals_arr && *user_param->portals_arr) {
-					fprintf(stderr,
-						"failed to parse portals\n");
+		case 'r':
+			if (!optarg)
+				goto invalid_cmdline;
+
+			if (optarg && !user_param->transport) {
+				user_param->transport = strdup(optarg);
+				if (!user_param->transport)
 					goto invalid_cmdline;
-				}
+			}
+			break;
+		case 'w':
+			if (optarg && !portals && !user_param->portals_arr) {
+				portals = strdup(optarg);
+				if (!portals)
+					goto invalid_cmdline;
 			} else
 				goto invalid_cmdline;
 			break;
@@ -414,6 +427,23 @@ int parse_cmdline(struct perf_parameters *user_param,
 		goto invalid_cmdline;
 	}
 
+	if (!user_param->transport) {
+		user_param->transport = strdup(XIO_DEF_TRANSPORT);
+	}
+
+	if (portals && !user_param->portals_arr) {
+		user_param->portals_arr =
+				portals_arg_to_urls(
+						user_param->transport,
+						portals,
+						&user_param->portals_arr_len);
+		if (!user_param->portals_arr && *user_param->portals_arr) {
+			fprintf(stderr, "failed to parse portals\n");
+			goto invalid_cmdline;
+		}
+		free(portals);
+	}
+
 	if (force_dependencies(user_param))
 		goto invalid_cmdline;
 
@@ -440,6 +470,8 @@ void print_test_info(const struct perf_parameters *user_param)
 		       user_param->server_addr);
 	printf(" Server Port		: %d\n",
 	       user_param->server_port);
+	printf(" Transport Type		: %s\n",
+	       user_param->transport);
 	printf(" Test Type		: %s\n",
 	       test_type_str(user_param->test_type));
 	printf(" Queue Depth		: %d\n",

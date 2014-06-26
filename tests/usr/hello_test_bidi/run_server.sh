@@ -8,7 +8,7 @@ cd $DIR
 # Arguments Check
 if [ $# -lt 2 ]; then
         echo "[$0] Missing Parameters!"
-	echo "Usage: $0 Server-IP Port [0 for infinite run and 1 for finite. default is 0] [data_len. default=1024]"
+	echo "Usage: $0 Server-IP Port [0 for infinite run and 1 for finite. default is 0] [data_len. default=1024] [transport. default=rdma]"
         exit 1
 fi
 
@@ -31,5 +31,12 @@ else
 	data_len=$4
 fi
 
-./xio_bidi_server -c 1 -p ${port} -n 0 -w ${data_len} ${server_ip} -f ${finite_run}
+if [ -z "$5" ]
+then
+	trans="rdma"
+else
+	trans=$5
+fi
+
+./xio_bidi_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip} -f ${finite_run}
 

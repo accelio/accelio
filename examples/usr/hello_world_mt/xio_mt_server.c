@@ -296,6 +296,10 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		exit(1);
+	}
 
 	server_data = calloc(1, sizeof(*server_data));
 	if (!server_data)
@@ -307,7 +311,10 @@ int main(int argc, char *argv[])
 	server_data->ctx	= xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%d", argv[1], port);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%d", argv[3], argv[1], port);
+	else
+		sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data->ctx, &server_ops,
 			  url, NULL, 0, server_data);
@@ -319,8 +326,12 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data->tdata[i].affinity = i+1;
 		port += 1;
-		sprintf(server_data->tdata[i].portal, "rdma://%s:%d",
-			argv[1], port);
+		if (argc > 3)
+			sprintf(server_data->tdata[i].portal, "%s://%s:%d",
+				argv[3], argv[1], port);
+		else
+			sprintf(server_data->tdata[i].portal, "rdma://%s:%d",
+				argv[1], port);
 		pthread_create(&server_data->tdata[i].thread_id, NULL,
 			       portal_server_cb, &server_data->tdata[i]);
 	}

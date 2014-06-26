@@ -8,7 +8,7 @@ cd $DIR
 # Arguments Check
 if [ $# -lt 2 ]; then
         echo "[$0] Missing Parameters!"
-        echo "Usage: $0 Server-IP Port [data_len. default=1024]"
+        echo "Usage: $0 Server-IP Port [data_len. default=1024] [transport. default=rdma]"
         exit 1
 fi
 
@@ -27,6 +27,13 @@ else
 	data_len=$3
 fi
 
-./xio_server -c ${core} -p ${port} -n ${hdrlen} -w ${data_len}	-l ${ovec} ${server_ip}
+if [ -z "$4" ]
+then
+	trans="rdma"
+else
+	trans=$4
+fi
+
+./xio_server -c ${core} -p ${port} -r ${trans} -n ${hdrlen} -w ${data_len}	-l ${ovec} ${server_ip}
 
 

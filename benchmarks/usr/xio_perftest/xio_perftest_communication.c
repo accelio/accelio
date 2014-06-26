@@ -236,7 +236,8 @@ int establish_connection(struct perf_comm *comm)
 	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
 
 	if (comm->user_param->machine_type == SERVER) {
-		sprintf(url, "rdma://*:%d", CONFIG_PORT);
+		sprintf(url, "%s://*:%d",
+		        comm->user_param->transport, CONFIG_PORT);
 
 		/* bind a listener server to a portal/url */
 		comm->control_ctx->server = xio_bind(comm->control_ctx->ctx,
@@ -245,7 +246,8 @@ int establish_connection(struct perf_comm *comm)
 		if (!comm->control_ctx->server)
 			fprintf(stderr, "failed to bind server\n");
 	} else {
-		sprintf(url, "rdma://%s:%d",
+		sprintf(url, "%s://%s:%d",
+			comm->user_param->transport,
 			comm->user_param->server_addr, CONFIG_PORT);
 
 		/* create url to connect to */

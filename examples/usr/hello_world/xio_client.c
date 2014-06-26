@@ -165,6 +165,11 @@ int main(int argc, char *argv[])
 	};
 	memset(&session_data, 0, sizeof(session_data));
 
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		exit(1);
+	}
+
 	/* initialize library */
 	xio_init();
 
@@ -173,7 +178,10 @@ int main(int argc, char *argv[])
 
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
+	else
+		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	session = xio_session_create(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, &session_data);
 

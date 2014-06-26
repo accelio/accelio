@@ -485,6 +485,11 @@ int main(int argc, char *argv[])
 	int			curr_cpu;
 	int			max_cpus;
 
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
+		exit(1);
+	}
+
 	xio_init();
 
 	curr_cpu = sched_getcpu();
@@ -498,7 +503,10 @@ int main(int argc, char *argv[])
 	server_data.ctx	= xio_context_create(NULL, 0, curr_cpu);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%d", argv[1], port);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%d", argv[3], argv[1], port);
+	else
+		sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
 			  url, NULL, 0, &server_data);
@@ -514,8 +522,12 @@ int main(int argc, char *argv[])
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
 		port += 1;
-		sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
-			argv[1], port);
+		if (argc > 3)
+			sprintf(server_data.tdata[i].portal, "%s://%s:%d",
+				argv[3], argv[1], port);
+		else
+			sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
+				argv[1], port);
 		pthread_create(&server_data.thread_id[i], NULL,
 			       portal_server_cb, &server_data.tdata[i]);
 	}

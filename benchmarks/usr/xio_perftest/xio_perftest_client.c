@@ -461,7 +461,9 @@ int run_client_test(struct perf_parameters *user_param)
 
 		ctx_write_data(comm, &command, sizeof(command));
 
-		sprintf(url, "rdma://%s:%d", user_param->server_addr,
+		sprintf(url, "%s://%s:%d",
+			user_param->transport,
+			user_param->server_addr,
 			user_param->server_port);
 		sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
 				&attr, url, 0, 0, &sess_data);

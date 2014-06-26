@@ -51,6 +51,7 @@
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
+#define XIO_DEF_TRANSPORT	"rdma"
 #define XIO_DEF_HEADER_SIZE	32
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
@@ -62,6 +63,7 @@
 struct xio_test_config {
 	char			server_addr[32];
 	uint16_t		server_port;
+	char			transport[16];
 	uint16_t		cpu;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
@@ -80,6 +82,7 @@ static struct msg_params	msg_params;
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
 	XIO_DEF_PORT,
+	XIO_DEF_TRANSPORT,
 	XIO_DEF_CPU,
 	XIO_DEF_HEADER_SIZE,
 	XIO_DEF_DATA_SIZE
@@ -274,6 +277,10 @@ static void usage(const char *argv0, int status)
 	printf("\t\tListen on port <port> (default %d)\n",
 	       XIO_DEF_PORT);
 
+	printf("\t-r, --transport=<type> ");
+	printf("\t\tUse rdma/tcp as transport <type> (default %s)\n",
+	       XIO_DEF_TRANSPORT);
+
 	printf("\t-n, --header-len=<number> ");
 	printf("\tSet the header length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_HEADER_SIZE);
@@ -306,6 +313,7 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 		static struct option const long_options[] = {
 			{ .name = "core",	.has_arg = 1, .val = 'c'},
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
+			{ .name = "transport",	.has_arg = 1, .val = 'r'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "finite",	.has_arg = 1, .val = 'f'},
@@ -314,7 +322,7 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:f:svh";
+		static char *short_options = "c:p:r:n:w:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -329,6 +337,9 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 		case 'p':
 			test_config->server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
+			break;
+		case 'r':
+			strcpy(test_config->transport, optarg);
 			break;
 		case 'n':
 			test_config->hdr_len =
@@ -379,6 +390,7 @@ static void print_test_config(
 	printf(" =============================================\n");
 	printf(" Server Address		: %s\n", test_config_p->server_addr);
 	printf(" Server Port		: %u\n", test_config_p->server_port);
+	printf(" Transport		: %s\n", test_config_p->transport);
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
@@ -410,7 +422,9 @@ int main(int argc, char *argv[])
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
 
-	sprintf(url, "rdma://%s:%d", test_config.server_addr,
+	sprintf(url, "%s://%s:%d",
+		test_config.transport,
+		test_config.server_addr,
 		test_config.server_port);
 
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, NULL);

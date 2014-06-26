@@ -237,6 +237,7 @@ static void signal_handler(int sig)
 static struct option longopts[] = {
 	{ "addr",	required_argument,	NULL, 'a' },
 	{ "port",	required_argument,	NULL, 'p' },
+	{ "transport",	required_argument,	NULL, 'r' },
 	{ "help",	no_argument,		NULL, 'h' },
 	{ "debug",	no_argument,		NULL, 'd' },
 	{ "nofork",	no_argument,		NULL, 'n' },
@@ -254,6 +255,7 @@ static void usage(const char *prog, int error)
 	printf("\t-a address, --addr ipaddress	" \
 	       "Use the specified ip address\n");
 	printf("\t-p port, --port port	Use the specified port\n");
+	printf("\t-r transport, --trans transport	Transport type (rdma/tcp)\n");
 	printf("\t-h, --help		This help text\n");
 	printf("\t-d, --debug		Debug mode: don't fork, " \
 	       "log traffic to stdout\n");
@@ -329,6 +331,7 @@ int main(int argc, char *const argv[])
 	int			c;
 	char			*addr = NULL;
 	char			*port = NULL;
+	char			*trans = NULL;
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -338,7 +341,7 @@ int main(int argc, char *const argv[])
 	};
 
 	while (1) {
-		c = getopt_long(argc, argv, "a:p:hdnV", longopts, NULL);
+		c = getopt_long(argc, argv, "a:p:r:hdnV", longopts, NULL);
 		if (c == -1)
 			break;
 
@@ -348,6 +351,9 @@ int main(int argc, char *const argv[])
 			break;
 		case 'p':
 			port = optarg;
+			break;
+		case 'r':
+			trans = optarg;
 			break;
 		case 'h':
 			usage(argv[0], 0);
@@ -418,7 +424,10 @@ int main(int argc, char *const argv[])
 	session_data.ctx = xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%s", addr, port);
+	if (trans)
+		sprintf(url, "%s://%s:%s", trans, addr, port);
+	else
+		sprintf(url, "rdma://%s:%s", addr, port);
 
 reconnect:
 	session = xio_session_create(XIO_SESSION_CLIENT,

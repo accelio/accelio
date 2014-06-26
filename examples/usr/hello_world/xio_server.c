@@ -207,8 +207,8 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			i;
 
-	if (argc < 2) {
-		printf("Usage: %s <host> <port>\n", argv[0]);
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\n", argv[0]);
 		exit(1);
 	}
 
@@ -229,7 +229,10 @@ int main(int argc, char *argv[])
 
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
+	else
+		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops, url, NULL, 0, &server_data);
 	if (server) {
