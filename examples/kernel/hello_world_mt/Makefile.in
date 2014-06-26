@@ -41,13 +41,13 @@ uninstall-y:
 	-/sbin/depmod -a
 
 clean:
-	-rm -f $(xiomodule1) *.o .*.cmd *.mod.c *.ko *.s */*.o
-	-rm -f $(xiomodule2) *.o .*.cmd *.mod.c *.ko *.s */*.o
+	-rm -f $(xiomodule1) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-rm -f $(xiomodule2) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
 
 distclean: clean
-	rm -f Makefile
+	rm -f Makefile configure config.status
 	rm -f config.h config.log config.status config.cache
-	rm -rf .tmp_versions
+	rm -rf .tmp_versions autom4te.cache
 
 maintainer-clean: distclean
 
