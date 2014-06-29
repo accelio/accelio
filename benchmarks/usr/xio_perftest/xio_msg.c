@@ -64,6 +64,7 @@ uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 {
 	int shmemid;
 	uint8_t *buf;
+	int	pagesz;
 
 	/* allocate memory */
 	shmemid = shmget(IPC_PRIVATE, pool_size,
@@ -100,7 +101,15 @@ uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 
 failed_huge_page:
 	*shmid = -1;
-	return memalign(sysconf(_SC_PAGESIZE), pool_size);
+		pagesz = sysconf(_SC_PAGESIZE);
+	if (pagesz < 0)
+		return NULL;
+
+	buf = memalign(pagesz, pool_size);
+	if (!buf)
+		return NULL;
+
+	return buf;
 }
 
 /*---------------------------------------------------------------------------*/

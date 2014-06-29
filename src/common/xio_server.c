@@ -92,6 +92,7 @@ static int xio_on_new_message(struct xio_server *server,
 {
 	struct xio_session		*session = NULL;
 	struct xio_connection		*connection = NULL;
+	struct xio_connection		*connection1 = NULL;
 	struct xio_task			*task;
 	struct xio_session_attr		attr = { 0 };
 	uint32_t			tlv_type;
@@ -137,11 +138,12 @@ static int xio_on_new_message(struct xio_server *server,
 			ERROR_LOG("server failed to allocate new connection\n");
 			goto cleanup;
 		}
-		connection = xio_session_assign_nexus(session, nexus);
-		if (!connection) {
+		connection1 = xio_session_assign_nexus(session, nexus);
+		if (!connection1) {
 			ERROR_LOG("server failed to assign new connection\n");
 			goto cleanup1;
 		}
+		connection = connection1;
 
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
@@ -170,11 +172,12 @@ static int xio_on_new_message(struct xio_server *server,
 			ERROR_LOG("server failed to allocate new connection\n");
 			goto cleanup;
 		}
-		connection = xio_session_assign_nexus(task->session, nexus);
+		connection1 = xio_session_assign_nexus(task->session, nexus);
 		if (!connection) {
 			ERROR_LOG("server failed to assign new connection\n");
 			goto cleanup1;
 		}
+		connection = connection1;
 
 		/* copy the server attributes to the connection */
 		xio_connection_set_ops(connection, &server->ops);

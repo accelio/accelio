@@ -378,7 +378,7 @@ int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 	return 0;
 
 cleanup:
-	if (comm->control_ctx->reply) {
+	if (comm && comm->control_ctx && comm->control_ctx->reply) {
 		xio_release_msg(comm->control_ctx->reply);
 		comm->control_ctx->reply = NULL;
 	}

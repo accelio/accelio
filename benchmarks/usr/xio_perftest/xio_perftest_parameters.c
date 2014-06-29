@@ -437,7 +437,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 						user_param->transport,
 						portals,
 						&user_param->portals_arr_len);
-		if (!user_param->portals_arr && *user_param->portals_arr) {
+		if (!user_param->portals_arr || !*user_param->portals_arr) {
 			fprintf(stderr, "failed to parse portals\n");
 			goto invalid_cmdline;
 		}
