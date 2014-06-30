@@ -53,7 +53,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	int		s = 0;
 	struct addrinfo hints;
 	struct addrinfo *result;
-	socklen_t	ss_len;
+	socklen_t	ss_len = -1;
 	int		retval = 0;
 
 	/*
@@ -148,7 +148,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 cleanup:
 	freeaddrinfo(result);
 
-	return retval;
+	return ss_len;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -164,7 +164,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	int		len;
 	struct addrinfo hints;
 	struct addrinfo *result;
-	socklen_t	ss_len;
+	socklen_t	ss_len = -1;
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
@@ -264,7 +264,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	}
 	freeaddrinfo(result);
 
-	return 0;
+	return ss_len;
 }
 
 /*
