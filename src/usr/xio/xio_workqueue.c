@@ -383,6 +383,12 @@ int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
 	int			retval = 0;
 	enum timers_list_rc	rc;
 
+	if (!xio_is_delayed_work_pending(dwork)) {
+		ERROR_LOG("work not pending\n");
+		xio_set_error(EEXIST);
+		return -1;
+	}
+
 	/* stop the timer */
 	xio_workqueue_disarm(work_queue);
 
