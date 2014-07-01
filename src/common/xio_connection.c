@@ -1770,6 +1770,12 @@ int xio_connection_disconnected(struct xio_connection *connection)
 			connection->session, connection,
 			connection->close_reason);
 
+	/* flush all messages from in flight message queue to in queue */
+	xio_connection_flush_msgs(connection);
+
+	/* flush all messages back to user */
+	xio_connection_notify_msgs_flush(connection);
+
 	if (connection->nexus) {
 		if (connection->session->lead_connection &&
 		    connection->session->lead_connection->nexus == connection->nexus)
@@ -1777,15 +1783,10 @@ int xio_connection_disconnected(struct xio_connection *connection)
 		if (connection->session->redir_connection &&
 		    connection->session->redir_connection->nexus == connection->nexus)
 		connection->session->redir_connection = NULL;
+		/* free nexus and tasks pools */
 		xio_nexus_close(connection->nexus,
 			       &connection->session->observer);
 	}
-
-	/* flush all messages from in flight message queue to in queue */
-	xio_connection_flush_msgs(connection);
-
-	/* flush all messages back to user */
-	xio_connection_notify_msgs_flush(connection);
 
 	xio_session_notify_connection_teardown(connection->session, connection);
 
