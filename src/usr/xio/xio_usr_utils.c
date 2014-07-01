@@ -54,7 +54,6 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	struct addrinfo hints;
 	struct addrinfo *result;
 	socklen_t	ss_len = -1;
-	int		retval = 0;
 
 	/*
 	 * [host]:port, [host]:, [host].
@@ -127,7 +126,6 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	}
 	if (result->ai_next) {
 		ERROR_LOG("more then one address is matched\n");
-		retval = -1;
 		goto cleanup;
 	}
 	switch (result->ai_family) {
@@ -141,7 +139,6 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		break;
 	default:
 		ERROR_LOG("unknown family :%d\n", result->ai_family);
-		retval = -1;
 		break;
 
 	}
