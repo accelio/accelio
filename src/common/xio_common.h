@@ -142,6 +142,12 @@ struct xio_options {
 	int			max_out_iovsz;
 };
 
+struct xio_sge {
+	uint64_t		addr;		/* virtual address */
+	uint32_t		length;		/* length	   */
+	uint32_t		stag;		/* rkey		   */
+};
+
 /*---------------------------------------------------------------------------*/
 /* message headers							     */
 /*---------------------------------------------------------------------------*/

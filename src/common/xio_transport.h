@@ -307,6 +307,12 @@ static inline void xio_transport_notify_message_error(
 					    &ev_data);
 }
 
+int xio_transport_flush_task_list(struct list_head *list);
+
+int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
+				struct xio_task *task,
+				int *is_assigned);
+
 /*---------------------------------------------------------------------------*/
 /* xio_reg_transport			                                     */
 /*---------------------------------------------------------------------------*/

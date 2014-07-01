@@ -4,7 +4,8 @@
 AM_CFLAGS = -fPIC -DPIC  			\
 	    -I$(top_srcdir)/src/usr 		\
 	    -I$(top_srcdir)/src/usr/xio		\
-	    -I$(top_srcdir)/src/usr/rdma	\
+	    -I$(top_srcdir)/src/usr/transport	\
+	    -I$(top_srcdir)/src/usr/transport/rdma	\
 	    -I$(top_srcdir)/src/common  	\
 	    -I$(top_srcdir)/include		\
 	    @AM_CFLAGS@
@@ -38,9 +39,10 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./xio/xio_tls.h				\
 			./xio/xio_timers_list.h			\
 			./xio/xio_ev_loop.h			\
-			./rdma/xio_rdma_mempool.h		\
-			./rdma/xio_rdma_transport.h		\
-			./rdma/xio_rdma_utils.h			\
+			./transport/xio_transport_mempool.h	\
+			./transport/xio_usr_transport.h		\
+			./transport/rdma/xio_rdma_transport.h	\
+			./transport/rdma/xio_rdma_utils.h	\
 			../common/xio_workqueue.h		\
 			../common/xio_workqueue_priv.h		\
 			../common/xio_common.h			\
@@ -84,11 +86,12 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
 			./xio/xio_workqueue.c		\
-			./rdma/xio_rdma_mempool.c	\
-			./rdma/xio_rdma_utils.c		\
-			./rdma/xio_rdma_verbs.c		\
-			./rdma/xio_rdma_management.c	\
-			./rdma/xio_rdma_datapath.c	\
+			./transport/rdma/xio_rdma_utils.c	\
+			./transport/rdma/xio_rdma_verbs.c	\
+			./transport/rdma/xio_rdma_management.c	\
+			./transport/rdma/xio_rdma_datapath.c	\
+			./transport/xio_transport_mempool.c	\
+			./transport/xio_usr_transport.c	\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\

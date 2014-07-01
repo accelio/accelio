@@ -48,7 +48,7 @@
 #include "xio_protocol.h"
 #include "get_clock.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_transport_mempool.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
 #include "xio_ev_loop.h"
@@ -703,74 +703,6 @@ static void xio_device_list_release(int del_fd)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rmda_mempool_array_init						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_mempool_array_init()
-{
-	long cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
-	if (cpus_nr < 0) {
-		xio_set_error(errno);
-		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
-
-
-	/* free devices */
-	mempool_array_len = 0;
-	mempool_array = ucalloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
-	if (mempool_array == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
-	mempool_array_len = cpus_nr;
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_array_release					     */
-/*---------------------------------------------------------------------------*/
-static void xio_rdma_mempool_array_release()
-{
-	int i;
-
-	for (i = 0; i < mempool_array_len; i++) {
-		if (mempool_array[i]) {
-			xio_mempool_destroy(mempool_array[i]);
-			mempool_array[i] = NULL;
-		}
-	}
-	ufree(mempool_array);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_array_get						     */
-/*---------------------------------------------------------------------------*/
-static struct xio_mempool *xio_rdma_mempool_array_get(
-		struct xio_context *ctx)
-{
-	if (ctx->nodeid > mempool_array_len) {
-		ERROR_LOG("xio_rdma_mempool_create failed. array overflow\n");
-		return NULL;
-	}
-	if (mempool_array[ctx->nodeid])
-		return mempool_array[ctx->nodeid];
-
-	mempool_array[ctx->nodeid] = xio_mempool_create(
-			ctx->nodeid,
-			XIO_MEMPOOL_FLAG_REG_MR |
-			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);
-
-	if (!mempool_array[ctx->nodeid]) {
-		ERROR_LOG("xio_mempool_create failed " \
-			  "(errno=%d %m)\n", errno);
-		return NULL;
-	}
-	return mempool_array[ctx->nodeid];
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_cm_channel_release						     */
 /*---------------------------------------------------------------------------*/
 static void xio_cm_channel_release(struct xio_cm_channel *channel)
@@ -1056,69 +988,47 @@ static void xio_rdma_task_init(struct xio_task *task,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_flush_task_list						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_flush_task_list(struct xio_rdma_transport *rdma_hndl,
-				    struct list_head *list)
-{
-	struct xio_task *ptask, *next_ptask;
-
-	list_for_each_entry_safe(ptask, next_ptask, list,
-				 tasks_list_entry) {
-		TRACE_LOG("flushing task %p type 0x%x\n",
-			  ptask, ptask->tlv_type);
-		if (ptask->sender_task) {
-			xio_tasks_pool_put(ptask->sender_task);
-			ptask->sender_task = NULL;
-		}
-		xio_tasks_pool_put(ptask);
-	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 {
 	if (!list_empty(&rdma_hndl->in_flight_list)) {
 		TRACE_LOG("in_flight_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
+		xio_transport_flush_task_list(&rdma_hndl->in_flight_list);
 		/* for task that attached to senders with ref count = 2 */
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
+		xio_transport_flush_task_list(&rdma_hndl->in_flight_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rdma_rd_in_flight_list)) {
 		TRACE_LOG("rdma_rd_in_flight_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl,
+		xio_transport_flush_task_list(
 					 &rdma_hndl->rdma_rd_in_flight_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rdma_rd_list)) {
 		TRACE_LOG("rdma_rd_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->rdma_rd_list);
+		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_list);
 	}
 
 	if (!list_empty(&rdma_hndl->tx_comp_list)) {
 		TRACE_LOG("tx_comp_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_comp_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_comp_list);
 	}
 	if (!list_empty(&rdma_hndl->io_list)) {
 		TRACE_LOG("io_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->io_list);
+		xio_transport_flush_task_list(&rdma_hndl->io_list);
 	}
 
 	if (!list_empty(&rdma_hndl->tx_ready_list)) {
 		TRACE_LOG("tx_ready_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_ready_list);
 		/* for task that attached to senders with ref count = 2 */
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_ready_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rx_list)) {
 		TRACE_LOG("rx_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->rx_list);
+		xio_transport_flush_task_list(&rdma_hndl->rx_list);
 	}
 
 	rdma_hndl->kick_rdma_rd = 0;
@@ -2167,7 +2077,11 @@ static struct xio_transport_base *xio_rdma_open(
 	XIO_OBSERVABLE_INIT(&rdma_hndl->base.observable, rdma_hndl);
 
 	if (rdma_options.enable_mem_pool) {
-		rdma_hndl->rdma_mempool = xio_rdma_mempool_array_get(ctx);
+		rdma_hndl->rdma_mempool =
+			xio_transport_mempool_array_get(ctx,
+							mempool_array,
+							mempool_array_len,
+							1);
 		if (rdma_hndl->rdma_mempool == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("allocating rdma mempool failed. %m\n");
@@ -2752,7 +2666,7 @@ static void xio_rdma_init()
 	/* storage for all memory registrations */
 	xio_mr_list_init();
 
-	xio_rdma_mempool_array_init();
+	xio_transport_mempool_array_init(&mempool_array, &mempool_array_len);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2773,7 +2687,7 @@ static void xio_rdma_release()
 	if (cdl_fd >= 0)
 		close(cdl_fd);
 
-	xio_rdma_mempool_array_release();
+	xio_transport_mempool_array_release(mempool_array, mempool_array_len);
 
 	/* free all redundant registered memory */
 	xio_mr_list_free();

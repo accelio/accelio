@@ -35,102 +35,88 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include "xio_task.h"
+
+#include "libxio.h"
+#include "xio_common.h"
 #include "xio_observer.h"
+#include "xio_context.h"
+#include "xio_task.h"
 #include "xio_transport.h"
+#include "xio_protocol.h"
+#include "xio_mem.h"
+#include "xio_usr_transport.h"
+#include "xio_common.h"
 
 /*---------------------------------------------------------------------------*/
-/* globals								     */
+/* xio_transport_mempool_array_init					     */
 /*---------------------------------------------------------------------------*/
-static LIST_HEAD(transports_list);
-
-
-/*---------------------------------------------------------------------------*/
-/* xio_reg_transport							     */
-/*---------------------------------------------------------------------------*/
-int xio_reg_transport(struct xio_transport *transport)
+int xio_transport_mempool_array_init(struct xio_mempool
+				     ***mempool_array,
+				     int *mempool_array_len)
 {
-	list_add(&transport->transports_list_entry, &transports_list);
+	long cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
+	if (cpus_nr < 0) {
+		xio_set_error(errno);
+		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
+		return -1;
+	}
+
+
+	/* free devices */
+	*mempool_array_len = 0;
+	*mempool_array = ucalloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
+	if (*mempool_array == NULL) {
+		xio_set_error(errno);
+		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
+		return -1;
+	}
+	*mempool_array_len = cpus_nr;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_unreg_transport						     */
+/* xio_transport_mempool_array_release					     */
 /*---------------------------------------------------------------------------*/
-void xio_unreg_transport(struct xio_transport *transport)
+void xio_transport_mempool_array_release(struct xio_mempool
+						**mempool_array,
+						int mempool_array_len)
 {
-	list_del(&transport->transports_list_entry);
+	int i;
+
+	for (i = 0; i < mempool_array_len; i++) {
+		if (mempool_array[i]) {
+			xio_mempool_destroy(mempool_array[i]);
+			mempool_array[i] = NULL;
+		}
+	}
+	ufree(mempool_array);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_get_transport							     */
+/* xio_transport_mempool_array_get					     */
 /*---------------------------------------------------------------------------*/
-struct xio_transport *xio_get_transport(const char *name)
+struct xio_mempool *xio_transport_mempool_array_get(
+		struct xio_context *ctx,
+		struct xio_mempool **mempool_array,
+		int mempool_array_len,
+		int reg_mr)
 {
-	struct xio_transport	*transport;
-	int			found = 0;
-
-	list_for_each_entry(transport, &transports_list,
-			    transports_list_entry) {
-		if (!strcmp(name, transport->name)) {
-			found = 1;
-			break;
-		}
-	}
-	if (!found)
+	if (ctx->nodeid > mempool_array_len) {
+		ERROR_LOG("xio_rdma_mempool_create failed. array overflow\n");
 		return NULL;
-
-	/* lazy initialization of transport */
-	if (transport->init) {
-		int retval = transport->init(transport);
-		if (retval != 0) {
-			ERROR_LOG("%s transport initialization failed.\n",
-				  name);
-			return NULL;
-		}
 	}
+	if (mempool_array[ctx->nodeid])
+		return mempool_array[ctx->nodeid];
 
-	return transport;
-}
+	mempool_array[ctx->nodeid] = xio_mempool_create(
+			ctx->nodeid,
+			(reg_mr ? XIO_MEMPOOL_FLAG_REG_MR : 0) |
+			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);
 
-/*---------------------------------------------------------------------------*/
-/* xio_transport_flush_task_list					     */
-/*---------------------------------------------------------------------------*/
-int xio_transport_flush_task_list(struct list_head *list)
-{
-	struct xio_task *ptask, *next_ptask;
-
-	list_for_each_entry_safe(ptask, next_ptask, list,
-				 tasks_list_entry) {
-		TRACE_LOG("flushing task %p type 0x%x\n",
-			  ptask, ptask->tlv_type);
-		if (ptask->sender_task) {
-			xio_tasks_pool_put(ptask->sender_task);
-			ptask->sender_task = NULL;
-		}
-		xio_tasks_pool_put(ptask);
+	if (!mempool_array[ctx->nodeid]) {
+		ERROR_LOG("xio_mempool_create failed (errno=%d %m)\n", errno);
+		return NULL;
 	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_transport_notify_assign_in_buf					     */
-/*---------------------------------------------------------------------------*/
-int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
-				struct xio_task *task, int *is_assigned)
-{
-	union xio_transport_event_data event_data = {
-			.assign_in_buf.task	   = task,
-			.assign_in_buf.is_assigned = 0
-	};
-
-	xio_transport_notify_observer(trans_hndl,
-				      XIO_TRANSPORT_ASSIGN_IN_BUF,
-				      &event_data);
-
-	*is_assigned = event_data.assign_in_buf.is_assigned;
-	return 0;
+	return mempool_array[ctx->nodeid];
 }

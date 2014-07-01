@@ -38,8 +38,7 @@
 #ifndef XIO_RDMA_TRANSPORT_H
 #define XIO_RDMA_TRANSPORT_H
 
-#include "xio_transport.h"
-#include "xio_context.h"
+#include "xio_usr_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -57,8 +56,6 @@ extern struct list_head		dev_list;
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_SGE				(XIO_IOVLEN + 1)
-
 #define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
@@ -66,20 +63,10 @@ extern struct list_head		dev_list;
 #define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR)
 #define CQE_ALLOC_SIZE			(10*(MAX_SEND_WR+MAX_RECV_WR))
 
-#define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			9216
-#define MAX_HDR_SZ			512
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
 #define MAX_NUM_DELAYED_ARM		16
 
-#define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
-					   * one for reply tx
-					   */
-#define CONN_SETUP_BUF_SIZE		4096
-
-#define NUM_START_PRIMARY_POOL_TASKS	32
-#define NUM_ALLOC_PRIMARY_POOL_TASKS	256
 #define NUM_START_PHANTOM_POOL_TASKS	0
 #define NUM_ALLOC_PHANTOM_POOL_TASKS	256
 #define NUM_MAX_PHANTOM_POOL_TASKS	32768
@@ -92,47 +79,10 @@ extern struct list_head		dev_list;
 /* see if a pointer is page aligned. */
 #define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)(ptr)) == 0)
 
-#define USECS_IN_SEC			1000000
-#define NSECS_IN_USEC			1000
-
-#define VALIDATE_SZ(sz)	do {			\
-		if (optlen != (sz)) {		\
-			xio_set_error(EINVAL);	\
-			return -1;		\
-		}				\
-	} while (0)
-
-
 #define XIO_TO_RDMA_TASK(xt, rt)			\
 		struct xio_rdma_task *(rt) =		\
 			(struct xio_rdma_task *)(xt)->dd_data
 
-#define xio_prefetch(p)            __builtin_prefetch(p)
-
-/* header flags */
-#define XIO_HEADER_FLAG_NONE		0x00
-#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
-
-/*---------------------------------------------------------------------------*/
-/* enums								     */
-/*---------------------------------------------------------------------------*/
-enum xio_transport_state {
-	XIO_STATE_INIT,
-	XIO_STATE_LISTEN,
-	XIO_STATE_CONNECTED,
-	XIO_STATE_DISCONNECTED,
-	XIO_STATE_RECONNECT,
-	XIO_STATE_CLOSED,
-	XIO_STATE_DESTROYED
-};
-
-enum xio_ib_op_code {
-	XIO_IB_NULL,
-	XIO_IB_RECV		= 1,
-	XIO_IB_SEND,
-	XIO_IB_RDMA_WRITE,
-	XIO_IB_RDMA_READ
-};
 
 #ifndef IBV_DEVICE_MR_ALLOCATE
 #  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
@@ -140,6 +90,17 @@ enum xio_ib_op_code {
 #ifndef IBV_ACCESS_ALLOCATE_MR
 #  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
 #endif /* M-pages compatibility */
+
+/*---------------------------------------------------------------------------*/
+/* enums								     */
+/*---------------------------------------------------------------------------*/
+enum xio_ib_op_code {
+	XIO_IB_NULL,
+	XIO_IB_RECV		= 1,
+	XIO_IB_SEND,
+	XIO_IB_RDMA_WRITE,
+	XIO_IB_RDMA_READ
+};
 
 
 struct xio_transport_base;
@@ -153,13 +114,6 @@ struct xio_rdma_options {
 	int			rdma_buf_attr_rdonly;
 	int			max_in_iovsz;
 	int			max_out_iovsz;
-};
-
-struct xio_sge {
-	uint64_t		addr;		/* virtual address */
-	uint32_t		length;		/* length	   */
-	uint32_t		stag;		/* rkey		   */
-
 };
 
 #define XIO_REQ_HEADER_VERSION	1
@@ -477,43 +431,6 @@ struct xio_dev_tdata {
 	pthread_t			dev_thread;
 	void				*async_loop;
 };
-
-/*
- * The next routines deal with comparing 16 bit unsigned ints
- * and worry about wraparound (automatic with unsigned arithmetic).
- */
-
-static inline int16_t before(uint16_t seq1, uint16_t seq2)
-{
-	return (int16_t)(seq1 - seq2) < 0;
-}
-#define after(seq2, seq1)       before(seq1, seq2)
-
-static inline int16_t before_eq(uint16_t seq1, uint16_t seq2)
-{
-	return (int16_t)(seq1 - seq2) <= 0;
-}
-#define after_eq(seq2, seq1)       before_eq(seq1, seq2)
-
-
-/* is s2<=s1<s3 ? */
-static inline int16_t between(uint16_t seq1, uint16_t seq2, uint16_t seq3)
-{
-	if (before_eq(seq1, seq2) && before(seq2, seq3))
-		return 1;
-	return 0;
-}
-
-static inline
-unsigned long long timespec_to_usecs(struct timespec *time_spec)
-{
-	unsigned long long retval = 0;
-
-	retval  = time_spec->tv_sec * USECS_IN_SEC;
-	retval += time_spec->tv_nsec / NSECS_IN_USEC;
-
-	return retval;
-}
 
 
 /* xio_rdma_verbs.c */

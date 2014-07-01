@@ -48,7 +48,7 @@
 #include "xio_protocol.h"
 #include "get_clock.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_transport_mempool.h"
 #include "xio_rdma_transport.h"
 
 

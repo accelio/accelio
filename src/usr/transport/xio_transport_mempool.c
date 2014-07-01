@@ -225,11 +225,14 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 			if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
 				xio_dereg_mr(&r->omr);
 
-			if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+			if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
 				ufree_huge_pages(r->buf);
-			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
 				unuma_free(r->buf);
-			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 				ufree(r->buf);
 			ufree(r);
 		}
@@ -244,7 +247,7 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 /* xio_mem_slot_resize						     */
 /*---------------------------------------------------------------------------*/
 static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
-						      int alloc)
+						 int alloc)
 {
 	char				*buf;
 	struct xio_mem_region		*region;
@@ -294,20 +297,26 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 		region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t));
 
-	if (region->buf == NULL)
-		goto cleanup1;
+	if (region->buf == NULL) {
+		ufree(buf);
+		return NULL;
+	}
 
 	if (slot->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
 		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
 		if (region->omr == NULL) {
-			if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+			if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
 				ufree_huge_pages(region->buf);
-			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
 				unuma_free(region->buf);
-			else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (slot->pool->flags &
+					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 				ufree(region->buf);
-			region->buf = NULL;
-			goto cleanup2;
+
+			ufree(buf);
+			return NULL;
 		}
 	}
 
@@ -348,15 +357,6 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	list_add(&region->mem_region_entry, &slot->mem_regions_list);
 
 	return block;
-
-cleanup2:
-	if (region->buf)
-		ufree(region->buf);
-
-cleanup1:
-	if (region)
-		ufree(region);
-	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -387,7 +387,7 @@ struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
 		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
 		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
 		DEBUG_LOG("mempool: using huge pages allocator\n");
-	}else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+	} else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
 		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
 		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
 		DEBUG_LOG("mempool: using numa allocator\n");
@@ -406,9 +406,8 @@ struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
 		}
 		/* pin to node */
 		ret = numa_run_on_node(nodeid);
-		if (ret) {
+		if (ret)
 			return NULL;
-		}
 	}
 
 	p = ucalloc(1, sizeof(struct xio_mempool));
@@ -454,9 +453,8 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 		}
 		/* pin to node */
 		ret = numa_run_on_node(nodeid);
-		if (ret) {
+		if (ret)
 			return NULL;
-		}
 	}
 	p = ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
@@ -533,7 +531,7 @@ static inline int size2index(struct xio_mempool *p, size_t sz)
 /* xio_mempool_alloc						     */
 /*---------------------------------------------------------------------------*/
 int xio_mempool_alloc(struct xio_mempool *p, size_t length,
-			   struct xio_mempool_obj *mp_obj)
+		      struct xio_mempool_obj *mp_obj)
 {
 	int			index;
 	struct xio_mem_slot	*slot;
@@ -598,8 +596,8 @@ void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 /* xio_mempool_add_allocator					     */
 /*---------------------------------------------------------------------------*/
 int xio_mempool_add_allocator(struct xio_mempool *p,
-				   size_t size, size_t min, size_t max,
-				   size_t alloc_quantum_nr)
+			      size_t size, size_t min, size_t max,
+			      size_t alloc_quantum_nr)
 {
 	struct xio_mem_slot	*new_slot;
 	struct xio_mem_block	*block;

@@ -141,12 +141,6 @@ struct xio_rdma_options {
 	int	max_out_iovsz;
 };
 
-struct xio_sge {
-	u64	addr;		/* virtual address */
-	u32	length;		/* length	   */
-	u32	stag;		/* r_key	   */
-};
-
 #define XIO_REQ_HEADER_VERSION	1
 
 struct __attribute__((__packed__)) xio_req_hdr {

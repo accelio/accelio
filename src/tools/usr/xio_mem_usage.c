@@ -51,7 +51,7 @@
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include "xio_rdma_transport.h"
-#include "xio_rdma_mempool.h"
+#include "xio_transport_mempool.h"
 
 #define PRINT_SIZE(type) \
 { \

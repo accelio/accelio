@@ -2523,25 +2523,6 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_notify_assign_in_buf					     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_assign_in_buf(struct xio_rdma_transport *rdma_hndl,
-			    struct xio_task *task, int *is_assigned)
-{
-	union xio_transport_event_data event_data = {
-			.assign_in_buf.task	   = task,
-			.assign_in_buf.is_assigned = 0
-	};
-
-	xio_transport_notify_observer(&rdma_hndl->base,
-				      XIO_TRANSPORT_ASSIGN_IN_BUF,
-				      &event_data);
-
-	*is_assigned = event_data.assign_in_buf.is_assigned;
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_prep_rdma_op							     */
 /*---------------------------------------------------------------------------*/
 static int xio_prep_rdma_op(
@@ -2878,7 +2859,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	else
 		task->imsg.out.data_iovlen = 0;
 
-	xio_rdma_assign_in_buf(rdma_hndl, task, &user_assign_flag);
+	xio_transport_assign_in_buf(&rdma_hndl->base, task, &user_assign_flag);
 	if (user_assign_flag) {
 		/* if user does not have buffers ignore */
 		if (task->imsg.in.data_iovlen == 0) {

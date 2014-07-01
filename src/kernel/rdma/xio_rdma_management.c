@@ -772,69 +772,46 @@ static int xio_rdma_task_init(struct xio_task *task,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_flush_task_list						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_flush_task_list(struct xio_rdma_transport *rdma_hndl,
-				    struct list_head *list)
-{
-	struct xio_task *ptask, *next_ptask;
-
-	list_for_each_entry_safe(ptask, next_ptask, list,
-				 tasks_list_entry) {
-		TRACE_LOG("flushing task %p type 0x%x\n",
-			  ptask, ptask->tlv_type);
-		if (ptask->sender_task) {
-			xio_tasks_pool_put(ptask->sender_task);
-			ptask->sender_task = NULL;
-		}
-		xio_tasks_pool_put(ptask);
-	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 {
 	if (!list_empty(&rdma_hndl->in_flight_list)) {
 		TRACE_LOG("in_flight_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
+		xio_transport_flush_task_list(&rdma_hndl->in_flight_list);
 		/* for task that attached to senders with ref count = 2 */
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->in_flight_list);
+		xio_transport_flush_task_list(&rdma_hndl->in_flight_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rdma_rd_in_flight_list)) {
 		TRACE_LOG("rdma_rd_in_flight_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl,
-					 &rdma_hndl->rdma_rd_in_flight_list);
+		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_in_flight_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rdma_rd_list)) {
 		TRACE_LOG("rdma_rd_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->rdma_rd_list);
+		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_list);
 	}
 
 	if (!list_empty(&rdma_hndl->tx_comp_list)) {
 		TRACE_LOG("tx_comp_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_comp_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_comp_list);
 	}
 	if (!list_empty(&rdma_hndl->io_list)) {
 		TRACE_LOG("io_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->io_list);
+		xio_transport_flush_task_list(&rdma_hndl->io_list);
 	}
 
 	if (!list_empty(&rdma_hndl->tx_ready_list)) {
 		TRACE_LOG("tx_ready_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_ready_list);
 		/* for task that attached to senders with ref count = 2 */
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->tx_ready_list);
+		xio_transport_flush_task_list(&rdma_hndl->tx_ready_list);
 	}
 
 	if (!list_empty(&rdma_hndl->rx_list)) {
 		TRACE_LOG("rx_list not empty!\n");
-		xio_rdma_flush_task_list(rdma_hndl, &rdma_hndl->rx_list);
+		xio_transport_flush_task_list(&rdma_hndl->rx_list);
 	}
 
 	return 0;
