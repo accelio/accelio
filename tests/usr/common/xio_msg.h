@@ -56,14 +56,9 @@ struct msg_pool {
 
 	struct xio_msg				**stack_ptr;
 	struct xio_msg				**stack_end;
-	void					*header;
-	void					*data;
 
-	struct xio_mr				*mr;
 	/* max number of elements */
 	size_t					max;
-	int					shmid;
-	int					pad;
 };
 
 

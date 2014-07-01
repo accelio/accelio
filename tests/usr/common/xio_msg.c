@@ -331,14 +331,7 @@ inline void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_free(struct msg_pool *pool)
 {
-	if (pool) {
-		if (pool->mr)
-			xio_dereg_mr(&pool->mr);
-		if (pool->data)
-			free_mem_buf(pool->data, pool->shmid);
-		if (pool->header)
-			free(pool->header);
+	if (pool)
 		free(pool);
-	}
 }
 
