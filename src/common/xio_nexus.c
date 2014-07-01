@@ -1328,6 +1328,11 @@ static void xio_on_nexus_disconnected(struct xio_nexus *nexus,
 
 	/* Try to reconnect */
 	if (enable_reconnect) {
+		/* cancel old timers */
+		if (xio_is_delayed_work_pending(&nexus->close_time_hndl))
+			xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+						 &nexus->close_time_hndl);
+
 		if (nexus->transport_hndl->is_client)
 			ret = xio_nexus_client_reconnect(nexus);
 		else
