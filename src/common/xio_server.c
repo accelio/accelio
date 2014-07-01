@@ -173,7 +173,7 @@ static int xio_on_new_message(struct xio_server *server,
 			goto cleanup;
 		}
 		connection1 = xio_session_assign_nexus(task->session, nexus);
-		if (!connection) {
+		if (!connection1) {
 			ERROR_LOG("server failed to assign new connection\n");
 			goto cleanup1;
 		}
