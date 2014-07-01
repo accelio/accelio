@@ -117,6 +117,8 @@ EXPORT_SYMBOL(xio_errno);
 
 EXPORT_SYMBOL(xio_reg_transport);
 EXPORT_SYMBOL(xio_unreg_transport);
+EXPORT_SYMBOL(xio_transport_flush_task_list);
+EXPORT_SYMBOL(xio_transport_assign_in_buf);
 
 EXPORT_SYMBOL(memcpyv);
 EXPORT_SYMBOL(memclonev);
