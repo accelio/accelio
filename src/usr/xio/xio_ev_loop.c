@@ -46,10 +46,13 @@
 #include <libxio.h>
 #include "xio_ev_loop.h"
 #include "xio_common.h"
+#include "get_clock.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
+
+extern double                    g_mhz;
 
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */
@@ -326,7 +329,11 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	struct xio_ev_data	*tev;
 	int			work_remains;
 	int			tmout;
+	int			wait_time = timeout;
+	cycles_t		start_cycle  = 0;
 
+	if (timeout != -1)
+		start_cycle = get_cycles();
 retry:
 	work_remains = xio_ev_loop_exec_scheduled(loop);
 	tmout = work_remains ? 0 : timeout;
@@ -346,7 +353,7 @@ retry:
 			if (likely(tev != NULL)) {
 				/* (fd != loop->wakeup_event) */
 				tev->handler(tev->fd, events[i].events,
-					     tev->data);
+						tev->data);
 			} else {
 				/* wakeup event auto-removed from epoll
 				 * due to ONESHOT
@@ -368,6 +375,15 @@ retry:
 		/* TODO: timeout should be updated by the elapsed
 		 * duration of each loop
 		 * */
+	}
+	/* calculate the remaining timeout */
+	if (timeout != -1 && !loop->stop_loop) {
+		 int time_passed = (int)((get_cycles() -
+					  start_cycle)/(1000*g_mhz) + 0.5);
+		 if (time_passed >= wait_time)
+			 loop->stop_loop = 1;
+		 else
+			 timeout = wait_time - time_passed;
 	}
 
 	if (likely(loop->stop_loop == 0))
