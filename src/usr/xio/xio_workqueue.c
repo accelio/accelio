@@ -341,6 +341,11 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
 	enum timers_list_rc	rc;
 	xio_work_handle_t	*work = &dwork->work;
 
+	if (xio_is_delayed_work_pending(dwork)) {
+		ERROR_LOG("work already pending\n");
+		xio_set_error(EEXIST);
+		return -1;
+	}
 
 	xio_timers_list_lock(&work_queue->timers_list);
 
