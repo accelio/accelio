@@ -47,7 +47,7 @@
 #define XIO_US_IN_MSEC  1000ULL
 #define XIO_NS_IN_MSEC  1000000ULL
 #define XIO_NS_IN_USEC  1000ULL
-#define SAFE_LIST	0;
+#define SAFE_LIST
 
 #define xio_timer_handle_t void *
 
@@ -116,19 +116,19 @@ static inline enum timers_list_rc xio_timers_list_add(
 				       struct xio_timers_list *timers_list,
 				       struct xio_timers_list_entry *tentry)
 {
-	struct list_head		*timer_list, *tmp_timer_list;
+	struct list_head		*timer_list;
 	struct xio_timers_list_entry	*tentry_from_list;
 	int				found = 0;
 	enum timers_list_rc		retval = TIMERS_LIST_RC_OK;
 
 
-	list_for_each_safe(timer_list, tmp_timer_list,
-			   &timers_list->timers_head) {
+	list_for_each(timer_list, &timers_list->timers_head) {
 		tentry_from_list = list_entry(timer_list,
 					      struct xio_timers_list_entry,
 					      entry);
 
-		if (tentry->expires < tentry_from_list->expires) {
+		if (time_before64(tentry->expires,
+				  tentry_from_list->expires)) {
 			list_add_tail(&tentry->entry, &tentry_from_list->entry);
 			found = 1;
 			break; /* for timer iteration */
@@ -262,7 +262,7 @@ static inline int64_t xio_timerlist_ns_duration_to_expire(
 	/*
 	 * timer at head of list is expired, zero ns required
 	 */
-	if (tentry->expires <= current_time)
+	if (time_after64(current_time, tentry->expires))
 		return 0;
 
 	ns_duration_to_expire = (tentry->expires - current_time);
@@ -286,11 +286,11 @@ static inline void xio_timers_list_expire(struct xio_timers_list *timers_list)
 	xio_timers_list_lock(timers_list);
 	while (!list_empty(&timers_list->timers_head)) {
 		tentry = list_first_entry(&timers_list->timers_head,
-			     struct xio_timers_list_entry, entry);
+					  struct xio_timers_list_entry, entry);
 
 		current_time = xio_timers_list_ns_current_get();
 
-		if (tentry->expires <= current_time) {
+		if (time_before_eq64(tentry->expires, current_time)) {
 			xio_timers_list_pre_dispatch(timers_list,
 						     tentry);
 
