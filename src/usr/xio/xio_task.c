@@ -84,7 +84,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 			  q->params.task_dd_data_sz);
 
 	tot_sz = slab_alloc_sz+tasks_alloc_sz;
-	if (tot_sz > 1 << 21) {
+
+	if (tot_sz > 1 << 20) {
 		buf = umalloc_huge_pages(tot_sz);
 		huge_alloc = 1;
 	} else {

@@ -68,7 +68,7 @@ extern struct list_head		dev_list;
 #define MAX_NUM_DELAYED_ARM		16
 
 #define NUM_START_PHANTOM_POOL_TASKS	0
-#define NUM_ALLOC_PHANTOM_POOL_TASKS	256
+#define NUM_ALLOC_PHANTOM_POOL_TASKS	512
 #define NUM_MAX_PHANTOM_POOL_TASKS	32768
 
 #define SOFT_CQ_MOD			8
