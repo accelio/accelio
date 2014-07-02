@@ -125,7 +125,8 @@ enum xio_session_type {
  *	  new session request
  */
 enum xio_proto {
-	XIO_PROTO_RDMA		/**< Infiniband's RDMA protocol		     */
+	XIO_PROTO_RDMA,		/**< Infiniband's RDMA protocol		     */
+	XIO_PROTO_TCP		/**< TCP protocol			     */
 };
 
 /**
@@ -135,7 +136,7 @@ enum xio_proto {
 enum xio_optlevel {
 	XIO_OPTLEVEL_ACCELIO, /**< Genenal library option level             */
 	XIO_OPTLEVEL_RDMA,    /**< RDMA tranport level			    */
-
+	XIO_OPTLEVEL_TCP,     /**< TCP tranport level			    */
 };
 
 /**
@@ -143,18 +144,31 @@ enum xio_optlevel {
  * @brief configuration tuning option name
  */
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,	   /**< enables the internal rdma     */
-					   /**< memory pool		      */
-
-	XIO_OPTNAME_DISABLE_HUGETBL,	  /**< disable huge pages allocations */
+	/* XIO_OPTLEVEL_ACCELIO */
+	XIO_OPTNAME_DISABLE_HUGETBL = 0,  /**< disable huge pages allocations */
 	XIO_OPTNAME_LOG_FN,		  /**< set user log function	      */
 	XIO_OPTNAME_LOG_LEVEL,		  /**< set/get logging level          */
-	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
-
-	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
 	XIO_OPTNAME_MEM_ALLOCATOR,        /**< set customed allocators hooks  */
-	XIO_OPTNAME_MAX_IN_IOVLEN,	  /**< set message's max in iovec     */
-	XIO_OPTNAME_MAX_OUT_IOVLEN        /**< set message's max out iovec    */
+
+	/* XIO_OPTLEVEL_ACCELIO/RDMA/TCP */
+	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
+	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
+	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
+
+	/* XIO_OPTLEVEL_RDMA/TCP */
+	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
+					  /**< transport memory pool	      */
+	XIO_OPTNAME_TRANS_BUF_THRESHOLD,  /**< set/get transport buffer	      */
+					  /**< threshold		      */
+
+	/* XIO_OPTLEVEL_RDMA */
+	XIO_OPTNAME_RDMA_PLACE_HOLDER = 300,   /**< place holder for rdma opt */
+
+	/* XIO_OPTLEVEL_TCP */
+	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400,  /**< check tcp mr validity    */
+	XIO_OPTNAME_TCP_NO_DELAY,	        /**< turn-off Nagle algorithm */
+	XIO_OPTNAME_TCP_SO_SNDBUF,	        /**< tcp socket send buffer   */
+	XIO_OPTNAME_TCP_SO_RCVBUF,	        /**< tcp socket receive buffer*/
 };
 
 /**

@@ -2519,7 +2519,7 @@ static int xio_rdma_set_opt(void *xio_obj,
 		rdma_options.enable_dma_latency = *((int *)optval);
 		return 0;
 		break;
-	case XIO_OPTNAME_RDMA_BUF_THRESHOLD:
+	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
 		VALIDATE_SZ(sizeof(int));
 
 		/* changing the parameter is not allowed */
@@ -2572,7 +2572,7 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
-	case XIO_OPTNAME_RDMA_BUF_THRESHOLD:
+	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
 		*((int *)optval) =
 			rdma_options.rdma_buf_threshold -
 				XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;

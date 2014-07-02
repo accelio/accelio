@@ -49,9 +49,11 @@ int	page_size;
 double	g_mhz;
 
 extern struct xio_transport xio_rdma_transport;
+extern struct xio_transport xio_tcp_transport;
 
 static struct xio_transport  *transport_tbl[] = {
-	&xio_rdma_transport
+	&xio_rdma_transport,
+	&xio_tcp_transport
 };
 
 #define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
