@@ -473,7 +473,7 @@ static int xio_tcp_write_send_data(
 			&task->omsg->out.pdata_iov[0];
 
 	/* user provided mr */
-	if (task->omsg->out.pdata_iov[0].mr) {
+	if (task->omsg->out.pdata_iov[0].mr || !tcp_options.enable_mr_check) {
 		for (i = 0; i < task->omsg->out.data_iovlen; i++)  {
 			tcp_task->txd.msg_iov[i+1].iov_base = iov->iov_base;
 			tcp_task->txd.msg_iov[i+1].iov_len = iov->iov_len;
@@ -566,7 +566,8 @@ static int xio_tcp_prep_req_out_data(
 		}
 	} else {
 		tcp_task->tcp_op = XIO_TCP_READ;
-		if (task->omsg->out.pdata_iov[0].mr) {
+		if (task->omsg->out.pdata_iov[0].mr ||
+		    !tcp_options.enable_mr_check) {
 			for (i = 0; i < vmsg->data_iovlen; i++) {
 				tcp_task->write_sge[i].addr =
 						vmsg->pdata_iov[i].iov_base;
@@ -873,7 +874,8 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
 		/* user provided mr */
-		if (vmsg->pdata_iov[0].mr) {
+		if (vmsg->pdata_iov[0].iov_base &&
+		    (vmsg->pdata_iov[0].mr  || !tcp_options.enable_mr_check)) {
 			for (i = 0; i < vmsg->data_iovlen; i++) {
 				tcp_task->read_sge[i].addr =
 					vmsg->pdata_iov[i].iov_base;
@@ -1136,7 +1138,8 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 	int retval;
 
 	/* user did not provided mr */
-	if (task->omsg->out.pdata_iov[0].mr == NULL) {
+	if (task->omsg->out.pdata_iov[0].mr == NULL &&
+	    tcp_options.enable_mr_check) {
 		if (tcp_hndl->tcp_mempool == NULL) {
 			xio_set_error(XIO_E_NO_BUFS);
 			ERROR_LOG("message /read/write failed - " \
@@ -2135,7 +2138,9 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 		}
 
 		/* user provided mr */
-		if (omsg->in.pdata_iov[0].mr)  {
+		if (omsg->in.pdata_iov[0].iov_base &&
+		    (omsg->in.pdata_iov[0].mr ||
+		     !tcp_options.enable_mr_check)) {
 			/* data was copied directly to user buffer */
 			/* need to update the buffer length */
 			omsg->in.data_iovlen = imsg->in.data_iovlen;
