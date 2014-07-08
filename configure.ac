@@ -152,6 +152,7 @@ if test "$enable_kernel_module" != "no"; then
 else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 examples/usr/hello_world";
+	subdirs2="$subdirs2 examples/usr/hello_world_daemon";
 
 if test "$mypj_found_event_headers" == "yes"; then
 	subdirs2="$subdirs2 examples/usr/hello_world_libevent";
@@ -171,6 +172,7 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 	subdirs2="$subdirs2 regression/usr/reg_basic_mt";
+	subdirs2="$subdirs2 src/tools/usr/";
 fi
 
 ##########################################################################
@@ -213,6 +215,7 @@ AC_CONFIG_FILES([Doxyfile])
 AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
+AC_CONFIG_FILES([examples/usr/hello_world_daemon/Makefile])
 if test "$mypj_found_event_headers" == "yes"; then
 	AC_CONFIG_FILES([examples/usr/hello_world_libevent/Makefile])
 fi
@@ -228,6 +231,7 @@ AC_CONFIG_FILES([tests/usr/hello_test_ow/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
+AC_CONFIG_FILES([src/tools/usr/Makefile])
 
 # generate the final Makefile etc.
 AC_OUTPUT

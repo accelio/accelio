@@ -38,7 +38,7 @@
 #if defined(__x86_64__) || defined(__i386__)
 /* Note: only x86 CPUs which have rdtsc instruction are supported. */
 typedef unsigned long long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	unsigned low, high;
 	unsigned long long val;
@@ -51,7 +51,7 @@ static inline cycles_t get_cycles()
 /* Note: only PPC CPUs which have mftb instruction are supported. */
 /* PPC64 has mftb */
 typedef unsigned long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	cycles_t ret;
 
@@ -61,7 +61,7 @@ static inline cycles_t get_cycles()
 #elif defined(__ia64__)
 /* Itanium2 and up has ar.itc (Itanium1 has errata) */
 typedef unsigned long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	cycles_t ret;
 
@@ -74,6 +74,6 @@ static inline cycles_t get_cycles()
 #include <linux/timex.h>
 #endif
 
-extern double get_cpu_mhz(int);
+double get_cpu_mhz(int);
 
 #endif

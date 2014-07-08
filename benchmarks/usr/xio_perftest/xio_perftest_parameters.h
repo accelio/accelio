@@ -61,6 +61,8 @@ typedef enum { READ, WRITE} Verb;
 #define XIO_DEF_PORT			2061
 #define XIO_DEF_CPU			0
 
+#define XIO_DEF_TRANSPORT		"rdma"
+
 #if defined(TEST_LAT)
 #define XIO_TEST_TYPE			LAT
 #define XIO_DEF_QUEUE_DEPTH		LAT_QUEUE_DEPTH
@@ -99,7 +101,7 @@ struct perf_parameters {
 	MachineType		machine_type;
 	Verb			verb;
 	char			*output_file;
-	char			*portals;
+	char			*transport;
 	char			**portals_arr;
 	char			*server_addr;
 };

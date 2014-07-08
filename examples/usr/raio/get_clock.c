@@ -167,11 +167,14 @@ static double proc_get_cpu_mhz(int no_cpu_freq_fail)
 			if (no_cpu_freq_fail)
 				fprintf(stderr, "Test integrity may" \
 					" be harmed !\n");
-			else
-				return 0.0;
+			else {
+				mhz = 0.0;
+				goto exit;
+			}
 			continue;
 		}
 	}
+exit:
 	fclose(f);
 	return mhz;
 }

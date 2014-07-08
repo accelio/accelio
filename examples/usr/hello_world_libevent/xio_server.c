@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <errno.h>
 
 #include "libxio.h"
 
@@ -50,6 +51,7 @@
 /* server private data */
 struct server_data {
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	uint64_t		nsent;
 	uint64_t		cnt;
 	struct xio_msg		rsp[QUEUE_DEPTH];	/* global message */
@@ -58,7 +60,8 @@ struct server_data {
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
-static void process_request(struct server_data *server_data, struct xio_msg *req)
+static void process_request(struct server_data *server_data,
+			    struct xio_msg *req)
 {
 	char *str, tmp;
 	int len, i;
@@ -69,31 +72,29 @@ static void process_request(struct server_data *server_data, struct xio_msg *req
 	 * the printf
 	 */
 	if (++server_data->cnt == PRINT_COUNTER) {
-		str = (char *) req->in.header.iov_base;
+		str = (char *)req->in.header.iov_base;
 		len = req->in.header.iov_len;
 		if (str) {
 			if (((unsigned) len) > 64)
 				len = 64;
 			tmp = str[len];
 			str[len] = '\0';
-			printf("message header : [%"PRIu64"] - %s\n",
+			printf("message header : [%lu] - %s\n",
 			       (req->sn + 1), str);
 			str[len] = tmp;
-
 		}
 		for (i = 0; i < req->in.data_iovlen; i++) {
-			str = (char *) req->in.data_iov[i].iov_base;
+			str = (char *)req->in.data_iov[i].iov_base;
 			len = req->in.data_iov[i].iov_len;
 			if (str) {
 				if (((unsigned) len) > 64)
 					len = 64;
 				tmp = str[len];
 				str[len] = '\0';
-				printf("message data: [%"PRIu64"][%d][%d] - %s\n",
+				printf("message data: [%lu][%d][%d] - %s\n",
 				       (req->sn + 1), i, len, str);
 				str[len] = tmp;
 			}
-
 		}
 		server_data->cnt = 0;
 	}
@@ -106,8 +107,8 @@ static void process_request(struct server_data *server_data, struct xio_msg *req
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 
@@ -117,8 +118,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		server_data->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		server_data->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -135,13 +140,18 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
-	/* automaticly accept the request */
+	struct server_data *server_data = cb_user_context;
+
+	/* automatically accept the request */
 	printf("new session event. session:%p\n", session);
 
-	xio_accept(session, NULL, 0, NULL, 0);
+	if (server_data->connection == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
+		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -150,9 +160,9 @@ static int on_new_session(struct xio_session *session,
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_user_context)
+		      struct xio_msg *req,
+		      int more_in_batch,
+		      void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
@@ -168,9 +178,7 @@ static int on_request(struct xio_session *session,
 
 #if  TEST_DISCONNECT
 	if (server_data->nsent == DISCONNECT_NR) {
-		struct xio_connection *connection =
-			xio_get_connection(session, server_data->ctx);
-		xio_disconnect(connection);
+		xio_disconnect(server_data->connection);
 		return 0;
 	}
 #endif
@@ -199,7 +207,8 @@ int main(int argc, char *argv[])
 	int			i;
 
 	if (argc < 2) {
-		printf("Usage: %s <host> <port>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
 		exit(1);
 	}
 
@@ -220,9 +229,13 @@ int main(int argc, char *argv[])
 
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
+	else
+		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 	/* bind a listener server to a portal/url */
-	server = xio_bind(server_data.ctx, &server_ops, url, NULL, 0, &server_data);
+	server = xio_bind(server_data.ctx, &server_ops,
+			  url, NULL, 0, &server_data);
 	if (server) {
 		printf("listen to %s\n", url);
 		xio_context_run_loop(server_data.ctx, XIO_INFINITE);

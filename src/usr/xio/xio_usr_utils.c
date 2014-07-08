@@ -53,7 +53,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	int		s = 0;
 	struct addrinfo hints;
 	struct addrinfo *result;
-	socklen_t	ss_len;
+	socklen_t	ss_len = -1;
 
 	/*
 	 * [host]:port, [host]:, [host].
@@ -68,11 +68,11 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		strncpy(host, cp, len);
 		host[len] = 0;
 		tp++;
-		if (tp == NULL) {
+		if (*tp == 0) {
 			strcpy(port, "0");
 		} else if (*tp == ':') {
 			tp++;
-			if (tp && *tp)
+			if (*tp)
 				strcpy(port, tp);
 			else
 				strcpy(port, "0");
@@ -86,7 +86,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		if (*cp == ':') {
 			strcpy(host, "0.0.0.0");
 			cp++;
-			if (cp && *cp)
+			if (*cp)
 				strcpy(port, cp);
 			else
 				strcpy(port, "0");
@@ -126,7 +126,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	}
 	if (result->ai_next) {
 		ERROR_LOG("more then one address is matched\n");
-		return -1;
+		goto cleanup;
 	}
 	switch (result->ai_family) {
 	case AF_INET:
@@ -137,10 +137,15 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		ss_len = sizeof(struct sockaddr_in6);
 		memcpy(ss, result->ai_addr, ss_len);
 		break;
+	default:
+		ERROR_LOG("unknown family :%d\n", result->ai_family);
+		break;
+
 	}
+cleanup:
 	freeaddrinfo(result);
 
-	return 0;
+	return ss_len;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -156,7 +161,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	int		len;
 	struct addrinfo hints;
 	struct addrinfo *result;
-	socklen_t	ss_len;
+	socklen_t	ss_len = -1;
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
@@ -256,7 +261,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	}
 	freeaddrinfo(result);
 
-	return 0;
+	return ss_len;
 }
 
 /*
@@ -303,6 +308,44 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 		closedir(directory_parent);
 	}
 	return node_id;
+}
+
+void xio_msg_dump(struct xio_msg *xio_msg)
+{
+	int i;
+
+	ERROR_LOG("*********************************************\n");
+	ERROR_LOG("type:0x%x\n", xio_msg->type);
+	ERROR_LOG("status:%d\n", xio_msg->status);
+	if (xio_msg->type == XIO_MSG_TYPE_REQ)
+		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
+	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
+		ERROR_LOG("response:%p, serial number:%lld\n",
+			  xio_msg->request,
+			  ((xio_msg->request) ? xio_msg->request->sn : -1));
+
+	ERROR_LOG("in header: length:%zd, address:%p\n",
+		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
+	ERROR_LOG("in data type:%d iovsz:%zd\n",xio_msg->in.data_type,
+		  xio_msg->in.data_iovsz);
+	ERROR_LOG("in data size:%zd\n", xio_msg->in.data_iovlen);
+	for (i = 0; i < xio_msg->in.data_iovlen; i++)
+		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n", i,
+			  xio_msg->in.pdata_iov[i].iov_len,
+			  xio_msg->in.pdata_iov[i].iov_base,
+			  xio_msg->in.pdata_iov[i].mr);
+
+	ERROR_LOG("out header: length:%zd, address:%p\n",
+		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
+	ERROR_LOG("out data type:%d iovsz:%zd\n",xio_msg->out.data_type,
+		  xio_msg->out.data_iovsz);
+	ERROR_LOG("out data size:%zd\n", xio_msg->out.data_iovlen);
+	for (i = 0; i < xio_msg->out.data_iovlen; i++)
+		ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n", i,
+			  xio_msg->out.pdata_iov[i].iov_len,
+			  xio_msg->out.pdata_iov[i].iov_base,
+			  xio_msg->out.pdata_iov[i].mr);
+	ERROR_LOG("*********************************************\n");
 }
 
 /*

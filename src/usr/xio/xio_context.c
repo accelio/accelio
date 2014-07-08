@@ -78,6 +78,7 @@ static void xio_stats_handler(int fd, int events, void *data)
 	struct iovec iov;
 	struct sockaddr_nl dest_addr;
 	uint64_t now = get_cycles();
+	ssize_t ret;
 	char *ptr;
 	int i;
 
@@ -85,11 +86,15 @@ static void xio_stats_handler(int fd, int events, void *data)
 	iov.iov_base = (void *)nlh;
 	/* max size for receive */
 	iov.iov_len = NLMSG_SPACE(1024);
+
+	memset(&msg, 0, sizeof(msg));
 	msg.msg_name = (void *)&dest_addr;
 	msg.msg_namelen = sizeof(dest_addr);
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
-	recvmsg(fd, &msg, 0);
+	ret = recvmsg(fd, &msg, 0);
+	if (ret <= 0)
+		return;
 
 	ptr = (char *)NLMSG_DATA(nlh);
 
@@ -143,7 +148,10 @@ static void xio_stats_handler(int fd, int events, void *data)
 	/* Send unicst */
 	dest_addr.nl_groups = 0;
 	/* send response */
-	sendmsg(fd, &msg, 0);
+	ret = sendmsg(fd, &msg, 0);
+	if (ret <= 0)
+		return;
+
 }
 
 /*---------------------------------------------------------------------------*/

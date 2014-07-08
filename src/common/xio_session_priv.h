@@ -50,67 +50,67 @@
 /* Common API */
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_disconnected			                             */
+/* xio_on_nexus_disconnected			                             */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_disconnected(struct xio_session *session,
-			     struct xio_conn *conn,
-			     union xio_conn_event_data *event_data);
+int xio_on_nexus_disconnected(struct xio_session *session,
+			     struct xio_nexus *nexus,
+			     union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_closed							     */
+/* xio_on_nexus_closed							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_closed(struct xio_session *session,
-		       struct xio_conn *conn,
-		       union xio_conn_event_data *event_data);
+int xio_on_nexus_closed(struct xio_session *session,
+		       struct xio_nexus *nexus,
+		       union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_error							     */
+/* xio_on_nexus_error							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_error(struct xio_session *session,
-		      struct xio_conn *conn,
-		      union xio_conn_event_data *event_data);
+int xio_on_nexus_error(struct xio_session *session,
+		      struct xio_nexus *nexus,
+		      union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_message							     */
 /*---------------------------------------------------------------------------*/
 int xio_on_new_message(struct xio_session *session,
-		       struct xio_conn *conn,
-		       union xio_conn_event_data *event_data);
+		       struct xio_nexus *nexus,
+		       union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_send_completion						     */
 /*---------------------------------------------------------------------------*/
 int xio_on_send_completion(struct xio_session *session,
-			   struct xio_conn *conn,
-			   union xio_conn_event_data *event_data);
+			   struct xio_nexus *nexus,
+			   union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_assign_in_buf							     */
 /*---------------------------------------------------------------------------*/
 int xio_on_assign_in_buf(struct xio_session *session,
-			 struct xio_conn *conn,
-			 union xio_conn_event_data *event_data);
+			 struct xio_nexus *nexus,
+			 union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_cancel_request						     */
 /*---------------------------------------------------------------------------*/
 int xio_on_cancel_request(struct xio_session *sess,
-			  struct xio_conn *conn,
-			  union xio_conn_event_data *event_data);
+			  struct xio_nexus *nexus,
+			  union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_cancel_response						     */
 /*---------------------------------------------------------------------------*/
 int xio_on_cancel_response(struct xio_session *sess,
-			   struct xio_conn *conn,
-			   union xio_conn_event_data *event_data);
+			   struct xio_nexus *nexus,
+			   union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_message_error						     */
+/* xio_on_nexus_message_error						     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_message_error(struct xio_session *session,
-			      struct xio_conn *conn,
-			      union xio_conn_event_data *event_data);
+int xio_on_nexus_message_error(struct xio_session *session,
+			      struct xio_nexus *nexus,
+			      union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_read_header						     */
@@ -196,16 +196,16 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 					  struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_server_conn_established					     */
+/* xio_on_server_nexus_established					     */
 /*---------------------------------------------------------------------------*/
-int xio_on_server_conn_established(struct xio_session *session,
-				   struct xio_conn *conn,
-				   union xio_conn_event_data *event_data);
+int xio_on_server_nexus_established(struct xio_session *session,
+				   struct xio_nexus *nexus,
+				   union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event_server				                     */
+/* xio_on_nexus_event_server				                     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_server(void *observer, void *sender, int event,
+int xio_server_on_nexus_event(void *observer, void *sender, int event,
 				    void *event_data);
 
 /* Client API */
@@ -259,50 +259,52 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_refused							     */
+/* xio_on_nexus_refused							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_refused(struct xio_session *session,
-			struct xio_conn *conn,
-			union xio_conn_event_data *event_data);
+int xio_on_nexus_refused(struct xio_session *session,
+			struct xio_nexus *nexus,
+			union xio_nexus_event_data *event_data);
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_client_conn_established					     */
+/* xio_on_client_nexus_established					     */
 /*---------------------------------------------------------------------------*/
-int xio_on_client_conn_established(struct xio_session *session,
-				   struct xio_conn *conn,
-				   union xio_conn_event_data *event_data);
+int xio_on_client_nexus_established(struct xio_session *session,
+				   struct xio_nexus *nexus,
+				   union xio_nexus_event_data *event_data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event_client						     */
+/* xio_on_nexus_event_client						     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_client(void *observer, void *sender, int event,
+int xio_client_on_nexus_event(void *observer, void *sender, int event,
 			     void *event_data);
 
 /* Should be in xio_ connection.h but it doesn't compile if moved there */
 /*---------------------------------------------------------------------------*/
-/* xio_connection_set_conn						     */
+/* xio_connection_set_nexus						     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_connection_set_conn(struct xio_connection *connection,
-					   struct xio_conn *conn)
+static inline void xio_connection_set_nexus(struct xio_connection *connection,
+					   struct xio_nexus *nexus)
 {
-	if (connection->conn && connection->conn == conn)
+	if (connection->nexus && connection->nexus == nexus)
 		return;
 
-	if (connection->conn)
-		xio_conn_unreg_observer(connection->conn,
+	if (connection->nexus)
+		xio_nexus_unreg_observer(connection->nexus,
 					&connection->session->observer);
 
-	if (conn) {
-		xio_conn_unreg_observer(conn,
+	if (nexus) {
+		xio_nexus_unreg_observer(nexus,
 					&connection->session->observer);
-		xio_conn_reg_observer(conn,
+		xio_nexus_reg_observer(nexus,
 				      &connection->session->observer,
 				      connection->session->session_id);
 	}
 
-	connection->conn = conn;
+	connection->nexus = nexus;
 }
 
+int xio_on_nexus_reconnected(struct xio_session *session,
+			    struct xio_nexus *nexus);
 
 #endif /* XIO_SESSION_PRIV_H */

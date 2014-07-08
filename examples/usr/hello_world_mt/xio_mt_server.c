@@ -63,6 +63,7 @@ struct thread_data {
 	int			pad;
 	struct xio_msg		rsp[QUEUE_DEPTH];
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	pthread_t		thread_id;
 };
 
@@ -73,7 +74,7 @@ struct server_data {
 };
 
 static struct portals_vec *portals_get(struct server_data *server_data,
-				const char *uri, void *user_context)
+				       const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
 	int			i;
@@ -102,11 +103,7 @@ static void process_request(struct thread_data *tdata,
 			    struct xio_msg *req)
 {
 	if (++tdata->cnt == PRINT_COUNTER) {
-		if (req->in.header.iov_base)
-			((char *)
-			 (req->in.header.iov_base))[req->in.header.iov_len]
-			  = 0;
-		printf("thread [%d] tid:%p - message: [%"PRIu64"] - %s\n",
+		printf("thread [%d] tid:%p - message: [%lu] - %s\n",
 		       tdata->affinity,
 		       (void *)pthread_self(),
 		       (req->sn + 1), (char *)req->in.header.iov_base);
@@ -121,9 +118,9 @@ static void process_request(struct thread_data *tdata,
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_user_context)
+		      struct xio_msg *req,
+		      int more_in_batch,
+		      void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
@@ -138,10 +135,8 @@ static int on_request(struct xio_session *session,
 	tdata->nsent++;
 
 #if  TEST_DISCONNECT
-	if (tdata->nsent == DISCONNECT_NR) {
-		struct xio_connection *connection =
-			xio_get_connection(session,tdata->ctx);
-		xio_disconnect(connection);
+	if (tdata->nsent == DISCONNECT_NR && tdata->connection) {
+		xio_disconnect(tdata->connection);
 		return 0;
 	}
 #endif
@@ -222,10 +217,11 @@ cleanup:
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
+	struct thread_data *tdata = event_data->conn_user_context;
 	int		   i;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
@@ -234,8 +230,12 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		tdata->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -254,8 +254,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;
@@ -292,6 +292,11 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port = atoi(argv[2]);
 
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\n",
+		       argv[0]);
+		exit(1);
+	}
 
 	server_data = calloc(1, sizeof(*server_data));
 	if (!server_data)
@@ -303,7 +308,10 @@ int main(int argc, char *argv[])
 	server_data->ctx	= xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%d", argv[1], port);
+	if (argc > 3)
+		sprintf(url, "%s://%s:%d", argv[3], argv[1], port);
+	else
+		sprintf(url, "rdma://%s:%d", argv[1], port);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data->ctx, &server_ops,
 			  url, NULL, 0, server_data);
@@ -315,8 +323,12 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data->tdata[i].affinity = i+1;
 		port += 1;
-		sprintf(server_data->tdata[i].portal, "rdma://%s:%d",
-			argv[1], port);
+		if (argc > 3)
+			sprintf(server_data->tdata[i].portal, "%s://%s:%d",
+				argv[3], argv[1], port);
+		else
+			sprintf(server_data->tdata[i].portal, "rdma://%s:%d",
+				argv[1], port);
 		pthread_create(&server_data->tdata[i].thread_id, NULL,
 			       portal_server_cb, &server_data->tdata[i]);
 	}

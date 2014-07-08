@@ -41,20 +41,19 @@
 #include <inttypes.h>
 #include <string.h>
 #include <getopt.h>
-#include <time.h>
-#include <sys/time.h>
 #include <errno.h>
-#include <sched.h>
 #include <pthread.h>
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_test_utils.h"
 
 #define MAX_HEADER_SIZE		32
 #define MAX_DATA_SIZE		32
 #define PRINT_COUNTER		6000000
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
+#define XIO_DEF_TRANSPORT	"rdma"
 #define XIO_DEF_HEADER_SIZE	32
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
@@ -62,19 +61,21 @@
 #define XIO_TEST_VERSION	"1.0.0"
 
 #define MAX_POOL_SIZE		400
-#define USECS_IN_SEC		1000000
-#define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
 #define MAX_THREADS		4
+#define DISCONNECT_FACTOR	3
 
 struct xio_test_config {
 	char			server_addr[32];
 	uint16_t		server_port;
+	char			transport[16];
 	uint16_t		cpu;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		conn_idx;
 	int			poll_timeout;
+	uint16_t		finite_run;
+	uint16_t		padding;
 };
 
 struct thread_stat_data {
@@ -96,6 +97,11 @@ struct thread_data {
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	pthread_t		thread_id;
+	uint64_t	disconnect_nr;
+	uint64_t		nrecv;
+	uint64_t		nsent;
+	uint16_t		finite_run;
+	uint16_t		padding[3];
 };
 
 /* private session data */
@@ -111,70 +117,14 @@ struct session_data {
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
 	XIO_DEF_PORT,
+	XIO_DEF_TRANSPORT,
 	XIO_DEF_CPU,
 	XIO_DEF_HEADER_SIZE,
 	XIO_DEF_DATA_SIZE,
 	XIO_DEF_POLL
 };
 
-/**
- * Convert a timespec to a microsecond value.
- * @e NOTE: There is a loss of precision in the conversion.
- *
- * @param time_spec The timespec to convert.
- * @return The number of microseconds specified by the timespec.
- */
-static inline
-unsigned long long timespec_to_usecs(struct timespec *time_spec)
-{
-	unsigned long long retval = 0;
-
-	retval  = time_spec->tv_sec * USECS_IN_SEC;
-	retval += time_spec->tv_nsec / NSECS_IN_USEC;
-
-	return retval;
-}
-
-static inline unsigned long long get_cpu_usecs()
-{
-	struct timespec ts = {0, 0};
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-
-	return  timespec_to_usecs(&ts);
-}
-
-/*
- * Set CPU affinity to one core.
- */
-static void set_cpu_affinity(int cpu)
-{
-	cpu_set_t coremask;		/* core affinity mask */
-
-	CPU_ZERO(&coremask);
-	CPU_SET(cpu, &coremask);
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &coremask) != 0)
-		fprintf(stderr, "Unable to set affinity. %m\n");
-}
-
-/*---------------------------------------------------------------------------*/
-/* get_time								     */
-/*---------------------------------------------------------------------------*/
-void get_time(char *time, int len)
-{
-	struct timeval tv;
-	struct tm      t;
-	int	       n;
-
-	gettimeofday(&tv, NULL);
-	localtime_r(&tv.tv_sec, &t);
-	/* Format the date and time,
-	   down to a single second. */
-	n = snprintf(time, len,
-		  "%04d/%02d/%02d-%02d:%02d:%02d.%05ld",
-		   t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-		   t.tm_hour, t.tm_min, t.tm_sec, tv.tv_usec);
-	time[n] = 0;
-}
+static struct msg_params msg_params;
 
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
@@ -206,6 +156,8 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 					     PRINT_COUNTER/data_len :
 					     PRINT_COUNTER);
 		tdata->stat.print_counter /=  MAX_THREADS;
+		tdata->disconnect_nr =
+			tdata->stat.print_counter * DISCONNECT_FACTOR;
 	}
 	if (++tdata->stat.cnt == tdata->stat.print_counter) {
 		char		timeb[40];
@@ -216,12 +168,12 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 		double txbw = (1.0*pps*tdata->stat.txlen/ONE_MB);
 		double rxbw = (1.0*pps*tdata->stat.rxlen/ONE_MB);
 
-		printf("transactions per second: %"PRIu64", bandwidth: " \
+		printf("transactions per second: %lu, bandwidth: " \
 		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, " \
 		       "RX: %zd B\n",
 		       pps, txbw, rxbw, tdata->stat.txlen, tdata->stat.rxlen);
 		get_time(timeb, 40);
-		printf("[%s] thread [%d] - tid:%p  - message [%"PRIu64"] " \
+		printf("[%s] thread [%d] - tid:%p  - message [%lu] " \
 		       "%s - %s\n",
 		       timeb,
 		       tdata->affinity,
@@ -249,16 +201,15 @@ static void *worker_thread(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* prepare data for the cuurent thread */
-	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE,
-				     test_config.hdr_len, test_config.data_len,
-				     0, 0);
+	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 	if (tdata->pool == NULL) {
 		fprintf(stderr, "failed to alloc pool\n");
 		return NULL;
 	}
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout, tdata->affinity);
+	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
+					tdata->affinity);
 
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
@@ -273,14 +224,15 @@ static void *worker_thread(void *data)
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 0;
+		msg->in.data_iovlen = 1;
 		msg->in.data_iov[0].iov_base = NULL;
 		msg->in.data_iov[0].iov_len  = ONE_MB;
 		msg->in.data_iov[0].mr = NULL;
 
 		/* create "hello world" message */
-		msg_write(msg, NULL,
-			  test_config.hdr_len, NULL, test_config.data_len);
+		msg_write(&msg_params, msg,
+			  test_config.hdr_len,
+			  1, test_config.data_len);
 
 		/* send first message */
 		if (xio_send_request(tdata->conn, msg) == -1) {
@@ -291,7 +243,8 @@ static void *worker_thread(void *data)
 					tdata->session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(tdata->pool, msg);
-			break;
+			tdata->nsent++;
+			xio_assert(0);
 		}
 	}
 
@@ -315,8 +268,8 @@ static void *worker_thread(void *data)
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
 	int		    i;
@@ -350,25 +303,40 @@ static int on_session_event(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *msg,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
 
+	tdata->nrecv++;
+
 	process_response(tdata, msg);
 
-	if (msg->status)
+	if (msg->status) {
 		printf("**** message completed with error. [%s]\n",
 		       xio_strerror(msg->status));
+		xio_assert(msg->status == 0);
+	}
 
 	/* message is no longer needed */
 	xio_release_response(msg);
 
+	if (tdata->finite_run) {
+		if (tdata->nrecv ==  tdata->disconnect_nr) {
+			xio_disconnect(tdata->conn);
+			return 0;
+		}
+		if (tdata->nsent == tdata->disconnect_nr) {
+			printf("already sent more that needed\n");
+			return 0;
+		}
+	}
+
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
+	msg->in.data_iovlen = 1;
 	msg->in.data_iov[0].iov_base = NULL;
 	msg->in.data_iov[0].iov_len  = ONE_MB;
 	msg->in.data_iov[0].mr = NULL;
@@ -377,8 +345,9 @@ static int on_response(struct xio_session *session,
 	msg->more_in_batch = 0;
 
 	/* recycle the message and fill new request */
-	msg_write(msg, NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+	msg_write(&msg_params, msg,
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	if (xio_send_request(tdata->conn, msg) == -1) {
 		if (xio_errno() != EAGAIN)
@@ -387,6 +356,7 @@ static int on_response(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, msg);
+		tdata->nsent++;
 		return 0;
 	}
 
@@ -397,12 +367,12 @@ static int on_response(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_user_context)
+		 enum xio_status error, struct xio_msg  *msg,
+		 void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
 
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
@@ -414,8 +384,8 @@ int on_msg_error(struct xio_session *session,
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
-			struct xio_new_session_rsp *rsp,
-			void *cb_user_context)
+				  struct xio_new_session_rsp *rsp,
+				  void *cb_user_context)
 {
 	printf("**** [%p] session established\n", session);
 
@@ -450,6 +420,10 @@ static void usage(const char *argv0, int status)
 	printf("\t\tConnect to port <port> (default %d)\n",
 	       XIO_DEF_PORT);
 
+	printf("\t-r, --transport=<type> ");
+	printf("\t\tUse rdma/tcp as transport <type> (default %s)\n",
+	       XIO_DEF_TRANSPORT);
+
 	printf("\t-n, --header-len=<number> ");
 	printf("\tSet the header length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_HEADER_SIZE);
@@ -461,6 +435,10 @@ static void usage(const char *argv0, int status)
 	printf("\t-t, --timeout=<number> ");
 	printf("\tSet polling timeout in microseconds " \
 			"(default %d)\n", XIO_DEF_POLL);
+
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
 
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
@@ -474,8 +452,7 @@ static void usage(const char *argv0, int status)
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(struct xio_test_config *test_config,
-		int argc, char **argv)
+int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 {
 	while (1) {
 		int c;
@@ -483,16 +460,18 @@ int parse_cmdline(struct xio_test_config *test_config,
 		static struct option const long_options[] = {
 			{ .name = "cpu",	.has_arg = 1, .val = 'c'},
 			{ .name = "port",	.has_arg = 1, .val = 'p'},
+			{ .name = "transport",	.has_arg = 1, .val = 'r'},
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "index",	.has_arg = 1, .val = 'i'},
 			{ .name = "timeout",	.has_arg = 1, .val = 't'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:w:i:t:vh";
+		static char *short_options = "c:p:r:n:w:i:t:f:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -508,6 +487,9 @@ int parse_cmdline(struct xio_test_config *test_config,
 			test_config->server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
+		case 'r':
+			strcpy(test_config->transport, optarg);
+			break;
 		case 'n':
 			test_config->hdr_len =
 				(uint32_t)strtol(optarg, NULL, 0);
@@ -519,6 +501,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 		case 'i':
 			test_config->conn_idx =
 				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'f':
+			test_config->finite_run =
+					(uint32_t)strtol(optarg, NULL, 0);
 			break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
@@ -536,7 +522,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -561,11 +547,13 @@ static void print_test_config(
 	printf(" =============================================\n");
 	printf(" Server Address		: %s\n", test_config_p->server_addr);
 	printf(" Server Port		: %u\n", test_config_p->server_port);
+	printf(" Transport		: %s\n", test_config_p->transport);
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" Poll timeout		: %d\n", test_config_p->poll_timeout);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -597,10 +585,14 @@ int main(int argc, char *argv[])
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 
-	if (msg_api_init(test_config.hdr_len, test_config.data_len, 0) != 0)
+	/* prepare buffers for this test */
+	if (msg_api_init(&msg_params,
+			 test_config.hdr_len, test_config.data_len, 0) != 0)
 		return -1;
 
-	sprintf(url, "rdma://%s:%d", test_config.server_addr,
+	sprintf(url, "%s://%s:%d",
+		test_config.transport,
+		test_config.server_addr,
 		test_config.server_port);
 	sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
 				   &attr, url, 0, 0, &sess_data);
@@ -608,7 +600,7 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto cleanup;
+		xio_assert(sess_data.session != NULL);
 	}
 
 	/* spawn threads to handle connection */
@@ -618,6 +610,7 @@ int main(int argc, char *argv[])
 		sess_data.tdata[i].cid			= i+1;
 		sess_data.tdata[i].stat.first_time	= 1;
 		sess_data.tdata[i].stat.print_counter	= PRINT_COUNTER;
+		sess_data.tdata[i].finite_run = test_config.finite_run;
 
 		/* all threads are working on the same session */
 		sess_data.tdata[i].session	= sess_data.session;
@@ -629,10 +622,12 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++)
 		pthread_join(sess_data.tdata[i].thread_id, NULL);
 
+	fprintf(stdout, "joined all threads\n");
+
 	/* close the session */
 	xio_session_destroy(sess_data.session);
 
-cleanup:
+	msg_api_free(&msg_params);
 
 	return 0;
 }

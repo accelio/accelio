@@ -149,7 +149,7 @@ void free_huge_pages(void *ptr)
 /*---------------------------------------------------------------------------*/
 void *xio_numa_alloc(size_t bytes, int node)
 {
-	size_t real_size = ALIGN(bytes, page_size);
+	size_t real_size = ALIGN((bytes + page_size), page_size);
 	void *p = numa_alloc_onnode(real_size, node);
 	if (!p) {
 		ERROR_LOG("numa_alloc_onnode failed sz:%zu. %m\n",
@@ -164,8 +164,6 @@ void *xio_numa_alloc(size_t bytes, int node)
 
 	/* Skip the page with metadata */
 	return p + page_size;
-
-	return p;
 }
 
 /*---------------------------------------------------------------------------*/

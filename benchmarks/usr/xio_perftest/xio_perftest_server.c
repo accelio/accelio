@@ -306,7 +306,9 @@ static void *balancer_server_cb(void *data)
 				server_data->user_param->poll_timeout, -1);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://*:%d", server_data->user_param->server_port);
+	sprintf(url, "%s://*:%d",
+		server_data->user_param->transport,
+		server_data->user_param->server_port);
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data->ctx, &server_ops, url,

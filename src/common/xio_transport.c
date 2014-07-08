@@ -95,3 +95,42 @@ struct xio_transport *xio_get_transport(const char *name)
 	return transport;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_transport_flush_task_list					     */
+/*---------------------------------------------------------------------------*/
+int xio_transport_flush_task_list(struct list_head *list)
+{
+	struct xio_task *ptask, *next_ptask;
+
+	list_for_each_entry_safe(ptask, next_ptask, list,
+				 tasks_list_entry) {
+		TRACE_LOG("flushing task %p type 0x%x\n",
+			  ptask, ptask->tlv_type);
+		if (ptask->sender_task) {
+			xio_tasks_pool_put(ptask->sender_task);
+			ptask->sender_task = NULL;
+		}
+		xio_tasks_pool_put(ptask);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_notify_assign_in_buf					     */
+/*---------------------------------------------------------------------------*/
+int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
+				struct xio_task *task, int *is_assigned)
+{
+	union xio_transport_event_data event_data = {
+			.assign_in_buf.task	   = task,
+			.assign_in_buf.is_assigned = 0
+	};
+
+	xio_transport_notify_observer(trans_hndl,
+				      XIO_TRANSPORT_ASSIGN_IN_BUF,
+				      &event_data);
+
+	*is_assigned = event_data.assign_in_buf.is_assigned;
+	return 0;
+}

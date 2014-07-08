@@ -42,6 +42,11 @@
 #include "xio_log.h"
 
 /*---------------------------------------------------------------------------*/
+/* externals								     */
+/*---------------------------------------------------------------------------*/
+extern struct xio_options g_options;
+
+/*---------------------------------------------------------------------------*/
 /* defines								     */
 /*---------------------------------------------------------------------------*/
 
@@ -77,7 +82,7 @@ void xio_set_error(int errnum);
 #define XIO_NOP			1
 
 #define XIO_CREDIT		(1 << 6)
-#define XIO_CONN_SETUP		(1 << 7)
+#define XIO_NEXUS_SETUP		(1 << 7)
 #define XIO_SESSION_SETUP	(1 << 8)
 #define XIO_CONNECTION_HELLO	(1 << 9)
 #define XIO_FIN			(1 << 10)
@@ -87,8 +92,8 @@ void xio_set_error(int errnum);
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
 #define XIO_CREDIT_NOP		(XIO_CREDIT | XIO_NOP)
-#define XIO_CONN_SETUP_REQ	(XIO_CONN_SETUP | XIO_REQUEST)
-#define XIO_CONN_SETUP_RSP	(XIO_CONN_SETUP | XIO_RESPONSE)
+#define XIO_NEXUS_SETUP_REQ	(XIO_NEXUS_SETUP | XIO_REQUEST)
+#define XIO_NEXUS_SETUP_RSP	(XIO_NEXUS_SETUP | XIO_RESPONSE)
 #define XIO_SESSION_SETUP_REQ	(XIO_SESSION_SETUP | XIO_REQUEST)
 #define XIO_SESSION_SETUP_RSP	(XIO_SESSION_SETUP | XIO_RESPONSE)
 #define XIO_ONE_WAY_REQ		XIO_MSG_TYPE_ONE_WAY
@@ -106,7 +111,7 @@ void xio_set_error(int errnum);
 #define IS_NOP(type)			((type) & XIO_NOP)
 #define IS_MESSAGE(type)		((type) & XIO_MESSAGE)
 #define IS_SESSION_SETUP(type)		((type) & XIO_SESSION_SETUP)
-#define IS_CONN_SETUP(type)		((type) & XIO_CONN_SETUP)
+#define IS_NEXUS_SETUP(type)		((type) & XIO_NEXUS_SETUP)
 #define IS_ONE_WAY(type)		((type) & XIO_ONE_WAY)
 #define IS_FIN(type)			((type) & XIO_FIN)
 #define IS_CANCEL(type)			((type) & XIO_CANCEL)
@@ -116,7 +121,7 @@ void xio_set_error(int errnum);
 /**
  *  TLV magic
  */
-#define XIO_MAGIC		0x6F727063  /* ascii of 'orpc' */
+#define XIO_MAGIC		0x58494F50  /* ascii of 'XIOP' */
 
 /**
  *  TLV macros
@@ -129,6 +134,19 @@ void xio_set_error(int errnum);
 #define UNPACK_LVAL(src, trgt, attr) ((trgt)->attr = ntohl((src)->attr))
 #define UNPACK_LLVAL(src, trgt, attr) ((trgt)->attr = ntohll((src)->attr))
 
+/*---------------------------------------------------------------------------*/
+/* structures								     */
+/*---------------------------------------------------------------------------*/
+struct xio_options {
+	int			max_in_iovsz;
+	int			max_out_iovsz;
+};
+
+struct xio_sge {
+	uint64_t		addr;		/* virtual address */
+	uint32_t		length;		/* length	   */
+	uint32_t		stag;		/* rkey		   */
+};
 
 /*---------------------------------------------------------------------------*/
 /* message headers							     */
@@ -147,17 +165,23 @@ struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		receipt_result;
 };
 
-struct __attribute__((__packed__)) xio_conn_setup_req {
+/* setup flags */
+#define XIO_CID			1
+
+#define XIO_RECONNECT		(XIO_CID)
+
+struct __attribute__((__packed__)) xio_nexus_setup_req {
 	uint16_t		version;
-	uint16_t		pad;
+	uint16_t		flags;
+	uint32_t		cid;
 };
 
 
-struct __attribute__((__packed__)) xio_conn_setup_rsp {
+struct __attribute__((__packed__)) xio_nexus_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;
-	uint16_t		pad;
+	uint16_t		flags;
 };
 
 struct __attribute__((__packed__)) xio_session_cancel_hdr {
@@ -167,8 +191,10 @@ struct __attribute__((__packed__)) xio_session_cancel_hdr {
 };
 
 struct xio_msg;
+struct xio_vmsg;
 struct xio_iovec;
 struct xio_iovec_ex;
+
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
@@ -218,8 +244,15 @@ size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
 size_t		memcpyv(struct xio_iovec *dst, int dsize,
 			struct xio_iovec *src, int ssize);
 
+size_t		memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
+			   struct xio_iovec_ex *src, int ssize);
+
 size_t		memclonev(struct xio_iovec *dst, int dsize,
 			  struct xio_iovec *src, int ssize);
+
+size_t		memclonev_ex(struct xio_iovec_ex *dst, int dsize,
+			  struct xio_iovec_ex *src, int ssize);
+
 
 size_t		xio_iov_length(const struct xio_iovec *iov,
 			       unsigned long nr_segs);
@@ -228,6 +261,16 @@ size_t		xio_iovex_length(const struct xio_iovec_ex *iov,
 				 unsigned long nr_segs);
 
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
+
+void		xio_msg_dump(struct xio_msg *xio_msg);
+
+void		xio_msg_map(struct xio_msg *xio_msg);
+
+void		xio_msg_unmap(struct xio_msg *xio_msg);
+
+void		xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg);
+
+void		xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg);
 
 #endif /*XIO_COMMON_H */
 

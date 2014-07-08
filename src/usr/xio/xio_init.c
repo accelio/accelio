@@ -40,8 +40,8 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_tls.h"
-#include "xio_sessions_store.h"
-#include "xio_conns_store.h"
+#include "xio_sessions_cache.h"
+#include "xio_nexus_cache.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
 
@@ -49,9 +49,11 @@ int	page_size;
 double	g_mhz;
 
 extern struct xio_transport xio_rdma_transport;
+extern struct xio_transport xio_tcp_transport;
 
 static struct xio_transport  *transport_tbl[] = {
-	&xio_rdma_transport
+	&xio_rdma_transport,
+	&xio_tcp_transport
 };
 
 #define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
@@ -90,8 +92,8 @@ static void xio_ctor()
 		page_size = 4096;
 	g_mhz = get_cpu_mhz(0);
 	xio_thread_data_construct();
-	sessions_store_construct();
-	conns_store_construct();
+	sessions_cache_construct();
+	nexus_cache_construct();
 
 	for (i = 0; i < transport_tbl_sz; i++) {
 		xio_reg_transport(transport_tbl[i]);

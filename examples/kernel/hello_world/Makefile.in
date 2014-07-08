@@ -4,14 +4,20 @@ SHELL = /bin/sh
 INSTALL = @INSTALL@
 mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
+OFED_CFLAGS = @OFED_CFLAGS@
+KSYMVERS = @RDMA_SYMVERS@
+
+NOSTDINC_FLAGS += @OFED_CFLAGS@
+
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	libxio.h\
 	xio_client.c xio_server.c
 
-xiomoduledir = @kmoduledir@/drivers/infiniband/ulp/xio
+xiomoduledir = @kmoduledir@/extra/net/xio
 
-xiomodule := xio.ko
+xiomodule1 := client.ko
+xiomodule2 := server.ko
 
 all: all-@ENABLE_XIO_MODULE@
 install: install-@ENABLE_XIO_MODULE@
@@ -25,15 +31,18 @@ all-y: all-spec
 
 install-y: all
 	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
-	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	$(INSTALL) -m 644 $(xiomodule1) $(DESTDIR)$(xiomoduledir)/$(xiomodule1)
+	$(INSTALL) -m 644 $(xiomodule2) $(DESTDIR)$(xiomoduledir)/$(xiomodule2)
 	-/sbin/depmod -a
 
 uninstall-y:
-	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule1)
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule2)
 	-/sbin/depmod -a
 
 clean:
-	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-rm -f $(xiomodule1) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-rm -f $(xiomodule2) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
 
 distclean: clean
 	rm -f Makefile configure config.status
@@ -51,7 +60,6 @@ obj-m := server.o client.o
 server-objs := xio_server.o
 client-objs := xio_client.o
 
-XIOSYMS=`pwd`/../../../src/kernel/xio/Module.symvers
-
 all-spec:
-	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=$(XIOSYMS) @KERNELMAKE_PARAMS@ modules
+	export NOSTDINC_FLAGS
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules

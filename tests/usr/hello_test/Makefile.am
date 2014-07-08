@@ -1,7 +1,7 @@
 # this is example file: examples/hello_world/Makefile.am
 
 # additional include pathes necessary to compile the C programs
-AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@
+AM_CFLAGS = -I$(top_srcdir)/include -I../common @AM_CFLAGS@
 
 AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt \
 	     -L$(top_builddir)/src/usr/
@@ -15,10 +15,12 @@ bin_PROGRAMS = xio_client \
 	       xio_server
 	
 # list of sources for the 'xio_perftest' binary
-xio_client_SOURCES =  xio_msg.c		\
+xio_client_SOURCES =  ../common/xio_msg.c		\
+		      ../common/xio_test_utils.c	\
 		      xio_client.c		
 		
-xio_server_SOURCES =  xio_msg.c		\
+xio_server_SOURCES =  ../common/xio_msg.c		\
+		      ../common/xio_test_utils.c	\
 		      xio_server.c		
 	
 

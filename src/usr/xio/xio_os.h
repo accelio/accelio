@@ -81,6 +81,7 @@
 #include <linux/usr.h>
 #include <linux/netlink.h>
 #include <linux/debugfs.h>
+#include <linux/jiffies.h>
 
 #include "get_clock.h"
 

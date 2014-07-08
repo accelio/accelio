@@ -43,6 +43,10 @@
 #include "xio_context.h"
 #include "xio_timers_list.h"
 
+
+#define NSEC_PER_SEC		1000000000L
+#define MAX_DELETED_WORKS	1024
+
 enum xio_workqueue_flags {
 	XIO_WORKQUEUE_IN_POLL		= 1 << 0,
 	XIO_WORKQUEUE_TIMER_ARMED	= 1 << 1
@@ -54,9 +58,10 @@ struct xio_workqueue {
 	int				timer_fd;
 	int				pipe_fd[2];
 	volatile uint32_t		flags;
+	uint64_t			deleted_works[MAX_DELETED_WORKS];
+	uint32_t			deleted_works_nr;
+	uint32_t			pad;
 };
-
-#define NSEC_PER_SEC    1000000000L
 
 /**
  * set_normalized_timespec - set timespec sec and nsec parts and
@@ -186,6 +191,8 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 	int64_t			exp;
 	ssize_t			s;
 	xio_work_handle_t	*work;
+	int			i, found = 0;
+
 
 	/* drain the pipe data */
 	while (1) {
@@ -193,6 +200,7 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 		if (s < 0) {
 			if (errno != EAGAIN)
 				ERROR_LOG("failed to read from pipe, %m\n");
+			work_queue->deleted_works_nr = 0;
 			return;
 		}
 		if (s != sizeof(uint64_t)) {
@@ -200,6 +208,22 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			return;
 		}
 		work = ptr_from_int64(exp);
+		if (!work) {
+			ERROR_LOG("null work\n");
+			return;
+		}
+
+		/* scan for deleted work the may be inside the pipe */
+		for(i = 0; i < work_queue->deleted_works_nr; i++) {
+			if (work_queue->deleted_works[i] == exp) {
+				found = 1;
+				break;
+			}
+		}
+		if (found) {
+			found = 0;
+			continue;
+		}
 
 		if (work->flags & XIO_WORK_PENDING) {
 			work->flags	&= ~XIO_WORK_PENDING;
@@ -317,6 +341,11 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
 	enum timers_list_rc	rc;
 	xio_work_handle_t	*work = &dwork->work;
 
+	if (xio_is_delayed_work_pending(dwork)) {
+		ERROR_LOG("work already pending\n");
+		xio_set_error(EEXIST);
+		return -1;
+	}
 
 	xio_timers_list_lock(&work_queue->timers_list);
 
@@ -353,6 +382,12 @@ int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
 {
 	int			retval = 0;
 	enum timers_list_rc	rc;
+
+	if (!xio_is_delayed_work_pending(dwork)) {
+		ERROR_LOG("work not pending\n");
+		xio_set_error(EEXIST);
+		return -1;
+	}
 
 	/* stop the timer */
 	xio_workqueue_disarm(work_queue);
@@ -410,6 +445,15 @@ int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 {
 	if (work->flags & XIO_WORK_PENDING) {
 		work->flags &= ~XIO_WORK_PENDING;
+		if (work_queue->deleted_works_nr < MAX_DELETED_WORKS) {
+			work_queue->deleted_works[
+				work_queue->deleted_works_nr
+						 ] = uint64_from_ptr(work);
+			work_queue->deleted_works_nr++;
+		} else {
+			ERROR_LOG("failed to delete work\n");
+		}
+
 		return 0;
 	}
 	return -1;

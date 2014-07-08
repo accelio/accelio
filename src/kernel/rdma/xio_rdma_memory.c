@@ -53,7 +53,6 @@
 #include "xio_context.h"
 #include "xio_task.h"
 #include "xio_transport.h"
-#include "xio_conn.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
@@ -253,8 +252,8 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  */
 
 static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
-                              struct ib_device *ibdev, u64 *pages,
-                              int *offset, int *data_size)
+			      struct ib_device *ibdev, u64 *pages,
+			      int *offset, int *data_size)
 {
 	struct scatterlist *sg, *sgl = mdesc->sgl;
 	u64 start_addr, end_addr, page, chunk_start = 0;
@@ -305,7 +304,7 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
  * consecutive SG elements are actually fragments of the same physcial page.
  */
 static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
-		                    struct ib_device *ibdev)
+				    struct ib_device *ibdev)
 {
 	struct scatterlist *sgl, *sg, *next_sg = NULL;
 	u64 start_addr, end_addr;
@@ -397,8 +396,11 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 
 	init_llist_head(&frwr->pool);
 	frwr->pool_size = 0;
-	/* a task can many need both RDMA read and write */
-	for (i = 0; i < rdma_hndl->num_tasks * 2; i++) {
+	/* There can be only max_tx_ready_tasks_num simultaniously inflight
+	 * request tasks at any given time, each of wich may need both RDMA
+	 * read and write (both data form server to client may be big)
+	 */
+	for (i = 0; i < rdma_hndl->max_tx_ready_tasks_num * 2; i++) {
 		desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 		if (!desc) {
 			ERROR_LOG("Failed to allocate a new fast_reg descriptor\n");
@@ -555,9 +557,10 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 
 	fdesc = get_fdesc(rdma_hndl);
 	if (!fdesc) {
-		ERROR_LOG("pool is empty!\n");
-		err = -ENOMEM;
-		goto err_reg;
+		/* We may have temporay pressure on pool */
+		DEBUG_LOG("pool is empty!\n");
+		/* fail to dummy, i.e. will use multiple RDMA  */
+		return xio_reg_rdma_mem_dummy(rdma_hndl, mdesc, cmd_dir);
 	}
 
 	page_list_len = xio_sg_to_page_vec(mdesc, dev->ib_dev,
@@ -618,9 +621,9 @@ void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
 	int i;
 
 	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
-		memmove(ptr, vmsg->data_iov[i].iov_base,
-			vmsg->data_iov[i].iov_len);
-		ptr += vmsg->data_iov[i].iov_len;
+		memmove(ptr, vmsg->pdata_iov[i].iov_base,
+			vmsg->pdata_iov[i].iov_len);
+		ptr += vmsg->pdata_iov[i].iov_len;
 	}
 }
 
@@ -649,7 +652,7 @@ int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl, int *nents)
 		return 0;
 	}
 
-	niov = &vmsg->data_iov[0];
+	niov = &vmsg->pdata_iov[0];
 	start_addr = niov->iov_base;
 	total_len = niov->iov_len;
 	sg = sgl;

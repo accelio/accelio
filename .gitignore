@@ -33,6 +33,10 @@ xio_oneway_client
 xio_oneway_server
 xio_read_lat
 xio_read_bw
+xioclntd
+xiosrvd
+src/tools/usr/Makefile.in
+src/tools/usr/xio_mem_usage
 regression/usr/reg_basic_mt/reg_basic_mt
 version.c
 */usr/*/Makefile.in

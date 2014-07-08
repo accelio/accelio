@@ -100,7 +100,7 @@ struct server_data {
 /* portals_get								     */
 /*---------------------------------------------------------------------------*/
 static struct portals_vec *portals_get(struct server_data *server_data,
-				const char *uri, void *user_context)
+				       const char *uri, void *user_context)
 {
 	/* fill portals array and return it. */
 	int			i;
@@ -177,9 +177,9 @@ static void msg_obj_init(void *user_context, void *obj)
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
-			struct xio_msg *req,
-			int more_in_batch,
-			void *cb_user_context)
+		      struct xio_msg *req,
+		      int more_in_batch,
+		      void *cb_user_context)
 {
 	struct thread_data	*tdata  = cb_user_context;
 	struct xio_buf		**iobuf = req->in.data_iov[0].user_context;
@@ -278,8 +278,8 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 /* on_send_rsp_complete							     */
 /*---------------------------------------------------------------------------*/
 static int on_send_rsp_complete(struct xio_session *session,
-			struct xio_msg *rsp,
-			void *cb_prv_data)
+				struct xio_msg *rsp,
+				void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
@@ -304,8 +304,8 @@ static int on_send_rsp_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *rsp,
-		void *cb_prv_data)
+		 enum xio_status error, struct xio_msg  *rsp,
+		 void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
 
@@ -418,13 +418,14 @@ static int on_new_connection(struct xio_session *session,
 	struct session_entry	*session_entry;
 	struct connection_entry *connection_entry;
 
-	connection_entry = calloc(1, sizeof(*connection_entry));
-	connection_entry->connection = connection;
-
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
 		if (session_entry->session == session) {
+			connection_entry = calloc(1, sizeof(*connection_entry));
+			if (connection_entry == NULL)
+				return -1;
+			connection_entry->connection = connection;
 			TAILQ_INSERT_TAIL(&session_entry->conns_list,
 					  connection_entry, conns_list_entry);
 			break;
@@ -505,8 +506,8 @@ static int on_session_teardown(struct xio_session *session,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
 	int		   i;
@@ -542,8 +543,8 @@ static int on_session_event(struct xio_session *session,
 /* on_new_session							     */
 /*---------------------------------------------------------------------------*/
 static int on_new_session(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context)
+			  struct xio_new_session_req *req,
+			  void *cb_user_context)
 {
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;
@@ -607,7 +608,7 @@ int server_main(int argc, char *argv[])
 	server_data->tdata = calloc(server_threads_num,
 				    sizeof(*server_data->tdata));
 	if (!server_data->tdata)
-		return -1;
+		goto cleanup;
 
 	server_data->threads_num = server_threads_num;
 	server_data->queue_depth = queue_depth;
@@ -629,7 +630,7 @@ int server_main(int argc, char *argv[])
 	server = xio_bind(server_data->ctx, &server_ops,
 			  url, NULL, 0, server_data);
 	if (server == NULL)
-		goto cleanup;
+		goto cleanup1;
 
 	/* initialize thread synchronization barrier */
 	pthread_barrier_init(&server_data->barr, NULL,
@@ -661,7 +662,8 @@ int server_main(int argc, char *argv[])
 
 	/* free the server */
 	xio_unbind(server);
-cleanup:
+
+cleanup1:
 	/* free the context */
 	xio_context_destroy(server_data->ctx);
 
@@ -670,6 +672,7 @@ cleanup:
 	pthread_spin_destroy(&server_data->lock);
 
 	free(server_data->tdata);
+cleanup:
 	free(server_data);
 
 	DEBUG("server: goodbye and good riddance\n");

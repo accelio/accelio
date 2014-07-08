@@ -42,7 +42,6 @@
 /* forward declarations	                                                     */
 /*---------------------------------------------------------------------------*/
 struct xio_task;
-struct xio_task_pool;
 struct xio_observer;
 struct xio_observable;
 struct xio_tasks_pool_ops;
@@ -124,27 +123,46 @@ struct xio_transport_msg_validators_cls {
 
 struct xio_tasks_pool_ops {
 	void	(*pool_get_params)(struct xio_transport_base *transport_hndl,
-				int *pool_len, int *pool_dd_sz,
+				int *start_nr,
+				int *max_nr,
+				int *alloc_nr,
+				int *pool_dd_size,
+				int *slab_dd_size,
 				int *task_dd_size);
-	int	(*pool_alloc)(struct xio_transport_base *trans_hndl,
-				int max, void *pool_dd_data);
-	int	(*pool_free)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data);
-	int	(*pool_init_item)(struct xio_transport_base *trans_hndl,
-				void *pool_dd_data, struct xio_task *task);
-	int	(*pool_uninit_item)(void *pool_dd_data, struct xio_task *task);
-	int	(*pool_run)(struct xio_transport_base *trans_hndl);
 
-	int	(*pre_put)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
-	int	(*post_get)(struct xio_transport_base *trans_hndl,
-			struct xio_task *task);
+	int	(*slab_pre_create)(struct xio_transport_base *trans_hndl,
+				   int alloc_nr,
+				   void *pool_dd_data, void *slab_dd_data);
+	int	(*slab_destroy)(struct xio_transport_base *trans_hndl,
+				 void *pool_dd_data,void *slab_dd_data);
+	int	(*slab_init_task)(struct xio_transport_base *trans_hndl,
+				  void *pool_dd_data, void *slab_dd_data,
+				  int tid, struct xio_task *task);
+	int	(*slab_uninit_task)(struct xio_transport_base *trans_hndl,
+				    void *pool_dd_data, void *slab_dd_data,
+				    struct xio_task *task);
+	int	(*slab_remap_task)(struct xio_transport_base *old_th,
+				   struct xio_transport_base *new_th,
+				   void *pool_dd_data, void *slab_dd_data,
+				   struct xio_task *task);
+	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
+				    void *pool_dd_data, void *slab_dd_data);
+	int	(*pool_pre_create)(struct xio_transport_base *trans_hndl,
+			void *pool, void *pool_dd_data);
+	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,
+				    void *pool, void *pool_dd_data);
+	int	(*pool_destroy)(struct xio_transport_base *trans_hndl,
+				void *pool, void *pool_dd_data);
+	int	(*task_pre_put)(struct xio_transport_base *trans_hndl,
+				struct xio_task *task);
+	int	(*task_post_get)(struct xio_transport_base *trans_hndl,
+				 struct xio_task *task);
 };
 
 struct xio_tasks_pool_cls {
 	void		*pool;
-	struct xio_task * (*task_alloc)(void *pool);
-	void		  (*task_free)(struct xio_task *task);
+	struct xio_task * (*task_get)(void *pool);
+	void		  (*task_put)(struct xio_task *task);
 
 	struct xio_task	* (*task_lookup)(void *pool, int task_id);
 };
@@ -197,6 +215,12 @@ struct xio_transport {
 	int	(*reject)(struct xio_transport_base *trans_hndl);
 
 	void	(*close)(struct xio_transport_base *trans_hndl);
+
+	int	(*dup2)(struct xio_transport_base *old_trans_hndl,
+			struct xio_transport_base **new_trans_hndl);
+
+	int	(*update_task)(struct xio_transport_base *trans_hndl,
+			       struct xio_task *task);
 
 	int	(*send)(struct xio_transport_base *trans_hndl,
 			struct xio_task *task);
@@ -282,6 +306,12 @@ static inline void xio_transport_notify_message_error(
 					    XIO_TRANSPORT_MESSAGE_ERROR,
 					    &ev_data);
 }
+
+int xio_transport_flush_task_list(struct list_head *list);
+
+int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
+				struct xio_task *task,
+				int *is_assigned);
 
 /*---------------------------------------------------------------------------*/
 /* xio_reg_transport			                                     */

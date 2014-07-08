@@ -82,6 +82,7 @@ struct server_data;
 
 struct thread_data {
 	struct server_data 	*sdata;
+	struct xio_connection 	*connection;
 	struct xio_msg		*rsp;
 	void __rcu		*ctx; /* RCU doesn't like incomplete types */
 	int			cnt;
@@ -193,7 +194,7 @@ int on_session_event(struct xio_session *session,
 		void *cb_user_context)
 {
 	struct server_data *sdata;
-	struct thread_data *tdata;
+	struct thread_data *tdata = event_data->conn_user_context;
 	struct xio_context *tctx[MAX_THREADS];
 	struct xio_context *ctx;
 	int i;
@@ -205,9 +206,13 @@ int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		tdata->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		/* NULL assignment is done with preemption disabled */
 		xio_connection_destroy(event_data->conn);
+		tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		spin_lock(&sdata->lock);
@@ -300,8 +305,8 @@ int xio_portal_thread(void *data)
 	sdata = tdata->sdata;
 
 	cpu = raw_smp_processor_id();
-	tdata->rsp = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				  GFP_KERNEL, cpu_to_node(cpu));
+	tdata->rsp = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				  cpu_to_node(cpu));
 	if (!tdata->rsp)
 		goto cleanup0;
 
@@ -362,7 +367,7 @@ cleanup1:
 	for (i = 0; i < QUEUE_DEPTH; i++)
 		kfree(tdata->rsp[i].out.header.iov_base);
 
-	kfree(tdata->rsp);
+	vfree(tdata->rsp);
 
 cleanup0:
 	i = atomic_dec_return(&cleanup_complete.thread_count);
@@ -382,7 +387,7 @@ static void free_tdata(struct server_data *sdata)
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		if (sdata->tdata[i]) {
-			kfree(sdata->tdata[i]);
+			vfree(sdata->tdata[i]);
 			sdata->tdata[i] = NULL;
 		}
 	}
@@ -412,8 +417,8 @@ static int init_threads(struct server_data *sdata)
 		struct thread_data *tdata;
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
-		tdata = kzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
-				     GFP_KERNEL, cpu_to_node(cpu));
+		tdata = vzalloc_node(sizeof(struct xio_msg) * QUEUE_DEPTH,
+				     cpu_to_node(cpu));
 		if (!tdata)
 			goto cleanup0;
 
@@ -559,7 +564,6 @@ void xio_thread_down(void *data)
 {
 	struct thread_data *tdata;
 	struct server_data *sdata;
-	struct xio_connection *connection;
 	struct xio_session *session;
 	struct xio_context *ctx;
 
@@ -572,11 +576,10 @@ void xio_thread_down(void *data)
 	if (!session)
 		goto stop_loop_now;
 
-	connection = xio_get_connection(session, ctx);
-	if (!connection)
+	if (!tdata->connection)
 		goto stop_loop_now;
 
-	xio_disconnect(connection);
+	xio_disconnect(tdata->connection);
 
 	rcu_read_unlock();
 

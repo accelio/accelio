@@ -44,10 +44,10 @@
 #include "xio_task.h"
 #include "xio_context.h"
 #include "xio_transport.h"
-#include "xio_sessions_store.h"
+#include "xio_sessions_cache.h"
 #include "xio_hash.h"
 #include "xio_session.h"
-#include "xio_conn.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
 
@@ -119,11 +119,11 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 		ptr = ptr + len;
 	}
 
-	req.proto = xio_conn_get_proto(connection->conn);
-	xio_conn_get_src_addr(connection->conn,
+	req.proto = xio_nexus_get_proto(connection->nexus);
+	xio_nexus_get_src_addr(connection->nexus,
 			      &req.src_addr, sizeof(req.src_addr));
 
-	/* store the task in io queue*/
+	/* cache the task in io queue*/
 	xio_connection_queue_io_task(connection, task);
 
 	/* notify the upper layer */
@@ -559,86 +559,91 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_server_conn_established					     */
+/* xio_on_server_nexus_established					     */
 /*---------------------------------------------------------------------------*/
-int xio_on_server_conn_established(struct xio_session *session,
-				   struct xio_conn *conn,
-				   union xio_conn_event_data *event_data)
+int xio_on_server_nexus_established(struct xio_session *session,
+				   struct xio_nexus *nexus,
+				   union xio_nexus_event_data *event_data)
 {
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_conn_event_server						     */
+/* xio_server_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
-int xio_on_conn_event_server(void *observer, void *sender, int event,
+int xio_server_on_nexus_event(void *observer, void *sender, int event,
 			     void *event_data)
 {
 	struct xio_session	*session = observer;
-	struct xio_conn	*conn	= sender;
+	struct xio_nexus	*nexus	= sender;
 	int			retval  = 0;
 
 
 	switch (event) {
-	case XIO_CONN_EVENT_NEW_MESSAGE:
+	case XIO_NEXUS_EVENT_NEW_MESSAGE:
 /*
 		TRACE_LOG("session: [notification] - new message. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 
-*/		xio_on_new_message(session, conn, event_data);
+*/		xio_on_new_message(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_SEND_COMPLETION:
+	case XIO_NEXUS_EVENT_SEND_COMPLETION:
 /*		TRACE_LOG("session: [notification] - send_completion. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 */
-		xio_on_send_completion(session, conn, event_data);
+		xio_on_send_completion(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ASSIGN_IN_BUF:
+	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
-			 "session:%p, conn:%p\n", observer, sender);
+			 "session:%p, nexus:%p\n", observer, sender);
 */
-		xio_on_assign_in_buf(session, conn, event_data);
+		xio_on_assign_in_buf(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_CANCEL_REQUEST:
+	case XIO_NEXUS_EVENT_CANCEL_REQUEST:
 		DEBUG_LOG("session: [notification] - cancel request. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_cancel_request(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_cancel_request(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_CANCEL_RESPONSE:
+	case XIO_NEXUS_EVENT_CANCEL_RESPONSE:
 		DEBUG_LOG("session: [notification] - cancel response. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_cancel_response(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_cancel_response(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ESTABLISHED:
+	case XIO_NEXUS_EVENT_ESTABLISHED:
 		DEBUG_LOG("session: [notification] - connection established. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_server_conn_established(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_server_nexus_established(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_DISCONNECTED:
+	case XIO_NEXUS_EVENT_DISCONNECTED:
 		DEBUG_LOG("session: [notification] - connection disconnected" \
-			 " session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_disconnected(session, conn, event_data);
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_disconnected(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_CLOSED:
+	case XIO_NEXUS_EVENT_RECONNECTED:
+		DEBUG_LOG("session: [notification] - connection reconnected" \
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_reconnected(session, nexus);
+		break;
+	case XIO_NEXUS_EVENT_CLOSED:
 		DEBUG_LOG("session: [notification] - connection closed. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_closed(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_closed(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_ERROR:
+	case XIO_NEXUS_EVENT_ERROR:
 		DEBUG_LOG("session: [notification] - connection error. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_error(session, conn, event_data);
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_error(session, nexus, event_data);
 		break;
-	case XIO_CONN_EVENT_MESSAGE_ERROR:
-		DEBUG_LOG("session: [notification] - conn message error. " \
-			 "session:%p, conn:%p\n", observer, sender);
-		xio_on_conn_message_error(session, conn, event_data);
+	case XIO_NEXUS_EVENT_MESSAGE_ERROR:
+		DEBUG_LOG("session: [notification] - nexus message error. " \
+			 "session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_message_error(session, nexus, event_data);
 		break;
 	default:
 		DEBUG_LOG("session: [notification] - unexpected event. " \
-			 "event:%d, session:%p, conn:%p\n",
+			 "event:%d, session:%p, nexus:%p\n",
 			 event, observer, sender);
-		xio_on_conn_error(session, conn, event_data);
+		xio_on_nexus_error(session, nexus, event_data);
 		break;
 	}
 

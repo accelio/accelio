@@ -108,6 +108,9 @@ struct raio_pool *raio_pool_init(int max, size_t size)
 	size_t pool_alloc_sz = sizeof(struct raio_pool) +
 				2*max*sizeof(void *);
 
+	if (max < 1)
+		return NULL;
+
 	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
@@ -128,8 +131,10 @@ struct raio_pool *raio_pool_init(int max, size_t size)
 	elems_alloc_sz = max*size;
 
 	data = calloc(elems_alloc_sz, sizeof(uint8_t));
-	if (data == NULL)
+	if (data == NULL) {
+		free(q);
 		return NULL;
+	}
 
 	for (i = 0; i < max; i++) {
 		q->array[i]		= data;
@@ -159,10 +164,22 @@ static void usage(const char *argv0)
 	printf("\n");
 	printf("options:\n");
 	printf("%s -a <server_addr> -p <port> -f <file_path>  " \
-	      "-b <block_size> -l <loops>\n",
+	       "-b <block_size> -l <loops>\n",
 	      argv0);
 
 	exit(0);
+}
+
+static void free_cmdline_params(void)
+{
+	if (file_path) {
+		free(file_path);
+		file_path = NULL;
+	}
+	if (server_addr) {
+		free(server_addr);
+		server_addr = NULL;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -181,6 +198,8 @@ int parse_cmdline(int argc, char **argv)
 	};
 	optind = 0;
 	opterr = 0;
+	server_addr = NULL;
+	file_path = NULL;
 
 	while (1) {
 		int c;
@@ -194,14 +213,20 @@ int parse_cmdline(int argc, char **argv)
 
 		switch (c) {
 		case 'a':
-			server_addr = strdup(optarg);
+			if (server_addr == NULL)
+				server_addr = strdup(optarg);
+			if (server_addr == NULL)
+				goto cleanup;
 			break;
 		case 'p':
 			server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'f':
-			file_path = strdup(optarg);
+			if (file_path == NULL)
+				file_path = strdup(optarg);
+			if (file_path == NULL)
+				goto cleanup;
 			break;
 		case 'b':
 			block_size = strtol(optarg, NULL, 0);
@@ -211,24 +236,27 @@ int parse_cmdline(int argc, char **argv)
 			break;
 		case 'h':
 			usage(argv[0]);
+			exit(0);
 			break;
 		default:
 			fprintf(stderr, " invalid command or flag.\n");
-			fprintf(stderr,
-				" please check command line and run again.\n\n");
-			usage(argv[0]);
+			goto cleanup;
 			break;
 		}
 	}
 	if (argc == 1)
 		usage(argv[0]);
-	if (optind < argc) {
-		fprintf(stderr,
-			" Invalid Command line.Please check command rerun\n");
-		exit(-1);
-	}
+	if (optind < argc)
+		goto cleanup;
 
 	return 0;
+
+cleanup:
+	free_cmdline_params();
+	fprintf(stderr,
+		"Invalid Command line. Please check command rerun\n");
+	usage(argv[0]);
+	exit(-1);
 }
 
 /*
@@ -293,7 +321,7 @@ int main(int argc, char *argv[])
 
 	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
 	fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
-		file_path, flags);
+		       file_path, flags);
 	if (fd == -1) {
 		fprintf(stderr, "raio_open failed - file:%s:%d/%s " \
 			"flags:%x %m\n", server_addr, server_port,
@@ -365,7 +393,7 @@ int main(int argc, char *argv[])
 				nsubmit = min(nqueued, IODEPTH-npending);
 				if (nsubmit) {
 					nsubmit = raio_submit(io_ctx,
-							nsubmit , piocb);
+							      nsubmit , piocb);
 					if (nsubmit <= 0) {
 						fprintf(
 						  stderr,
@@ -411,7 +439,8 @@ int main(int argc, char *argv[])
 							      events[i].obj);
 					}
 					retval = raio_release(io_ctx,
-							ncomplete, events);
+							      ncomplete,
+							      events);
 					if (retval == -1) {
 						fprintf(stderr,
 							"\nraio_release failed: fd:%d %m\n",
@@ -460,6 +489,8 @@ close_file:
 		fprintf(stderr, "raio_close failed - fd:%d %m\n", fd);
 		return -1;
 	}
+	free_cmdline_params();
+
 	printf("good bye\n");
 	return fd;
 }

@@ -42,41 +42,41 @@
 #include <inttypes.h>
 #include <string.h>
 #include <getopt.h>
-#include <time.h>
-#include <sys/time.h>
 #include <errno.h>
-#include <sched.h>
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_test_utils.h"
 
 #define MAX_HEADER_SIZE		32
 #define MAX_DATA_SIZE		32
 #define PRINT_COUNTER		4000000
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
+#define XIO_DEF_TRANSPORT	"rdma"
 #define XIO_DEF_HEADER_SIZE	32
 #define XIO_DEF_DATA_SIZE	32
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
-#define MAX_OUTSTANDING_REQS	5000
-#define TEST_DISCONNECT		0
-#define DISCONNECT_NR		12000000
-#define ASK_FOR_RECEIPT		0
+#define MAX_OUTSTANDING_REQS	50
+/* will disconnect after DISCONNECT_FACTOR*print counter msgs */
+#define DISCONNECT_FACTOR	3
+#define ASK_FOR_RECEIPT		1
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
-#define USECS_IN_SEC		1000000
-#define NSECS_IN_USEC		1000
 #define ONE_MB			(1 << 20)
 
 struct xio_test_config {
 	char			server_addr[32];
 	uint16_t		server_port;
+	char			transport[16];
 	uint16_t		cpu;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		conn_idx;
+	uint16_t		finite_run;
+	uint16_t		padding[3];
 };
 
 struct test_stat {
@@ -98,7 +98,9 @@ struct test_params {
 	uint64_t		nsent;
 	uint64_t		ncomp;
 	int			ask_for_receipt;
-	int			pad;
+	uint16_t		finite_run;
+	uint16_t		padding;
+	uint64_t		disconnect_nr;
 };
 
 
@@ -108,49 +110,11 @@ struct test_params {
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
 	XIO_DEF_PORT,
+	XIO_DEF_TRANSPORT,
 	XIO_DEF_CPU,
 	XIO_DEF_HEADER_SIZE,
 	XIO_DEF_DATA_SIZE
 };
-
-/**
- * Convert a timespec to a microsecond value.
- * @e NOTE: There is a loss of precision in the conversion.
- *
- * @param time_spec The timespec to convert.
- * @return The number of microseconds specified by the timespec.
- */
-static inline
-unsigned long long timespec_to_usecs(struct timespec *time_spec)
-{
-	unsigned long long retval = 0;
-
-	retval  = time_spec->tv_sec * USECS_IN_SEC;
-	retval += time_spec->tv_nsec / NSECS_IN_USEC;
-
-	return retval;
-}
-
-static inline unsigned long long get_cpu_usecs()
-{
-	struct timespec ts = {0, 0};
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-
-	return  timespec_to_usecs(&ts);
-}
-
-/*
- * Set CPU affinity to one core.
- */
-static void set_cpu_affinity(int cpu)
-{
-	cpu_set_t coremask;		/* core affinity mask */
-
-	CPU_ZERO(&coremask);
-	CPU_SET(cpu, &coremask);
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &coremask) != 0)
-		fprintf(stderr, "Unable to set affinity. %m\n");
-}
 
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
@@ -173,6 +137,8 @@ static void process_message(struct test_params *test_params,
 		data_len = test_params->stat.txlen/1024;
 		test_params->stat.print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		test_params->disconnect_nr =
+			test_params->stat.print_counter * DISCONNECT_FACTOR;
 	}
 	if (++test_params->stat.cnt == test_params->stat.print_counter) {
 		uint64_t delta = get_cpu_usecs() - test_params->stat.start_time;
@@ -180,7 +146,7 @@ static void process_message(struct test_params *test_params,
 
 		double txbw = (1.0*pps*test_params->stat.txlen/ONE_MB);
 
-		printf("transactions per second: %"PRIu64", bandwidth: " \
+		printf("transactions per second: %lu, bandwidth: " \
 		       "TX %.2f MB/s, length: TX: %zd B\n",
 		       pps, txbw,
 		       test_params->stat.txlen);
@@ -193,8 +159,8 @@ static void process_message(struct test_params *test_params,
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 
@@ -204,16 +170,17 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("nsent:%"PRIu64", ncomp:%"PRIu64", " \
-		       "delta:%"PRIu64"\n",
-		        test_params->nsent, test_params->ncomp,
-			test_params->nsent-test_params->ncomp);
+		printf("nsent:%lu, ncomp:%lu, " \
+		       "delta:%lu\n",
+		       test_params->nsent, test_params->ncomp,
+		       test_params->nsent-test_params->ncomp);
 
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(test_params->ctx, XIO_INFINITE);  /* exit */
+		xio_context_stop_loop(test_params->ctx,
+				      XIO_INFINITE);  /* exit */
 		break;
 	default:
 		break;
@@ -226,20 +193,19 @@ static int on_session_event(struct xio_session *session,
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
 static int on_session_established(struct xio_session *session,
-			struct xio_new_session_rsp *rsp,
-			void *cb_user_context)
+				  struct xio_new_session_rsp *rsp,
+				  void *cb_user_context)
 {
 	printf("**** [%p] session established\n", session);
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* on_msg_delivered							     */
 /*---------------------------------------------------------------------------*/
-static int on_msg_delivered(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *cb_user_context)
+static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
+			    int more_in_batch, void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 
@@ -248,12 +214,15 @@ static int on_msg_delivered(struct xio_session *session,
 	/* can be safely freed */
 	msg_pool_put(test_params->pool, msg);
 
-#if  TEST_DISCONNECT
-	if (test_params->ncomp == DISCONNECT_NR) {
-		xio_disconnect(test_params->connection);
-		return 0;
+	if (test_params->finite_run) {
+		if (test_params->ncomp > test_params->disconnect_nr)
+			return 0;
+		if (test_params->ncomp == test_params->disconnect_nr) {
+			xio_disconnect(test_params->connection);
+			return 0;
+		}
 	}
-#endif
+
 	/* peek message from the pool */
 	msg = msg_pool_get(test_params->pool);
 	if (msg == NULL) {
@@ -269,12 +238,15 @@ static int on_msg_delivered(struct xio_session *session,
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
-		  NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	/* try to send it */
 	if (test_params->ask_for_receipt)
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+	else if (test_params->nsent%(MAX_OUTSTANDING_REQS-1) == 0)
+		msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+
 
 	if (xio_send_msg(test_params->connection, msg) == -1) {
 		if (xio_errno() != EAGAIN)
@@ -283,7 +255,7 @@ static int on_msg_delivered(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 		msg_pool_put(test_params->pool, msg);
-		return 0;
+		xio_assert(0);
 	}
 	test_params->nsent++;
 
@@ -328,12 +300,15 @@ static int on_msg_send_complete(struct xio_session *session,
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
-		  NULL, test_config.hdr_len,
-		  NULL, test_config.data_len);
+		  test_config.hdr_len,
+		  1, test_config.data_len);
 
 	/* try to send it */
 	if (test_params->ask_for_receipt)
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+	else if (test_params->nsent%(MAX_OUTSTANDING_REQS-1) == 0)
+		msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+
 
 	if (xio_send_msg(test_params->connection, msg) == -1) {
 		if (xio_errno() != EAGAIN)
@@ -342,7 +317,7 @@ static int on_msg_send_complete(struct xio_session *session,
 					session,
 					xio_strerror(xio_errno()));
 		msg_pool_put(test_params->pool, msg);
-		return 0;
+		xio_assert(0);
 	}
 	test_params->nsent++;
 
@@ -353,12 +328,12 @@ static int on_msg_send_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_user_context)
+			enum xio_status error, struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
 
-	printf("**** [%p] message [%"PRIu64"] failed. reason: %s\n",
+	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(test_params->pool, msg);
@@ -394,6 +369,10 @@ static void usage(const char *argv0, int status)
 	printf("\t\tConnect to port <port> (default %d)\n",
 	       XIO_DEF_PORT);
 
+	printf("\t-r, --transport=<type> ");
+	printf("\t\tUse rdma/tcp as transport <type> (default %s)\n",
+	       XIO_DEF_TRANSPORT);
+
 	printf("\t-n, --header-len=<number> ");
 	printf("\tSet the header length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_HEADER_SIZE);
@@ -401,6 +380,10 @@ static void usage(const char *argv0, int status)
 	printf("\t-w, --data-len=<length> ");
 	printf("\tSet the data length of the message to <number> bytes " \
 			"(default %d)\n", XIO_DEF_DATA_SIZE);
+
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
 
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
@@ -414,21 +397,22 @@ static void usage(const char *argv0, int status)
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline							     */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(struct xio_test_config *test_config,
-		int argc, char **argv)
+int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 {
 	static struct option const long_options[] = {
 		{ .name = "cpu",	.has_arg = 1, .val = 'c'},
 		{ .name = "port",	.has_arg = 1, .val = 'p'},
+		{ .name = "transport",	.has_arg = 1, .val = 'r'},
 		{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 		{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 		{ .name = "index",	.has_arg = 1, .val = 'i'},
+		{ .name = "finite-run",	.has_arg = 1, .val = 'f'},
 		{ .name = "version",	.has_arg = 0, .val = 'v'},
 		{ .name = "help",	.has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
 
-	static char *short_options = "c:p:n:w:i:vh";
+	static char *short_options = "c:p:r:n:w:i:f:vh";
 	optind = 0;
 	opterr = 0;
 
@@ -450,6 +434,9 @@ int parse_cmdline(struct xio_test_config *test_config,
 			test_config->server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
+		case 'r':
+			strcpy(test_config->transport, optarg);
+			break;
 		case 'n':
 			test_config->hdr_len =
 				(uint32_t)strtol(optarg, NULL, 0);
@@ -461,6 +448,10 @@ int parse_cmdline(struct xio_test_config *test_config,
 		case 'i':
 			test_config->conn_idx =
 				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'f':
+			test_config->finite_run =
+					(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'v':
 			printf("version: %s\n", XIO_TEST_VERSION);
@@ -474,7 +465,7 @@ int parse_cmdline(struct xio_test_config *test_config,
 			fprintf(stderr,
 				" please check command line and run again.\n\n");
 			usage(argv[0], -1);
-			break;
+			exit(-1);
 		}
 	}
 	if (optind == argc - 1) {
@@ -499,10 +490,12 @@ static void print_test_config(
 	printf(" =============================================\n");
 	printf(" Server Address		: %s\n", test_config_p->server_addr);
 	printf(" Server Port		: %u\n", test_config_p->server_port);
+	printf(" Transport		: %s\n", test_config_p->transport);
 	printf(" Header Length		: %u\n", test_config_p->hdr_len);
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" Connection Index	: %u\n", test_config_p->conn_idx);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
+	printf(" Finite run		: %x\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 /*---------------------------------------------------------------------------*/
@@ -537,13 +530,14 @@ int main(int argc, char *argv[])
 	memset(&test_params, 0, sizeof(struct test_params));
 	test_params.stat.first_time = 1;
 	test_params.ask_for_receipt = ASK_FOR_RECEIPT;
+	test_params.finite_run = test_config.finite_run;
 
 	/* prepare buffers for this test */
 	if (msg_api_init(&test_params.msg_params,
 			 test_config.hdr_len, test_config.data_len, 0) != 0)
 		return -1;
 
-	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 0, 0, 0);
+	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
 	if (test_params.pool == NULL)
 		goto cleanup;
 
@@ -552,23 +546,26 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "context creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit1;
+		xio_assert(test_params.ctx != NULL);
 	}
 
-	sprintf(url, "rdma://%s:%d", test_config.server_addr,
+	sprintf(url, "%s://%s:%d",
+		test_config.transport,
+		test_config.server_addr,
 		test_config.server_port);
 	session = xio_session_create(XIO_SESSION_CLIENT,
-				   &attr, url, 0, 0, &test_params);
+				     &attr, url, 0, 0, &test_params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit2;
+		xio_assert(session != NULL);
 	}
 
 	/* connect the session  */
 	test_params.connection = xio_connect(session, test_params.ctx,
-				       test_config.conn_idx, NULL, &test_params);
+					     test_config.conn_idx,
+					     NULL, &test_params);
 
 	printf("**** starting ...\n");
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
@@ -584,12 +581,14 @@ int main(int argc, char *argv[])
 
 		/* assign buffers to the message */
 		msg_write(&test_params.msg_params, msg,
-			  NULL, test_config.hdr_len,
-			  NULL, test_config.data_len);
+			  test_config.hdr_len,
+			  1, test_config.data_len);
 
 		/* try to send it */
 		if (test_params.ask_for_receipt)
 			msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+		else if (i == MAX_OUTSTANDING_REQS-1)
+			msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
 
 		if (xio_send_msg(test_params.connection, msg) == -1) {
 			printf("**** sent %d messages\n", i);
@@ -599,7 +598,7 @@ int main(int argc, char *argv[])
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(test_params.pool, msg);
-			goto exit3;
+			xio_assert(0);
 		}
 		test_params.nsent++;
 	}
@@ -610,24 +609,22 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		goto exit3;
+		xio_assert(retval == 0);
 	}
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
-exit3:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
 		fprintf(stderr, "session close failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
+		xio_assert(retval == 0);
 	}
 
-exit2:
 	xio_context_destroy(test_params.ctx);
 
-exit1:
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 cleanup:

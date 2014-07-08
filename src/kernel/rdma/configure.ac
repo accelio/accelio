@@ -5,6 +5,9 @@ AC_PROG_INSTALL
 runver=`uname -r`
 bad_kernel_version=no
 ENABLE_XIO_MODULE=y
+# do not build against ofed until kernel module can be built out of kernel
+# tree
+ENABLE_OFED_BUILD=y
 KERNELCFLAGS=
 
 kernelsrc=
@@ -18,6 +21,77 @@ AC_ARG_WITH(kernel-build,
 AC_ARG_ENABLE(kernel-module,
 	[  --enable-kernel-module  Compile kernel module ])
 
+#build against installed OFED
+RDMA_SYMVERS=`pwd`/../xio/Module.symvers
+
+if test "$ENABLE_OFED_BUILD" = "y"; then
+AC_MSG_CHECKING([if ofed installed])
+MLNX_OFED=`if ofed_info 2>/dev/null | grep MLNX_OFED >/dev/null 2>/dev/null; then echo true; else echo false; fi`
+OFED_CFLAGS=
+
+if test "$MLNX_OFED" = "true"; then
+	AC_MSG_RESULT(yes)
+
+	# Whether MLNX_OFED for ubuntu has been installed
+	MLNX_OFED_IB_UBUNTU_INSTALLED=`if dpkg -s mlnx-ofed-kernel-dkms >/dev/null 2>/dev/null; then echo true; else echo false; fi`
+
+	# Whether MLNX_OFED for RedHat has been installed
+	MLNX_OFED_IB_RH_INSTALLED=`if rpm -q mlnx-ofa_kernel-devel >&/dev/null; then echo true; else echo false; fi`
+
+	# Check if we have custom compiled kernel modules
+	if test "$MLNX_OFED_IB_RH_INSTALLED" = "false"; then
+	MLNX_OFED_IB_RH_INSTALLED=`if rpm -q kernel-ib-devel >&/dev/null; then echo true; else echo false; fi`
+	fi
+
+	if test "$MLNX_OFED_IB_UBUNTU_INSTALLED" = "true"; then
+	OFED_VERS=`dpkg -s mlnx-ofed-kernel-dkms | awk -F\- '/Version/ {print $1}' | awk '{print $2}'`
+	OFED_CFLAGS=`echo -I/var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include -include /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/include/linux/compat-2.6.h`
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS /var/lib/dkms/mlnx-ofed-kernel/$OFED_VERS/build/Module.symvers`
+	fi
+
+	if test "$MLNX_OFED_IB_RH_INSTALLED" = "true"; then
+	OFED_CFLAGS=`echo -I/usr/src/ofa_kernel/default/include -include /usr/src/ofa_kernel/default/include/linux/compat-2.6.h`
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS /usr/src/ofa_kernel/default/Module.symvers`
+	fi
+else
+	AC_MSG_RESULT(no)
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS ../compat/Module.symvers`
+
+	# Whether or not the OFED kernel-ib-devel RPM has been installed.
+	OFED_KERNEL_IB_DEVEL_RPM_INSTALLED=`if rpm -q kernel-ib-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
+
+	# Whether or not the OFED compat-rdma-devel RPM has been installed.
+	OFED_COMPAT_RDMA_DEVEL_RPM_INSTALLED=`if rpm -q compat-rdma-devel 2>/dev/null | grep -q $(uname -r | sed 's/-/_/g'); then echo true; else echo false; fi`
+
+	if test "$OFED_KERNEL_IB_DEVEL_RPM_INSTALLED" = "true"; then
+	# Read OFED's config.mk, which contains the definition of the variable
+	# BACKPORT_INCLUDES.
+	cfile="/usr/src/ofa_kernel/config.mk"
+	if test -r "${cfile}"; then
+	  echo "loading build-specific script '${cfile}'"
+	  . "${cfile}"
+	else
+		cfile="/usr/src/ofa_kernel/default/config.mk"
+		if test -r "${cfile}"; then
+			echo "loading build-specific script '${cfile}'"
+			. "${cfile}"
+		fi
+	fi
+
+	OFED_CFLAGS=`echo $BACKPORT_INCLUDES -I/usr/src/ofa_kernel/include`
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS /usr/src/ofa_kernel/Module.symvers`
+	fi
+
+	if test "$OFED_COMPAT_RDMA_DEVEL_RPM_INSTALLED" = "true"; then
+	OFED_CFLAGS=`echo -I/usr/src/compat-rdma/include -include /usr/src/compat-rdma/include/linux/compat-2.6.h`
+	RDMA_SYMVERS=`echo $RDMA_SYMVERS /usr/src/compat-rdma/Module.symvers`
+	fi
+fi
+
+AC_MSG_NOTICE([ofed include files directory is ${OFED_CFLAGS}])
+AC_SUBST(OFED_CFLAGS)
+AC_SUBST(RDMA_SYMVERS)
+fi
 
 if test "$ENABLE_XIO_MODULE" = y; then
 	AC_MSG_CHECKING([kernel source directory])

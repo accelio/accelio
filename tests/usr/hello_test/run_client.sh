@@ -1,22 +1,48 @@
 #!/bin/bash
 
+# Get Running Directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd $DIR
+
+
+# Arguments Check
+if [ $# -lt 2 ]; then
+        echo "[$0] Missing Parameters!"
+	echo "Usage: $0 Server-IP Port [0 for infinite run and 1 for finite. default is 0] [data_len. default=1024] [transport. default=rdma]"
+        exit 1
+fi
+
 export LD_LIBRARY_PATH=../../../src/usr/
 
-server_ip=192.168.20.126
-#server_ip=192.168.20.236
-#server_ip=1.1.1.31
-port=1234
+server_ip=$1
+port=$2
+if [ -z "$3" ]
+then
+	#running indefinitely
+	finite_run="0"
+else
+	finite_run=$3
+fi
 
-#./xio_client -c 1 -p ${port} -n 0 -w 0 ${server_ip}
-./xio_client -c 1 -p ${port} -n 0 -w 1024 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 4096 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 8192 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 16384 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 32768 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 65536 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 131072 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 262144 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 524288 ${server_ip}
-#./xio_client -c 1 -p ${port} -n 0 -w 1048576 ${server_ip}
+core=1
+ivec=0
+ovec=1
+hdrlen=0
+
+if [ -z "$4" ]
+then
+	data_len="1024"
+else
+	data_len=$4
+fi
+
+if [ -z "$5" ]
+then
+	trans="rdma"
+else
+	trans=$5
+fi
+
+./xio_client -c ${core} -p ${port} -r ${trans} -n ${hdrlen} -w ${data_len} -l ${ovec} -g ${ivec} ${server_ip} -f ${finite_run}
 
 

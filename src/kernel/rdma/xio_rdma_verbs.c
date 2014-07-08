@@ -45,7 +45,6 @@
 #include "xio_context.h"
 #include "xio_task.h"
 #include "xio_transport.h"
-#include "xio_conn.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"

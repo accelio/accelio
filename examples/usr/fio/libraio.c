@@ -125,7 +125,7 @@ static struct io_u *fio_libraio_event(struct thread_data *td, int event)
 }
 
 static int fio_libraio_getevents(struct thread_data *td, unsigned int min,
-				unsigned int max, struct timespec *t)
+				 unsigned int max, struct timespec *t)
 {
 	struct libraio_data *ld = td->io_ops->data;
 	unsigned actual_min = td->o.iodepth_batch_complete == 0 ? 0 : min;
@@ -133,7 +133,7 @@ static int fio_libraio_getevents(struct thread_data *td, unsigned int min,
 
 	do {
 		r = raio_getevents(ld->raio_ctx, actual_min,
-				max, ld->raio_events + events, t);
+				   max, ld->raio_events + events, t);
 		if (r >= 0) {
 			raio_release(ld->raio_ctx, r,
 				     ld->raio_events + events);
@@ -165,7 +165,7 @@ static int fio_libraio_queue(struct thread_data *td, struct io_u *io_u)
 }
 
 static void fio_libraio_queued(struct thread_data *td, struct io_u **io_us,
-			      unsigned int nr)
+			       unsigned int nr)
 {
 	struct timeval now;
 	unsigned int i;
@@ -492,9 +492,9 @@ static int fio_libraio_init(struct thread_data *td)
 
 		engine_data = io_u->engine_data;
 		raio_reg_mr(ld->raio_ctx,
-				io_u->buf,
-				max_bs,
-				&engine_data->mr);
+			    io_u->buf,
+			    max_bs,
+			    &engine_data->mr);
 		if (engine_data->mr == NULL) {
 			log_err("libraio: memory registration failed\n");
 			return 1;

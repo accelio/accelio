@@ -278,8 +278,8 @@ static inline uint16_t get_port(const struct sockaddr *ip)
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
-		struct xio_session_event_data *event_data,
-		void *cb_user_context)
+			    struct xio_session_event_data *event_data,
+			    void *cb_user_context)
 {
 	struct raio_session_data  *session_data = cb_user_context;
 
@@ -338,9 +338,9 @@ static void on_submit_answer(struct xio_msg *rsp)
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
-			struct xio_msg *rsp,
-			int more_in_batch,
-			void *cb_user_context)
+		       struct xio_msg *rsp,
+		       int more_in_batch,
+		       void *cb_user_context)
 {
 	struct raio_session_data  *session_data = cb_user_context;
 	uint32_t		  command;
@@ -382,7 +382,7 @@ struct xio_session_ops ses_ops = {
 /* raio_open								     */
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
-	      const char *pathname, int flags)
+			    const char *pathname, int flags)
 
 {
 	int				retval;
@@ -802,7 +802,7 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 /* rsd_getevents							     */
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_getevents(raio_context_t ctx, long min_nr, long nr,
-		   struct raio_event *events, struct timespec *t)
+				 struct raio_event *events, struct timespec *t)
 {
 	struct raio_session_data	*session_data;
 	struct raio_io_u		*io_u;
@@ -890,7 +890,7 @@ restart:
 /* raio_release								     */
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
-				struct raio_event *events)
+			       struct raio_event *events)
 {
 	int				i;
 	struct raio_io_u		*io_u;

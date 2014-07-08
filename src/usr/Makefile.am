@@ -4,7 +4,9 @@
 AM_CFLAGS = -fPIC -DPIC  			\
 	    -I$(top_srcdir)/src/usr 		\
 	    -I$(top_srcdir)/src/usr/xio		\
-	    -I$(top_srcdir)/src/usr/rdma	\
+	    -I$(top_srcdir)/src/usr/transport	\
+	    -I$(top_srcdir)/src/usr/transport/rdma	\
+	    -I$(top_srcdir)/src/usr/transport/tcp	\
 	    -I$(top_srcdir)/src/common  	\
 	    -I$(top_srcdir)/include		\
 	    @AM_CFLAGS@
@@ -38,15 +40,17 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./xio/xio_tls.h				\
 			./xio/xio_timers_list.h			\
 			./xio/xio_ev_loop.h			\
-			./rdma/xio_rdma_mempool.h		\
-			./rdma/xio_rdma_transport.h		\
-			./rdma/xio_rdma_utils.h			\
+			./transport/xio_transport_mempool.h	\
+			./transport/xio_usr_transport.h		\
+			./transport/rdma/xio_rdma_transport.h	\
+			./transport/rdma/xio_rdma_utils.h	\
+			./transport/tcp/xio_tcp_transport.h	\
 			../common/xio_workqueue.h		\
 			../common/xio_workqueue_priv.h		\
 			../common/xio_common.h			\
 			../common/xio_connection.h		\
-			../common/xio_conn.h			\
-			../common/xio_conns_store.h		\
+			../common/xio_nexus.h			\
+			../common/xio_nexus_cache.h		\
 			../common/xio_context.h			\
 			../common/xio_hash.h			\
 			../common/xio_mbuf.h			\
@@ -55,7 +59,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_server.h			\
 			../common/xio_session.h			\
 			../common/xio_session_priv.h		\
-			../common/xio_sessions_store.h		\
+			../common/xio_sessions_cache.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
 			../common/xio_transport.h		\
@@ -84,12 +88,14 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
 			./xio/xio_workqueue.c		\
-			./rdma/xio_rdma_mempool.c	\
-			./rdma/xio_rdma_utils.c		\
-			./rdma/xio_rdma_verbs.c		\
-			./rdma/xio_rdma_management.c	\
-			./rdma/xio_rdma_datapath.c	\
-			./linux/hexdump.c		\
+			./transport/rdma/xio_rdma_utils.c	\
+			./transport/rdma/xio_rdma_verbs.c	\
+			./transport/rdma/xio_rdma_management.c	\
+			./transport/rdma/xio_rdma_datapath.c	\
+			./transport/tcp/xio_tcp_management.c	\
+			./transport/tcp/xio_tcp_datapath.c	\
+			./transport/xio_transport_mempool.c	\
+			./transport/xio_usr_transport.c	\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\
@@ -97,10 +103,10 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_session.c		\
 			../common/xio_session_server.c	\
 			../common/xio_session_client.c	\
-			../common/xio_sessions_store.c	\
+			../common/xio_sessions_cache.c	\
 			../common/xio_observer.c	\
-			../common/xio_conn.c		\
-			../common/xio_conns_store.c	\
+			../common/xio_nexus.c		\
+			../common/xio_nexus_cache.c	\
 			../common/xio_transport.c	\
 			../common/xio_connection.c	
 	

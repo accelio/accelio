@@ -201,6 +201,27 @@ size_t memclonev(struct xio_iovec *dst, int dsize,
 	return sz;
 }
 
+/*---------------------------------------------------------------------------*/
+/* memclonev_ex								     */
+/*---------------------------------------------------------------------------*/
+size_t memclonev_ex(struct xio_iovec_ex *dst, int dsize,
+		    struct xio_iovec_ex *src, int ssize)
+{
+	int			nr = 0;
+	int			sz;
+
+	sz = (dsize < ssize) ? dsize : ssize;
+
+	while (nr < sz) {
+		dst[nr].iov_base = src[nr].iov_base;
+		dst[nr].iov_len = src[nr].iov_len;
+		nr++;
+	}
+
+	return sz;
+}
+
+
 /*
  * Total number of bytes covered by an iovec.
  */
@@ -341,5 +362,147 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 	}
 
 	return d;
+}
+
+/**
+ * memcpyv_ex
+ *
+ * Copy data from one iov to another.
+ *
+ * @dst:	An array of iovec structures that you want to
+ *		copy the data to.
+ * @dsize:	The number of entries in the dst array.
+ * @src:	An array of iovec structures that you want to
+ *		copy the data from.
+ * @ssize:	The number of entries in the src array.
+ */
+size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
+		  struct xio_iovec_ex *src, int ssize)
+{
+	void		*daddr	= dst[0].iov_base;
+	void		*saddr	= src[0].iov_base;
+	size_t		dlen	= dst[0].iov_len;
+	size_t		slen	= src[0].iov_len;
+	size_t		d	= 0,
+			s	= 0,
+			dst_len = 0;
+
+	if (dsize < 1 || ssize < 1) {
+		ERROR_LOG("iovec size < 1 dsize:%d, ssize:%d\n",
+			  dsize, ssize);
+		return 0;
+	}
+
+	while (1) {
+		if (slen < dlen) {
+			memcpy(daddr, saddr, slen);
+			dst_len	+= slen;
+
+			s++;
+			if (s == ssize) {
+				dst[d].iov_len = dst_len;
+				d++;
+				break;
+			}
+			dlen	-= slen;
+			daddr	+= slen;
+			saddr	= src[s].iov_base;
+			slen	= src[s].iov_len;
+		} else if (dlen < slen) {
+			memcpy(daddr, saddr, dlen);
+			dst[d].iov_len = dst_len + dlen;
+			dst_len = 0;
+
+			d++;
+			if (d == dsize)
+				break;
+			slen	-= dlen;
+			saddr	+= dlen;
+			daddr	= dst[d].iov_base;
+			dlen	= dst[d].iov_len;
+
+		} else {
+			memcpy(daddr, saddr, dlen);
+			dst[d].iov_len = dst_len + dlen;
+			dst_len = 0;
+
+			d++;
+			s++;
+			if ((d == dsize) || (s == ssize))
+				break;
+
+			daddr	= dst[d].iov_base;
+			dlen	= dst[d].iov_len;
+			saddr	= src[s].iov_base;
+			slen	= src[s].iov_len;
+		}
+	}
+
+	/* not enough buffers to complete */
+	if (s < ssize) {
+		ERROR_LOG("dest iovec exhausted\n");
+		return 0;
+	}
+
+	return d;
+}
+
+
+void xio_msg_map(struct xio_msg *msg)
+{
+	if (msg->in.data_type == XIO_DATA_TYPE_ARRAY &&
+	    msg->in.data_iovlen <= XIO_IOVLEN) {
+		msg->in.pdata_iov = msg->in.data_iov;
+		msg->in.data_iovsz = XIO_IOVLEN;
+	}
+
+	if (msg->out.data_type == XIO_DATA_TYPE_ARRAY &&
+	    msg->out.data_iovlen && msg->out.data_iovlen <= XIO_IOVLEN) {
+		msg->out.pdata_iov = msg->out.data_iov;
+		msg->out.data_iovsz = XIO_IOVLEN;
+	}
+}
+
+void xio_msg_unmap(struct xio_msg *msg)
+{
+	if (msg->in.data_type == XIO_DATA_TYPE_ARRAY &&
+	    msg->in.data_iovlen <= XIO_IOVLEN) {
+		msg->in.pdata_iov = NULL;
+		msg->in.data_iovsz = 0;
+	}
+
+	if (msg->out.data_type == XIO_DATA_TYPE_ARRAY &&
+	    msg->out.data_iovlen <= XIO_IOVLEN) {
+		msg->out.pdata_iov = NULL;
+		msg->out.data_iovsz = 0;
+	}
+}
+
+void xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg)
+{
+	int i;
+
+	if (vmsg->data_iovsz <  vmsg->data_iovlen)
+		return;
+
+	if (vmsg->data_iovlen > XIO_IOVLEN)
+		return;
+
+	for (i = 0; i < vmsg->data_iovlen; i++)
+		vmsg->pdata_iov[i] = vmsg->data_iov[i];
+}
+
+void xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg)
+{
+	int i;
+
+	if (vmsg->data_iovsz < vmsg->data_iovlen)
+		return;
+
+	if (vmsg->data_iovlen > XIO_IOVLEN)
+		return;
+
+	for (i = 0; i < vmsg->data_iovlen; i++)
+		vmsg->data_iov[i] = vmsg->pdata_iov[i];
 }
 

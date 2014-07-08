@@ -39,6 +39,7 @@
 #define XIO_SESSION_H
 
 #include "xio_hash.h"
+#include "xio_context.h"
 #include "sys/hashtable.h"
 
 /*---------------------------------------------------------------------------*/
@@ -98,14 +99,17 @@ struct xio_session {
 	uint16_t			last_opened_portal;
 	uint16_t			last_opened_service;
 	uint16_t			in_notify;
-	uint16_t			pad[3];
+	uint16_t			pad;
 
+	uint32_t			teardown_reason;
 	uint32_t			reject_reason;
 	struct mutex                    lock;	   /* lock open connection */
 	spinlock_t                      connections_list_lock;
 	int				disable_teardown;
 	struct xio_connection		*lead_connection;
 	struct xio_connection		*redir_connection;
+	xio_work_handle_t		teardown_work;
+
 };
 
 /*---------------------------------------------------------------------------*/
@@ -134,20 +138,20 @@ struct xio_session *xio_find_session(
 
 struct xio_connection *xio_session_find_connection(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
 
 struct xio_connection *xio_session_alloc_connection(
 		struct xio_session *session,
 		struct xio_context *ctx,
-		uint32_t conn_idx,
-		void *conn_user_context);
+		uint32_t connection_idx,
+		void	 *connection_user_context);
 
 int xio_session_free_connection(
 		struct xio_connection *connection);
 
-struct xio_connection  *xio_session_assign_conn(
+struct xio_connection  *xio_session_assign_nexus(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
 
 void xio_session_assign_ops(
 		struct xio_session *session,
@@ -155,7 +159,11 @@ void xio_session_assign_ops(
 
 struct xio_connection *xio_server_create_accepted_connection(
 		struct xio_session *session,
-		struct xio_conn *conn);
+		struct xio_nexus *nexus);
+
+int xio_session_reconnect(
+		struct xio_session  *session,
+		struct xio_connection  *connection);
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_is_valid_in_req						     */

@@ -50,7 +50,8 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor directives                                                   */
 /*---------------------------------------------------------------------------*/
-#define XIO_MAX_IOV			16	/* limit message fragments */
+#define XIO_IOVLEN			4
+#define XIO_MAX_IOV			256	/* limit message fragments */
 #define XIO_VERSION			0x0100
 
 
@@ -58,7 +59,7 @@
 /* enums                                                                     */
 /*---------------------------------------------------------------------------*/
 /**
- * @enum xio_log_leve
+ * @enum xio_log_level
  * @brief logging levels
  */
 enum xio_log_level {
@@ -69,6 +70,11 @@ enum xio_log_level {
 	XIO_LOG_LEVEL_DEBUG,
 	XIO_LOG_LEVEL_TRACE,
 	XIO_LOG_LEVEL_LAST
+};
+
+enum xio_data_type {
+	XIO_DATA_TYPE_ARRAY = 0,
+	XIO_DATA_TYPE_PTR   = 1,
 };
 
 enum xio_session_type {
@@ -87,19 +93,32 @@ enum xio_proto {
 enum xio_optlevel {
 	XIO_OPTLEVEL_ACCELIO,
 	XIO_OPTLEVEL_RDMA,
+	XIO_OPTLEVEL_TCP,  /* not supported yet */
 };
 
 enum xio_optname {
-	XIO_OPTNAME_ENABLE_MEM_POOL,	  /**< enables the internal rdma      */
-					  /**< memory pool		      */
-
-	XIO_OPTNAME_DISABLE_HUGETBL,	  /**< disable huge pages allocations */
+	/* XIO_OPTLEVEL_ACCELIO */
+	XIO_OPTNAME_DISABLE_HUGETBL = 0,  /**< disable huge pages allocations */
 	XIO_OPTNAME_LOG_FN,		  /**< set user log function	      */
 	XIO_OPTNAME_LOG_LEVEL,		  /**< set/get logging level          */
-	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency        */
+	XIO_OPTNAME_MEM_ALLOCATOR,        /**< set customed allocators hooks  */
 
-	XIO_OPTNAME_RDMA_BUF_THRESHOLD,   /**< set/get rdma buffer threshold  */
-	XIO_OPTNAME_MEM_ALLOCATOR         /**< set customed allocators hooks  */
+	/* XIO_OPTLEVEL_ACCELIO/RDMA/TCP */
+	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
+	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
+	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
+
+	/* XIO_OPTLEVEL_RDMA/TCP */
+	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
+					  /**< transport memory pool	      */
+	XIO_OPTNAME_TRANS_BUF_THRESHOLD,  /**< set/get transport buffer	      */
+					  /**< threshold		      */
+
+	/* XIO_OPTLEVEL_RDMA */
+	XIO_OPTNAME_RDMA_PLACE_HOLDER = 300,   /**< place holder for rdma opt */
+
+	/* XIO_OPTLEVEL_TCP */
+	XIO_OPTNAME_TCP_PLACE_HOLDER = 400,    /**< place holder for tcp opt  */
 };
 
 /*  A number random enough not to collide with different errno ranges.       */
@@ -136,7 +155,14 @@ enum xio_status {
 	XIO_E_MSG_CANCELED		= (XIO_BASE_STATUS + 25),
 	XIO_E_MSG_CANCEL_FAILED		= (XIO_BASE_STATUS + 26),
 	XIO_E_MSG_NOT_FOUND		= (XIO_BASE_STATUS + 27),
-	XIO_E_MSG_FLUSHED		= (XIO_BASE_STATUS + 28)
+	XIO_E_MSG_FLUSHED		= (XIO_BASE_STATUS + 28),
+	XIO_E_MSG_DISCARDED		= (XIO_BASE_STATUS + 29),
+	XIO_E_STATE			= (XIO_BASE_STATUS + 30),
+	XIO_E_NO_USER_BUFS		= (XIO_BASE_STATUS + 31),
+	XIO_E_NO_USER_MR		= (XIO_BASE_STATUS + 32),
+	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
+	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 35)
 };
 
 enum xio_session_flags {
@@ -144,8 +170,10 @@ enum xio_session_flags {
 };
 
 enum xio_msg_flags {
-	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1,  /**< request read receipt   */
-	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = 0x2   /**< zero copy for transfers*/
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1,  /**< request read receipt    */
+	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = 0x2,  /**< zero copy for transfers */
+	XIO_MSG_FLAG_IMM_SEND_COMP	  = 0x4   /**< request an immediate    */
+						  /**< send completion         */
 };
 
 enum xio_session_event {
@@ -180,11 +208,19 @@ enum xio_receipt_result {
 
 enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_CTX                 = 1 << 0,
-	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1
+	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1,
+	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
+	XIO_CONNECTION_ATTR_SRC_ADDR		= 1 << 3
 };
 
 enum xio_context_attr_mask {
 	XIO_CONTEXT_ATTR_USER_CTX		= 1 << 0
+};
+
+enum xio_session_attr_mask {
+	XIO_SESSION_ATTR_USER_CTX		= 1 << 0,
+	XIO_SESSION_ATTR_SES_OPS		= 1 << 1,
+	XIO_SESSION_ATTR_URI			= 1 << 2
 };
 
 /*---------------------------------------------------------------------------*/
@@ -216,6 +252,7 @@ struct xio_session_attr {
 	struct xio_session_ops	*ses_ops;	/* session's ops callbacks */
 	void			*user_context;  /* sent to server upon new
 						   session */
+	char			*uri;		  /**< the uri		   */
 	size_t			user_context_len;
 };
 
@@ -228,6 +265,10 @@ struct xio_connection_attr {
 						/**< pass to connection      */
 						/**< oriented callbacks      */
 	struct xio_context	*ctx;
+	int			reserved;
+	enum xio_proto		proto;		/**< protocol type	     */
+	struct sockaddr_storage	src_addr;	/**< source address of       */
+						/**< requester	             */
 };
 
 /**
@@ -267,9 +308,13 @@ struct xio_msg_pdata {
 };
 
 struct xio_vmsg {
-	struct xio_iovec	header;		/* header's iovec */
-	size_t			data_iovlen;	/* number of items in vector  */
-	struct xio_iovec_ex	data_iov[XIO_MAX_IOV];
+	struct xio_iovec	header;		/**< header's io vector	    */
+	enum xio_data_type	data_type;
+	int			pad;
+	size_t			data_iovsz;	/**< data iovecs alloced    */
+	size_t			data_iovlen;	/**< data iovecs count	    */
+	struct xio_iovec_ex	*pdata_iov;
+	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
 };
 
 struct xio_msg {
@@ -683,6 +728,32 @@ struct xio_session *xio_session_create(
  * @returns success (0), or a (negative) error value
  */
 int xio_session_destroy(struct xio_session *session);
+
+/**
+ * query session parameters
+ *
+ * @param[in] session	The xio session handle
+ * @param[in] attr	The session attributes structure
+ * @param[in] attr_mask attribute mask to query
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_query_session(struct xio_session *session,
+		      struct xio_session_attr *attr,
+		      int attr_mask);
+
+/**
+ * modify session parameters
+ *
+ * @param[in] session	The xio session handle
+ * @param[in] attr	The session attributes structure
+ * @param[in] attr_mask attribute mask to query
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_modify_session(struct xio_session *session,
+		       struct xio_session_attr *attr,
+		       int attr_mask);
 
 /**
  * xio_connect - create connection handle.
