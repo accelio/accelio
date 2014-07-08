@@ -1,7 +1,7 @@
 # this is example file: examples/hello_world/Makefile.am
 
 # additional include pathes necessary to compile the C programs
-AM_CFLAGS = -I$(top_srcdir)/include -I../common @AM_CFLAGS@
+AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/tests/usr/common @AM_CFLAGS@
 
 AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -lpthread \
 	     -L$(top_builddir)/src/usr/
