@@ -44,6 +44,9 @@
 /* Set to true to enable all debugging. */
 extern char  REG_DEBUG;
 
+#ifdef DEBUG
+#undef DEBUG
+#endif
 #define DEBUG(...) {						\
 	if (REG_DEBUG) {					\
 		fprintf(stderr, __VA_ARGS__);			\
