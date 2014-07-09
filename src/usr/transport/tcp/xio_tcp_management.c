@@ -43,6 +43,7 @@
 #include "xio_task.h"
 #include "xio_transport_mempool.h"
 #include "xio_tcp_transport.h"
+#include "xio_sg_table.h"
 
 /* default option values */
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
@@ -1505,34 +1506,42 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 	int		i;
 	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->in;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sge;
+	unsigned long		nents, max_nents;
 
-	if ((vmsg->data_iovlen > tcp_options.max_in_iovsz) ||
-	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
-	    (vmsg->data_iovsz > tcp_options.max_in_iovsz)) {
+	sgtbl		= xio_sg_table_get(&msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
+	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
+
+	if ((nents > tcp_options.max_in_iovsz) ||
+	    (nents > max_nents) ||
+	    (max_nents > tcp_options.max_in_iovsz)) {
 		return 0;
 	}
 
-	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
-	    vmsg->data_iovlen > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
 
 	if ((vmsg->header.iov_base != NULL)  &&
 	    (vmsg->header.iov_len == 0))
 		return 0;
 
-	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->pdata_iov[i].mr)
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		if (sge_mr(sgtbl_ops, sge))
 			mr_found++;
-		if (vmsg->pdata_iov[i].iov_base == NULL) {
-			if (vmsg->pdata_iov[i].mr)
+		if (sge_addr(sgtbl_ops, sge) == NULL) {
+			if (sge_mr(sgtbl_ops, sge))
 				return 0;
 		} else {
-			if (vmsg->pdata_iov[i].iov_len == 0)
+			if (sge_length(sgtbl_ops, sge)  == 0)
 				return 0;
 		}
 	}
 	if (tcp_options.enable_mr_check &&
-	    (mr_found != vmsg->data_iovlen) && mr_found)
+	    (mr_found != nents) && mr_found)
 		return 0;
 
 	return 1;
@@ -1543,17 +1552,25 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 {
-	int		i;
-	int		mr_found = 0;
-	struct xio_vmsg *vmsg = &msg->out;
+	int			i;
+	int			mr_found = 0;
+	struct xio_vmsg		*vmsg = &msg->out;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sge;
+	unsigned long		nents, max_nents;
 
-	if ((vmsg->data_iovlen > tcp_options.max_out_iovsz) ||
-	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
-	    (vmsg->data_iovsz > tcp_options.max_out_iovsz))
+	sgtbl		= xio_sg_table_get(&msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
+	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
+
+	if ((nents > tcp_options.max_out_iovsz) ||
+	    (nents > max_nents) ||
+	    (max_nents > tcp_options.max_out_iovsz))
 		return 0;
 
-	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
-	    vmsg->data_iovlen > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
 
 	if (((vmsg->header.iov_base != NULL)  &&
@@ -1562,16 +1579,16 @@ static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 	     (vmsg->header.iov_len != 0)))
 			return 0;
 
-	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->pdata_iov[i].mr)
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		if (sge_mr(sgtbl_ops, sge))
 			mr_found++;
-		if ((vmsg->pdata_iov[i].iov_base == NULL) ||
-		    (vmsg->pdata_iov[i].iov_len == 0))
-				return 0;
+		if ((sge_addr(sgtbl_ops, sge) == NULL) ||
+		    (sge_length(sgtbl_ops, sge)  == 0))
+			return 0;
 	}
 
 	if (tcp_options.enable_mr_check &&
-	    (mr_found != vmsg->data_iovlen) && mr_found)
+	    (mr_found != nents) && mr_found)
 		return 0;
 
 	return 1;

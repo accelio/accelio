@@ -147,7 +147,7 @@ void process_request(struct thread_data *tdata, struct xio_msg *req)
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;
-	req->in.data_iovlen	  = 0;
+	req->in.data_iov.nents	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -320,7 +320,7 @@ int xio_portal_thread(void *data)
 		if (!tdata->rsp[i].out.header.iov_base)
 			goto cleanup1;
 
-		tdata->rsp[i].out.header.iov_len = strlen(msg);
+		tdata->rsp[i].out.header.iov_len = strlen(msg) + 1;
 	}
 
 	/* create thread context for the server */

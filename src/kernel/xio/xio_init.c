@@ -47,6 +47,7 @@
 #include "xio_nexus.h"
 #include "xio_task.h"
 #include "xio_context.h"
+#include "xio_sg_table.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO generic part "
@@ -122,9 +123,11 @@ EXPORT_SYMBOL(xio_transport_assign_in_buf);
 
 EXPORT_SYMBOL(memcpyv);
 EXPORT_SYMBOL(memclonev);
-EXPORT_SYMBOL(memcpyv_ex);
-EXPORT_SYMBOL(memclonev_ex);
 
+EXPORT_SYMBOL(tbl_copy);
+EXPORT_SYMBOL(tbl_clone);
+EXPORT_SYMBOL(xio_sg_table_get);
+EXPORT_SYMBOL(xio_sg_table_ops_get);
 
 EXPORT_SYMBOL(xio_context_add_event);
 EXPORT_SYMBOL(xio_context_stop_loop);

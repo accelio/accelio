@@ -61,7 +61,7 @@
 #define MAX_OUTSTANDING_REQS	50
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
-#define ASK_FOR_RECEIPT		1
+#define ASK_FOR_RECEIPT		0
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
@@ -122,12 +122,15 @@ static struct xio_test_config  test_config = {
 static void process_message(struct test_params *test_params,
 			    struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&msg->out);
+	int			onents = vmsg_sglist_nents(&msg->out);
+
 	if (test_params->stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < msg->out.data_iovlen; i++)
-			data_len += msg->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		test_params->stat.txlen = msg->out.header.iov_len + data_len;
 
@@ -233,7 +236,7 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
 	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
@@ -295,7 +298,7 @@ static int on_msg_send_complete(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
 	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
@@ -577,7 +580,7 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len	= 0;
-		msg->in.data_iovlen	= 0;
+		vmsg_sglist_set_nents(&msg->in, 0);
 
 		/* assign buffers to the message */
 		msg_write(&test_params.msg_params, msg,

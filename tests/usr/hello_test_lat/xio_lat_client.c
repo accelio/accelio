@@ -49,7 +49,7 @@
 
 #define MAX_HEADER_SIZE		32
 #define MAX_DATA_SIZE		32
-#define PRINT_COUNTER		20000
+#define PRINT_COUNTER		100000
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
 #define XIO_DEF_TRANSPORT	"rdma"
@@ -100,24 +100,27 @@ static struct xio_test_config  test_config = {
 /*---------------------------------------------------------------------------*/
 static void process_response(struct xio_msg *rsp)
 {
-	static uint64_t cnt;
-	static int first_time = 1;
-	static uint64_t start_time;
-	static size_t	txlen, rxlen;
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+	int			inents = vmsg_sglist_nents(&rsp->in);
+	static uint64_t		cnt;
+	static int		first_time = 1;
+	static uint64_t		start_time;
+	static size_t		txlen, rxlen;
 
 	if (first_time) {
-		size_t	data_len = 0;
-		int	i;
+		struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+		int			onents = vmsg_sglist_nents(&rsp->out);
+		size_t			data_len = 0;
+		int			i;
 
-
-		for (i = 0; i < rsp->out.data_iovlen; i++)
-			data_len += rsp->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		for (i = 0; i < rsp->in.data_iovlen; i++)
-			data_len += rsp->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		rxlen = rsp->in.header.iov_len + data_len;
 
@@ -142,7 +145,7 @@ static void process_response(struct xio_msg *rsp)
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		cnt = 0;
 		start_time = get_cpu_usecs();
 	}
@@ -196,6 +199,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
+	struct xio_iovec_ex	*sglist;
+
 	process_response(msg);
 
 	if (msg->status) {
@@ -221,10 +226,12 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 1;
-	msg->in.data_iov[0].iov_base = NULL;
-	msg->in.data_iov[0].iov_len  = ONE_MB;
-	msg->in.data_iov[0].mr = NULL;
+	sglist = vmsg_sglist(&msg->in);
+	vmsg_sglist_set_nents(&msg->in, 1);
+
+	sglist[0].iov_base = NULL;
+	sglist[0].iov_len  = ONE_MB;
+	sglist[0].mr = NULL;
 
 	msg->sn = 0;
 	msg->more_in_batch = 0;
@@ -428,6 +435,7 @@ int main(int argc, char *argv[])
 	int			retval;
 	char			url[256];
 	struct xio_msg		*msg;
+	struct xio_iovec_ex	*sglist;
 	int			i = 0;
 
 	/* client session attributes */
@@ -485,10 +493,13 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 1);
+
+
+		sglist[0].iov_base = NULL;
+		sglist[0].iov_len  = ONE_MB;
+		sglist[0].mr = NULL;
 
 
 		/* recycle the message and fill new request */

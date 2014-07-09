@@ -130,15 +130,15 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		data = ((char *)data) + sizeof(struct xio_task) +
 					q->params.task_dd_data_sz;
 
-		s->array[i]->imsg.in.data_type = XIO_DATA_TYPE_PTR;
-		s->array[i]->imsg.in.pdata_iov  = data;
-		s->array[i]->imsg.in.data_iovsz = g_options.max_in_iovsz;
+		s->array[i]->imsg.in.sgl_type	         = XIO_SGL_TYPE_IOV_PTR;
+		s->array[i]->imsg.in.pdata_iov.sglist    = data;
+		s->array[i]->imsg.in.pdata_iov.max_nents = g_options.max_in_iovsz;
 
 		data = ((char *)data) + g_options.max_in_iovsz*sizeof(struct xio_iovec_ex);
 
-		s->array[i]->imsg.out.data_type = XIO_DATA_TYPE_PTR;
-		s->array[i]->imsg.out.pdata_iov  = data;
-		s->array[i]->imsg.out.data_iovsz = g_options.max_out_iovsz;
+		s->array[i]->imsg.out.sgl_type		  = XIO_SGL_TYPE_IOV_PTR;
+		s->array[i]->imsg.out.pdata_iov.sglist	  = data;
+		s->array[i]->imsg.out.pdata_iov.max_nents = g_options.max_out_iovsz;
 
 		data = ((char *)data) + g_options.max_out_iovsz*sizeof(struct xio_iovec_ex);
 

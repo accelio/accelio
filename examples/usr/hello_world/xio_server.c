@@ -47,6 +47,18 @@
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		2000000
 
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
 
 /* server private data */
 struct server_data {
@@ -63,8 +75,12 @@ struct server_data {
 static void process_request(struct server_data *server_data,
 			    struct xio_msg *req)
 {
-	char *str, tmp;
-	int len, i;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&req->in);
+	char			*str;
+	int			nents = vmsg_sglist_nents(&req->in);
+	int			len, i;
+	char			tmp;
+
 
 	/* note all data is packed together so in order to print each
 	 * part on its own NULL character is temporarily stuffed
@@ -83,9 +99,9 @@ static void process_request(struct server_data *server_data,
 			       (req->sn + 1), str);
 			str[len] = tmp;
 		}
-		for (i = 0; i < req->in.data_iovlen; i++) {
-			str = (char *)req->in.data_iov[i].iov_base;
-			len = req->in.data_iov[i].iov_len;
+		for (i = 0; i < nents; i++) {
+			str = (char *)sglist[i].iov_base;
+			len = sglist[i].iov_len;
 			if (str) {
 				if (((unsigned) len) > 64)
 					len = 64;
@@ -100,7 +116,7 @@ static void process_request(struct server_data *server_data,
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;
-	req->in.data_iovlen	  = 0;
+	vmsg_sglist_set_nents(&req->in, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -222,7 +238,18 @@ int main(int argc, char *argv[])
 			strdup("hello world header response");
 		server_data.rsp[i].out.header.iov_len =
 			strlen(server_data.rsp[i].out.header.iov_base) + 1;
-	}
+
+		server_data.rsp[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
+		server_data.rsp[i].out.data_iov.max_nents = XIO_IOVLEN;
+
+		server_data.rsp[i].out.data_iov.sglist[0].iov_base =
+			strdup("hello world data response");
+
+		server_data.rsp[i].out.data_iov.sglist[0].iov_len =
+			strlen(server_data.rsp[i].out.data_iov.sglist[0].iov_base) + 1;
+
+		server_data.rsp[i].out.data_iov.nents = 1;
+}
 
 	/* create thread context for the client */
 	server_data.ctx	= xio_context_create(NULL, 0, -1);
@@ -248,8 +275,10 @@ int main(int argc, char *argv[])
 	}
 
 	/* free the message */
-	for (i = 0; i < QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(server_data.rsp[i].out.header.iov_base);
+		free(server_data.rsp[i].out.data_iov.sglist[0].iov_base);
+	}
 
 	/* free the context */
 	xio_context_destroy(server_data.ctx);

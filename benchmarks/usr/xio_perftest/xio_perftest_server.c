@@ -102,11 +102,11 @@ static int on_request(struct xio_session *session,
 	rsp->request		= req;
 	rsp->more_in_batch	= more_in_batch;
 	rsp->in.header.iov_len	= 0;
-	rsp->in.data_iovlen	= 0;
 	rsp->out.header.iov_len = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 
 	if (tdata->user_param->verb == READ)
-		rsp->out.data_iovlen = 0;
+		vmsg_sglist_set_nents(&rsp->out, 0);
 
 	if (xio_send_response(rsp) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
@@ -153,18 +153,20 @@ static int on_msg_error(struct xio_session *session,
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	if (!tdata->in_xbuf) {
-		tdata->in_xbuf = xio_alloc(msg->in.data_iov[0].iov_len);
-	} else if (tdata->in_xbuf->length < msg->in.data_iov[0].iov_len) {
+		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
+	} else if (tdata->in_xbuf->length < sglist[0].iov_len) {
 		xio_free(&tdata->in_xbuf);
-		tdata->in_xbuf = xio_alloc(msg->in.data_iov[0].iov_len);
+		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
 	}
 
-	msg->in.data_iovlen		= 1;
-	msg->in.data_iov[0].iov_base	= tdata->in_xbuf->addr;
-	msg->in.data_iov[0].iov_len	= tdata->in_xbuf->length;
-	msg->in.data_iov[0].mr		= tdata->in_xbuf->mr;
+	vmsg_sglist_set_nents(&msg->in, 1);
+
+	sglist[0].iov_base	= tdata->in_xbuf->addr;
+	sglist[0].iov_len	= tdata->in_xbuf->length;
+	sglist[0].mr		= tdata->in_xbuf->mr;
 
 	return 0;
 }

@@ -64,7 +64,6 @@
 #define NULL_BS_DEV_SIZE (1ULL << 32)
 #define EXTRA_MSGS	100
 
-
 /*---------------------------------------------------------------------------*/
 /* data structres				                             */
 /*---------------------------------------------------------------------------*/
@@ -295,7 +294,7 @@ reject:
 
 	pd->close_rsp.out.header.iov_len = sizeof(struct raio_answer);
 	pd->close_rsp.out.header.iov_base = pd->rsp_hdr;
-	pd->close_rsp.out.data_iovlen = 0;
+	pd->close_rsp.out.data_iov.nents = 0;
 
 	pd->close_rsp.request = req;
 
@@ -495,7 +494,7 @@ reject:
 	}
 
 	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.out.data_iovlen = 0;
+	pd->rsp.out.data_iov.nents = 0;
 
 	pd->rsp.request = req;
 
@@ -523,7 +522,7 @@ int raio_reject_request(void *prv_session_data,
 		 pd->rsp_hdr))));
 
 	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.out.data_iovlen = 0;
+	pd->rsp.out.data_iov.nents = 0;
 	pd->rsp.request = req;
 
 	xio_send_response(&pd->rsp);
@@ -537,6 +536,7 @@ int raio_reject_request(void *prv_session_data,
 static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 {
 	struct raio_io_u	*io_u = iocmd->user_context;
+	struct xio_iovec_ex	*sglist;
 	struct raio_answer	ans = { RAIO_CMD_IO_SUBMIT, 0, 0, 0 };
 
 	pack_u32((uint32_t *)&iocmd->res2,
@@ -550,20 +550,21 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 	io_u->rsp->out.header.iov_len = sizeof(struct raio_answer) +
 					2*sizeof(uint32_t);
 
+	sglist = vmsg_sglist(&io_u->rsp->out);
 	if (io_u->iocmd.op == RAIO_CMD_PREAD) {
 		if (iocmd->res != iocmd->bcount) {
 			if (iocmd->res < iocmd->bcount) {
-				io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+				sglist[0].iov_len = iocmd->res;
 			} else {
-				io_u->rsp->out.data_iovlen	   = 0;
-				io_u->rsp->out.data_iov[0].iov_len = iocmd->res;
+				vmsg_sglist_set_nents(&io_u->rsp->out, 0);
+				sglist[0].iov_len = iocmd->res;
 			}
 		} else {
-			io_u->rsp->out.data_iov[0].iov_len = iocmd->bcount;
+			sglist[0].iov_len = iocmd->bcount;
 		}
 	} else {
-		io_u->rsp->out.data_iov[0].iov_len = 0;
-		io_u->rsp->out.data_iovlen = 0;
+		vmsg_sglist_set_nents(&io_u->rsp->out, 0);
+		sglist[0].iov_len = 0;
 	}
 
 	xio_send_response(io_u->rsp);
@@ -582,6 +583,7 @@ static int raio_handle_submit(void *prv_session_data,
 {
 	struct raio_io_portal_data	*pd = prv_portal_data;
 	struct raio_io_session_data	*sd = prv_session_data;
+	struct xio_iovec_ex		*sglist;
 	struct raio_io_u		*io_u;
 	struct raio_iocb		iocb;
 	struct raio_answer		ans;
@@ -616,11 +618,15 @@ static int raio_handle_submit(void *prv_session_data,
 	io_u->iocmd.bcount		= iocb.u.c.nbytes;
 
 	if (io_u->iocmd.op == RAIO_CMD_PWRITE) {
-		io_u->iocmd.buf		= req->in.data_iov[0].iov_base;
-		io_u->iocmd.mr		= req->in.data_iov[0].mr;
+		sglist = vmsg_sglist(&req->in);
+
+		io_u->iocmd.buf		= sglist[0].iov_base;
+		io_u->iocmd.mr		= sglist[0].mr;
 	} else {
-		io_u->iocmd.buf		= io_u->rsp->out.data_iov[0].iov_base;
-		io_u->iocmd.mr		= io_u->rsp->out.data_iov[0].mr;
+		sglist = vmsg_sglist(&io_u->rsp->out);
+
+		io_u->iocmd.buf		= sglist[0].iov_base;
+		io_u->iocmd.mr		= sglist[0].mr;
 	}
 	io_u->iocmd.fsize		= sd->fsize;
 	io_u->iocmd.offset		= iocb.u.c.offset;
@@ -632,7 +638,7 @@ static int raio_handle_submit(void *prv_session_data,
 
 	io_u->rsp->request		= req;
 	io_u->rsp->user_context		= io_u;
-	io_u->rsp->out.data_iovlen	= 1;
+	io_u->rsp->out.data_iov.nents	= 1;
 
 
 	/* issues request to bs */

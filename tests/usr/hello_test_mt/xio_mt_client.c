@@ -59,8 +59,9 @@
 #define XIO_DEF_CPU		0
 #define XIO_DEF_POLL		0
 #define XIO_TEST_VERSION	"1.0.0"
+#define MAX_OUTSTANDING_REQS	50
 
-#define MAX_POOL_SIZE		400
+#define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
 #define MAX_THREADS		4
 #define DISCONNECT_FACTOR	3
@@ -131,18 +132,23 @@ static struct msg_params msg_params;
 /*---------------------------------------------------------------------------*/
 static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 {
-	if (tdata->stat.first_time) {
-		size_t	data_len = 0;
-		int	i;
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+	int			inents = vmsg_sglist_nents(&rsp->in);
 
-		for (i = 0; i < rsp->out.data_iovlen; i++)
-			data_len += rsp->out.data_iov[i].iov_len;
+	if (tdata->stat.first_time) {
+		struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+		int			onents = vmsg_sglist_nents(&rsp->out);
+		size_t			data_len = 0;
+		int			i;
+
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		tdata->stat.txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		for (i = 0; i < rsp->in.data_iovlen; i++)
-			data_len += rsp->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		tdata->stat.rxlen = rsp->in.header.iov_len + data_len;
 
@@ -180,7 +186,7 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 		       (void *)pthread_self(),
 		       (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		tdata->stat.cnt = 0;
 		tdata->stat.start_time = get_cpu_usecs();
 	}
@@ -191,6 +197,7 @@ static void *worker_thread(void *data)
 	struct thread_data	*tdata = data;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
+	struct xio_iovec_ex	*sglist;
 	int			i;
 
 	/* set affinity to thread */
@@ -215,7 +222,7 @@ static void *worker_thread(void *data)
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
 				  tdata->cid, NULL, tdata);
 
-	for (i = 0;  i < 50; i++) {
+	for (i = 0;  i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(tdata->pool);
 		if (msg == NULL)
@@ -224,10 +231,13 @@ static void *worker_thread(void *data)
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 1);
+
+		sglist[0].iov_base = NULL;
+		sglist[0].iov_len  = ONE_MB;
+		sglist[0].mr = NULL;
 
 		/* create "hello world" message */
 		msg_write(&msg_params, msg,
@@ -308,6 +318,7 @@ static int on_response(struct xio_session *session,
 		       void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
+	struct xio_iovec_ex *sglist;
 
 	tdata->nrecv++;
 
@@ -336,10 +347,14 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 1;
-	msg->in.data_iov[0].iov_base = NULL;
-	msg->in.data_iov[0].iov_len  = ONE_MB;
-	msg->in.data_iov[0].mr = NULL;
+
+	sglist = vmsg_sglist(&msg->in);
+	vmsg_sglist_set_nents(&msg->in, 1);
+
+
+	sglist[0].iov_base = NULL;
+	sglist[0].iov_len  = ONE_MB;
+	sglist[0].mr = NULL;
 
 	msg->sn = 0;
 	msg->more_in_batch = 0;

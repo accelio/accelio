@@ -57,6 +57,7 @@
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_sg_table.h"
 
 #define XIO_KMALLOC_THRESHOLD 0x20000 /* 128K - kmalloc limit */
 
@@ -619,11 +620,18 @@ void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
 {
 	void *ptr = mp->addr;
 	int i;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sge;
+	sgtbl		= xio_sg_table_get(vmsg);
+	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
 
-	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
-		memmove(ptr, vmsg->pdata_iov[i].iov_base,
-			vmsg->pdata_iov[i].iov_len);
-		ptr += vmsg->pdata_iov[i].iov_len;
+	sge = sge_first(sgtbl_ops, sgtbl);
+	for (i = 0; i < tbl_nents(sgtbl_ops, sgtbl) - 1; i++) {
+		memmove(ptr, sge_addr(sgtbl_ops, sge),
+			sge_length(sgtbl_ops, sge));
+		ptr += sge_length(sgtbl_ops, sge);
+		sge = sge_next(sgtbl_ops, sgtbl, sge);
 	}
 }
 
@@ -635,29 +643,35 @@ void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len)
 
 int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl, int *nents)
 {
-	struct xio_iovec_ex *iov, *niov;
-	struct scatterlist *sg;
-	void *start_addr, *end_addr;
-	size_t total_len;
-	int i;
+	struct xio_iovec_ex	*iov, *niov;
+	struct scatterlist	*sg;
+	void			*start_addr, *end_addr;
+	size_t			total_len, sgnents;
+	int			i;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
 
-	if (vmsg->data_iovlen > XIO_MAX_IOV) {
-		WARN_LOG("IOV too long %zu\n", vmsg->data_iovlen);
+	sgtbl		= xio_sg_table_get(vmsg);
+	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+	sgnents		= tbl_nents(sgtbl_ops, sgtbl);
+
+	if (sgnents > XIO_MAX_IOV) {
+		WARN_LOG("IOV too long %zu\n", sgnents);
 		*nents = 0;
 		return -EINVAL;
 	}
 
-	if (vmsg->data_iovlen == 0) {
+	if (sgnents == 0) {
 		*nents = 0;
 		return 0;
 	}
 
-	niov = &vmsg->pdata_iov[0];
+	niov = tbl_sglist(sgtbl_ops, sgtbl);
 	start_addr = niov->iov_base;
 	total_len = niov->iov_len;
 	sg = sgl;
 
-	for (i = 0; i < vmsg->data_iovlen - 1; i++) {
+	for (i = 0; i < sgnents - 1; i++) {
 		iov = niov;
 		niov++;
 		end_addr = iov->iov_base + iov->iov_len;

@@ -99,12 +99,13 @@ static void process_request(struct xio_msg *msg)
 		cnt = 0;
 		return;
 	}
-
 	if (++cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("**** message [%lu] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -221,27 +222,29 @@ int on_msg_error(struct xio_session *session,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	static int first_time = 1;
-	static char *buf;
-	static struct xio_mr *mr;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	static int		first_time = 1;
+	static char		*buf;
+	static struct xio_mr	*mr;
 
-	msg->in.data_iovlen = 1;
-
+	vmsg_sglist_set_nents(&msg->in, 1);
 	if (first_time) {
-		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = xio_reg_mr(
-				msg->in.data_iov[0].iov_base,
-				msg->in.data_iov[0].iov_len);
-		buf = msg->in.data_iov[0].iov_base;
-		mr = msg->in.data_iov[0].mr;
+		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
+		sglist[0].iov_len = XIO_READ_BUF_LEN;
+		sglist[0].mr = xio_reg_mr(sglist[0].iov_base,
+					  sglist[0].iov_len);
+		buf = sglist[0].iov_base;
+		mr = sglist[0].mr;
 		first_time = 0;
 	} else {
-		msg->in.data_iov[0].iov_base = buf;
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = mr;
+		sglist[0].iov_base = buf;
+		sglist[0].iov_len = XIO_READ_BUF_LEN;
+		sglist[0].mr = mr;
 	}
 
 	return 0;

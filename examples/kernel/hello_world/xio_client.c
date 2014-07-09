@@ -68,6 +68,19 @@ static struct completion cleanup_complete;
 #define QUEUE_DEPTH		512
 #define HW_PRINT_COUNTER	4000000
 
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
+
 /* private session data */
 struct session_data {
 	struct xio_context	*ctx;
@@ -95,7 +108,7 @@ static void process_response(struct xio_msg *rsp)
 	}
 	rsp->in.header.iov_base	  = NULL;
 	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -247,12 +260,14 @@ static int xio_client_main(void *data)
 		session_data->req[i].out.header.iov_base =
 			kstrdup("hello world header request", GFP_KERNEL);
 		session_data->req[i].out.header.iov_len =
-			strlen(session_data->req[i].out.header.iov_base);
+			strlen(session_data->req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
+		session_data->req[i].out.sgl_type	    = XIO_SGL_TYPE_IOV;
+		session_data->req[i].out.data_iov.max_nents = XIO_IOVLEN;
 		session_data->req[i].out.data_iov[0].iov_base =
 			kstrdup("hello world iovec request", GFP_KERNEL);
 		session_data->req[i].out.data_iov[0].iov_len =
-			strlen(session_data->req[i].out.data_iov[0].iov_base);
+			strlen(session_data->req[i].out.data_iov[0].iov_base) + 1;
 		session_data->req[i].out.data_iovlen = 1;
 	}
 

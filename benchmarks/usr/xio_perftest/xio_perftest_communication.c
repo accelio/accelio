@@ -43,7 +43,7 @@
 #include "libxio.h"
 #include "xio_perftest_parameters.h"
 #include "xio_perftest_communication.h"
-
+#include "xio_msg.h"
 
 #define CONFIG_PORT	20610
 
@@ -280,9 +280,9 @@ int ctx_xchg_data(struct perf_comm *comm,
 	if (comm->user_param->machine_type == CLIENT) {
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
-		comm->control_ctx->msg.out.data_iovlen		= 0;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
-		comm->control_ctx->msg.in.data_iovlen		= 0;
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
 
 		xio_send_request(comm->control_ctx->conn,
 				 &comm->control_ctx->msg);
@@ -312,9 +312,10 @@ int ctx_xchg_data(struct perf_comm *comm,
 
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
-		comm->control_ctx->msg.out.data_iovlen		= 0;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
-		comm->control_ctx->msg.in.data_iovlen		= 0;
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
+
 
 		comm->control_ctx->msg.request = comm->control_ctx->reply;
 
@@ -342,9 +343,10 @@ int ctx_write_data(struct perf_comm *comm, void *data, int size)
 
 	comm->control_ctx->msg.out.header.iov_base	= data;
 	comm->control_ctx->msg.out.header.iov_len	= size;
-	comm->control_ctx->msg.out.data_iovlen		= 0;
 	comm->control_ctx->msg.in.header.iov_len	= 0;
-	comm->control_ctx->msg.in.data_iovlen		= 0;
+	vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+	vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
+
 
 	return xio_send_msg(comm->control_ctx->conn, &comm->control_ctx->msg);
 }

@@ -39,6 +39,7 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
+#include "xio_sg_table.h"
 
 #include <linux/kernel.h>
 #include <linux/topology.h>
@@ -231,6 +232,9 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 void xio_msg_dump(struct xio_msg *xio_msg)
 {
 	int i;
+	struct  xio_sg_table_ops *sgtbl_ops;
+	void			 *sgtbl;
+	void			 *sge;
 
 	ERROR_LOG("*********************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
@@ -242,25 +246,38 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 			  xio_msg->request,
 			  ((xio_msg->request) ? xio_msg->request->sn : -1));
 
+	sgtbl		= xio_sg_table_get(&xio_msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);
+
 	ERROR_LOG("in header: length:%zd, address:%p\n",
 		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
-	ERROR_LOG("in data type:%d iovsz:%zd\n",xio_msg->in.data_type,
-		  xio_msg->in.data_iovsz);
-	ERROR_LOG("in data size:%zd\n", xio_msg->in.data_iovlen);
-	for (i = 0; i < xio_msg->in.data_iovlen; i++)
-		ERROR_LOG("in data[%d]: length:%zd, address:%p\n", i,
-			  xio_msg->in.pdata_iov[i].iov_len,
-			  xio_msg->in.pdata_iov[i].iov_base);
+	ERROR_LOG("in sgl type:%d iovsz:%d\n",xio_msg->in.sgl_type,
+		  tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("in data size:%d\n",
+		  tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n", i,
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge),
+			  sge_mr(sgtbl_ops, sge));
+	}
+
+	sgtbl		= xio_sg_table_get(&xio_msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->out.sgl_type);
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
 		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
-	ERROR_LOG("out data type:%d iovsz:%zd\n",xio_msg->out.data_type,
-		  xio_msg->out.data_iovsz);
-	ERROR_LOG("out data size:%zd\n", xio_msg->out.data_iovlen);
-	for (i = 0; i < xio_msg->out.data_iovlen; i++)
-		ERROR_LOG("out data[%d]: length:%zd, address:%p\n", i,
-			  xio_msg->out.pdata_iov[i].iov_len,
-			  xio_msg->out.pdata_iov[i].iov_base);
+	ERROR_LOG("out sgl type:%d iovsz:%d\n",xio_msg->out.sgl_type,
+		 tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("out data size:%d\n", tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n", i,
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge),
+			  sge_mr(sgtbl_ops, sge));
+	}
 	ERROR_LOG("*********************************************\n");
 }
 

@@ -48,6 +48,18 @@
 #define TEST_DISCONNECT		1
 #define DISCONNECT_NR		3000000
 
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
 
 struct thread_data {
 	int			cid;
@@ -135,7 +147,7 @@ static void process_response(struct thread_data  *tdata,
 	}
 	rsp->in.header.iov_base	  = NULL;
 	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 }
 
 /*---------------------------------------------------------------------------*/

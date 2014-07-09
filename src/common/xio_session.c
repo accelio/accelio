@@ -49,6 +49,7 @@
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
+#include "xio_sg_table.h"
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
@@ -657,6 +658,11 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_statistics *stats = &connection->ctx->stats;
 	struct xio_vmsg *vmsg = &msg->in;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+
+	sgtbl		= xio_sg_table_get(&msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
@@ -680,11 +686,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	msg->timestamp = get_cycles();
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	xio_stat_add(stats, XIO_STAT_RX_BYTES,
-		     vmsg->header.iov_len +
-		     xio_iovex_length(vmsg->pdata_iov, vmsg->data_iovlen));
-
-	xio_msg_cp_ptr2vec(&msg->in);
-	xio_msg_cp_ptr2vec(&msg->out);
+		     vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl));
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg)
@@ -807,12 +809,15 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		}
 		if (hdr.flags & XIO_MSG_RSP_FLAG_LAST) {
 			struct xio_vmsg *vmsg = &msg->in;
+			struct xio_sg_table_ops	*sgtbl_ops;
+			void			*sgtbl;
+
+			sgtbl		= xio_sg_table_get(&msg->in);
+			sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
+
 			xio_stat_add(stats, XIO_STAT_RX_BYTES,
 				     vmsg->header.iov_len +
-				     xio_iovex_length(vmsg->pdata_iov,
-						      vmsg->data_iovlen));
-			xio_msg_cp_ptr2vec(&msg->in);
-			xio_msg_cp_ptr2vec(&msg->out);
+				     tbl_length(sgtbl_ops, sgtbl));
 
 			omsg->request	= msg;
 			if (connection->ses_ops.on_msg)
@@ -1205,12 +1210,9 @@ int xio_on_assign_in_buf(struct xio_session *session,
 	}
 
 	if (connection->ses_ops.assign_data_in_buf) {
-		xio_msg_cp_ptr2vec(&task->imsg.in);
 		connection->ses_ops.assign_data_in_buf(&task->imsg,
 					connection->cb_user_context);
 		event_data->assign_in_buf.is_assigned = 1;
-		/* copy the task message to pointer */
-		xio_msg_cp_vec2ptr(&task->imsg.in);
 		return 0;
 	}
 	event_data->assign_in_buf.is_assigned = 0;

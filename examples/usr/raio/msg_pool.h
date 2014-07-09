@@ -120,10 +120,22 @@ static inline void msg_reset(struct xio_msg *msg)
 {
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
-	msg->out.data_iovlen = 0;
+	msg->in.data_iov.nents = 0;
+	msg->out.data_iov.nents = 0;
 	msg->out.header.iov_len = 0;
 }
+
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
 
 
 #endif /* #define MSG_API_H */

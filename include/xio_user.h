@@ -98,12 +98,14 @@ enum xio_log_level {
 };
 
 /**
- * @enum xio_data_type
- * @brief message data iovec allocation type
+ * @enum xio_sgl_type
+ * @brief message data scatter gather type
  */
-enum xio_data_type {
-	XIO_DATA_TYPE_ARRAY = 0,
-	XIO_DATA_TYPE_PTR   = 1,
+enum xio_sgl_type {
+	XIO_SGL_TYPE_IOV		= 0,
+	XIO_SGL_TYPE_IOV_PTR		= 1,
+	XIO_SGL_TYPE_SCATTERLIST	= 2,
+	XIO_SGL_TYPE_LAST
 };
 
 /**
@@ -451,19 +453,56 @@ struct xio_msg_pdata {
 	struct xio_msg		**prev;		/**< internal library usage   */
 };
 
+/**
+ * @struct xio_sg_table
+ * @brief scatter gather table data structure
+ */
+struct xio_sg_table {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	void				*sglist;  /**< scatter list	   */
+};
+
+/**
+ * @struct xio_sg_table
+ * @brief scatter gather iovec vector data structure
+ */
+struct xio_sg_iov {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		sglist[XIO_IOVLEN]; /**< scatter vec */
+
+};
+
+/**
+ * @struct xio_sg_table
+ * @brief scatter gather iovec pointer data structure
+ */
+struct xio_sg_iovptr {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		*sglist;    /**< scatter list	   */
+};
 
 /**
  * @struct xio_vmsg
  * @brief message sub element type
  */
 struct xio_vmsg {
-	struct xio_iovec	header;		/**< header's io vector	    */
-	enum xio_data_type	data_type;
-	int			pad;
-	size_t			data_iovsz;	/**< data iovecs alloced    */
-	size_t			data_iovlen;	/**< data iovecs count	    */
-	struct xio_iovec_ex	*pdata_iov;
-	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
+	struct xio_iovec		header;		/**< header's io vector	    */
+	enum xio_sgl_type		sgl_type;
+	int				pad;
+	union {
+		struct xio_sg_table	data_tbl;
+		struct xio_sg_iov	data_iov;
+		struct xio_sg_iovptr	pdata_iov;
+	};
 };
 
 /**

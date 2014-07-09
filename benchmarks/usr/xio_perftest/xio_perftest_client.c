@@ -192,6 +192,7 @@ static void *statistics_thread_cb(void *data)
 static void *worker_thread(void *data)
 {
 	struct thread_data	*tdata = data;
+	struct xio_iovec_ex	*sglist;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
 	int			i;
@@ -226,15 +227,19 @@ static void *worker_thread(void *data)
 
 		/* get pointers to internal buffers */
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 0;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 0);
+
 		msg->out.header.iov_len = 0;
+		sglist = vmsg_sglist(&msg->out);
 		if (tdata->data_len) {
-			msg->out.data_iovlen		= 1;
-			msg->out.data_iov[0].iov_base	= tdata->xbuf->addr;
-			msg->out.data_iov[0].iov_len	= tdata->xbuf->length;
-			msg->out.data_iov[0].mr		= tdata->xbuf->mr;
+			vmsg_sglist_set_nents(&msg->out, 1);
+			sglist[0].iov_base	= tdata->xbuf->addr;
+			sglist[0].iov_len	= tdata->xbuf->length;
+			sglist[0].mr		= tdata->xbuf->mr;
 		} else {
-			msg->out.data_iovlen = 0;
+			vmsg_sglist_set_nents(&msg->out, 0);
 		}
 		msg->user_context = (void *)get_cycles();
 		/* send first message */
@@ -317,6 +322,7 @@ static int on_response(struct xio_session *session,
 			void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
+
 	cycles_t rtt = (get_cycles()-(cycles_t)msg->user_context);
 
 	if (tdata->do_stat) {
@@ -343,7 +349,7 @@ static int on_response(struct xio_session *session,
 
 	/* reset message */
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
+	vmsg_sglist_set_nents(&msg->in, 0);
 
 	msg->user_context = (void *)get_cycles();
 	if (xio_send_request(tdata->conn, msg) == -1) {

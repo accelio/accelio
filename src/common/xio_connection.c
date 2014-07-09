@@ -45,6 +45,7 @@
 #include "xio_connection.h"
 #include "xio_session.h"
 #include "xio_context.h"
+#include "xio_sg_table.h"
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_INFLIGHT_BUDGET	64
@@ -181,9 +182,12 @@ static int xio_init_ow_msg_pool(struct xio_connection *connection)
 	}
 
 	xio_msg_list_init(&connection->one_way_msg_pool);
-	for (i = 0; i < MSG_POOL_SZ; i++)
+	for (i = 0; i < MSG_POOL_SZ; i++) {
+		connection->msg_array[i].in.data_iov.max_nents = XIO_IOVLEN;
+		connection->msg_array[i].out.data_iov.max_nents = XIO_IOVLEN;
 		xio_msg_list_insert_head(&connection->one_way_msg_pool,
 					 &connection->msg_array[i], pdata);
+	}
 
 	return 0;
 }
@@ -348,7 +352,6 @@ int xio_connection_send(struct xio_connection *connection,
 	xio_session_write_header(task, &hdr);
 
 	/* send it */
-	xio_msg_map(msg);
 	retval = xio_nexus_send(connection->nexus, task);
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
@@ -779,6 +782,8 @@ int xio_send_request(struct xio_connection *connection,
 	struct xio_statistics	*stats;
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
 
 
 	if (connection  == NULL || msg == NULL) {
@@ -803,7 +808,6 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
-		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -817,13 +821,15 @@ int xio_send_request(struct xio_connection *connection,
 			return -1;
 		}
 
-		vmsg = &pmsg->out;
+		vmsg		= &pmsg->out;
+		sgtbl		= xio_sg_table_get(vmsg);
+		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->pdata_iov,
-					      vmsg->data_iovlen));
+			     tbl_length(sgtbl_ops, sgtbl));
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
@@ -851,6 +857,9 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_msg		*pmsg = msg;
 	int			valid;
 	int			retval = 0;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+
 
 	while (pmsg) {
 		task	   = container_of(msg->request, struct xio_task, imsg);
@@ -894,7 +903,6 @@ int xio_send_response(struct xio_msg *msg)
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
 			     get_cycles() - task->imsg.timestamp);
 
-		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -902,12 +910,14 @@ int xio_send_response(struct xio_msg *msg)
 			return -1;
 		}
 
+		sgtbl		= xio_sg_table_get(vmsg);
+		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+
 
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->pdata_iov,
-					      vmsg->data_iovlen));
+			     tbl_length(sgtbl_ops, sgtbl));
 
 		pmsg->flags = XIO_MSG_RSP_FLAG_LAST;
 		if ((pmsg->request->flags &
@@ -938,8 +948,9 @@ int xio_send_response(struct xio_msg *msg)
 int xio_connection_send_read_receipt(struct xio_connection *connection,
 				     struct xio_msg *msg)
 {
-	struct xio_msg *rsp;
-	struct xio_task *task;
+	struct xio_msg		*rsp;
+	struct xio_task		*task;
+
 
 
 	if (xio_msg_list_empty(&connection->one_way_msg_pool)) {
@@ -959,7 +970,7 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	task->state = XIO_TASK_STATE_READ;
 
 	rsp->out.header.iov_len = 0;
-	rsp->out.data_iovlen = 0;
+	rsp->out.data_iov.nents = 0;
 
 	xio_msg_list_insert_tail(&connection->rsps_msgq, rsp, pdata);
 
@@ -987,6 +998,9 @@ int xio_send_msg(struct xio_connection *connection,
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg = msg;
 	int			valid;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+
 
 
 	if (xio_session_not_queueing(connection->session) &&
@@ -1003,20 +1017,21 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
-		xio_msg_map(pmsg);
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid out message\n");
 			return -1;
 		}
-		vmsg	= &pmsg->out;
+		vmsg		= &pmsg->out;
+		sgtbl		= xio_sg_table_get(vmsg);
+		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES,
 			     vmsg->header.iov_len +
-			     xio_iovex_length(vmsg->pdata_iov,
-			     vmsg->data_iovlen));
+			     tbl_length(sgtbl_ops, sgtbl));
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_ONE_WAY_REQ;
@@ -1242,8 +1257,8 @@ static int xio_send_fin_req(struct xio_connection *connection)
 	msg->type		= XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
-	msg->out.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
 
 
 	/* insert to the tail of the queue */
@@ -1282,8 +1297,8 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
-	msg->out.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
 
 	/* insert to the tail of the queue */
 	xio_msg_list_insert_tail(&connection->rsps_msgq, msg, pdata);
@@ -1320,8 +1335,8 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	msg->type		= XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
-	msg->out.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
 
 	TRACE_LOG("send fin request. session:%p, connection:%p\n",
 		  connection->session, connection);
@@ -1560,8 +1575,8 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	msg->type		= XIO_CONNECTION_HELLO_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
-	msg->out.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
 
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
@@ -1591,8 +1606,8 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
-	msg->out.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
 
 
 	/* we don't want to send all queued messages yet - send directly */

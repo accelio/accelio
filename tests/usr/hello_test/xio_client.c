@@ -129,28 +129,24 @@ static struct xio_test_config  test_config = {
 static void process_response(struct test_params *test_params,
 			     struct xio_msg *rsp)
 {
-	if (test_params->stat.first_time) {
-		size_t	data_len = 0;
-		int	i;
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+	int			inents = vmsg_sglist_nents(&rsp->in);
 
-		if (rsp->out.data_type == XIO_DATA_TYPE_PTR) {
-			for (i = 0; i < rsp->out.data_iovlen; i++)
-				data_len += rsp->out.pdata_iov[i].iov_len;
-		} else {
-			for (i = 0; i < rsp->out.data_iovlen; i++)
-				data_len += rsp->out.data_iov[i].iov_len;
-		}
+	if (test_params->stat.first_time) {
+		struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+		int			onents = vmsg_sglist_nents(&rsp->out);
+		size_t			data_len = 0;
+		int			i;
+
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		test_params->stat.txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		if (rsp->in.data_type == XIO_DATA_TYPE_PTR) {
-			for (i = 0; i < rsp->in.data_iovlen; i++)
-				data_len += rsp->in.pdata_iov[i].iov_len;
-		} else {
-			for (i = 0; i < rsp->in.data_iovlen; i++)
-				data_len += rsp->in.data_iov[i].iov_len;
-		}
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
+
 		test_params->stat.rxlen = rsp->in.header.iov_len + data_len;
 
 		test_params->stat.start_time = get_cpu_usecs();
@@ -172,16 +168,17 @@ static void process_response(struct test_params *test_params,
 
 		double txbw = (1.0*pps*test_params->stat.txlen/ONE_MB);
 		double rxbw = (1.0*pps*test_params->stat.rxlen/ONE_MB);
-
 		printf("transactions per second: %lu, bandwidth: " \
 		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, RX: %zd B\n",
 		       pps, txbw, rxbw,
 		       test_params->stat.txlen, test_params->stat.rxlen);
 		get_time(timeb, 40);
+
 		printf("**** [%s] - message [%zd] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.pdata_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
+
 		test_params->stat.cnt = 0;
 		test_params->stat.start_time = get_cpu_usecs();
 	}
@@ -254,8 +251,9 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
-	int j;
+	struct test_params	*test_params = cb_user_context;
+	struct xio_iovec_ex	*sglist;
+	int			j;
 
 	test_params->nrecv++;
 
@@ -291,19 +289,14 @@ static int on_response(struct xio_session *session,
 	}
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = test_config.in_iov_len;
-	if (msg->in.data_iovlen  > XIO_IOVLEN) {
-		for (j = 0; j < test_config.in_iov_len; j++) {
-			msg->in.pdata_iov[j].iov_base = NULL;
-			msg->in.pdata_iov[j].iov_len  = ONE_MB;
-			msg->in.pdata_iov[j].mr = NULL;
-		}
-	} else {
-		for (j = 0; j < test_config.in_iov_len; j++) {
-			msg->in.data_iov[j].iov_base = NULL;
-			msg->in.data_iov[j].iov_len  = ONE_MB;
-			msg->in.data_iov[j].mr = NULL;
-		}
+
+	sglist = vmsg_sglist(&msg->in);
+	vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
+
+	for (j = 0; j < test_config.in_iov_len; j++) {
+		sglist[j].iov_base = NULL;
+		sglist[j].iov_len  = ONE_MB;
+		sglist[j].mr = NULL;
 	}
 
 	msg->sn = 0;
@@ -536,6 +529,7 @@ int main(int argc, char *argv[])
 {
 	struct xio_session	*session;
 	struct test_params	test_params;
+	struct xio_iovec_ex	*sglist;
 	int			error;
 	int			retval;
 	char			url[256];
@@ -619,19 +613,13 @@ int main(int argc, char *argv[])
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
 
-		msg->in.data_iovlen = test_config.in_iov_len;
-		if (msg->in.data_iovlen  > XIO_IOVLEN) {
-			for (j = 0; j < test_config.in_iov_len; j++) {
-				msg->in.pdata_iov[j].iov_base = NULL;
-				msg->in.pdata_iov[j].iov_len  = ONE_MB;
-				msg->in.pdata_iov[j].mr = NULL;
-			}
-		} else {
-			for (j = 0; j < test_config.in_iov_len; j++) {
-				msg->in.data_iov[j].iov_base = NULL;
-				msg->in.data_iov[j].iov_len  = ONE_MB;
-				msg->in.data_iov[j].mr = NULL;
-			}
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
+
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			sglist[j].iov_base = NULL;
+			sglist[j].iov_len  = ONE_MB;
+			sglist[j].mr = NULL;
 		}
 
 		/* assign buffers to the message */

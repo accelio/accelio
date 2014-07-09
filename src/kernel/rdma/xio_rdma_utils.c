@@ -47,6 +47,7 @@
 #include "xio_task.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
+#include "xio_sg_table.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_validate_rdma_op							     */
@@ -58,12 +59,14 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 int *tasks_used)
 {
 	struct xio_iovec_ex *liov;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void		*sgtbl;
 	uint64_t	raddr;
 	uint32_t	rlen;
 	uint64_t	laddr;
 	uint32_t	llen;
 	uint32_t	tot_len = 0;
-	size_t		lsize;
+	size_t		lsize, lnents;
 	int		l, r;
 	int		k = 0;
 
@@ -72,15 +75,20 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 		*tasks_used = 0;
 		return -1;
 	}
+	sgtbl		= xio_sg_table_get(vmsg);
+	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+	lnents		= tbl_nents(sgtbl_ops, sgtbl);
 
-	if (vmsg->data_iovlen > XIO_MAX_IOV || vmsg->data_iovlen == 0) {
-		WARN_LOG("IOV size %zu\n", vmsg->data_iovlen);
+
+	if (lnents > XIO_MAX_IOV || lnents == 0) {
+		WARN_LOG("IOV size %zu\n", lnents);
 		*tasks_used = 0;
 		return -EINVAL;
 	}
 
-	lsize = vmsg->data_iovlen;
-	liov  = vmsg->pdata_iov;
+
+	lsize = lnents;
+	liov  = tbl_sglist(sgtbl_ops, sgtbl);
 
 	r = 0;
 	rlen  = rsg_list[r].length;
@@ -141,7 +149,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	/* not enough buffers to complete */
 	if (tot_len < op_size) {
 		*tasks_used = 0;
-		ERROR_LOG("iovec exausted\n");
+		ERROR_LOG("iovec exhausted\n");
 		return -1;
 	}
 

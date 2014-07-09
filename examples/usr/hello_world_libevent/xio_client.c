@@ -48,6 +48,19 @@
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		2000000
 
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
+
 
 /* private session data */
 struct session_data {
@@ -87,7 +100,7 @@ static void process_response(struct session_data *session_data,
 	}
 	rsp->in.header.iov_base	  = NULL;
 	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -220,11 +233,14 @@ int main(int argc, char *argv[])
 		session_data.req[i].out.header.iov_len =
 			strlen(session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
-		session_data.req[i].out.data_iov[0].iov_base =
+		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
+		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
+
+		session_data.req[i].out.data_iov.sglist[0].iov_base =
 			strdup("hello world iovec request");
-		session_data.req[i].out.data_iov[0].iov_len =
-			strlen(session_data.req[i].out.data_iov[0].iov_base);
-		session_data.req[i].out.data_iovlen = 1;
+		session_data.req[i].out.data_iov.sglist[0].iov_len =
+			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+		session_data.req[i].out.data_iov.nents = 1;
 	}
 	/* send first message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -259,7 +275,7 @@ int main(int argc, char *argv[])
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(session_data.req[i].out.header.iov_base);
-		free(session_data.req[i].out.data_iov[0].iov_base);
+		free(session_data.req[i].out.data_iov.sglist[0].iov_base);
 	}
 
 	/* free the context */

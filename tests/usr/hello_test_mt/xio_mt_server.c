@@ -158,11 +158,13 @@ static void process_request(struct thread_data *tdata, struct xio_msg *msg)
 	}
 
 	if (++tdata->stat.cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("thread [%d] - message [%lu] %s - %s\n",
 		       tdata->affinity,
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		tdata->stat.cnt = 0;
 	}
 }
@@ -245,21 +247,22 @@ int on_msg_error(struct xio_session *session,
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	msg->in.data_iovlen = 1;
+	vmsg_sglist_set_nents(&msg->in, 1);
 
 	if (tdata->buf == NULL) {
-		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr =
-			xio_reg_mr(msg->in.data_iov[0].iov_base,
-				   msg->in.data_iov[0].iov_len);
-		tdata->buf = msg->in.data_iov[0].iov_base;
-		tdata->mr = msg->in.data_iov[0].mr;
+		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
+		sglist[0].iov_len = XIO_READ_BUF_LEN;
+		sglist[0].mr =
+			xio_reg_mr(sglist[0].iov_base, sglist[0].iov_len);
+
+		tdata->buf = sglist[0].iov_base;
+		tdata->mr = sglist[0].mr;
 	} else {
-		msg->in.data_iov[0].iov_base = tdata->buf;
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = tdata->mr;
+		sglist[0].iov_base = tdata->buf;
+		sglist[0].iov_len = XIO_READ_BUF_LEN;
+		sglist[0].mr = tdata->mr;
 	}
 
 	return 0;

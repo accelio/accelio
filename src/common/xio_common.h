@@ -263,7 +263,7 @@ size_t		xio_iovex_length(const struct xio_iovec_ex *iov,
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 void		xio_msg_dump(struct xio_msg *xio_msg);
-
+/*
 void		xio_msg_map(struct xio_msg *xio_msg);
 
 void		xio_msg_unmap(struct xio_msg *xio_msg);
@@ -271,6 +271,6 @@ void		xio_msg_unmap(struct xio_msg *xio_msg);
 void		xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg);
 
 void		xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg);
-
+*/
 #endif /*XIO_COMMON_H */
 

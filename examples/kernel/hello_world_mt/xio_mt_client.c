@@ -109,7 +109,7 @@ static void process_response(struct thread_data *tdata, struct xio_msg *rsp)
 	}
 	rsp->in.header.iov_base	 = NULL;
 	rsp->in.header.iov_len	 = 0;
-	rsp->in.data_iovlen	 = 0;
+	rsp->in.data_iov.nents	 = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -191,7 +191,7 @@ static int on_response(struct xio_session *session,
 
 	req->in.header.iov_base	 = NULL;
 	req->in.header.iov_len	 = 0;
-	req->in.data_iovlen	 = 0;
+	req->in.data_iov.nents	 = 0;
 
 	/* re-send the message */
 	rcu_read_lock();
@@ -291,7 +291,7 @@ static int xio_client_thread(void *data)
 		if (!tdata->req[i].out.header.iov_base)
 			goto cleanup1;
 
-		tdata->req[i].out.header.iov_len = strlen(msg);
+		tdata->req[i].out.header.iov_len = strlen(msg) + 1;
 		tdata->req[i].user_context = &tdata->req[i];
 	}
 

@@ -62,6 +62,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_sessions_cache.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
+			../common/xio_sg_table.h		\
 			../common/xio_transport.h		\
 			../common/sys/hashtable.h		\
 			./linux/atomic.h 			\
@@ -88,6 +89,8 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
 			./xio/xio_workqueue.c		\
+			./xio/xio_sg_iov.c		\
+			./xio/xio_sg_iovptr.c		\
 			./transport/rdma/xio_rdma_utils.c	\
 			./transport/rdma/xio_rdma_verbs.c	\
 			./transport/rdma/xio_rdma_management.c	\
@@ -96,6 +99,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./transport/tcp/xio_tcp_datapath.c	\
 			./transport/xio_transport_mempool.c	\
 			./transport/xio_usr_transport.c	\
+			../common/xio_sg_table.c	\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\

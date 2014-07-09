@@ -116,13 +116,17 @@ static struct xio_test_config  test_config = {
 static void process_rx_message(struct ow_test_params *ow_params,
 			       struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&msg->in);
+	int			inents = vmsg_sglist_nents(&msg->in);
+
+
 	if (ow_params->rx_stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
 		data_len = 0;
-		for (i = 0; i < msg->in.data_iovlen; i++)
-			data_len += msg->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		ow_params->rx_stat.xlen = msg->in.header.iov_len + data_len;
 
@@ -149,7 +153,7 @@ static void process_rx_message(struct ow_test_params *ow_params,
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (msg->sn + 1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		ow_params->rx_stat.cnt = 0;
 		ow_params->rx_stat.start_time = get_cpu_usecs();
 	}
@@ -162,12 +166,15 @@ static void process_rx_message(struct ow_test_params *ow_params,
 static void process_tx_message(struct ow_test_params *ow_params,
 			       struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&msg->out);
+	int			onents = vmsg_sglist_nents(&msg->out);
+
 	if (ow_params->tx_stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < msg->out.data_iovlen; i++)
-			data_len += msg->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		ow_params->tx_stat.xlen = msg->out.header.iov_len + data_len;
 
@@ -196,7 +203,7 @@ static void process_tx_message(struct ow_test_params *ow_params,
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (msg->sn + 1),
 		       (char *)msg->out.header.iov_base,
-		       (char *)msg->out.data_iov[0].iov_base);
+		       (char *)(onents > 0 ? osglist[0].iov_base : NULL));
 		ow_params->tx_stat.cnt = 0;
 		ow_params->tx_stat.start_time = get_cpu_usecs();
 	}
