@@ -773,6 +773,40 @@ static int xio_rdma_task_init(struct xio_task *task,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_txd_init								     */
+/*---------------------------------------------------------------------------*/
+static void xio_xd_reinit(struct xio_work_req *xd,
+			  size_t xd_nr,
+			  struct ib_mr *srmr)
+{
+	int i;
+
+	if (!srmr)
+		return;
+
+	for (i = 0; i < xd_nr; i++) {
+		if (!xd->sge[i].lkey)
+			break;
+		xd->sge[i].lkey = srmr->lkey;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_task_reinit							     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_task_reinit(struct xio_task *task,
+				struct xio_rdma_transport *rdma_hndl,
+				struct ib_mr *srmr)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	xio_xd_reinit(&rdma_task->rxd, rdma_hndl->max_sge, srmr);
+	xio_xd_reinit(&rdma_task->txd, rdma_hndl->max_sge, srmr);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
@@ -1369,9 +1403,13 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rkey_tbl *te;
 
+	rdma_task->rdma_hndl = new_hndl;
+
 	/* if the same device is used then there is no need to remap */
 	if (old_hndl->dev == new_hndl->dev)
 		return 0;
+
+	xio_rdma_task_reinit(task, new_hndl, new_hndl->dev->mr);
 
 	if (!new_hndl->rkey_tbl) {
 		/* one for each possible desc and one for device mr */
@@ -2181,7 +2219,7 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 
 	xio_rdma_close(*new_trans_hndl);
 
-	/* conn layer will call close which will only decrement */
+	/* nexus layer will call close which will only decrement */
 	atomic_inc(&old_trans_hndl->refcnt);
 	*new_trans_hndl = old_trans_hndl;
 
@@ -2195,6 +2233,9 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 static int xio_new_rkey(struct xio_rdma_transport *rdma_hndl, uint32_t *key)
 {
 	int i;
+
+	if (!*key)
+		return 0;
 
 	for (i = 0; i < rdma_hndl->peer_rkey_tbl_size; i++) {
 		if (rdma_hndl->peer_rkey_tbl[i].old_rkey == *key) {

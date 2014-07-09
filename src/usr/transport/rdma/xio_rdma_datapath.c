@@ -78,7 +78,6 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data);
 static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mr_lookup							     */
 /*---------------------------------------------------------------------------*/
@@ -135,7 +134,7 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 {
 	struct ibv_send_wr	*bad_wr;
 	int			retval, nr_posted;
-
+	
 	/*
 	TRACE_LOG("num_sge:%d, len1:%d, len2:%d, send_flags:%d\n",
 		  xio_send->send_wr.num_sge,
@@ -567,7 +566,6 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 				  wc->wr_id,
 				  ibv_wc_status_str(wc->status),
 				  wc->vendor_err);
-
 
 		ERROR_LOG("byte_len=%u, immdata=%u, qp_num=0x%x, src_qp=0x%x\n",
 			  wc->byte_len, wc->imm_data, wc->qp_num, wc->src_qp);

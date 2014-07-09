@@ -359,6 +359,7 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 {
 	struct xio_task	*task;
 	struct xio_nexus_setup_req req = {0};
+	struct xio_transport_base *trans_hndl;
 	int    retval = 0;
 
 	TRACE_LOG("send setup request\n");
@@ -377,6 +378,18 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 	task->tlv_type = XIO_NEXUS_SETUP_REQ;
 
 	req.version = XIO_VERSION;
+
+	/* when reconnecting before the dup2 send is done via new handle */
+	if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
+		req.flags = XIO_RECONNECT;
+		req.cid = nexus->server_cid;
+		trans_hndl = nexus->new_transport_hndl;
+	} else {
+		req.flags = 0;
+		req.cid = 0;
+		trans_hndl = nexus->transport_hndl;
+	}
+
 	retval = xio_nexus_write_setup_req(task, &req);
 	if (retval)
 		goto cleanup;
@@ -384,7 +397,15 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 
 	/* always add it to the top */
 	list_add(&task->tasks_list_entry, &nexus->tx_queue);
-	retval = nexus->transport->send(nexus->transport_hndl, task);
+
+
+	if (!trans_hndl) {
+		ERROR_LOG("null transport handle state=%d\n", nexus->state);
+		xio_tasks_pool_put(task);
+		return -1;
+	}
+
+	retval = nexus->transport->send(trans_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup request failed\n");
 		xio_tasks_pool_put(task);
@@ -406,6 +427,7 @@ cleanup:
 static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *new)
 {
 	struct xio_transport		*transport;
+	struct xio_tasks_pool		*initial_tasks_pool;
 
 	if (old->transport != new->transport) {
 		ERROR_LOG("can't swap not the same transport\n");
@@ -437,6 +459,13 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *new)
 	xio_observable_reg_observer(
 			&old->transport_hndl->observable,
 			&new->trans_observer);
+
+	/* Swap the initial pool as the setup request arrived on the a task
+	 * from the initial pool and should be answered using the same task
+	 */
+	initial_tasks_pool = old->initial_tasks_pool;
+	old->initial_tasks_pool = new->initial_tasks_pool;
+	new->initial_tasks_pool = initial_tasks_pool;
 
 	xio_tasks_pool_remap(old->primary_tasks_pool, new->transport_hndl);
 	/* make old_nexus->transport_hndl copy of new_nexus->transport_hndl
@@ -497,6 +526,7 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 		 * old nexus
 		 */
 		cid = req.cid;
+		flags = XIO_RECONNECT;
 		dis_nexus = xio_nexus_cache_lookup(cid);
 		if (dis_nexus) {
 			/* stop timer */
@@ -509,6 +539,7 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 			/* retransmission will start after setup response is
 			 * transmitted - xio_nexus_on_send_setup_rsp_comp
 			 */
+			nexus = dis_nexus;
 		} else {
 			flags = XIO_CID;
 			status = -1;
@@ -810,6 +841,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	int				pool_dd_sz;
 	struct xio_tasks_pool_cls	pool_cls;
 	struct xio_tasks_pool_params	params;
+	struct xio_transport_base	*transport_hndl;
 
 	if (nexus->initial_pool_ops == NULL)
 		return -1;
@@ -821,14 +853,19 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	    (nexus->initial_pool_ops->slab_destroy == NULL))
 		return -1;
 
+	if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
+		transport_hndl = nexus->new_transport_hndl;
+	else
+		transport_hndl = nexus->transport_hndl;
+
 	/* get pool properties from the transport */
-	nexus->initial_pool_ops->pool_get_params(nexus->transport_hndl,
-						&start_nr,
-						&max_nr,
-						&alloc_nr,
-						&pool_dd_sz,
-						&slab_dd_sz,
-						&task_dd_sz);
+	nexus->initial_pool_ops->pool_get_params(transport_hndl,
+						 &start_nr,
+						 &max_nr,
+						 &alloc_nr,
+						 &pool_dd_sz,
+						 &slab_dd_sz,
+						 &task_dd_sz);
 
 	memset(&params, 0, sizeof(params));
 
@@ -838,7 +875,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	params.pool_dd_data_sz		   = pool_dd_sz;
 	params.slab_dd_data_sz		   = slab_dd_sz;
 	params.task_dd_data_sz		   = task_dd_sz;
-	params.pool_hooks.context	   = nexus->transport_hndl;
+	params.pool_hooks.context	   = transport_hndl;
 	params.pool_hooks.slab_pre_create  =
 		(void *)nexus->initial_pool_ops->slab_pre_create;
 	params.pool_hooks.slab_post_create =
@@ -869,9 +906,9 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 		pool_cls.task_lookup	= (void *)xio_tasks_pool_lookup;
 		pool_cls.task_put	= (void *)xio_tasks_pool_put;
 
-		nexus->transport->set_pools_cls(nexus->transport_hndl,
-					       &pool_cls,
-					       NULL);
+		nexus->transport->set_pools_cls(transport_hndl,
+					        &pool_cls,
+					        NULL);
 	}
 
 	/* initialize the tasks pool */
@@ -995,12 +1032,25 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_primary_pool_recreate(struct xio_nexus *nexus)
 {
+	struct xio_tasks_pool_cls	pool_cls;
+
 	if (nexus->primary_pool_ops == NULL)
 		return -1;
 
 	if (nexus->primary_tasks_pool == NULL)
 		return -1;
 
+	/* set pool helpers to the transport */
+	if (nexus->transport->set_pools_cls) {
+		pool_cls.pool		= NULL;
+		pool_cls.task_get	= (void *)xio_tasks_pool_get;
+		pool_cls.task_lookup	= (void *)xio_tasks_pool_lookup;
+		pool_cls.task_put	= xio_tasks_pool_put;
+
+		nexus->transport->set_pools_cls(nexus->transport_hndl,
+					       NULL,
+					       &pool_cls);
+	}
 	/* Equivalent to old xio_rdma_primary_pool_run,
 	 * will call xio_rdma_rearm_rq
 	 */
@@ -1301,6 +1351,8 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 		if (!ret) {
 			TRACE_LOG("reconnect attempt nexus:%p\n", nexus);
 			return;
+		} else {
+			ERROR_LOG("can't reconnect nexus:%p\n", nexus);
 		}
 	}
 
@@ -2165,6 +2217,7 @@ static void xio_nexus_client_reconnect_timeout(void *data)
 	struct xio_nexus *nexus = data;
 	int retval;
 
+	ERROR_LOG("%s\n", __func__);
 	/* Try to reconnect after the waiting period */
 	retval = xio_nexus_reconnect(nexus);
 	if (!retval) {
@@ -2248,7 +2301,6 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 	retval = xio_nexus_reconnect(nexus);
 	if (!retval)
 		return 0;
-
 
 	nexus->reconnect_retries = 2;
 	retval = xio_ctx_add_delayed_work(nexus->transport_hndl->ctx,

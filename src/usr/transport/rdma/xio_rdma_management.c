@@ -989,6 +989,40 @@ static void xio_rdma_task_init(struct xio_task *task,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_txd_reinit								     */
+/*---------------------------------------------------------------------------*/
+static void xio_xd_reinit(struct xio_work_req *xd,
+			  size_t xd_nr,
+			  struct ibv_mr *srmr)
+{
+	int i;
+
+	if (!srmr)
+		return;
+
+	for (i = 0; i < xd_nr; i++) {
+		if (!xd->sge[i].lkey)
+			break;
+		xd->sge[i].lkey = srmr->lkey;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_task_reinit							     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_task_reinit(struct xio_task *task,
+				struct xio_rdma_transport *rdma_hndl,
+				struct ibv_mr *srmr)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	xio_xd_reinit(&rdma_task->rxd, rdma_hndl->max_sge, srmr);
+	xio_xd_reinit(&rdma_task->txd, rdma_hndl->max_sge, srmr);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
@@ -1459,6 +1493,40 @@ static int xio_rdma_primary_pool_slab_pre_create(
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_primary_pool_slab_post_create				     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_primary_pool_slab_post_create(
+		struct xio_transport_base *transport_hndl,
+		void *pool_dd_data, void *slab_dd_data)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)transport_hndl;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
+
+	if (!rdma_slab->data_mr)
+		return 0;
+
+	/* With reconnect can use another HCA */
+	if (rdma_slab->data_mr->pd == rdma_hndl->tcq->dev->pd)
+		return 0;
+
+	ibv_dereg_mr(rdma_slab->data_mr);
+	rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
+					rdma_slab->data_pool,
+					rdma_hndl->alloc_sz,
+					IBV_ACCESS_LOCAL_WRITE);
+	if (!rdma_slab->data_mr) {
+		xio_set_error(errno);
+		ufree_huge_pages(rdma_slab->data_pool);
+		ERROR_LOG("ibv_reg_mr failed, %m\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_primary_pool_post_create					     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_primary_pool_post_create(
@@ -1494,6 +1562,34 @@ static int xio_rdma_primary_pool_slab_destroy(
 		ibv_dereg_mr(rdma_slab->data_mr);
 		ufree_huge_pages(rdma_slab->data_pool);
 	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_primary_pool_slab_remap_task				     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_primary_pool_slab_remap_task(
+					    struct xio_transport_base *old_th,
+					    struct xio_transport_base *new_th,
+					    void *pool_dd_data, void *slab_dd_data,
+					    struct xio_task *task)
+{
+	struct xio_rdma_transport *old_hndl =
+		(struct xio_rdma_transport *) old_th;
+	struct xio_rdma_transport *new_hndl =
+		(struct xio_rdma_transport *) new_th;
+	struct xio_rdma_tasks_slab *rdma_slab =
+		(struct xio_rdma_tasks_slab *)slab_dd_data;
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	rdma_task->rdma_hndl = new_hndl;
+
+	/* if the same device is used then there is no need to remap */
+	if (old_hndl->tcq->dev == new_hndl->tcq->dev)
+		return 0;
+
+	xio_rdma_task_reinit(task, new_hndl, rdma_slab->data_mr);
 
 	return 0;
 }
@@ -1586,8 +1682,10 @@ static void xio_rdma_primary_pool_get_params(
 static struct xio_tasks_pool_ops   primary_tasks_pool_ops = {
 	.pool_get_params	= xio_rdma_primary_pool_get_params,
 	.slab_pre_create	= xio_rdma_primary_pool_slab_pre_create,
+	.slab_post_create	= xio_rdma_primary_pool_slab_post_create,
 	.slab_destroy		= xio_rdma_primary_pool_slab_destroy,
 	.slab_init_task		= xio_rdma_primary_pool_slab_init_task,
+	.slab_remap_task	= xio_rdma_primary_pool_slab_remap_task,
 	.pool_post_create	= xio_rdma_primary_pool_post_create,
 	.task_pre_put		= xio_rdma_task_pre_put,
 };
@@ -2166,8 +2264,11 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 	int was = __atomic_add_unless(&rdma_hndl->base.refcnt, -1, 0);
 
 	/* was already 0 */
-	if (!was)
+	if (!was) {
+		TRACE_LOG("xio_rmda_close: [was-closed] handle:%p, qp:%p\n",
+			  rdma_hndl, rdma_hndl->qp);
 		return;
+	}
 
 	if (was == 1) {
 		/* now it is zero */
@@ -2181,6 +2282,8 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 				(struct xio_transport_base *)rdma_hndl);
 			 break;
 		case XIO_STATE_CONNECTED:
+			TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+				  rdma_hndl);
 			 rdma_hndl->state = XIO_STATE_CLOSED;
 			 retval = rdma_disconnect(rdma_hndl->cm_id);
 			 if (retval)
@@ -2230,7 +2333,7 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 
 	xio_rdma_close(*new_trans_hndl);
 
-	/* conn layer will call close which will only decrement */
+	/* nexus layer will call close which will only decrement */
 	atomic_inc(&old_trans_hndl->refcnt);
 	*new_trans_hndl = old_trans_hndl;
 
@@ -2244,6 +2347,9 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 static int xio_new_rkey(struct xio_rdma_transport *rdma_hndl, uint32_t *key)
 {
 	int i;
+
+	if (!*key)
+		return 0;
 
 	for (i = 0; i < rdma_hndl->peer_rkey_tbl_size; i++) {
 		if (rdma_hndl->peer_rkey_tbl[i].old_rkey == *key) {
