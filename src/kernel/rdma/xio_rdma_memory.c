@@ -149,6 +149,11 @@ void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 	if (!xd->nents)
 		return;
 
+	/* Inline were not mapped */
+	if ((direction == DMA_TO_DEVICE) &&
+	    (xd->send_wr.send_flags & IB_SEND_INLINE))
+		return;
+
 	ib_dma_unmap_sg(ib_dev, xd->sgl, xd->mapped, direction);
 	xd->mapped = 0;
 
@@ -170,6 +175,20 @@ int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
 
 	/* cleared in unmap */
 	sg_mark_end(&xd->sgl[xd->nents - 1]);
+
+	if ((direction == DMA_TO_DEVICE) &&
+	    (xd->send_wr.send_flags & IB_SEND_INLINE)) {
+		/* Inline need not be mapped just return to virt addresses
+		 * from sg's page + offset
+		 */
+		for (i = 0; i < xd->nents; i++) {
+			xd->sge[i].addr = uint64_from_ptr(sg_virt(&xd->sgl[i]));
+			xd->sge[i].length = xd->sgl[i].length;
+		}
+		xd->mapped = xd->nents;
+		return 0;
+	}
+
 	nents = ib_dma_map_sg(ib_dev, xd->sgl, xd->nents, direction);
 	if (!nents) {
 		sg_unmark_end(&xd->sgl[xd->nents - 1]);
