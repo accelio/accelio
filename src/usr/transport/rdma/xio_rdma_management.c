@@ -1726,7 +1726,8 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	}
 
 	child_hndl->cm_id	= ev->id;
-	child_hndl->tcq		= parent_hndl->tcq;
+	/* Paernt handle i.e. listener doesn't have a CQ */
+	child_hndl->tcq		= NULL;
 	ev->id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
 		ev->param.conn.initiator_depth;

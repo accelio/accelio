@@ -1764,9 +1764,8 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 
 	child_hndl->dev		= dev;
 	child_hndl->cm_id	= cm_id;
-	child_hndl->qp		= cm_id->qp;
-	child_hndl->tcq		= parent_hndl->tcq;
-	atomic_inc(&child_hndl->tcq->refcnt);
+	/* Paernt handle i.e. listener doesn't have a CQ */
+	child_hndl->tcq		= NULL;
 
 	/* Can we set it ? is it a new cm_id */
 	cm_id->context		= child_hndl;
