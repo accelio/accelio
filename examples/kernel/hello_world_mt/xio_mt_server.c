@@ -194,12 +194,15 @@ int on_session_event(struct xio_session *session,
 		void *cb_user_context)
 {
 	struct server_data *sdata;
-	struct thread_data *tdata = event_data->conn_user_context;
+	struct thread_data *tdata;
 	struct xio_context *tctx[MAX_THREADS];
 	struct xio_context *ctx;
 	int i;
 
 	sdata = cb_user_context;
+	tdata = (event_data->conn_user_context == sdata) ? NULL :
+		event_data->conn_user_context;
+
 
 	printk("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -207,12 +210,14 @@ int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		tdata->connection = event_data->conn;
+		if (tdata)
+			tdata->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		/* NULL assignment is done with preemption disabled */
 		xio_connection_destroy(event_data->conn);
-		tdata->connection = NULL;
+		if (tdata)
+			tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		spin_lock(&sdata->lock);
