@@ -1778,6 +1778,9 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 	memcpy(&child_hndl->base.peer_addr,
 	       &child_hndl->cm_id->route.addr.dst_addr,
 	       sizeof(child_hndl->base.peer_addr));
+	memcpy(&child_hndl->base.local_addr,
+	       &child_hndl->cm_id->route.addr.src_addr,
+	       sizeof(child_hndl->base.local_addr));
 	child_hndl->base.proto = XIO_PROTO_RDMA;
 
 	retval = xio_setup_qp(child_hndl);
@@ -1820,6 +1823,14 @@ static void on_cm_refused(struct rdma_cm_event *ev,
 static void on_cm_established(struct rdma_cm_event *ev,
 			      struct xio_rdma_transport *rdma_hndl)
 {
+	/* initiator is dst, target is src */
+	memcpy(&rdma_hndl->base.peer_addr,
+	       &rdma_hndl->cm_id->route.addr.dst_addr,
+	       sizeof(rdma_hndl->base.peer_addr));
+	memcpy(&rdma_hndl->base.local_addr,
+	       &rdma_hndl->cm_id->route.addr.src_addr,
+	       sizeof(rdma_hndl->base.local_addr));
+
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_ESTABLISHED, NULL);
 }

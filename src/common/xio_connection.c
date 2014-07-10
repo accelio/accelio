@@ -1548,12 +1548,15 @@ int xio_query_connection(struct xio_connection *connection,
 	if (attr_mask & XIO_CONNECTION_ATTR_PROTO)
 		attr->proto = xio_nexus_get_proto(connection->nexus);
 
-	if (connection->session &&
-	    connection->session->type == XIO_SESSION_SERVER) {
-		if (attr_mask & XIO_CONNECTION_ATTR_SRC_ADDR)
-			xio_nexus_get_src_addr(connection->nexus, &attr->src_addr,
-					      sizeof(attr->src_addr));
-	}
+	if (attr_mask & XIO_CONNECTION_ATTR_PEER_ADDR)
+		xio_nexus_get_peer_addr(connection->nexus,
+					&attr->peer_addr,
+					sizeof(attr->peer_addr));
+
+	if (attr_mask & XIO_CONNECTION_ATTR_LOCAL_ADDR)
+		xio_nexus_get_local_addr(connection->nexus,
+					 &attr->local_addr,
+					 sizeof(attr->local_addr));
 
 	return 0;
 }

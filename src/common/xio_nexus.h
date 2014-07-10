@@ -280,10 +280,16 @@ static inline void xio_nexus_notify_observer(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_get_src_addr						     */
+/* xio_nexus_get_peer_addr						     */
 /*---------------------------------------------------------------------------*/
-int xio_nexus_get_src_addr(struct xio_nexus *nexus,
-			   struct sockaddr_storage *sa, socklen_t len);
+int xio_nexus_get_peer_addr(struct xio_nexus *nexus,
+			    struct sockaddr_storage *sa, socklen_t len);
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_get_local_addr						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_get_local_addr(struct xio_nexus *nexus,
+			     struct sockaddr_storage *sa, socklen_t len);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_get_validators_cls						     */

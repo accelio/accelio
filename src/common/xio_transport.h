@@ -112,6 +112,7 @@ struct xio_transport_base {
 	atomic_t			refcnt;
 	char				*portal_uri;
 	struct sockaddr_storage		peer_addr;
+	struct sockaddr_storage		local_addr;
 	enum   xio_proto		proto;
 	int				pad;
 };

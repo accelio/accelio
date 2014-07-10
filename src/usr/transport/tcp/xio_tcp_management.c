@@ -490,6 +490,15 @@ void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
 
 	child_hndl->base.proto = XIO_PROTO_TCP;
 
+	len = sizeof(child_hndl->base.local_addr);
+	retval = getsockname(child_hndl->sock_fd,
+			     (struct sockaddr *)&child_hndl->base.local_addr,
+			     &len);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
+	}
+
 	ev_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
 	xio_transport_notify_observer((struct xio_transport_base *)parent_hndl,
@@ -602,7 +611,7 @@ void xio_tcp_conn_established_ev_handler(int fd, int events, void *user_context)
 	struct xio_tcp_transport	*tcp_hndl = user_context;
 	int				retval = 0;
 	int				so_error = 0;
-	socklen_t			so_error_len = sizeof(so_error);
+	socklen_t			len = sizeof(so_error);
 
 	/* remove from epoll */
 	retval = xio_context_del_ev_handler(
@@ -631,9 +640,19 @@ void xio_tcp_conn_established_ev_handler(int fd, int events, void *user_context)
 			    SOL_SOCKET,
 			    SO_ERROR,
 			    &so_error,
-			    &so_error_len);
+			    &len);
 	if (retval) {
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
+		so_error = errno;
+	}
+
+	len = sizeof(tcp_hndl->base.peer_addr);
+	retval = getpeername(tcp_hndl->sock_fd,
+			     (struct sockaddr *)&tcp_hndl->base.peer_addr,
+			     &len);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp getpeername failed. (errno=%d %m)\n", errno);
 		so_error = errno;
 	}
 
@@ -656,7 +675,7 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 {
 	struct xio_tcp_transport	*tcp_hndl =
 					(struct xio_tcp_transport *)transport;
-	int				ss_len = 0;
+	socklen_t			ss_len = 0;
 	int				retval = 0;
 
 	/* resolve the portal_uri */
@@ -724,6 +743,16 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 		}
 	} else {
 		/*handle in ev_handler*/
+	}
+
+	ss_len = sizeof(tcp_hndl->base.local_addr);
+	retval = getsockname(tcp_hndl->sock_fd,
+			     (struct sockaddr *)&tcp_hndl->base.local_addr,
+			     &ss_len);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
+		return retval;
 	}
 
 	return 0;

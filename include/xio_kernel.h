@@ -216,7 +216,8 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_CTX                 = 1 << 0,
 	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1,
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
-	XIO_CONNECTION_ATTR_SRC_ADDR		= 1 << 3
+	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
+	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4
 };
 
 enum xio_context_attr_mask {
@@ -273,8 +274,8 @@ struct xio_connection_attr {
 	struct xio_context	*ctx;
 	int			reserved;
 	enum xio_proto		proto;		/**< protocol type	     */
-	struct sockaddr_storage	src_addr;	/**< source address of       */
-						/**< requester	             */
+	struct sockaddr_storage	peer_addr;	/**< address of peer	      */
+	struct sockaddr_storage	local_addr;	/**< address of local	      */
 };
 
 /**

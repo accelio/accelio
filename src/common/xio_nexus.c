@@ -2073,12 +2073,22 @@ int xio_nexus_get_opt(struct xio_nexus *nexus, int optname, void *optval,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_get_src_addr						     */
+/* xio_nexus_get_peer_addr						     */
 /*---------------------------------------------------------------------------*/
-int xio_nexus_get_src_addr(struct xio_nexus *nexus,
-			   struct sockaddr_storage *sa, socklen_t len)
+int xio_nexus_get_peer_addr(struct xio_nexus *nexus,
+			    struct sockaddr_storage *sa, socklen_t len)
 {
 	memcpy(sa, &nexus->transport_hndl->peer_addr, len);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_get_local_addr						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_get_local_addr(struct xio_nexus *nexus,
+			     struct sockaddr_storage *sa, socklen_t len)
+{
+	memcpy(sa, &nexus->transport_hndl->local_addr, len);
 	return 0;
 }
 

@@ -120,8 +120,8 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	}
 
 	req.proto = xio_nexus_get_proto(connection->nexus);
-	xio_nexus_get_src_addr(connection->nexus,
-			      &req.src_addr, sizeof(req.src_addr));
+	xio_nexus_get_peer_addr(connection->nexus,
+				&req.src_addr, sizeof(req.src_addr));
 
 	/* cache the task in io queue*/
 	xio_connection_queue_io_task(connection, task);
