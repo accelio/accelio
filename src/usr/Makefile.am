@@ -10,10 +10,12 @@ if HAVE_INFINIBAND_VERBS
                           ./transport/rdma/xio_rdma_verbs.c       \
                           ./transport/rdma/xio_rdma_management.c  \
                           ./transport/rdma/xio_rdma_datapath.c
+    libxio_rdma_ldflags = -lrdmacm -libverbs
 else
     libxio_rdma_srcdir =
     libxio_rdma_headers =
     libxio_rdma_sources =
+    libxio_rdma_ldflags =
 endif
 
 AM_CFLAGS = -fPIC -DPIC  			\
@@ -129,7 +131,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt -lpthread \
+libxio_la_LDFLAGS = -lnuma $(libxio_rdma_ldflags) -lrt -lpthread \
 		     $(libxio_version_script)
 
 libxio_la_DEPENDENCIES =  $(top_srcdir)/src/usr/libxio.map
