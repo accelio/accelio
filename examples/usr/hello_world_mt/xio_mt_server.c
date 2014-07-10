@@ -202,7 +202,7 @@ static void *portal_server_cb(void *data)
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		tdata->rsp[i].out.header.iov_base = strdup(str);
 		tdata->rsp[i].out.header.iov_len =
-			strlen(tdata->rsp[i].out.header.iov_base);
+			strlen(tdata->rsp[i].out.header.iov_base) + 1;
 	}
 
 	/* the default xio supplied main loop */
@@ -233,8 +233,12 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_user_context)
 {
 	struct server_data *server_data = cb_user_context;
-	struct thread_data *tdata = event_data->conn_user_context;
+	struct thread_data *tdata;
 	int		   i;
+
+
+	tdata = (event_data->conn_user_context == server_data) ?
+		NULL : event_data->conn_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -243,11 +247,13 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		tdata->connection = event_data->conn;
+		if (tdata)
+			tdata->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
-		tdata->connection = NULL;
+		if (tdata)
+			tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);

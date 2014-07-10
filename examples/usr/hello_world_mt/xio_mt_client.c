@@ -110,7 +110,7 @@ static void *worker_thread(void *data)
 		tdata->affinity);
 	tdata->req.out.header.iov_base = strdup(str);
 	tdata->req.out.header.iov_len =
-		strlen(tdata->req.out.header.iov_base);
+		strlen(tdata->req.out.header.iov_base) + 1;
 
 	/* send first message */
 	xio_send_request(tdata->conn, &tdata->req);
