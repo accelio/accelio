@@ -285,16 +285,6 @@ struct xio_mr_elem {
 	struct list_head		xm_list_entry; /* entry in dev list */
 };
 
-struct xio_mr {
-	void				*addr;  /* for new devices */
-	size_t				length; /* for new devices */
-	int				access; /* for new devices */
-	int				addr_alloced;	/* address was
-							   allocated by xio */
-	struct list_head		dm_list;
-	struct list_head		mr_list_entry;
-};
-
 struct xio_rdma_tasks_slab {
 	/* memory for non-rdma send/recv */
 	void				*data_pool;

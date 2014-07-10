@@ -48,9 +48,12 @@
 #include "xio_server.h"
 #include "xio_nexus.h"
 
+#ifdef HAVE_INFINIBAND_VERBS_H
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include "xio_rdma_transport.h"
+#endif
+#include "xio_usr_transport.h"
 #include "xio_transport_mempool.h"
 
 #define PRINT_SIZE(type) \
@@ -79,23 +82,24 @@ int main(int argc, char **argv)
     PRINT_SIZE(struct xio_sge);
     PRINT_SIZE(struct xio_tlv);
     PRINT_SIZE(struct xio_session_hdr);
+    PRINT_SIZE(struct xio_session_cancel_hdr);
     PRINT_SIZE(struct xio_nexus_setup_req);
     PRINT_SIZE(struct xio_nexus_setup_rsp);
+
+#ifdef HAVE_INFINIBAND_VERBS_H
+    printf("\nRDMA Transport:\n");
     PRINT_SIZE(struct xio_rdma_setup_msg);
-    PRINT_SIZE(struct xio_session_cancel_hdr);
     PRINT_SIZE(struct xio_rdma_cancel_hdr);
     PRINT_SIZE(struct xio_req_hdr);
     PRINT_SIZE(struct xio_rsp_hdr);
     PRINT_SIZE(struct xio_nop_hdr);
-
-
-    printf("\nRDMA Transport:\n");
     PRINT_SIZE(struct xio_rdma_task);
     PRINT_SIZE(struct xio_cq);
     PRINT_SIZE(struct xio_device);
     PRINT_SIZE(struct xio_rdma_transport);
     PRINT_SIZE(struct xio_cm_channel);
     PRINT_SIZE(struct xio_work_req);
+#endif
 
 #if 0
     PRINT_SIZE(mxm_async_context_t);

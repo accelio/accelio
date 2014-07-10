@@ -87,6 +87,16 @@ enum xio_transport_state {
 	XIO_STATE_DESTROYED
 };
 
+struct xio_mr {
+	void				*addr;  /* for new devices */
+	size_t				length; /* for new devices */
+	int				access; /* for new devices */
+	int				addr_alloced;	/* address was
+							   allocated by xio */
+	struct list_head		dm_list;
+	struct list_head		mr_list_entry;
+};
+
 /*
  * The next routines deal with comparing 16 bit unsigned ints
  * and worry about wraparound (automatic with unsigned arithmetic).

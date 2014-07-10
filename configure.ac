@@ -32,8 +32,11 @@ AC_CHECK_HEADERS([numa.h],
 AC_CHECK_HEADERS([event2/event.h],
 		 [mypj_found_event_headers=yes; break;])
 
+AM_CONDITIONAL(HAVE_INFINIBAND_VERBS, test "x$mypj_found_verbs_headers" = "xyes")
+
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
-      [AC_MSG_ERROR([Unable to find the infiniband header files])])
+      [AC_MSG_WARN([Unable to find the infiniband header files,
+				rdma transport will not be available.])])
 AS_IF([test "x$mypj_found_numa_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the numactl-devel header files])])
 # Checks for typedefs, structures, and compiler characteristics.
