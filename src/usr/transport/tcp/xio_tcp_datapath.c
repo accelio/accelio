@@ -302,6 +302,8 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->peer_max_in_iovsz	= rsp->max_in_iovsz;
 	tcp_hndl->peer_max_out_iovsz	= rsp->max_out_iovsz;
 
+	tcp_hndl->sn = 0;
+
 	/* now we can calculate  primary pool size */
 	xio_tcp_calc_pool_size(tcp_hndl);
 
@@ -682,8 +684,10 @@ static int xio_tcp_on_rsp_send_comp(struct xio_tcp_transport *tcp_hndl,
 {
 	union xio_transport_event_data event_data;
 
-	if (IS_CANCEL(task->tlv_type))
+	if (IS_CANCEL(task->tlv_type)) {
+		xio_tasks_pool_put(task);
 		return 0;
+	}
 
 	event_data.msg.op	= XIO_WC_OP_SEND;
 	event_data.msg.task	= task;
@@ -764,6 +768,33 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 			  removed, task->tlv_type);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_write_sn							     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_write_sn(struct xio_task *task, uint16_t sn)
+{
+	uint16_t *psn;
+
+	/* save the current place */
+	xio_mbuf_push(&task->mbuf);
+	/* goto to the first tlv */
+	xio_mbuf_reset(&task->mbuf);
+	/* goto the first transport header*/
+	xio_mbuf_set_trans_hdr(&task->mbuf);
+
+	/* jump over the first uint32_t */
+	xio_mbuf_inc(&task->mbuf, sizeof(uint32_t));
+
+	/* and set serial number */
+	psn = xio_mbuf_get_curr_ptr(&task->mbuf);
+	*psn = htons(sn);
+
+	/* pop to the original place */
+	xio_mbuf_pop(&task->mbuf);
+
+	return 0;
+}
+
 /*
 static void xio_tcp_xmit_handler(void *xio_task)
 {
@@ -809,6 +840,12 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			}
 		}
 
+		xio_tcp_write_sn(task, tcp_hndl->sn);
+		tcp_task->sn = tcp_hndl->sn;
+		tcp_hndl->sn++;
+
+		tcp_task->txd.stage = XIO_TCP_TX_IN_SEND;
+
 		/* ORK todo batch? */
 		retval = xio_tcp_send_work(tcp_hndl, &tcp_task->txd, 1);
 
@@ -847,7 +884,8 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	if (task_success &&
 	    (tcp_hndl->tx_comp_cnt >= COMPLETION_BATCH_MAX ||
 	     task->is_control ||
-	     (task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP))) {
+	     (task->omsg &&
+	      (task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP)))) {
 		retval = xio_ctx_add_work(tcp_hndl->base.ctx,
 					  task_success,
 					  xio_tcp_tx_completion_handler,
@@ -1441,6 +1479,7 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 		return -1;
 	}
 
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
 	req_hdr->opcode		= tmp_req_hdr->opcode;
 
@@ -1455,6 +1494,8 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
 			sizeof(struct xio_tcp_req_hdr));
+
+	tcp_task->sn = req_hdr->sn;
 
 	/* params for SEND */
 	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
@@ -1521,6 +1562,7 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		return -1;
 	}
 
+	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
@@ -2024,6 +2066,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		xio_set_error(XIO_E_MSG_INVALID);
 		goto cleanup;
 	}
+	/* read the sn */
+	tcp_task->sn = rsp_hdr.sn;
 
 	task->imsg.more_in_batch = tcp_task->more_in_batch;
 
@@ -2291,6 +2335,306 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_cancel_req_handler						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_cancel_req_handler(struct xio_tcp_transport *tcp_hndl,
+				      void *ulp_msg, size_t ulp_msg_sz)
+{
+	union xio_transport_event_data	event_data;
+
+	/* fill notification event */
+	event_data.cancel.ulp_msg	   =  ulp_msg;
+	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
+	event_data.cancel.task		   =  NULL;
+	event_data.cancel.result	   =  0;
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CANCEL_REQUEST,
+				      &event_data);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_cancel_rsp_handler						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_cancel_rsp_handler(struct xio_tcp_transport *tcp_hndl,
+				      struct xio_tcp_cancel_hdr *cancel_hdr,
+				      void *ulp_msg, size_t ulp_msg_sz)
+{
+	union xio_transport_event_data	event_data;
+	struct xio_task			*ptask, *next_ptask;
+	struct xio_tcp_task		*tcp_task;
+	struct xio_task			*task_to_cancel = NULL;
+
+	if ((cancel_hdr->result ==  XIO_E_MSG_CANCELED) ||
+	    (cancel_hdr->result ==  XIO_E_MSG_CANCEL_FAILED)) {
+		/* look in the in_flight */
+		list_for_each_entry_safe(ptask, next_ptask,
+					 &tcp_hndl->in_flight_list,
+				tasks_list_entry) {
+			tcp_task = ptask->dd_data;
+			if (tcp_task->sn == cancel_hdr->sn) {
+				task_to_cancel = ptask;
+				break;
+			}
+		}
+		if (!task_to_cancel) {
+			/* look in the tx_comp */
+			list_for_each_entry_safe(ptask, next_ptask,
+						 &tcp_hndl->tx_comp_list,
+					tasks_list_entry) {
+				tcp_task = ptask->dd_data;
+				if (tcp_task->sn == cancel_hdr->sn) {
+					task_to_cancel = ptask;
+					break;
+				}
+			}
+		}
+
+		if (!task_to_cancel)  {
+			ERROR_LOG("[%u] - Failed to found canceled message\n",
+				  cancel_hdr->sn);
+			/* fill notification event */
+			event_data.cancel.ulp_msg	=  ulp_msg;
+			event_data.cancel.ulp_msg_sz	=  ulp_msg_sz;
+			event_data.cancel.task		=  NULL;
+			event_data.cancel.result	=  XIO_E_MSG_NOT_FOUND;
+
+			xio_transport_notify_observer(
+					&tcp_hndl->base,
+					XIO_TRANSPORT_CANCEL_RESPONSE,
+					&event_data);
+			return 0;
+		}
+	}
+
+	/* fill notification event */
+	event_data.cancel.ulp_msg	   =  ulp_msg;
+	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
+	event_data.cancel.task		   =  task_to_cancel;
+	event_data.cancel.result	   =  cancel_hdr->result;
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      &event_data);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_on_recv_cancel_rsp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_on_recv_cancel_rsp(struct xio_tcp_transport *tcp_hndl,
+				      struct xio_task *task)
+{
+	int			retval = 0;
+	struct xio_tcp_rsp_hdr	rsp_hdr;
+	struct xio_msg		*imsg;
+	void			*ulp_hdr;
+	void			*buff;
+	uint16_t		ulp_msg_sz;
+	XIO_TO_TCP_TASK(task, tcp_task);
+	struct xio_tcp_cancel_hdr cancel_hdr;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sg;
+
+	/* read the response header */
+	retval = xio_tcp_read_rsp_header(tcp_hndl, task, &rsp_hdr);
+	if (retval != 0) {
+		xio_set_error(XIO_E_MSG_INVALID);
+		goto cleanup;
+	}
+
+	/* read the sn */
+	tcp_task->sn = rsp_hdr.sn;
+
+	imsg = &task->imsg;
+	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
+
+	imsg->type = task->tlv_type;
+	imsg->in.header.iov_len		= rsp_hdr.ulp_hdr_len;
+	imsg->in.header.iov_base	= ulp_hdr;
+	sgtbl		= xio_sg_table_get(&task->imsg.in);
+	sgtbl_ops	= xio_sg_table_ops_get(task->imsg.in.sgl_type);
+	sg = sge_first(sgtbl_ops, sgtbl);
+	sge_set_addr(sgtbl_ops, sg, NULL);
+	tbl_set_nents(sgtbl_ops, sgtbl, 0);
+
+	buff = imsg->in.header.iov_base;
+	buff += xio_read_uint16(&cancel_hdr.hdr_len, 0, buff);
+	buff += xio_read_uint16(&cancel_hdr.sn, 0, buff);
+	buff += xio_read_uint32(&cancel_hdr.result, 0, buff);
+	buff += xio_read_uint16(&ulp_msg_sz, 0, buff);
+
+	list_move_tail(&task->tasks_list_entry, &tcp_hndl->io_list);
+
+	xio_tcp_cancel_rsp_handler(tcp_hndl, &cancel_hdr,
+				   buff, ulp_msg_sz);
+	/* return the the cancel response task to pool */
+	xio_tasks_pool_put(task);
+
+	return 0;
+cleanup:
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_on_recv_cancel_req						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_on_recv_cancel_req(struct xio_tcp_transport *tcp_hndl,
+				      struct xio_task *task)
+{
+	int			retval = 0;
+	XIO_TO_TCP_TASK(task, tcp_task);
+	struct  xio_tcp_cancel_hdr cancel_hdr;
+	struct xio_tcp_req_hdr	req_hdr;
+	struct xio_msg		*imsg;
+	void			*ulp_hdr;
+	void			*buff;
+	uint16_t		ulp_msg_sz;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sg;
+
+	/* read header */
+	retval = xio_tcp_read_req_header(tcp_hndl, task, &req_hdr);
+	if (retval != 0) {
+		xio_set_error(XIO_E_MSG_INVALID);
+		goto cleanup;
+	}
+
+	/* read the sn */
+	tcp_task->sn = req_hdr.sn;
+
+	imsg	= &task->imsg;
+	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
+
+	/* set header pointers */
+	imsg->type = task->tlv_type;
+	imsg->in.header.iov_len		= req_hdr.ulp_hdr_len;
+	imsg->in.header.iov_base	= ulp_hdr;
+	sgtbl		= xio_sg_table_get(&task->imsg.in);
+	sgtbl_ops	= xio_sg_table_ops_get(task->imsg.in.sgl_type);
+	sg = sge_first(sgtbl_ops, sgtbl);
+	sge_set_addr(sgtbl_ops, sg, NULL);
+	tbl_set_nents(sgtbl_ops, sgtbl, 0);
+
+	buff = imsg->in.header.iov_base;
+	buff += xio_read_uint16(&cancel_hdr.hdr_len, 0, buff);
+	buff += xio_read_uint16(&cancel_hdr.sn, 0, buff);
+	buff += xio_read_uint32(&cancel_hdr.result, 0, buff);
+	buff += xio_read_uint16(&ulp_msg_sz, 0, buff);
+
+	list_move_tail(&task->tasks_list_entry, &tcp_hndl->io_list);
+
+	xio_tcp_cancel_req_handler(tcp_hndl, buff, ulp_msg_sz);
+	/* return the the cancel request task to pool */
+	xio_tasks_pool_put(task);
+
+	return 0;
+
+cleanup:
+	retval = xio_errno();
+	ERROR_LOG("xio_tcp_on_recv_req failed. (errno=%d %s)\n", retval,
+		  xio_strerror(retval));
+	xio_transport_notify_observer_error(&tcp_hndl->base, retval);
+
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_send_cancel							     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
+			       uint16_t tlv_type,
+			       struct  xio_tcp_cancel_hdr *cancel_hdr,
+			       void *ulp_msg, size_t ulp_msg_sz)
+{
+	uint64_t		payload;
+	uint16_t		ulp_hdr_len;
+	int			retval;
+	struct xio_task		*task;
+	struct xio_tcp_task	*tcp_task;
+	void			*buff;
+
+	task = xio_tcp_primary_task_alloc(tcp_hndl);
+	if (!task) {
+		ERROR_LOG("primary tasks pool is empty\n");
+		return -1;
+	}
+	xio_mbuf_reset(&task->mbuf);
+
+	/* set start of the tlv */
+	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
+		return -1;
+
+	task->tlv_type			= tlv_type;
+	tcp_task			= (struct xio_tcp_task *)task->dd_data;
+	tcp_task->tcp_op		= XIO_TCP_SEND;
+	tcp_task->write_num_sge		= 0;
+	tcp_task->read_num_sge		= 0;
+
+	ulp_hdr_len = sizeof(*cancel_hdr) + sizeof(uint16_t) + ulp_msg_sz;
+	tcp_hndl->dummy_msg.out.header.iov_base = ucalloc(1, ulp_hdr_len);
+	tcp_hndl->dummy_msg.out.header.iov_len = ulp_hdr_len;
+
+
+	/* write the message */
+	/* get the pointer */
+	buff = tcp_hndl->dummy_msg.out.header.iov_base;
+
+	/* pack relevant values */
+	buff += xio_write_uint16(cancel_hdr->hdr_len, 0, buff);
+	buff += xio_write_uint16(cancel_hdr->sn, 0, buff);
+	buff += xio_write_uint32(cancel_hdr->result, 0, buff);
+	buff += xio_write_uint16((uint16_t)(ulp_msg_sz), 0, buff);
+	buff += xio_write_array(ulp_msg, ulp_msg_sz, 0, buff);
+
+	task->omsg = &tcp_hndl->dummy_msg;
+
+	/* write xio header to the buffer */
+	if (IS_REQUEST(task->tlv_type)) {
+		retval = xio_tcp_prep_req_header(
+				tcp_hndl, task,
+				ulp_hdr_len, 0, 0,
+				XIO_E_SUCCESS);
+	} else {
+		retval = xio_tcp_prep_rsp_header(
+				tcp_hndl, task,
+				ulp_hdr_len, 0, 0,
+				XIO_E_SUCCESS);
+	}
+
+	if (retval)
+		return -1;
+
+	payload = xio_mbuf_tlv_payload_len(&task->mbuf);
+
+	/* add tlv */
+	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
+		return  -1;
+
+	/* set the length */
+	tcp_task->txd.msg_iov[0].iov_len = xio_mbuf_data_length(&task->mbuf);
+	tcp_task->txd.msg_len		 = 1;
+	tcp_task->txd.tot_iov_byte_len	 = tcp_task->txd.msg_iov[0].iov_len;
+	tcp_task->txd.msg.msg_iov	 = tcp_task->txd.msg_iov;
+	tcp_task->txd.msg.msg_iovlen	 = tcp_task->txd.msg_len;
+
+	task->omsg = NULL;
+	free(tcp_hndl->dummy_msg.out.header.iov_base);
+
+	tcp_hndl->tx_ready_tasks_num++;
+	list_move_tail(&task->tasks_list_entry, &tcp_hndl->tx_ready_list);
+
+	xio_tcp_xmit(tcp_hndl);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_send							     */
 /*---------------------------------------------------------------------------*/
 int xio_tcp_send(struct xio_transport_base *transport,
@@ -2396,14 +2740,12 @@ int xio_tcp_rx_handler(struct xio_tcp_transport *tcp_hndl)
 		case XIO_NEXUS_SETUP_RSP:
 			xio_tcp_on_setup_msg(tcp_hndl, task);
 			return 1;
-		/*
 		case XIO_CANCEL_REQ:
-			xio_rdma_on_recv_cancel_req(rdma_hndl, task);
-			break;
+			xio_tcp_on_recv_cancel_req(tcp_hndl, task);
+			return 1;
 		case XIO_CANCEL_RSP:
-			xio_rdma_on_recv_cancel_rsp(rdma_hndl, task);
-			break;
-		*/
+			xio_tcp_on_recv_cancel_rsp(tcp_hndl, task);
+			return 1;
 		default:
 			if (IS_REQUEST(task->tlv_type))
 				retval = xio_tcp_on_recv_req_header(tcp_hndl,
@@ -2495,4 +2837,141 @@ int xio_tcp_poll(struct xio_transport_base *transport,
 	}
 
 	return nr_comp;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_cancel_req							     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_cancel_req(struct xio_transport_base *transport,
+		       struct xio_msg *req, uint64_t stag,
+		       void *ulp_msg, size_t ulp_msg_sz)
+{
+	struct xio_tcp_transport *tcp_hndl =
+		(struct xio_tcp_transport *)transport;
+	struct xio_task			*ptask, *next_ptask;
+	union xio_transport_event_data	event_data;
+	struct xio_tcp_task		*tcp_task;
+	struct xio_tcp_cancel_hdr	cancel_hdr = {
+		.hdr_len	= sizeof(cancel_hdr),
+		.result		= 0
+	};
+
+	/* look in the tx_ready */
+	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->tx_ready_list,
+				 tasks_list_entry) {
+		if (ptask->omsg &&
+		    (ptask->omsg->sn == req->sn) &&
+		    (ptask->stag == stag)) {
+			TRACE_LOG("[%lu] - message found on tx_ready_list\n",
+				  req->sn);
+
+			tcp_task = ptask->dd_data;
+
+			if (tcp_task->txd.stage != XIO_TCP_TX_BEFORE)
+				goto send_cancel;
+
+			/* return decrease ref count from task */
+			xio_tasks_pool_put(ptask);
+			tcp_hndl->tx_ready_tasks_num--;
+			list_move_tail(&ptask->tasks_list_entry,
+				       &tcp_hndl->tx_comp_list);
+
+			/* fill notification event */
+			event_data.cancel.ulp_msg	=  ulp_msg;
+			event_data.cancel.ulp_msg_sz	=  ulp_msg_sz;
+			event_data.cancel.task		=  ptask;
+			event_data.cancel.result	=  XIO_E_MSG_CANCELED;
+
+			xio_transport_notify_observer(
+					&tcp_hndl->base,
+					XIO_TRANSPORT_CANCEL_RESPONSE,
+					&event_data);
+			return 0;
+		}
+	}
+	/* look in the in_flight */
+	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->in_flight_list,
+				 tasks_list_entry) {
+		if (ptask->omsg &&
+		    (ptask->omsg->sn == req->sn) &&
+		    (ptask->stag == stag) &&
+		    (ptask->state != XIO_TASK_STATE_RESPONSE_RECV)) {
+			TRACE_LOG("[%lu] - message found on in_flight_list\n",
+				  req->sn);
+			goto send_cancel;
+		}
+	}
+	/* look in the tx_comp */
+	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->tx_comp_list,
+				 tasks_list_entry) {
+		if (ptask->omsg &&
+		    (ptask->omsg->sn == req->sn) &&
+		    (ptask->stag == stag) &&
+		    (ptask->state != XIO_TASK_STATE_RESPONSE_RECV)) {
+			TRACE_LOG("[%lu] - message found on tx_comp_list\n",
+				  req->sn);
+			goto send_cancel;
+		}
+	}
+	TRACE_LOG("[%lu] - message not found on tx path\n", req->sn);
+
+	/* fill notification event */
+	event_data.cancel.ulp_msg	   =  ulp_msg;
+	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
+	event_data.cancel.task		   =  NULL;
+	event_data.cancel.result	   =  XIO_E_MSG_NOT_FOUND;
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      &event_data);
+
+	return 0;
+
+send_cancel:
+
+	TRACE_LOG("[%lu] - send cancel request\n", req->sn);
+
+	tcp_task	= ptask->dd_data;
+	cancel_hdr.sn	= tcp_task->sn;
+
+	xio_tcp_send_cancel(tcp_hndl, XIO_CANCEL_REQ, &cancel_hdr,
+			    ulp_msg, ulp_msg_sz);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_cancel_rsp							     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
+		       struct xio_task *task, enum xio_status result,
+		       void *ulp_msg, size_t ulp_msg_sz)
+{
+	struct xio_tcp_transport *tcp_hndl =
+		(struct xio_tcp_transport *)transport;
+	struct xio_tcp_task	*tcp_task;
+
+	struct  xio_tcp_cancel_hdr cancel_hdr = {
+		.hdr_len	= sizeof(cancel_hdr),
+		.result		= result,
+	};
+
+	if (task) {
+		tcp_task = task->dd_data;
+		cancel_hdr.sn = tcp_task->sn;
+	} else {
+		/* 0 might be a valid sn for another task */
+		if ((cancel_hdr.result ==  XIO_E_MSG_CANCELED) ||
+		    (cancel_hdr.result ==  XIO_E_MSG_CANCEL_FAILED)) {
+			ERROR_LOG("task cannot be null if result is "
+				  "MSG_CANCELED or MSG_CANCEL_FAILED\n");
+			return -1;
+		}
+		cancel_hdr.sn = 0;
+	}
+
+	/* fill dummy transport header since was handled by upper layer
+	 */
+	return xio_tcp_send_cancel(tcp_hndl, XIO_CANCEL_RSP,
+				   &cancel_hdr, ulp_msg, ulp_msg_sz);
 }

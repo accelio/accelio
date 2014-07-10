@@ -88,6 +88,12 @@ enum xio_tcp_rx_stage {
 	XIO_TCP_RX_DONE
 };
 
+enum xio_tcp_tx_stage {
+	XIO_TCP_TX_BEFORE,
+	XIO_TCP_TX_IN_SEND,
+	XIO_TCP_TX_DONE
+};
+
 /*---------------------------------------------------------------------------*/
 struct xio_tcp_options {
 	int			enable_mem_pool;
@@ -109,6 +115,7 @@ struct __attribute__((__packed__)) xio_tcp_req_hdr {
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
+	uint16_t		sn;		/* serial number	*/
 	uint16_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[1];
@@ -116,7 +123,6 @@ struct __attribute__((__packed__)) xio_tcp_req_hdr {
 	uint16_t		recv_num_sge;
 	uint16_t		read_num_sge;
 	uint16_t		write_num_sge;
-	uint16_t		pad1;
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
@@ -130,9 +136,10 @@ struct __attribute__((__packed__)) xio_tcp_rsp_hdr {
 	uint8_t			version;	/* response version     */
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
+	uint16_t		sn;		/* serial number	*/
 	uint16_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[3];
+	uint8_t			pad[1];
 
 	uint16_t		write_num_sge;
 
@@ -150,11 +157,17 @@ struct __attribute__((__packed__)) xio_tcp_setup_msg {
 	uint32_t		max_out_iovsz;
 };
 
+struct __attribute__((__packed__)) xio_tcp_cancel_hdr {
+	uint16_t		hdr_len;	 /* req header length	*/
+	uint16_t		sn;		 /* msg serial number	*/
+	uint32_t		result;
+};
+
 struct xio_tcp_work_req {
 	struct iovec			*msg_iov;
 	uint32_t			msg_len;
 	uint32_t			tot_iov_byte_len;
-	enum xio_tcp_rx_stage		stage;
+	int				stage;
 	uint32_t			pad;
 	struct msghdr			msg;
 };
@@ -173,9 +186,10 @@ struct xio_tcp_task {
 	uint32_t			req_read_num_sge;
 	uint32_t			req_recv_num_sge;
 
+	uint16_t			sn;
 	uint16_t			more_in_batch;
 
-	uint16_t			pad[3];
+	uint16_t			pad[2];
 
 	struct xio_tcp_work_req		txd;
 	struct xio_tcp_work_req		rxd;
@@ -234,7 +248,10 @@ struct xio_tcp_transport {
 	int				tx_ready_tasks_num;
 
 	uint16_t			tx_comp_cnt;
-	uint16_t			pad2[3];
+
+	uint16_t			sn;	   /* serial number */
+
+	uint16_t			pad[2];
 
 	/* control path params */
 	int				num_tasks;
@@ -251,6 +268,11 @@ struct xio_tcp_transport {
 	struct xio_tasks_pool_cls	primary_pool_cls;
 
 	struct xio_tcp_setup_msg	setup_rsp;
+
+	/* too big to be on stack - use as temporaries */
+	union {
+		struct xio_msg		dummy_msg;
+	};
 };
 
 int xio_tcp_send(struct xio_transport_base *transport,
@@ -273,5 +295,13 @@ struct xio_task *xio_tcp_primary_task_alloc(
 
 void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 			  int notify_observer);
+
+int xio_tcp_cancel_req(struct xio_transport_base *transport,
+		       struct xio_msg *req, uint64_t stag,
+		       void *ulp_msg, size_t ulp_msg_sz);
+
+int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
+		       struct xio_task *task, enum xio_status result,
+		       void *ulp_msg, size_t ulp_msg_sz);
 
 #endif /* XIO_TCP_TRANSPORT_H_ */

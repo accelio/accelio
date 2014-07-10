@@ -890,6 +890,7 @@ static void xio_tcp_txd_init(struct xio_tcp_work_req *txd,
 	txd->msg_len = 1;
 	txd->tot_iov_byte_len = 0;
 
+	txd->stage = XIO_TCP_TX_BEFORE;
 	txd->msg.msg_control = NULL;
 	txd->msg.msg_controllen = 0;
 	txd->msg.msg_flags = 0;
@@ -1291,6 +1292,7 @@ static int xio_tcp_task_pre_put(
 	tcp_task->rsp_write_num_sge	= 0;
 	tcp_task->req_read_num_sge	= 0;
 	tcp_task->req_recv_num_sge	= 0;
+	tcp_task->sn			= 0;
 
 	tcp_task->tcp_op		= XIO_TCP_NULL;
 
@@ -1630,8 +1632,8 @@ struct xio_transport xio_tcp_transport = {
 	.poll			= xio_tcp_poll,
 	.set_opt		= xio_tcp_set_opt,
 	.get_opt		= xio_tcp_get_opt,
-/*	.cancel_req		= xio_tcp_cancel_req,*/
-/*	.cancel_rsp		= xio_tcp_cancel_rsp,*/
+	.cancel_req		= xio_tcp_cancel_req,
+	.cancel_rsp		= xio_tcp_cancel_rsp,
 	.get_pools_setup_ops	= xio_tcp_get_pools_ops,
 	.set_pools_cls		= xio_tcp_set_pools_cls,
 
