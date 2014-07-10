@@ -264,11 +264,11 @@ static int xio_client_main(void *data)
 		/* iovec[0]*/
 		session_data->req[i].out.sgl_type	    = XIO_SGL_TYPE_IOV;
 		session_data->req[i].out.data_iov.max_nents = XIO_IOVLEN;
-		session_data->req[i].out.data_iov[0].iov_base =
+		session_data->req[i].out.data_iov.sglist[0].iov_base =
 			kstrdup("hello world iovec request", GFP_KERNEL);
-		session_data->req[i].out.data_iov[0].iov_len =
-			strlen(session_data->req[i].out.data_iov[0].iov_base) + 1;
-		session_data->req[i].out.data_iovlen = 1;
+		session_data->req[i].out.data_iov.sglist[0].iov_len =
+			strlen(session_data->req[i].out.data_iov.sglist[0].iov_base) + 1;
+		session_data->req[i].out.data_iov.nents = 1;
 	}
 
 	/* send first message */
@@ -288,7 +288,7 @@ static int xio_client_main(void *data)
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(session_data->req[i].out.header.iov_base);
-		kfree(session_data->req[i].out.data_iov[0].iov_base);
+		kfree(session_data->req[i].out.data_iov.sglist[0].iov_base);
 	}
 
 	/* free the context */

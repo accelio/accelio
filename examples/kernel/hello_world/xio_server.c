@@ -138,7 +138,6 @@ static void process_request(struct xio_msg *req)
 	}
 	req->in.header.iov_base	  = NULL;
 	req->in.header.iov_len	  = 0;
-	req->in.data_iovlen	  = 0;
 	vmsg_sglist_set_nents(&req->in, 0);
 }
 
