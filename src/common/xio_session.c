@@ -753,10 +753,13 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	     XIO_MSG_RSP_FLAG_FIRST)) {
 		xio_connection_remove_in_flight(connection, omsg);
 	} else {
-		if (task->tlv_type == XIO_ONE_WAY_RSP)
+		if (task->tlv_type == XIO_ONE_WAY_RSP) {
+			if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST)
+				xio_connection_remove_in_flight(connection, omsg);
 			connection->in_flight_sends_budget++;
-		else
+		} else {
 			connection->in_flight_reqs_budget++;
+		}
 	}
 
 	omsg->type = task->tlv_type;
