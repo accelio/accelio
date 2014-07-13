@@ -48,11 +48,11 @@ extern struct xio_tcp_options tcp_options;
 static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl);
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_send                                                           */
+/* xio_tcp_sendmsg_work                                                      */
 /*---------------------------------------------------------------------------*/
-static int xio_tcp_send_work(struct xio_tcp_transport *tcp_hndl,
-			     struct xio_tcp_work_req *xio_send,
-			     int block)
+static int xio_tcp_sendmsg_work(struct xio_tcp_transport *tcp_hndl,
+				struct xio_tcp_work_req *xio_send,
+				int block)
 {
 	int			i, retval = 0, tmp_bytes, sent_bytes = 0;
 
@@ -211,7 +211,7 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 
 	xio_task_addref(task);
 
-	xio_tcp_send_work(tcp_hndl, &tcp_task->txd, 1);
+	xio_tcp_sendmsg_work(tcp_hndl, &tcp_task->txd, 1);
 
 	list_move_tail(&task->tasks_list_entry, &tcp_hndl->in_flight_list);
 
@@ -252,7 +252,7 @@ static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_task->tcp_op		 = XIO_TCP_SEND;
 
-	xio_tcp_send_work(tcp_hndl, &tcp_task->txd, 1);
+	xio_tcp_sendmsg_work(tcp_hndl, &tcp_task->txd, 1);
 
 	list_move(&task->tasks_list_entry, &tcp_hndl->in_flight_list);
 
@@ -806,6 +806,137 @@ static void xio_tcp_xmit_handler(void *xio_task)
 	xio_tcp_xmit(tcp_task->tcp_hndl);
 }*/
 
+#ifdef HAVE_SENDMMSG
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_xmit							     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
+{
+	struct xio_task		*task = NULL, *task_success = NULL;
+	struct xio_tcp_task	*tcp_task = NULL;
+	int			retval;
+	struct mmsghdr		*msgvec = tcp_hndl->msgvec;
+	int			i, j, tmp_bytes;
+	int			imm_comp = 0;
+
+	if (tcp_hndl->tx_ready_tasks_num == 0)
+		return 0;
+
+try_send:
+	task = list_first_entry(&tcp_hndl->tx_ready_list,
+				struct xio_task,  tasks_list_entry);
+	i = 0;
+	while (i < tcp_hndl->tx_ready_tasks_num && i < TX_BATCH) {
+		tcp_task = task->dd_data;
+
+		if (tcp_task->txd.stage == XIO_TCP_TX_BEFORE) {
+			xio_tcp_write_sn(task, tcp_hndl->sn);
+			tcp_task->sn = tcp_hndl->sn;
+			tcp_hndl->sn++;
+			tcp_task->txd.stage = XIO_TCP_TX_IN_SEND;
+		}
+
+		tcp_hndl->msgvec[i].msg_hdr = tcp_task->txd.msg;
+
+		++i;
+
+		task = list_first_entry(
+				&task->tasks_list_entry,
+				struct xio_task,  tasks_list_entry);
+	}
+
+	retval = sendmmsg(tcp_hndl->sock_fd, msgvec, i, 0);
+	if (retval < 0)
+		goto on_error;
+
+	for (i = 0; i < retval; i++) {
+		task = list_first_entry(
+				&tcp_hndl->tx_ready_list,
+				struct xio_task,  tasks_list_entry);
+
+		tcp_task = task->dd_data;
+
+		if (msgvec[i].msg_len < 0) {
+			goto on_error;
+		} else if (msgvec[i].msg_len ==
+			   tcp_task->txd.tot_iov_byte_len) {
+			--tcp_hndl->tx_ready_tasks_num;
+
+			list_move_tail(&task->tasks_list_entry,
+				       &tcp_hndl->in_flight_list);
+
+			task_success = task;
+
+			++tcp_hndl->tx_comp_cnt;
+
+			imm_comp = imm_comp || task->is_control ||
+				   (task->omsg &&
+				    (task->omsg->flags &
+					XIO_MSG_FLAG_IMM_SEND_COMP));
+		} else {
+			tcp_task->txd.tot_iov_byte_len -= msgvec[i].msg_len;
+			tmp_bytes = 0;
+			for (j = 0; j < tcp_task->txd.msg.msg_iovlen; j++) {
+				if (tcp_task->txd.msg.msg_iov[j].iov_len +
+						tmp_bytes < msgvec[i].msg_len) {
+					tmp_bytes +=
+					tcp_task->txd.msg.msg_iov[j].iov_len;
+				} else {
+					tcp_task->txd.msg.msg_iov[j].iov_len -=
+						(msgvec[i].msg_len - tmp_bytes);
+					tcp_task->txd.msg.msg_iov[j].iov_base +=
+						(msgvec[i].msg_len - tmp_bytes);
+					tcp_task->txd.msg.msg_iov =
+						&tcp_task->txd.msg.msg_iov[j];
+					tcp_task->txd.msg.msg_iovlen -= j;
+					break;
+				}
+			}
+			break;
+		}
+	}
+
+	/* ORK todo 1 make sure to remove the handle on close, when?*/
+	/* ORK todo 2 batch completions*/
+	if (task_success &&
+	    (tcp_hndl->tx_comp_cnt >= COMPLETION_BATCH_MAX || imm_comp)) {
+		retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+					  task_success,
+					  xio_tcp_tx_completion_handler,
+					  &tcp_task->comp_work);
+		if (retval != 0) {
+			ERROR_LOG("xio_ctx_add_work failed.\n");
+			return retval;
+		}
+
+		tcp_hndl->tx_comp_cnt = 0;
+	}
+
+	if (tcp_hndl->tx_ready_tasks_num)
+		goto try_send;
+
+	return 0;
+
+on_error:
+	/* ORK todo add event (not work!) for ready for write*/
+	/*retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+				    task,
+				    xio_tcp_xmit_handler,
+				    &tcp_task->xmit_work);
+	if (retval != 0) {
+		ERROR_LOG("xio_ctx_add_work failed.\n");
+		return retval;
+	}*/
+
+	if (errno == ECONNRESET) {
+		TRACE_LOG("tcp trans got reset, tcp_hndl=%p\n",
+			  tcp_hndl);
+		on_sock_disconnected(tcp_hndl, 1);
+	}
+
+	return -1;
+}
+#else
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_xmit							     */
 /*---------------------------------------------------------------------------*/
@@ -814,7 +945,8 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	struct xio_task		*task = NULL, *task_success = NULL,
 				*task1, *task2;
 	struct xio_tcp_task	*tcp_task = NULL;
-	int			retval;
+	int			retval = 0;
+	int			imm_comp = 0;
 
 	/* if "ready to send queue" is not empty */
 	while (tcp_hndl->tx_ready_tasks_num) {
@@ -840,14 +972,14 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			}
 		}
 
-		xio_tcp_write_sn(task, tcp_hndl->sn);
-		tcp_task->sn = tcp_hndl->sn;
-		tcp_hndl->sn++;
+		if (tcp_task->txd.stage == XIO_TCP_TX_BEFORE) {
+			xio_tcp_write_sn(task, tcp_hndl->sn);
+			tcp_task->sn = tcp_hndl->sn;
+			tcp_hndl->sn++;
+			tcp_task->txd.stage = XIO_TCP_TX_IN_SEND;
+		}
 
-		tcp_task->txd.stage = XIO_TCP_TX_IN_SEND;
-
-		/* ORK todo batch? */
-		retval = xio_tcp_send_work(tcp_hndl, &tcp_task->txd, 1);
+		retval = xio_tcp_sendmsg_work(tcp_hndl, &tcp_task->txd, 1);
 
 		if (retval < 0) {
 			/* ORK todo add event (not work!) for ready for write*/
@@ -864,9 +996,10 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 				TRACE_LOG("tcp trans got reset, tcp_hndl=%p\n",
 					  tcp_hndl);
 				on_sock_disconnected(tcp_hndl, 1);
+				return -1;
 			}
 
-			return -1;
+			break;
 		}
 
 		tcp_hndl->tx_ready_tasks_num--;
@@ -877,15 +1010,18 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 		task_success = task;
 
 		++tcp_hndl->tx_comp_cnt;
+
+		imm_comp = imm_comp || task->is_control ||
+			   (task->omsg &&
+			    (task->omsg->flags &
+				XIO_MSG_FLAG_IMM_SEND_COMP));
 	}
 
 	/* ORK todo 1 make sure to remove the handle on close, when?*/
 	/* ORK todo 2 batch completions*/
 	if (task_success &&
 	    (tcp_hndl->tx_comp_cnt >= COMPLETION_BATCH_MAX ||
-	     task->is_control ||
-	     (task->omsg &&
-	      (task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP)))) {
+	     imm_comp)) {
 		retval = xio_ctx_add_work(tcp_hndl->base.ctx,
 					  task_success,
 					  xio_tcp_tx_completion_handler,
@@ -898,8 +1034,9 @@ static int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 		tcp_hndl->tx_comp_cnt = 0;
 	}
 
-	return 0;
+	return retval < 0 ? retval : 0;
 }
+#endif /* HAVE_SENDMMSG */
 
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_prep_req_in_data						     */
@@ -1072,7 +1209,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 		must_send = 1;
 	} else {
 		/* ORK todo add logic for batching sends*/
-		must_send = 1;
+		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
+			must_send = 1;
 	}
 
 	if (must_send) {
@@ -1426,7 +1564,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 		must_send = 1;
 	} else {
 		/* ORK TODO batching ? */
-		must_send = 1;
+		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
+			must_send = 1;
 	}
 
 	if (must_send) {

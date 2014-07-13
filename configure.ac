@@ -44,6 +44,8 @@ AC_TYPE_SIZE_T
 
 AC_CHECK_LIB(numa, numa_available)
 
+AC_CHECK_FUNCS(sendmmsg recvmmsg)
+
 ##########################################################################
 # perf support
 ##########################################################################

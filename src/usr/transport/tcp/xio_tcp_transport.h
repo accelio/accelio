@@ -39,6 +39,7 @@
 #define XIO_TCP_TRANSPORT_H_
 
 #include "xio_usr_transport.h"
+#include <sys/socket.h>
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -59,6 +60,8 @@ extern double				g_mhz;
 					      * COMPLETION_BATCH_MAX
 					      * packets
 					      */
+
+#define TX_BATCH			16   /* Number of TX tasks to batch */
 
 #define RX_POLL_NR_MAX			16   /* Max num of RX messages
 					      * to receive in one poll
@@ -269,6 +272,9 @@ struct xio_tcp_transport {
 
 	struct xio_tcp_setup_msg	setup_rsp;
 
+#ifdef HAVE_SENDMMSG
+	struct mmsghdr			msgvec[TX_BATCH];
+#endif
 	/* too big to be on stack - use as temporaries */
 	union {
 		struct xio_msg		dummy_msg;
