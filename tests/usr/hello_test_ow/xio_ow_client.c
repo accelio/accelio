@@ -61,7 +61,7 @@
 #define MAX_OUTSTANDING_REQS	50
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
-#define ASK_FOR_RECEIPT		0
+#define ASK_FOR_RECEIPT		1
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
