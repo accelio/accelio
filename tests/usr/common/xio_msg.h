@@ -58,7 +58,8 @@ struct msg_pool {
 	struct xio_msg				**stack_end;
 
 	/* max number of elements */
-	size_t					max;
+	uint32_t				max;
+	uint32_t				free;
 };
 
 

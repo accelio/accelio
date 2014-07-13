@@ -222,15 +222,19 @@ void msg_write(struct msg_params *msg_params,
 
 	if (pmsg->data_iov.nents > XIO_IOVLEN) {
 		for (i = 0; i < pmsg->data_iov.nents; i++) {
-			pmsg->pdata_iov.sglist[i].iov_base	= msg_params->g_data;
+			pmsg->pdata_iov.sglist[i].iov_base	=
+				msg_params->g_data;
 			pmsg->pdata_iov.sglist[i].iov_len	= datalen;
-			pmsg->pdata_iov.sglist[i].mr		= msg_params->g_data_mr;
+			pmsg->pdata_iov.sglist[i].mr		=
+				msg_params->g_data_mr;
 		}
 	} else {
 		for (i = 0; i < pmsg->data_iov.nents; i++) {
-			pmsg->data_iov.sglist[i].iov_base	= msg_params->g_data;
+			pmsg->data_iov.sglist[i].iov_base	=
+				msg_params->g_data;
 			pmsg->data_iov.sglist[i].iov_len	= datalen;
-			pmsg->data_iov.sglist[i].mr		= msg_params->g_data_mr;
+			pmsg->data_iov.sglist[i].mr		=
+				msg_params->g_data_mr;
 		}
 	}
 }
@@ -305,6 +309,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 	msg_pool->stack_ptr = msg_pool->stack;
 	msg_pool->stack_end = msg_pool->stack_ptr + max;
 	msg_pool->max = max;
+	msg_pool->free = max;
 
 	return msg_pool;
 }
@@ -314,8 +319,11 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 /*---------------------------------------------------------------------------*/
 inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
 {
-	return (pool->stack_ptr == pool->stack_end) ? NULL :
-		*pool->stack_ptr++;
+	if (pool->stack_ptr == pool->stack_end)
+		return NULL;
+
+	pool->free--;
+	return *pool->stack_ptr++;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -323,11 +331,14 @@ inline struct xio_msg *msg_pool_get(struct msg_pool *pool)
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg)
 {
+	if (pool->stack_ptr == pool->stack)
+		return;
+	pool->free++;
 	*--pool->stack_ptr = msg;
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_pool_get								     */
+/* msg_pool_free							     */
 /*---------------------------------------------------------------------------*/
 inline void msg_pool_free(struct msg_pool *pool)
 {
