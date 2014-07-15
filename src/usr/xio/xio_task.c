@@ -262,12 +262,12 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 {
 	struct xio_tasks_slab	*pslab, *next_pslab;
-	int			i, retval;
+	int			i;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {
 		if (q->params.pool_hooks.slab_post_create)
-			retval = q->params.pool_hooks.slab_post_create(
+			q->params.pool_hooks.slab_post_create(
 					new_context,
 					q->dd_data,
 					pslab->dd_data);
