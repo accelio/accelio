@@ -46,7 +46,7 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 
-#define XIO_TASK_MAGIC   0x58494f5f5441534b
+#define XIO_TASK_MAGIC   0x58494f54 /* Hex of 'XIOT' */
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_alloc_slab						     */

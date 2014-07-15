@@ -1245,6 +1245,7 @@ static int xio_rdma_task_pre_put(
 		}
 	}
 	rdma_task->write_num_sge	= 0;
+	/*
 	rdma_task->req_write_num_sge	= 0;
 	rdma_task->rsp_write_num_sge	= 0;
 	rdma_task->req_read_num_sge	= 0;
@@ -1254,7 +1255,7 @@ static int xio_rdma_task_pre_put(
 	rdma_task->ib_op = XIO_IB_NULL;
 	rdma_task->phantom_idx = 0;
 	rdma_task->sn = 0;
-
+	*/
 	return 0;
 }
 

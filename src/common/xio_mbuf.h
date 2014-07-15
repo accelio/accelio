@@ -45,20 +45,19 @@ struct xio_mbuf {
 	void			*curr;
 
 	struct {
-		void		*tail;
 		void		*head;
+		void		*tail;
+		uint64_t	len;
 		uint32_t	type;
 		uint32_t	pad;
-		uint64_t	len;
-
 		void		*val;
 	} tlv;
 
 	struct {
-		void		*tail;
 		void		*head;
-		size_t		buflen;
-		size_t		datalen;
+		void		*tail;
+		uint32_t	buflen;
+		uint32_t	datalen;
 	} buf;
 
 	void			*marker;
@@ -113,7 +112,7 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 {
 	DEBUG_LOG("########################################################" \
 		  "#############\n");
-	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%zd, datalen:%zd\n",
+	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%u, datalen:%u\n",
 		  mbuf, mbuf->buf.head, mbuf->buf.tail, mbuf->buf.buflen,
 		  mbuf->buf.datalen);
 	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%llu, val:%p\n",
@@ -451,7 +450,7 @@ static inline int xio_mbuf_set_data_length(struct xio_mbuf *mbuf,
 		return 0;
 	}
 	ERROR_LOG("xio_mbuf_set_data_length failed. datalen:%zd, " \
-		  "buf.buflen:%zd\n", datalen, mbuf->buf.buflen);
+		  "buf.buflen:%u\n", datalen, mbuf->buf.buflen);
 
 	return -1;
 }

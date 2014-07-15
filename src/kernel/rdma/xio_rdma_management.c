@@ -1020,6 +1020,7 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 
 	xio_rdma_mempool_free(&rdma_task->write_sge);
 	rdma_task->write_num_sge	= 0;
+	/*
 	rdma_task->req_write_num_sge	= 0;
 	rdma_task->rsp_write_num_sge	= 0;
 	rdma_task->req_read_num_sge	= 0;
@@ -1029,7 +1030,7 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 	rdma_task->ib_op = XIO_IB_NULL;
 	rdma_task->phantom_idx = 0;
 	rdma_task->sn = 0;
-
+	*/
 	return 0;
 }
 

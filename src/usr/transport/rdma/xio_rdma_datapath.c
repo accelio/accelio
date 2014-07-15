@@ -134,7 +134,7 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 {
 	struct ibv_send_wr	*bad_wr;
 	int			retval, nr_posted;
-	
+
 	/*
 	TRACE_LOG("num_sge:%d, len1:%d, len2:%d, send_flags:%d\n",
 		  xio_send->send_wr.num_sge,
@@ -519,7 +519,7 @@ static void xio_handle_task_error(struct xio_task *task)
 		break;
 	default:
 		ERROR_LOG("unknown opcode: task:%p, type:0x%x, " \
-			  "magic:0x%lx, ib_op:0x%x\n",
+			  "magic:0x%x, ib_op:0x%x\n",
 			  task, task->tlv_type,
 			  task->magic, rdma_task->ib_op);
 		break;
@@ -791,7 +791,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 			xio_tasks_pool_put(ptask);
 		} else {
 			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
-				  "magic:0x%lx\n",
+				  "magic:0x%x\n",
 				  ptask, rdma_task->ib_op,
 				  ptask->ltid, ptask->magic);
 			continue;
@@ -1551,7 +1551,8 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
 	req_hdr.tid		= task->ltid;
 	req_hdr.opcode		= rdma_task->ib_op;
-	if (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY)
+	if (task->omsg_flags &&
+	    task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY)
 		req_hdr.flags = XIO_HEADER_FLAG_SMALL_ZERO_COPY;
 	else
 		req_hdr.flags = XIO_HEADER_FLAG_NONE;
@@ -1864,6 +1865,7 @@ static int xio_rdma_prep_req_in_data(
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
 	void				*sg;
+	int				small_zero_copy;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->in);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->in.sgl_type);
@@ -1880,7 +1882,9 @@ static int xio_rdma_prep_req_in_data(
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
-	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
+	small_zero_copy = (task->omsg_flags &&
+			   (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY));
+	if (!small_zero_copy &&
 	    data_len + hdr_len + MAX_HDR_SZ < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
@@ -2130,7 +2134,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len += sizeof(rsp_hdr);
 	xio_hdr_len += rdma_task->rsp_write_num_sge*sizeof(struct xio_sge);
 
-	small_zero_copy = task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY;
+	small_zero_copy = (task->imsg_flags &&
+			   (task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY));
 
 	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",

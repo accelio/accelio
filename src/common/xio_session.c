@@ -720,7 +720,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_msg		*omsg;
 	struct xio_task		*sender_task = task->sender_task;
-	struct xio_statistics *stats = &connection->ctx->stats;
+	struct xio_statistics	*stats = &connection->ctx->stats;
 
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
 		DEBUG_LOG("responses received while connection is offline\n");
@@ -1056,8 +1056,6 @@ int xio_on_new_message(struct xio_session *session,
 	struct xio_task		*task  = event_data->msg.task;
 	struct xio_connection	*connection = NULL;
 	int			retval = -1;
-	int			tlv_type;
-
 
 
 	if (task->sender_task) {
@@ -1093,11 +1091,10 @@ int xio_on_new_message(struct xio_session *session,
 		}
 	}
 
-	tlv_type		= task->tlv_type;
 	task->session		= session;
 	task->connection	= connection;
 
-	switch (tlv_type) {
+	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
 	case XIO_ONE_WAY_REQ:
 		retval = xio_on_req_recv(connection, task);
@@ -1131,7 +1128,7 @@ int xio_on_new_message(struct xio_session *session,
 
 	if (retval != 0)
 		ERROR_LOG("receiving new message failed. type:0x%x\n",
-			  tlv_type);
+			  task->tlv_type);
 
 	return 0;
 }

@@ -229,12 +229,6 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
-	enum xio_ib_op_code		ib_op;
-	u16				more_in_batch;
-	u16				sn;
-	u16				phantom_idx;
-	u16				pad[3];
-
 	//struct xio_data_buffer sdb;
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
@@ -246,17 +240,18 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	u32				read_num_sge;
-	u32				write_num_sge;
-	u32				recv_num_sge;
+	u16				pad0;
+	u16				read_num_sge;
+	u16				write_num_sge;
+	u16				recv_num_sge;
 	struct xio_rdma_mem_desc	read_sge;
 	struct xio_rdma_mem_desc	write_sge;
 
 	/* What this side got from the peer for RDMA R/W */
-	u32				req_write_num_sge;
-	u32				rsp_write_num_sge;
-	u32				req_read_num_sge;
-	u32				req_recv_num_sge;
+	u16				req_read_num_sge;
+	u16				req_write_num_sge;
+	u16				req_recv_num_sge;
+	u16				rsp_write_num_sge;
 	struct xio_sge			*req_read_sge;
 	struct xio_sge			*req_write_sge;
 	/* What this side got from the peer for SEND
@@ -266,6 +261,13 @@ struct xio_rdma_task {
 	/* What this side writes to the peer on RDMA W
 	 */
 	struct xio_sge			*rsp_write_sge;
+
+	enum xio_ib_op_code		ib_op;
+	u16				more_in_batch;
+	u16				sn;
+	u16				phantom_idx;
+	u16				pad[3];
+
 };
 
 struct xio_cq  {
