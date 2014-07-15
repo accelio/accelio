@@ -59,6 +59,15 @@ MODULE_DESCRIPTION("XIO library "
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+int xio_rdma_cq_completions;
+module_param_named(cq_completions, xio_rdma_cq_completions, int, 0644);
+MODULE_PARM_DESC(cq_completions, "moderate CQ to N completions if N > 0 (default:disabled)");
+
+int xio_rdma_cq_timeout;
+module_param_named(cq_timeout, xio_rdma_cq_timeout, int, 0644);
+MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:disabled)");
+
+
 /* default option values */
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
@@ -166,6 +175,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	int		num_cores = num_online_cpus();
 	u32		alloc_sz;
 	int		cpu;
+	int ret;
 
 	/* If two session were created with the same context and
 	 * the address resolved on the same device than the same
@@ -247,6 +257,19 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		goto cleanup3;
 	}
 
+	if (xio_rdma_cq_completions && xio_rdma_cq_timeout) {
+		if (xio_rdma_cq_completions > 0xffff ||
+			xio_rdma_cq_timeout > 0xffff) {
+			ERROR_LOG("invalid CQ moderation values\n");
+		} else {
+			ret = ib_modify_cq(tcq->cq,
+					xio_rdma_cq_completions, xio_rdma_cq_timeout);
+			if (ret && ret != -ENOSYS) {
+				ERROR_LOG("failed modifying CQ (%d)\n", ret);
+				goto cleanup4;
+			}
+		}
+	}
 	/* we don't expect missed events (if supported) so it is an error */
 	if (ib_req_notify_cq(tcq->cq,
 			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
