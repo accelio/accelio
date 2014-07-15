@@ -932,22 +932,23 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 	struct xio_connection *connection;
 
 	if (session->lead_connection &&
-	    session->lead_connection->nexus == nexus)
+	    session->lead_connection->nexus == nexus) {
 		connection = session->lead_connection;
-	else if (session->redir_connection &&
-		 session->redir_connection->nexus == nexus)
+		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+	} else if (session->redir_connection &&
+		   session->redir_connection->nexus == nexus) {
 		connection = session->redir_connection;
-	else {
+		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+	} else {
 		spin_lock(&session->connections_list_lock);
 		connection = xio_session_find_connection(session, nexus);
 		spin_unlock(&session->connections_list_lock);
+		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		xio_connection_disconnected(connection);
 	}
-	connection->close_reason = XIO_E_SESSION_DISCONECTED;
-	xio_connection_disconnected(connection);
 
 	return 0;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_reconnected			                             */
