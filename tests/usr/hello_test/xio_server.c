@@ -47,7 +47,7 @@
 #include "xio_msg.h"
 #include "xio_test_utils.h"
 
-#define MAX_POOL_SIZE		6000
+#define MAX_POOL_SIZE		128
 #define PRINT_COUNTER		4000000
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
@@ -80,9 +80,9 @@ struct test_params {
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
 	struct xio_buf		*xbuf;
-	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		ncomp;
+	struct msg_params	msg_params;
 };
 
 /*---------------------------------------------------------------------------*/

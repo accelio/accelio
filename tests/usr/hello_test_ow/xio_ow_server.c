@@ -73,12 +73,10 @@ struct xio_test_config {
 };
 
 struct test_params {
-	struct msg_pool		*pool;
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
 	char			*buf;
 	struct xio_mr		*mr;
-	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
@@ -220,12 +218,8 @@ static int on_msg_error(struct xio_session *session,
 			enum xio_status error, struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
-
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
-
-	msg_pool_put(test_params->pool, msg);
 
 	return 0;
 }
@@ -429,15 +423,6 @@ int main(int argc, char *argv[])
 	test_params.finite_run = test_config.finite_run;
 	test_params.disconnect_nr = PRINT_COUNTER * DISCONNECT_FACTOR;
 
-	/* prepare buffers for this test */
-	if (msg_api_init(&test_params.msg_params,
-			 test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
-
-	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
-	if (test_params.pool == NULL)
-		goto cleanup;
-
 	test_params.ctx = xio_context_create(NULL, 0, test_config.cpu);
 	if (test_params.ctx == NULL) {
 		int error = xio_errno();
@@ -470,9 +455,6 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.pool)
-		msg_pool_free(test_params.pool);
-
 	if (test_params.mr) {
 		xio_dereg_mr(&test_params.mr);
 		test_params.mr = NULL;
@@ -482,8 +464,6 @@ int main(int argc, char *argv[])
 		free(test_params.buf);
 		test_params.buf = NULL;
 	}
-cleanup:
-	msg_api_free(&test_params.msg_params);
 
 	xio_shutdown();
 
