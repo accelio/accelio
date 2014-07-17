@@ -143,7 +143,7 @@ static void process_message(struct test_params *test_params,
 		test_params->disconnect_nr =
 			test_params->stat.print_counter * DISCONNECT_FACTOR;
 	}
-	if (++test_params->stat.cnt == test_params->stat.print_counter) {
+	if (++test_params->stat.cnt%test_params->stat.print_counter == 0) {
 		uint64_t delta = get_cpu_usecs() - test_params->stat.start_time;
 		uint64_t pps = (test_params->stat.cnt*USECS_IN_SEC)/delta;
 
@@ -153,8 +153,6 @@ static void process_message(struct test_params *test_params,
 		       "TX %.2f MB/s, length: TX: %zd B\n",
 		       pps, txbw,
 		       test_params->stat.txlen);
-		test_params->stat.cnt = 0;
-		test_params->stat.start_time = get_cpu_usecs();
 	}
 }
 

@@ -75,8 +75,7 @@ struct xio_test_config {
 struct test_params {
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
-	char			*buf;
-	struct xio_mr		*mr;
+	struct xio_buf		*xbuf;
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
@@ -229,23 +228,20 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params	*test_params = cb_user_context;
-	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	struct test_params *test_params = cb_user_context;
+	msg->in.data_iovlen = 1;
 
-
-	vmsg_sglist_set_nents(&msg->in, 1);
-	if (test_params->mr == NULL) {
-		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = xio_reg_mr(sglist[0].iov_base,
-					  sglist[0].iov_len);
-		test_params->buf = sglist[0].iov_base;
-		test_params->mr = sglist[0].mr;
-	} else {
-		sglist[0].iov_base = test_params->buf;
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = test_params->mr;
+	if (test_params->xbuf == NULL) {
+		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+		if(!test_params->xbuf) {
+			printf("error alloc xbuf\n");
+			return 0;
+		}
 	}
+
+	msg->in.data_iov[0].iov_base = test_params->xbuf->addr;
+	msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
+	msg->in.data_iov[0].mr = test_params->xbuf->mr;
 
 	return 0;
 }
@@ -455,15 +451,8 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.mr) {
-		xio_dereg_mr(&test_params.mr);
-		test_params.mr = NULL;
-	}
-
-	if (test_params.buf) {
-		free(test_params.buf);
-		test_params.buf = NULL;
-	}
+	if (test_params.xbuf)
+		xio_free(&test_params.xbuf);
 
 	xio_shutdown();
 
