@@ -76,6 +76,7 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
+static struct xio_buf		*xbuf;
 static struct msg_params	msg_params;
 
 
@@ -228,24 +229,14 @@ int on_msg_error(struct xio_session *session,
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
-	static int		first_time = 1;
-	static char		*buf;
-	static struct xio_mr	*mr;
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (first_time) {
-		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = xio_reg_mr(sglist[0].iov_base,
-					  sglist[0].iov_len);
-		buf = sglist[0].iov_base;
-		mr = sglist[0].mr;
-		first_time = 0;
-	} else {
-		sglist[0].iov_base = buf;
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = mr;
-	}
+	if (xbuf == NULL)
+		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = xbuf->addr;
+	sglist[0].mr =	xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -412,7 +403,7 @@ int main(int argc, char *argv[])
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
-
+	xbuf = NULL;
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
@@ -449,6 +440,11 @@ int main(int argc, char *argv[])
 	if (pool)
 		msg_pool_free(pool);
 	pool = NULL;
+
+	if (xbuf) {
+		xio_free(&xbuf);
+		xbuf = NULL;
+	}
 
 	xio_context_destroy(ctx);
 

@@ -57,6 +57,7 @@
 #define XIO_DEF_CPU		0
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
+#define MAX_OUTSTANDING_REQS	50
 
 #define MAX_POOL_SIZE		2048
 #define ONE_MB			(1 << 20)
@@ -79,6 +80,7 @@ struct xio_test_config {
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
 static struct xio_connection	*conn;
+static struct xio_buf		*xbuf;
 static uint64_t			print_counter;
 static struct msg_params	msg_params;
 
@@ -222,7 +224,7 @@ static int on_new_connection_event(struct xio_connection *connection,
 			return 0;
 		}
 		i++;
-		if (i == 256)
+		if (i == MAX_OUTSTANDING_REQS)
 			break;
 	}
 
@@ -424,6 +426,24 @@ int on_msg_error(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (xbuf == NULL)
+		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = xbuf->addr;
+	sglist[0].mr = xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
 struct xio_session_ops server_ops = {
@@ -432,6 +452,7 @@ struct xio_session_ops server_ops = {
 	.on_msg_send_complete		=  on_send_response_complete,
 	.on_msg				=  on_message,
 	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
 
 /*---------------------------------------------------------------------------*/
@@ -580,7 +601,7 @@ int main(int argc, char *argv[])
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
-
+	xbuf = NULL;
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
@@ -617,6 +638,11 @@ int main(int argc, char *argv[])
 	if (pool)
 		msg_pool_free(pool);
 	pool = NULL;
+
+	if (xbuf) {
+		xio_free(&xbuf);
+		xbuf = NULL;
+	}
 
 	xio_context_destroy(ctx);
 

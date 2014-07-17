@@ -89,15 +89,14 @@ struct thread_stat_data {
 };
 
 struct  thread_data {
-	char			portal[64];
 	struct thread_stat_data	stat;
-	int			affinity;
-	int			cnt;
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	void			*loop;
-	char			*buf;
-	struct xio_mr		*mr;
+	struct xio_buf		*xbuf;
+	char			portal[64];
+	int			affinity;
+	int			cnt;
 	pthread_t		thread_id;
 };
 
@@ -250,20 +249,12 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
+	if (tdata->xbuf == NULL)
+		tdata->xbuf = xio_alloc(XIO_READ_BUF_LEN);
 
-	if (tdata->buf == NULL) {
-		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr =
-			xio_reg_mr(sglist[0].iov_base, sglist[0].iov_len);
-
-		tdata->buf = sglist[0].iov_base;
-		tdata->mr = sglist[0].mr;
-	} else {
-		sglist[0].iov_base = tdata->buf;
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = tdata->mr;
-	}
+	sglist[0].iov_base = tdata->xbuf->addr;
+	sglist[0].mr = tdata->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -327,11 +318,8 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->mr)
-		xio_dereg_mr(&tdata->mr);
-
-	if (tdata->buf)
-		free(tdata->buf);
+	if (tdata->xbuf)
+		xio_free(&tdata->xbuf);
 
 cleanup:
 	/* free the context */

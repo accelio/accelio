@@ -79,8 +79,7 @@ struct ow_test_params {
 	struct msg_pool		*pool;
 	struct xio_context	*ctx;
 	struct xio_connection	*connection;
-	char			*buf;
-	struct xio_mr		*mr;
+	struct xio_buf		*xbuf;
 	struct msg_params	msg_params;
 	int			nsent;
 	int			ndelivered;
@@ -318,18 +317,12 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct ow_test_params	*ow_params = cb_user_context;
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (ow_params->mr == NULL) {
-		sglist[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = xio_reg_mr(sglist[0].iov_base,
-					  sglist[0].iov_len);
-		ow_params->buf = sglist[0].iov_base;
-		ow_params->mr = sglist[0].mr;
-	} else {
-		sglist[0].iov_base = ow_params->buf;
-		sglist[0].iov_len = XIO_READ_BUF_LEN;
-		sglist[0].mr = ow_params->mr;
-	}
+	if (ow_params->xbuf == NULL)
+		ow_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = ow_params->xbuf->addr;
+	sglist[0].mr = ow_params->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -547,15 +540,11 @@ int main(int argc, char *argv[])
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
 
-	if (ow_params.mr) {
-		xio_dereg_mr(&ow_params.mr);
-		ow_params.mr = NULL;
+	if (ow_params.xbuf) {
+		xio_free(&ow_params.xbuf);
+		ow_params.xbuf = NULL;
 	}
 
-	if (ow_params.buf) {
-		free(ow_params.buf);
-		ow_params.buf = NULL;
-	}
 cleanup:
 	msg_api_free(&ow_params.msg_params);
 

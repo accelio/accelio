@@ -228,20 +228,16 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
-	msg->in.data_iovlen = 1;
+	struct test_params	*test_params = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	if (test_params->xbuf == NULL) {
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (test_params->xbuf == NULL)
 		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
-		if(!test_params->xbuf) {
-			printf("error alloc xbuf\n");
-			return 0;
-		}
-	}
 
-	msg->in.data_iov[0].iov_base = test_params->xbuf->addr;
-	msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-	msg->in.data_iov[0].mr = test_params->xbuf->mr;
+	sglist[0].iov_base = test_params->xbuf->addr;
+	sglist[0].mr = test_params->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }

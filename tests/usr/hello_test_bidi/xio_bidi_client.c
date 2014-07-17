@@ -61,6 +61,8 @@
 #define MAX_POOL_SIZE		2048
 #define ONE_MB			(1 << 20)
 #define DISCONNECT_FACTOR	3
+#define MAX_OUTSTANDING_REQS	50
+#define XIO_READ_BUF_LEN	ONE_MB
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -81,11 +83,11 @@ static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
 static struct xio_context	*ctx;
+static struct xio_buf		*xbuf;
 static struct msg_params	msg_params;
-static uint64_t nrecv;
-static uint64_t nsent;
-static uint64_t	disconnect_nr;
-
+static uint64_t			nrecv;
+static uint64_t			nsent;
+static uint64_t			disconnect_nr;
 
 
 static struct xio_test_config  test_config = {
@@ -372,6 +374,25 @@ int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (xbuf == NULL)
+		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = xbuf->addr;
+	sglist[0].mr = xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -380,9 +401,9 @@ struct xio_session_ops ses_ops = {
 	.on_msg_send_complete		=  on_send_response_complete,
 	.on_session_established		=  on_session_established,
 	.on_msg				=  on_message,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
-
 
 /*---------------------------------------------------------------------------*/
 /* usage                                                                     */
@@ -549,6 +570,8 @@ int main(int argc, char *argv[])
 
 	nrecv = 0;
 	nsent = 0;
+	xbuf = NULL;
+
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
@@ -623,7 +646,7 @@ int main(int argc, char *argv[])
 		}
 		nsent++;
 		i++;
-		if (i == 256)
+		if (i == MAX_OUTSTANDING_REQS)
 			break;
 	}
 
@@ -652,6 +675,11 @@ exit3:
 exit1:
 
 	msg_api_free(&msg_params);
+
+	if (xbuf) {
+		xio_free(&xbuf);
+		xbuf = NULL;
+	}
 
 	fprintf(stdout, "exit complete\n");
 

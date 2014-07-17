@@ -31,6 +31,6 @@ else
 	trans=$4
 fi
 
-./xio_oneway_server -c 7 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip}
+./xio_oneway_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip}
 
 

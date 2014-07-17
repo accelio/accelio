@@ -59,9 +59,10 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_OUTSTANDING_REQS	50
 #define DISCONNECT_FACTOR	3
-
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
+#define XIO_READ_BUF_LEN	ONE_MB
+
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -86,6 +87,7 @@ struct ow_test_stat {
 
 struct ow_test_params {
 	struct msg_pool		*pool;
+	struct xio_buf		*xbuf;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
 	struct ow_test_stat	rx_stat;
@@ -350,6 +352,26 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	struct ow_test_params	*ow_params = cb_user_context;
+
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (ow_params->xbuf == NULL)
+		ow_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = ow_params->xbuf->addr;
+	sglist[0].mr = ow_params->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -359,7 +381,8 @@ static struct xio_session_ops ses_ops = {
 	.on_msg				=  on_server_message,
 	.on_msg_send_complete		=  NULL,
 	.on_msg_delivered		=  on_message_delivered,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
 
 /*---------------------------------------------------------------------------*/
@@ -640,6 +663,12 @@ int main(int argc, char *argv[])
 
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
+
+	if (ow_params.xbuf) {
+		xio_free(&ow_params.xbuf);
+		ow_params.xbuf = NULL;
+	}
+
 cleanup:
 	msg_api_free(&ow_params.msg_params);
 
