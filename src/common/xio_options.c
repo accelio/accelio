@@ -46,12 +46,14 @@
 
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
+#define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
 
 
 /* xio options */
 struct xio_options			g_options = {
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
+	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT
 };
 
 /*---------------------------------------------------------------------------*/
@@ -152,6 +154,10 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			return retval;
 		}
 		break;
+	case XIO_OPTNAME_ENABLE_RECONNECT:
+		g_options.reconnect = *((int *)optval);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -181,6 +187,10 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		 *((int *)optval) = g_options.max_in_iovsz;
 		 return 0;
 		 break;
+	case XIO_OPTNAME_ENABLE_RECONNECT:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.reconnect;
+		 return 0;
 	default:
 		break;
 	}

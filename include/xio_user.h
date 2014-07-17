@@ -156,6 +156,7 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
+	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */

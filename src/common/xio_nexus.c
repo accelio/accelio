@@ -1334,10 +1334,9 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 						*event_data)
 {
 	int ret;
-	int enable_reconnect = 0;
 
 	/* Try to reconnect */
-	if (enable_reconnect) {
+	if (g_options.reconnect) {
 		/* cancel old timers */
 		if (xio_is_delayed_work_pending(&nexus->close_time_hndl))
 			xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,

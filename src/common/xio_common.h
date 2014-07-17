@@ -140,6 +140,8 @@ void xio_set_error(int errnum);
 struct xio_options {
 	int			max_in_iovsz;
 	int			max_out_iovsz;
+	int			reconnect;
+	int			pad;
 };
 
 struct xio_sge {
