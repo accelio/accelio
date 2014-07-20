@@ -164,6 +164,8 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 					     PRINT_COUNTER/data_len :
 					     PRINT_COUNTER);
 		tdata->stat.print_counter /=  MAX_THREADS;
+		if (tdata->stat.print_counter <  1000)
+			tdata->stat.print_counter = 1000;
 		tdata->disconnect_nr =
 			tdata->stat.print_counter * DISCONNECT_FACTOR;
 	}

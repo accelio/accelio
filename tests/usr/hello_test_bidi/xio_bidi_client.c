@@ -157,6 +157,8 @@ static void process_response(struct xio_msg *rsp)
 		data_len = data_len/1024;
 		print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		if (print_counter < 1000)
+			print_counter = 1000;
 		disconnect_nr = print_counter * DISCONNECT_FACTOR;
 	}
 

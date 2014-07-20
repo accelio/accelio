@@ -157,6 +157,8 @@ static void process_response(struct test_params *test_params,
 		data_len = data_len/1024;
 		test_params->stat.print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		if (test_params->stat.print_counter < 1000)
+			test_params->stat.print_counter = 1000;
 		test_params->disconnect_nr =
 			test_params->stat.print_counter * DISCONNECT_FACTOR;
 	}

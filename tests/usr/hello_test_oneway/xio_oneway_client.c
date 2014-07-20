@@ -138,6 +138,8 @@ static void process_rx_message(struct ow_test_params *ow_params,
 		data_len = ow_params->rx_stat.xlen/1024;
 		ow_params->rx_stat.print_counter = data_len ?
 			PRINT_COUNTER/data_len : PRINT_COUNTER;
+		if (ow_params->rx_stat.print_counter < 1000)
+			ow_params->rx_stat.print_counter = 1000;
 	}
 	if (++ow_params->rx_stat.cnt == ow_params->rx_stat.print_counter) {
 		char		timeb[40];
@@ -186,6 +188,8 @@ static void process_tx_message(struct ow_test_params *ow_params,
 		data_len = ow_params->tx_stat.xlen/1024;
 		ow_params->tx_stat.print_counter = data_len ?
 			PRINT_COUNTER/data_len : PRINT_COUNTER;
+		if (ow_params->tx_stat.print_counter < 1000)
+			ow_params->tx_stat.print_counter = 1000;
 		ow_params->disconnect_nr =
 			ow_params->tx_stat.print_counter * DISCONNECT_FACTOR;
 	}
