@@ -22,10 +22,12 @@ bin_PROGRAMS = xio_mt_client \
 	
 # list of sources for the 'xio_perftest' binary
 xio_mt_client_SOURCES =  ../common/xio_msg.c		\
+			 ../common/xio_intf.c		\
 			 ../common/xio_test_utils.c	\
 		         xio_mt_client.c		
 		
 xio_mt_server_SOURCES =  ../common/xio_msg.c		\
+			 ../common/xio_intf.c		\
 			 ../common/xio_test_utils.c	\
 		         xio_mt_server.c		
 	

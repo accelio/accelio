@@ -47,6 +47,7 @@
 #include "libxio.h"
 #include "xio_msg.h"
 #include "xio_test_utils.h"
+#include "xio_intf.h"
 
 #define MAX_POOL_SIZE		512
 
@@ -60,7 +61,7 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
-#define MAX_THREADS		4
+#define MAX_THREADS		6
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -548,6 +549,10 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port;
 	int			max_cpus;
+	uint64_t		cpusmask;
+	int			cpusnr;
+	int			cpu;
+
 
 
 	memset(&server_data, 0, sizeof(server_data));
@@ -563,6 +568,15 @@ int main(int argc, char *argv[])
 		return -1;
 
 	print_test_config(&test_config);
+	i = intf_best_cpus(test_config.server_addr, &cpusmask, &cpusnr);
+	if (i == 0) {
+		if (!cpusmask_test_bit(test_config.cpu, &cpusmask)) {
+			printf("warning: cpu %d is not best cpu for %s\n",
+			       test_config.cpu, test_config.server_addr);
+			printf("best cpus [%d] %s\n", cpusnr,
+			       intf_cpusmask_str(cpusmask, cpusnr, url));
+		}
+	}
 
 	set_cpu_affinity(test_config.cpu);
 
@@ -588,9 +602,14 @@ int main(int argc, char *argv[])
 
 	/* spawn portals */
 	port = test_config.server_port;
-	for (i = 0; i < server_data.tdata_nr; i++) {
-		server_data.tdata[i].affinity =
-			((test_config.cpu + i)%max_cpus);
+	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
+		while (1) {
+			if (cpusmask_test_bit(cpu, &cpusmask))
+				break;
+			if (++cpu == max_cpus)
+				cpu = 0;
+		}
+		server_data.tdata[i].affinity = cpu;
 		port++;
 		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
 			test_config.transport,

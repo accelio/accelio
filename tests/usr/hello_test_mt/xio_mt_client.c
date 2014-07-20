@@ -46,6 +46,7 @@
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_intf.h"
 #include "xio_test_utils.h"
 
 #define MAX_HEADER_SIZE		32
@@ -65,6 +66,7 @@
 #define ONE_MB			(1 << 20)
 #define MAX_THREADS		4
 #define DISCONNECT_FACTOR	3
+#define HCA_NAME		"ib0"
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -581,6 +583,9 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			i = 0;
 	int			max_cpus;
+	uint64_t		cpusmask;
+	int			cpusnr;
+	int			cpu;
 
 	/* client session attributes */
 	struct xio_session_attr attr = {
@@ -594,11 +599,20 @@ int main(int argc, char *argv[])
 
 	print_test_config(&test_config);
 
+	i = intf_name_best_cpus(HCA_NAME, &cpusmask, &cpusnr);
+	if (i == 0) {
+		if (!cpusmask_test_bit(test_config.cpu, &cpusmask)) {
+			printf("warning: cpu %d is not best cpu for %s\n",
+			       test_config.cpu, HCA_NAME);
+			printf("best cpus [%d] %s\n", cpusnr,
+			       intf_cpusmask_str(cpusmask, cpusnr, url));
+		}
+	}
+
 	set_cpu_affinity(test_config.cpu);
 
 	memset(&sess_data, 0, sizeof(sess_data));
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-
 
 	/* prepare buffers for this test */
 	if (msg_api_init(&msg_params,
@@ -619,9 +633,14 @@ int main(int argc, char *argv[])
 	}
 
 	/* spawn threads to handle connection */
-	for (i = 0; i < MAX_THREADS; i++) {
-		sess_data.tdata[i].affinity		=
-				((test_config.cpu + i + 1) % max_cpus);
+	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
+		while (1) {
+			if (cpusmask_test_bit(cpu, &cpusmask))
+				break;
+			if (++cpu == max_cpus)
+				cpu = 0;
+		}
+		sess_data.tdata[i].affinity		= cpu;
 		sess_data.tdata[i].cid			= i+1;
 		sess_data.tdata[i].stat.first_time	= 1;
 		sess_data.tdata[i].stat.print_counter	= PRINT_COUNTER;
