@@ -16,7 +16,7 @@ export LD_LIBRARY_PATH=../../../src/usr/
 
 server_ip=$1
 port=$2
-core=5
+core=1
 ovec=0
 hdrlen=0
 

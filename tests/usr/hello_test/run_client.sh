@@ -24,7 +24,7 @@ else
 	finite_run=$3
 fi
 
-core=5
+core=1
 ivec=0
 ovec=1
 hdrlen=0
