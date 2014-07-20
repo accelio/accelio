@@ -473,13 +473,14 @@ void xio_close_time_wait(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
-	connection->state = XIO_CONNECTION_STATE_CLOSED;
-
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
 
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
+
+
+	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
 		xio_session_notify_connection_teardown(connection->session,
@@ -624,6 +625,8 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 
 		/* flush all messages back to user */
 		xio_connection_notify_msgs_flush(connection);
+
+		connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 		if (!connection->disable_notify)
 			xio_session_notify_connection_teardown(

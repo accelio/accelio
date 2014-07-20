@@ -1228,13 +1228,14 @@ static void xio_fin_req_timeout(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
-	connection->state = XIO_CONNECTION_STATE_CLOSED;
-
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
 
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
+
+	connection->state = XIO_CONNECTION_STATE_CLOSED;
+
 
 	if (!connection->disable_notify)
 		xio_session_notify_connection_teardown(connection->session,
@@ -1759,6 +1760,23 @@ int xio_connection_destroy(struct xio_connection *connection)
 		  session, connection, connection->nexus,
 		  session->connections_nr);
 
+	switch (connection->state) {
+	case XIO_CONNECTION_STATE_INIT:
+	case XIO_CONNECTION_STATE_CLOSE_WAIT:
+	case XIO_CONNECTION_STATE_CLOSED:
+	case XIO_CONNECTION_STATE_DISCONNECTED:
+	case XIO_CONNECTION_STATE_ERROR:
+		break;
+	default:
+		ERROR_LOG("connection %p : current_state:%s, " \
+			  "invalid destroy state\n",
+			  connection,
+			  xio_connection_state_str(connection->state));
+		xio_set_error(EPERM);
+		return -1;
+		break;
+	}
+
 	if (connection->state == XIO_CONNECTION_STATE_CLOSE_WAIT)  {
 		retval = xio_send_fin_req(connection);
 		DEBUG_LOG("connection %p state change: current_state:%s, " \
@@ -1782,8 +1800,6 @@ int xio_connection_destroy(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 int xio_connection_disconnected(struct xio_connection *connection)
 {
-	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
-
 	xio_session_notify_connection_disconnected(
 			connection->session, connection,
 			connection->close_reason);
@@ -1793,6 +1809,8 @@ int xio_connection_disconnected(struct xio_connection *connection)
 
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
+
+	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
 
 	if (connection->nexus) {
 		if (connection->session->lead_connection &&
@@ -1816,7 +1834,6 @@ int xio_connection_disconnected(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 int xio_connection_refused(struct xio_connection *connection)
 {
-	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
 	connection->close_reason = XIO_E_CONNECT_ERROR;
 
 	xio_session_notify_connection_refused(
@@ -1829,6 +1846,8 @@ int xio_connection_refused(struct xio_connection *connection)
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
+	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
+
 	xio_session_notify_connection_teardown(connection->session, connection);
 
 	return 0;
@@ -1840,7 +1859,6 @@ int xio_connection_refused(struct xio_connection *connection)
 int xio_connection_error_event(struct xio_connection *connection,
 			       enum xio_status reason)
 {
-	connection->state	 = XIO_CONNECTION_STATE_ERROR;
 	connection->close_reason = reason;
 
 	xio_session_notify_connection_error(connection->session, connection,
@@ -1852,6 +1870,7 @@ int xio_connection_error_event(struct xio_connection *connection,
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
+	connection->state	 = XIO_CONNECTION_STATE_ERROR;
 	xio_session_notify_connection_teardown(connection->session, connection);
 
 	return 0;
