@@ -14,9 +14,13 @@ AM_LDFLAGS = -L$(top_builddir)/src/usr/
 ###############################################################################
 
 # the program to build (the names of the final binaries)
-bin_PROGRAMS = xio_mem_usage
-	
+bin_PROGRAMS = xio_mem_usage 	\
+	       xio_if_numa_cpus
+
 # list of sources for the 'xio_mem_usage' binary
 xio_mem_usage_SOURCES =  xio_mem_usage.c		
 		
+xio_if_numa_cpus_SOURCES =  xio_if_numa_cpus.c
+xio_if_numa_cpus_LDFLAGS =  -lnuma
+
 ###############################################################################
