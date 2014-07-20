@@ -60,8 +60,8 @@ extern struct list_head		dev_list;
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR)
-#define CQE_ALLOC_SIZE			(10*(MAX_SEND_WR+MAX_RECV_WR))
+#define MAX_CQE_PER_QP			MAX_SEND_WR
+#define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
