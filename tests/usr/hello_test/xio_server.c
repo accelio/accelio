@@ -47,7 +47,7 @@
 #include "xio_msg.h"
 #include "xio_test_utils.h"
 
-#define MAX_POOL_SIZE		128
+#define MAX_POOL_SIZE		512
 #define PRINT_COUNTER		4000000
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
