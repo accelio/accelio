@@ -162,8 +162,9 @@ struct xio_tasks_pool {
 /*---------------------------------------------------------------------------*/
 static void xio_task_reset(struct xio_task *task)
 {
+	if (task->imsg.user_context)
+		task->imsg.user_context	= 0;
 	/*
-	task->imsg.user_context		= 0;
 	task->imsg.flags		= 0;
 	task->tlv_type			= 0xdead;
 	task->omsg_flags		= 0;
@@ -193,12 +194,11 @@ static inline void xio_task_release(struct kref *kref)
 
 	pool = (struct xio_tasks_pool *)task->pool;
 
+	xio_task_reset(task);
+
 	if (pool->params.pool_hooks.task_pre_put)
 		pool->params.pool_hooks.task_pre_put(
 				pool->params.pool_hooks.context, task);
-
-	xio_task_reset(task);
-
 	pool->curr_free++;
 	pool->curr_used--;
 
