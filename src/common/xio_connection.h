@@ -82,7 +82,7 @@ struct xio_connection {
 	uint16_t			disable_notify;
 	uint16_t			in_flight_reqs_budget;
 	uint16_t			in_flight_sends_budget; /* one way msgs */
-	uint16_t			app_io_budget;
+	int16_t				app_io_budget;
 	uint16_t			in_close;
 	uint16_t			is_flushed;
 	uint32_t			pad;

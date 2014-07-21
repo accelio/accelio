@@ -126,7 +126,7 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 			if (s == snents) {
 				sge_set_length(dtbl_ops, dsge, dst_len);
 				d++;
-				dsge = sge_next(dtbl_ops, dtbl, dsge);
+				/*dsge = sge_next(dtbl_ops, dtbl, dsge);*/
 				break;
 			}
 			dlen	-= slen;

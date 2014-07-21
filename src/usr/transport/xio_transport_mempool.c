@@ -298,7 +298,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 		region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t));
 
 	if (region->buf == NULL) {
-		ufree(buf);
+		ufree(region);
 		return NULL;
 	}
 
@@ -315,7 +315,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
 				ufree(region->buf);
 
-			ufree(buf);
+			ufree(region);
 			return NULL;
 		}
 	}
