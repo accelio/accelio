@@ -168,10 +168,12 @@ enum xio_optname {
 	XIO_OPTNAME_RDMA_PLACE_HOLDER = 300,   /**< place holder for rdma opt */
 
 	/* XIO_OPTLEVEL_TCP */
-	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400,  /**< check tcp mr validity    */
-	XIO_OPTNAME_TCP_NO_DELAY,	        /**< turn-off Nagle algorithm */
-	XIO_OPTNAME_TCP_SO_SNDBUF,	        /**< tcp socket send buffer   */
-	XIO_OPTNAME_TCP_SO_RCVBUF,	        /**< tcp socket receive buffer*/
+	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400, /**< check tcp mr validity     */
+	XIO_OPTNAME_TCP_NO_DELAY,	       /**< turn-off Nagle algorithm  */
+	XIO_OPTNAME_TCP_SO_SNDBUF,	       /**< tcp socket send buffer    */
+	XIO_OPTNAME_TCP_SO_RCVBUF,	       /**< tcp socket receive buffer */
+	XIO_OPTNAME_TCP_DUAL_STREAM,	       /**< performance boost for the */
+					       /**< price of two fd resources */
 };
 
 /**
