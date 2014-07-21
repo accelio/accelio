@@ -272,6 +272,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 	spin_lock(&mr_list_lock);
 	if (!list_empty(&mr_list)) {
 		list_del(&tmr->mr_list_entry);
+		spin_unlock(&mr_list_lock);
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
@@ -286,8 +287,8 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		}
 		ufree(tmr);
 		*p_tmr = NULL;
-	}
-	spin_unlock(&mr_list_lock);
+	} else
+		spin_unlock(&mr_list_lock);
 
 	return 0;
 }
