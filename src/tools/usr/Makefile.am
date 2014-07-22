@@ -5,6 +5,7 @@ AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@ \
 	    -I$(top_srcdir)/src/usr		\
 	    -I$(top_srcdir)/src/usr/transport	\
 	    -I$(top_srcdir)/src/usr/transport/rdma	\
+            -I$(top_srcdir)/src/usr/transport/tcp       \
 	    -I$(top_srcdir)/src/usr/xio		
 
 AM_LDFLAGS = -L$(top_builddir)/src/usr/
