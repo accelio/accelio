@@ -113,68 +113,6 @@ int main(int argc, char **argv)
     PRINT_SIZE(struct xio_tcp_transport);
     PRINT_SIZE(struct xio_tcp_work_req);
 
-#if 0
-    PRINT_SIZE(mxm_async_context_t);
-    PRINT_SIZE(mxm_proto_ep_t);
-    PRINT_SIZE(mxm_req_base_t);
-    PRINT_SIZE(mxm_send_req_t);
-    PRINT_SIZE(mxm_recv_req_t);
-    PRINT_SIZE(mxm_mem_region_t);
-
-    printf("\nProtocol Layer:\n");
-    PRINT_SIZE(mxm_proto_mq_t);
-    PRINT_SIZE(mxm_proto_ep_t);
-    PRINT_SIZE(mxm_proto_conn_t);
-    PRINT_SIZE(mxm_req_priv_t);
-    PRINT_SIZE(mxm_sreq_priv_t);
-    PRINT_SIZE(mxm_rreq_priv_t);
-    PRINT_SIZE(mxm_proto_internal_op_t);
-    PRINT_SIZE(mxm_proto_recv_seg_t);
-    PRINT_SIZE(mxm_proto_header_t);
-    PRINT_SIZE(mxm_proto_eager_header_t);
-    PRINT_SIZE(mxm_proto_rts_header_t);
-    PRINT_SIZE(mxm_proto_rts_resp_header_t);
-
-    printf("\nUtil:\n");
-    // TODO
-
-    printf("\nTransport layer:\n");
-    PRINT_SIZE(mxm_tl_sge_t);
-    PRINT_SIZE(mxm_tl_send_op_t);
-    PRINT_SIZE(mxm_tl_send_spec_t);
-    PRINT_SIZE(mxm_tl_channel_t);
-    PRINT_SIZE(mxm_tl_ep_t);
-
-    printf("\nSelf:\n");
-    // TODO
-
-    printf("\nOOB:\n");
-    // TODO
-
-#if HAVE_TL_UD
-    printf("\nUD:\n");
-    PRINT_SIZE(mxm_ud_ep_t);
-    PRINT_SIZE(mxm_ud_channel_t);
-    PRINT_SIZE(mxm_ud_send_skb_t);
-    PRINT_SIZE(mxm_ud_recv_skb_t);
-    PRINT_SIZE(mxm_ud_net_header_t);
-    PRINT_SIZE(mxm_ud_tx_elem_t);
-#endif
-
-#if HAVE_TL_RC
-    printf("\nRC:\n");
-    PRINT_SIZE(mxm_rc_ep_t);
-    PRINT_SIZE(mxm_rc_channel_t);
-    PRINT_SIZE(mxm_cib_send_skb_t);
-    PRINT_SIZE(mxm_cib_recv_skb_t);
-#endif
-
-#if HAVE_TL_DC
-    printf("\nDC:\n");
-    PRINT_SIZE(mxm_dc_ep_t);
-    PRINT_SIZE(mxm_dc_channel_t);
-#endif
-#endif
     printf("\n");
     return 0;
 }
