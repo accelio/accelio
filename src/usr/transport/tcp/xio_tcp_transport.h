@@ -40,6 +40,7 @@
 
 #include "xio_usr_transport.h"
 #include <sys/socket.h>
+#include "xio_context.h"
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -341,7 +342,7 @@ struct xio_tcp_transport {
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[IOV_MAX];
 
-	xio_work_handle_t		disconnect_work;
+	xio_ctx_event_t			disconnect_event;
 };
 
 int xio_tcp_send(struct xio_transport_base *transport,

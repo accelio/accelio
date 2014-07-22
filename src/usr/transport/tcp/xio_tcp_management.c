@@ -249,6 +249,8 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 	TRACE_LOG("tcp transport: [post close] handle:%p\n",
 		  tcp_hndl);
 
+	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+
 	xio_observable_unreg_all_observers(&tcp_hndl->base.observable);
 
 	if (tcp_hndl->tmp_rx_buf) {
@@ -720,7 +722,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	INIT_LIST_HEAD(&tcp_hndl->pending_conns);
 
-	memset(&tcp_hndl->disconnect_work, 0, sizeof(xio_work_handle_t));
+	memset(&tcp_hndl->disconnect_event, 0, sizeof(xio_ctx_event_t));
 
 	TRACE_LOG("xio_tcp_open: [new] handle:%p\n", tcp_hndl);
 

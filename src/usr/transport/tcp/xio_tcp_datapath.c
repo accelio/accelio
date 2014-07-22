@@ -784,7 +784,8 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_disconnect_handler						     */
 /*---------------------------------------------------------------------------*/
-static void xio_tcp_disconnect_handler(void *xio_tcp_hndl)
+static void xio_tcp_disconnect_handler(xio_ctx_event_t *tev,
+				       void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
 
@@ -797,16 +798,14 @@ static void xio_tcp_disconnect_handler(void *xio_tcp_hndl)
 void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
-	int retval;
 
-	if (!xio_is_work_pending(&tcp_hndl->disconnect_work)) {
-		retval = xio_ctx_add_work(tcp_hndl->base.ctx,
-					  tcp_hndl,
-					  xio_tcp_disconnect_handler,
-					  &tcp_hndl->disconnect_work);
-		if (retval != 0)
-			ERROR_LOG("xio_ctx_add_work failed.\n");
-	}
+	if (tcp_hndl->state == XIO_STATE_DISCONNECTED)
+		return;
+
+	xio_ctx_init_event(&tcp_hndl->disconnect_event,
+			   xio_tcp_disconnect_handler,
+			   tcp_hndl);
+	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 
 	tcp_hndl->state = XIO_STATE_DISCONNECTED;
 }
