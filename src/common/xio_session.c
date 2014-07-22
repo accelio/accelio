@@ -628,8 +628,6 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 		/* flush all messages back to user */
 		xio_connection_notify_msgs_flush(connection);
 
-		connection->state = XIO_CONNECTION_STATE_CLOSED;
-
 		if (!connection->disable_notify)
 			xio_session_notify_connection_teardown(
 					connection->session,
