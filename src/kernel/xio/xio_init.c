@@ -162,7 +162,6 @@ EXPORT_SYMBOL(xio_release_response);
 EXPORT_SYMBOL(xio_write_tlv);
 EXPORT_SYMBOL(xio_read_tlv);
 EXPORT_SYMBOL(xio_iov_length);
-EXPORT_SYMBOL(xio_iovex_length);
 
 EXPORT_SYMBOL(xio_tasks_pool_create);
 EXPORT_SYMBOL(xio_tasks_pool_destroy);
