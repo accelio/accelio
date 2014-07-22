@@ -55,13 +55,13 @@
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_req_recv(struct xio_connection *connection,
-				  struct xio_task *task);
+			   struct xio_task *task);
 static int xio_on_rsp_recv(struct xio_connection *nexusetion,
-				  struct xio_task *task);
+			   struct xio_task *task);
 static int xio_on_ow_req_send_comp(struct xio_connection *connection,
-				  struct xio_task *task);
+				   struct xio_task *task);
 static int xio_on_rsp_send_comp(struct xio_connection *connection,
-				  struct xio_task *task);
+				struct xio_task *task);
 /*---------------------------------------------------------------------------*/
 /* xio_session_alloc_connection						     */
 /*---------------------------------------------------------------------------*/
@@ -74,8 +74,8 @@ struct xio_connection *xio_session_alloc_connection(
 	struct xio_connection		*connection;
 
 	/* allocate and initialize connection */
-	connection = xio_connection_init(session, ctx,
-					 connection_idx, connection_user_context);
+	connection = xio_connection_init(session, ctx, connection_idx,
+					 connection_user_context);
 	if (connection == NULL) {
 		ERROR_LOG("failed to initialize connection. " \
 			  "seesion:%p, ctx:%p, connection_idx:%d\n",
@@ -213,7 +213,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 /* xio_session_write_header						     */
 /*---------------------------------------------------------------------------*/
 void xio_session_write_header(struct xio_task *task,
-			     struct xio_session_hdr *hdr)
+			      struct xio_session_hdr *hdr)
 {
 	struct xio_session_hdr *tmp_hdr;
 
@@ -233,7 +233,7 @@ void xio_session_write_header(struct xio_task *task,
 /* xio_session_read_header						     */
 /*---------------------------------------------------------------------------*/
 void xio_session_read_header(struct xio_task *task,
-			    struct xio_session_hdr *hdr)
+			     struct xio_session_hdr *hdr)
 {
 	struct xio_session_hdr *tmp_hdr;
 
@@ -305,8 +305,9 @@ void xio_session_notify_new_connection(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_session_notify_connection_established				     */
 /*---------------------------------------------------------------------------*/
-void xio_session_notify_connection_established(struct xio_session *session,
-				       struct xio_connection *connection)
+void xio_session_notify_connection_established(
+		struct xio_session *session,
+		struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {
 		.conn		   = connection,
@@ -343,9 +344,10 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_session_notify_connection_disconnected				     */
 /*---------------------------------------------------------------------------*/
-void xio_session_notify_connection_disconnected(struct xio_session *session,
-					  struct xio_connection *connection,
-					  enum xio_status reason)
+void xio_session_notify_connection_disconnected(
+		struct xio_session *session,
+		struct xio_connection *connection,
+		enum xio_status reason)
 {
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT,
@@ -364,8 +366,8 @@ void xio_session_notify_connection_disconnected(struct xio_session *session,
 /* xio_session_notify_connection_refused				     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_connection_refused(struct xio_session *session,
-					  struct xio_connection *connection,
-					  enum xio_status reason)
+					   struct xio_connection *connection,
+					   enum xio_status reason)
 {
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_REFUSED_EVENT,
@@ -384,7 +386,7 @@ void xio_session_notify_connection_refused(struct xio_session *session,
 /* xio_session_notify_connection_teardown				     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_connection_teardown(struct xio_session *session,
-					  struct xio_connection *connection)
+					    struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT,
@@ -403,8 +405,8 @@ void xio_session_notify_connection_teardown(struct xio_session *session,
 /* xio_session_notify_connection_error					     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_connection_error(struct xio_session *session,
-					  struct xio_connection *connection,
-					  enum xio_status reason)
+					 struct xio_connection *connection,
+					 enum xio_status reason)
 {
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_CONNECTION_ERROR_EVENT,
@@ -454,7 +456,7 @@ void xio_session_post_teardown(struct xio_session *session)
 /* xio_on_fin_req_send_comp				                     */
 /*---------------------------------------------------------------------------*/
 int xio_on_fin_req_send_comp(struct xio_connection *connection,
-			struct xio_task *task)
+			     struct xio_task *task)
 {
 	TRACE_LOG("got fin request send completion. session:%p, " \
 		  "connection:%p\n",
@@ -517,7 +519,7 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 	/* cancel the timer */
 	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
 		xio_ctx_del_delayed_work(connection->ctx,
-					&connection->fin_timeout_work);
+					 &connection->fin_timeout_work);
 
 	xio_connection_release_fin(connection, task->sender_task->omsg);
 
@@ -655,7 +657,7 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 /* xio_on_req_recv				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_req_recv(struct xio_connection *connection,
-		struct xio_task *task)
+			   struct xio_task *task)
 {
 	struct xio_session_hdr	hdr;
 	struct xio_msg		*msg = &task->imsg;
@@ -758,7 +760,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	} else {
 		if (task->tlv_type == XIO_ONE_WAY_RSP) {
 			if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST)
-				xio_connection_remove_in_flight(connection, omsg);
+				xio_connection_remove_in_flight(connection,
+								omsg);
 			connection->in_flight_sends_budget++;
 		} else {
 			connection->in_flight_reqs_budget++;
@@ -803,7 +806,6 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			if ((hdr.flags &
 			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
 					XIO_MSG_RSP_FLAG_FIRST) {
-
 				/* after receipt delivered reproduce the
 				 * original "in" side  */
 				memcpy(&omsg->in, &sender_task->in_receipt,
@@ -819,7 +821,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			void			*sgtbl;
 
 			sgtbl		= xio_sg_table_get(&msg->in);
-			sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
+			sgtbl_ops	= xio_sg_table_ops_get(
+							msg->in.sgl_type);
 
 			xio_stat_add(stats, XIO_STAT_RX_BYTES,
 				     vmsg->header.iov_len +
@@ -849,7 +852,6 @@ static int xio_on_rsp_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
 		goto xmit;
@@ -929,8 +931,8 @@ xmit:
 /* xio_on_nexus_disconnected			                             */
 /*---------------------------------------------------------------------------*/
 int xio_on_nexus_disconnected(struct xio_session *session,
-			     struct xio_nexus *nexus,
-			     union xio_nexus_event_data *event_data)
+			      struct xio_nexus *nexus,
+			      union xio_nexus_event_data *event_data)
 {
 	struct xio_connection *connection;
 
@@ -957,11 +959,12 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 /* xio_on_nexus_reconnected			                             */
 /*---------------------------------------------------------------------------*/
 int xio_on_nexus_reconnected(struct xio_session *session,
-			    struct xio_nexus *nexus)
+			     struct xio_nexus *nexus)
 {
 	struct xio_connection		*connection;
 
-	if (session->lead_connection && session->lead_connection->nexus == nexus)
+	if (session->lead_connection &&
+	    session->lead_connection->nexus == nexus)
 		connection = session->lead_connection;
 	else
 		connection = xio_session_find_connection(session, nexus);
@@ -976,8 +979,8 @@ int xio_on_nexus_reconnected(struct xio_session *session,
 /* xio_on_nexus_closed							     */
 /*---------------------------------------------------------------------------*/
 int xio_on_nexus_closed(struct xio_session *session,
-		       struct xio_nexus *nexus,
-		       union xio_nexus_event_data *event_data)
+			struct xio_nexus *nexus,
+			union xio_nexus_event_data *event_data)
 {
 	TRACE_LOG("session:%p - nexus:%p close complete\n", session, nexus);
 
@@ -991,8 +994,8 @@ int xio_on_nexus_closed(struct xio_session *session,
 /* xio_on_nexus_message_error						     */
 /*---------------------------------------------------------------------------*/
 int xio_on_nexus_message_error(struct xio_session *session,
-			      struct xio_nexus *nexus,
-			      union xio_nexus_event_data *event_data)
+			       struct xio_nexus *nexus,
+			       union xio_nexus_event_data *event_data)
 {
 	struct xio_task *task = event_data->msg_error.task;
 
@@ -1016,9 +1019,8 @@ int xio_on_nexus_message_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_error							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_nexus_error(struct xio_session *session,
-		      struct xio_nexus *nexus,
-		      union xio_nexus_event_data *event_data)
+int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
+		       union xio_nexus_event_data *event_data)
 {
 	struct xio_connection *connection =
 				xio_session_find_connection(session, nexus);
@@ -1314,7 +1316,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 		hdr.requester_session_id = ntohl(tmp_hdr->requester_session_id);
 
 		observer = xio_nexus_observer_lookup(nexus,
-						    hdr.requester_session_id);
+						     hdr.requester_session_id);
 		if (observer == NULL) {
 			ERROR_LOG("failed to find session\n");
 			return -1;
@@ -1340,8 +1342,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 	connection = xio_session_find_connection(session, nexus);
 	if (connection == NULL) {
 		ERROR_LOG("failed to find session\n");
-		if (msg)
-			kfree(msg);
+		kfree(msg);
 		return -1;
 	}
 
@@ -1359,8 +1360,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 	else
 		ERROR_LOG("cancel is not supported\n");
 
-	if (msg)
-		kfree(msg);
+	kfree(msg);
 
 	return 0;
 }
@@ -1369,13 +1369,12 @@ int xio_on_cancel_response(struct xio_session *sess,
 /*---------------------------------------------------------------------------*/
 /* xio_session_init			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_init(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context)
+struct xio_session *xio_session_init(enum xio_session_type type,
+				     struct xio_session_attr *attr,
+				     const char *uri,
+				     uint32_t initial_sn,
+				     uint32_t flags,
+				     void *cb_user_context)
 {
 	struct xio_session	*session = NULL;
 	int			retval;
@@ -1480,13 +1479,12 @@ int xio_session_destroy(struct xio_session *session)
 /*---------------------------------------------------------------------------*/
 /* xio_session_create			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_create(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context)
+struct xio_session *xio_session_create(enum xio_session_type type,
+				       struct xio_session_attr *attr,
+				       const char *uri,
+				       uint32_t initial_sn,
+				       uint32_t flags,
+				       void *cb_user_context)
 {
 	struct xio_session	*session = NULL;
 
@@ -1498,7 +1496,7 @@ struct xio_session *xio_session_create(
 	}
 
 	session = xio_session_init(type, attr, uri,
-				     initial_sn, flags, cb_user_context);
+				   initial_sn, flags, cb_user_context);
 
 	if (session == NULL) {
 		ERROR_LOG("failed to open session\n");
@@ -1511,7 +1509,7 @@ struct xio_session *xio_session_create(
 /* xio_session_assign_ops						     */
 /*---------------------------------------------------------------------------*/
 void xio_session_assign_ops(struct xio_session *session,
-		struct xio_session_ops *ops)
+			    struct xio_session_ops *ops)
 {
 	memcpy(&session->ses_ops, ops, sizeof(*ops));
 }
@@ -1592,9 +1590,8 @@ int xio_modify_session(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* xio_get_connection							     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_get_connection(
-		struct xio_session *session,
-		struct xio_context *ctx)
+struct xio_connection *xio_get_connection(struct xio_session *session,
+					  struct xio_context *ctx)
 {
 	ERROR_LOG("%s function have been deprecated. "			\
 		  "That means it have been replaced by new function or" \

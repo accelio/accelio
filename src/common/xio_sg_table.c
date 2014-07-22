@@ -53,11 +53,6 @@ void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type)
 	};
 
 	return vec[sgl_type];
-
-	//return ((sgl_type == XIO_SGL_TYPE_IOV) ?
-	//	 (void *)&sgtbl_ops_iov :
-	//	 ((sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?
-	//	 (void *)&sgtbl_ops_iovptr : NULL));
 }
 
 /*---------------------------------------------------------------------------*/

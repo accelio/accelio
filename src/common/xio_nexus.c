@@ -907,8 +907,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 		pool_cls.task_put	= (void *)xio_tasks_pool_put;
 
 		nexus->transport->set_pools_cls(transport_hndl,
-					        &pool_cls,
-					        NULL);
+						&pool_cls, NULL);
 	}
 
 	/* initialize the tasks pool */

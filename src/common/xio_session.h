@@ -169,7 +169,7 @@ int xio_session_reconnect(
 /* xio_session_is_valid_in_req						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_session_is_valid_in_req(struct xio_session *session,
-					   struct xio_msg *msg)
+					      struct xio_msg *msg)
 {
 	if (session->validators_cls->is_valid_in_req)
 		return session->validators_cls->is_valid_in_req(msg);
@@ -182,7 +182,7 @@ static inline int xio_session_is_valid_in_req(struct xio_session *session,
 /* xio_session_is_valid_out_msg						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_session_is_valid_out_msg(struct xio_session *session,
-					    struct xio_msg *msg)
+					       struct xio_msg *msg)
 {
 	if (session->validators_cls->is_valid_out_msg)
 		return session->validators_cls->is_valid_out_msg(msg);
@@ -202,26 +202,32 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 void xio_session_notify_new_connection(struct xio_session *session,
 				       struct xio_connection *connection);
 
-void xio_session_notify_connection_established(struct xio_session *session,
-					  struct xio_connection *connection);
+void xio_session_notify_connection_established(
+					struct xio_session *session,
+					struct xio_connection *connection);
 
-void xio_session_notify_connection_closed(struct xio_session *session,
-					  struct xio_connection *connection);
+void xio_session_notify_connection_closed(
+					struct xio_session *session,
+					struct xio_connection *connection);
 
-void xio_session_notify_connection_disconnected(struct xio_session *session,
-					  struct xio_connection *connection,
-					  enum xio_status reason);
+void xio_session_notify_connection_disconnected(
+					struct xio_session *session,
+					struct xio_connection *connection,
+					enum xio_status reason);
 
-void xio_session_notify_connection_refused(struct xio_session *session,
-					   struct xio_connection *connection,
-					   enum xio_status reason);
+void xio_session_notify_connection_refused(
+					struct xio_session *session,
+					struct xio_connection *connection,
+					enum xio_status reason);
 
-void xio_session_notify_connection_error(struct xio_session *session,
-					 struct xio_connection *connection,
-					 enum xio_status reason);
+void xio_session_notify_connection_error(
+					struct xio_session *session,
+					struct xio_connection *connection,
+					enum xio_status reason);
 
-void xio_session_notify_connection_teardown(struct xio_session *session,
-				       struct xio_connection *connection);
+void xio_session_notify_connection_teardown(
+					struct xio_session *session,
+					struct xio_connection *connection);
 
 int xio_session_notify_msg_error(struct xio_connection *connection,
 				 struct xio_msg *msg, enum xio_status result);

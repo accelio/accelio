@@ -101,10 +101,10 @@ struct xio_tasks_pool_hooks {
 				  int tid, struct xio_task *task);
 	int	(*slab_uninit_task)(void *context,
 				    void *pool_dd_data,
-			            void *slab_dd_data,
+				    void *slab_dd_data,
 				    struct xio_task *task);
 	int	(*slab_remap_task)(void *old_context,
-			           void *new_context,
+				   void *new_context,
 				   void *pool_dd_data,
 				   void *slab_dd_data,
 				   struct xio_task *task);
@@ -112,11 +112,11 @@ struct xio_tasks_pool_hooks {
 				    void *pool_dd_data,
 				    void *slab_dd_data);
 	int	(*pool_pre_create)(void *context, void *pool,
-				    void *pool_dd_data);
+				   void *pool_dd_data);
 	int	(*pool_post_create)(void *context, void *pool,
 				    void *pool_dd_data);
 	int	(*pool_destroy)(void *context, void *pool,
-			        void *pool_dd_data);
+				void *pool_dd_data);
 	int	(*task_pre_put)(void *context, struct xio_task *task);
 	int	(*task_post_get)(void *context, struct xio_task *task);
 };

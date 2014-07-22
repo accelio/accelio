@@ -81,7 +81,8 @@ struct xio_connection {
 
 	uint16_t			disable_notify;
 	uint16_t			in_flight_reqs_budget;
-	uint16_t			in_flight_sends_budget; /* one way msgs */
+	/* one way msgs */
+	uint16_t			in_flight_sends_budget;
 	int16_t				app_io_budget;
 	uint16_t			in_close;
 	uint16_t			is_flushed;
@@ -133,12 +134,12 @@ static inline void xio_connection_set_ops(
 }
 
 int xio_connection_send(struct xio_connection *connection,
-			  struct xio_msg *msg);
+			struct xio_msg *msg);
 
 int xio_connection_xmit_msgs(struct xio_connection *connection);
 
 void xio_connection_queue_io_task(struct xio_connection *connection,
-				    struct xio_task *task);
+				  struct xio_task *task);
 
 struct xio_task *xio_connection_find_io_task(struct xio_connection *connection,
 					     uint64_t msg_sn);
@@ -155,10 +156,10 @@ struct xio_transition *xio_connection_next_transit(
 					int fin_ack);
 
 int xio_connection_send_read_receipt(struct xio_connection *connection,
-			      struct xio_msg *msg);
+				     struct xio_msg *msg);
 
 int xio_connection_release_read_receipt(struct xio_connection *connection,
-				  struct xio_msg *msg);
+					struct xio_msg *msg);
 
 void xio_release_response_task(struct xio_task *task);
 
@@ -168,7 +169,7 @@ int xio_connection_fin_addref(struct xio_connection *connection);
 int xio_connection_fin_put(struct xio_connection *connection);
 
 int xio_connection_release_fin(struct xio_connection *connection,
-				   struct xio_msg *msg);
+			       struct xio_msg *msg);
 
 int xio_send_fin_ack(struct xio_connection *connection,
 		     struct xio_task *task);

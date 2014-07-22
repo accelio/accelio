@@ -44,8 +44,7 @@
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_proto							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_proto(const char *uri,
-			char *proto, int proto_len)
+int xio_uri_get_proto(const char *uri, char *proto, int proto_len)
 {
 	char *start = (char *)uri;
 	char *end;
@@ -104,8 +103,7 @@ char *xio_uri_get_resource_ptr(const char *uri)
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_portal							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_portal(const char *uri,
-		char *portal, int portal_len)
+int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 {
 	char *res = xio_uri_get_resource_ptr(uri);
 	int len = (res == NULL) ? strlen(uri) : (res - uri);
@@ -119,10 +117,9 @@ int xio_uri_get_portal(const char *uri,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_uri_get_resource						     */
+/* xio_uri_get_resource							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_resource(const char *uri,
-		char *resource, int resource_len)
+int xio_uri_get_resource(const char *uri, char *resource, int resource_len)
 {
 	char *res = xio_uri_get_resource_ptr(uri);
 	if (res != NULL) {
@@ -151,10 +148,10 @@ size_t xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_read_tlv							     */
+/* xio_read_tlv								     */
 /*---------------------------------------------------------------------------*/
 size_t xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
-		      uint8_t *buffer)
+		    uint8_t *buffer)
 {
 	struct xio_tlv *tlv;
 
