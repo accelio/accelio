@@ -582,6 +582,7 @@ static int on_new_session(struct xio_session *session,
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_INSERT_TAIL(&server_data->sessions_list,
 			  session_entry, sessions_list_entry);
+	pthread_spin_unlock(&server_data->lock);
 	/* automatic accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);
 
