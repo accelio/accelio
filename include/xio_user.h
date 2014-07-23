@@ -1450,16 +1450,6 @@ enum xio_mempool_flag {
 	XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC	= 0x0008
 };
 
-/**
- * create mempool with default allocators
- *
- * @param[in] nodeid	  numa node id. -1 if don't care
- * @param[in] flags	  mask of mempool creation flags
- *			  defined (@ref xio_mempool_flag)
- *
- * @returns success (0), or a (negative) error value
- */
-struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
 /**
  * create mempool with NO (!) allocators
@@ -1470,7 +1460,10 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  *
  * @returns success (0), or a (negative) error value
  */
-struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags);
+struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
+
+/* for backward compatibility - shall be deprecated in the future */
+#define xio_mempool_create_ex	xio_mempool_create
 
 /**
  * add an allocator to current set (setup only)

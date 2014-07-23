@@ -211,7 +211,7 @@ static struct xio_mem_block *new_block(struct xio_mem_slot *slot)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mem_slot_free						     */
+/* xio_mem_slot_free							     */
 /*---------------------------------------------------------------------------*/
 static int xio_mem_slot_free(struct xio_mem_slot *slot)
 {
@@ -244,7 +244,7 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mem_slot_resize						     */
+/* xio_mem_slot_resize							     */
 /*---------------------------------------------------------------------------*/
 static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 						 int alloc)
@@ -360,7 +360,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mempool_destroy						     */
+/* xio_mempool_destroy							     */
 /*---------------------------------------------------------------------------*/
 void xio_mempool_destroy(struct xio_mempool *p)
 {
@@ -377,9 +377,9 @@ void xio_mempool_destroy(struct xio_mempool *p)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mempool_create_ex						     */
+/* xio_mempool_create							     */
 /*---------------------------------------------------------------------------*/
-struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
+struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 {
 	struct xio_mempool *p;
 
@@ -423,11 +423,11 @@ struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mempool_create						     */
+/* xio_mempool_create_prv						     */
 /*---------------------------------------------------------------------------*/
-struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
+struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 {
-	struct xio_mempool *p;
+	struct xio_mempool	*p;
 	int			i;
 	int			ret;
 

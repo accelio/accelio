@@ -38,5 +38,17 @@
 #ifndef XIO_TRANSPORT_MEMPOOL_H
 #define XIO_TRANSPORT_MEMPOOL_H
 
+/**
+ * create private mempool with default allocators
+ *
+ * @param[in] nodeid	  numa node id. -1 if don't care
+ * @param[in] flags	  mask of mempool creation flags
+ *			  defined (@ref xio_mempool_flag)
+ *
+ * @returns success (0), or a (negative) error value
+ */
+struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags);
+
+
 #endif
 

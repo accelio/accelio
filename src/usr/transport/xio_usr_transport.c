@@ -45,6 +45,7 @@
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_usr_transport.h"
+#include "xio_transport_mempool.h"
 #include "xio_common.h"
 
 #ifndef HAVE_INFINIBAND_VERBS_H
@@ -201,7 +202,7 @@ struct xio_mempool *xio_transport_mempool_array_get(
 	if (mempool_array[ctx->nodeid])
 		return mempool_array[ctx->nodeid];
 
-	mempool_array[ctx->nodeid] = xio_mempool_create(
+	mempool_array[ctx->nodeid] = xio_mempool_create_prv(
 			ctx->nodeid,
 			(reg_mr ? XIO_MEMPOOL_FLAG_REG_MR : 0) |
 			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);
