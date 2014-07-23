@@ -49,6 +49,8 @@ extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
 
 
+#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
+
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
@@ -407,6 +409,7 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
+	xio_delayed_work_handle_t	timewait_timeout_work;
 };
 
 struct xio_cm_channel {

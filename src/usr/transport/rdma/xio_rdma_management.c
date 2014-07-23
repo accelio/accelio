@@ -1702,6 +1702,10 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl)
 	TRACE_LOG("rdma transport: [post close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
+	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
+		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+					 &rdma_hndl->timewait_timeout_work);
+
 	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
 
 	xio_rdma_phantom_pool_destroy(rdma_hndl);
@@ -1895,11 +1899,54 @@ static void  on_cm_established(struct rdma_cm_event *ev,
 				      NULL);
 }
 
+/*
+ * Handle RDMA_CM_EVENT_TIMEWAIT_EXIT which is expected to be the last
+ * event during the life cycle of a connection, when it had been shut down
+ * and the network has cleared from the remaining in-flight messages.
+*/
+/*---------------------------------------------------------------------------*/
+/* on_cm_timedwait_exit							     */
+/*---------------------------------------------------------------------------*/
+static void on_cm_timewait_exit(struct rdma_cm_event *ev,
+				struct xio_rdma_transport *rdma_hndl)
+{
+	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
+
+	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
+		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+					 &rdma_hndl->timewait_timeout_work);
+
+	xio_rdma_flush_all_tasks(rdma_hndl);
+
+	if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_DISCONNECTED,
+					      NULL);
+	}
+
+	if (rdma_hndl->state == XIO_STATE_CLOSED) {
+		xio_transport_notify_observer(&rdma_hndl->base,
+					      XIO_TRANSPORT_CLOSED,
+					      NULL);
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_timewait_exit_timeout						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_timewait_exit_timeout(void *data)
+{
+	WARN_LOG("\"timewait exit\" timeout. rdma_hndl:%p\n", data);
+
+	on_cm_timewait_exit(NULL, data);
+}
+
 /*---------------------------------------------------------------------------*/
 /* on_cm_disconnected							     */
 /*---------------------------------------------------------------------------*/
 static void  on_cm_disconnected(struct rdma_cm_event *ev,
-		struct xio_rdma_transport *rdma_hndl)
+				struct xio_rdma_transport *rdma_hndl)
 {
 	int retval;
 
@@ -1915,34 +1962,16 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 			DEBUG_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
 	}
-}
 
-/*
- * Handle RDMA_CM_EVENT_TIMEWAIT_EXIT which is expected to be the last
- * event during the life cycle of a connection, when it had been shut down
- * and the network has cleared from the remaining in-flight messages.
-*/
-/*---------------------------------------------------------------------------*/
-/* on_cm_timedwait_exit							     */
-/*---------------------------------------------------------------------------*/
-static void on_cm_timewait_exit(struct rdma_cm_event *ev,
-		struct xio_rdma_transport *rdma_hndl)
-{
-	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
-
-	xio_rdma_flush_all_tasks(rdma_hndl);
-
-	if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
-		xio_transport_notify_observer(&rdma_hndl->base,
-					      XIO_TRANSPORT_DISCONNECTED,
-					      NULL);
-	}
-
-	if (rdma_hndl->state == XIO_STATE_CLOSED) {
-		xio_transport_notify_observer(&rdma_hndl->base,
-					      XIO_TRANSPORT_CLOSED,
-					      NULL);
-		rdma_hndl->state = XIO_STATE_DESTROYED;
+	/* trigger the timer */
+	retval = xio_ctx_add_delayed_work(
+				rdma_hndl->base.ctx,
+				XIO_TIMEWAIT_EXIT_TIMEOUT, rdma_hndl,
+				xio_timewait_exit_timeout,
+				&rdma_hndl->timewait_timeout_work);
+	if (retval != 0) {
+		ERROR_LOG("xio_ctx_timer_add_delayed_work failed.\n");
+		return;
 	}
 }
 
