@@ -980,10 +980,20 @@ int xio_on_nexus_closed(struct xio_session *session,
 			struct xio_nexus *nexus,
 			union xio_nexus_event_data *event_data)
 {
+	struct xio_connection		*connection;
+
 	TRACE_LOG("session:%p - nexus:%p close complete\n", session, nexus);
 
 	/* no more notifications */
 	xio_nexus_unreg_observer(nexus, &session->observer);
+
+	if (session->lead_connection &&
+	    session->lead_connection->nexus == nexus)
+		connection = session->lead_connection;
+	else
+		connection = xio_session_find_connection(session, nexus);
+	connection->nexus = NULL;
+
 
 	return 0;
 }
