@@ -1041,7 +1041,8 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 
 	tcp_hndl->is_listen = 1;
 
-	retval  = listen(tcp_hndl->sock.cfd, backlog);
+	retval  = listen(tcp_hndl->sock.cfd,
+			 backlog > 0 ? backlog : MAX_BACKLOG);
 	if (retval) {
 		xio_set_error(errno);
 		ERROR_LOG("tcp listen failed. (errno=%d %m)\n", errno);
