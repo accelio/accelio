@@ -1375,19 +1375,26 @@ int xio_on_cancel_response(struct xio_session *sess,
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_init			                                     */
+/* xio_session_create			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_init(enum xio_session_type type,
-				     struct xio_session_attr *attr,
-				     const char *uri,
-				     uint32_t initial_sn,
-				     uint32_t flags,
-				     void *cb_user_context)
+struct xio_session *xio_session_create(enum xio_session_type type,
+				       struct xio_session_attr *attr,
+				       const char *uri,
+				       uint32_t initial_sn,
+				       uint32_t flags,
+				       void *cb_user_context)
 {
 	struct xio_session	*session = NULL;
 	int			retval;
 	int			uri_len = strlen(uri);
 
+
+	/* input validation */
+	if (attr == NULL || uri == NULL) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("xio_session_open: invalid parameter\n");
+		return NULL;
+	}
 
 	/* extract portal from uri */
 	/* create the session */
@@ -1456,6 +1463,8 @@ cleanup2:
 cleanup:
 	kfree(session);
 
+	ERROR_LOG("session creation failed\n");
+
 	return NULL;
 }
 
@@ -1482,35 +1491,6 @@ int xio_session_destroy(struct xio_session *session)
 	}
 
 	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_session_create			                                     */
-/*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_create(enum xio_session_type type,
-				       struct xio_session_attr *attr,
-				       const char *uri,
-				       uint32_t initial_sn,
-				       uint32_t flags,
-				       void *cb_user_context)
-{
-	struct xio_session	*session = NULL;
-
-	/* input validation */
-	if (attr == NULL || uri == NULL) {
-		xio_set_error(EINVAL);
-		ERROR_LOG("xio_session_open: invalid parameter\n");
-		return NULL;
-	}
-
-	session = xio_session_init(type, attr, uri,
-				   initial_sn, flags, cb_user_context);
-
-	if (session == NULL) {
-		ERROR_LOG("failed to open session\n");
-		return NULL;
-	}
-	return session;
 }
 
 /*---------------------------------------------------------------------------*/

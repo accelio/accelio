@@ -115,14 +115,6 @@ struct xio_session {
 /*---------------------------------------------------------------------------*/
 /* functions								     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_init(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context);
-
 void xio_session_write_header(
 		struct xio_task *task,
 		struct xio_session_hdr *hdr);

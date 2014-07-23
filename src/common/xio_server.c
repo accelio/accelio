@@ -110,7 +110,7 @@ static int xio_on_new_message(struct xio_server *server,
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
-		session = xio_session_init(
+		session = xio_session_create(
 				XIO_SESSION_SERVER,
 				&attr,
 				server->uri,
