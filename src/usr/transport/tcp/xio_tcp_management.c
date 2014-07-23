@@ -740,7 +740,6 @@ cleanup:
 void xio_tcp_handle_pending_conn(int fd, struct xio_tcp_transport *parent_hndl)
 {
 	int retval;
-	struct xio_tcp_connect_msg msg;
 	struct xio_tcp_pending_conn *pconn, *next_pconn;
 	struct xio_tcp_pending_conn *pending_conn = NULL, *matching_conn = NULL;
 	struct xio_tcp_pending_conn *ctl_conn = NULL, *data_conn = NULL;
@@ -771,7 +770,7 @@ void xio_tcp_handle_pending_conn(int fd, struct xio_tcp_transport *parent_hndl)
 		return;
 	}
 
-	buf = (struct xio_tcp_connect_msg *)&msg;
+	buf = &pending_conn->msg;
 	buf += sizeof(struct xio_tcp_connect_msg) -
 			pending_conn->waiting_for_bytes;
 	while (pending_conn->waiting_for_bytes) {
@@ -787,9 +786,9 @@ void xio_tcp_handle_pending_conn(int fd, struct xio_tcp_transport *parent_hndl)
 		}
 	}
 
-	UNPACK_LVAL(&msg, &pending_conn->msg, sock_type);
-	UNPACK_SVAL(&msg, &pending_conn->msg, second_port);
-	UNPACK_SVAL(&msg, &pending_conn->msg, pad);
+	UNPACK_LVAL(&pending_conn->msg, &pending_conn->msg, sock_type);
+	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, second_port);
+	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, pad);
 
 	if (pending_conn->msg.sock_type == XIO_TCP_SINGLE_SOCK) {
 		is_single = 1;
