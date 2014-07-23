@@ -1372,7 +1372,6 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 	if (task->omsg->more_in_batch == 0) {
 		must_send = 1;
 	} else {
-		/* ORK todo add logic for batching sends*/
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
@@ -1710,7 +1709,6 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	if (task->omsg->more_in_batch == 0) {
 		must_send = 1;
 	} else {
-		/* ORK TODO batching ? */
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
@@ -3256,6 +3254,10 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			if (retval == 0) {
 				DEBUG_LOG("tcp transport got EOF,tcp_hndl=%p\n",
 					  tcp_hndl);
+				if (count) {
+					exit = 1;
+					break;
+				}
 				xio_tcp_disconnect_helper(tcp_hndl);
 				return -1;
 			} else if (retval < 0) {
@@ -3279,6 +3281,10 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			if (retval == 0) {
 				DEBUG_LOG("tcp transport got EOF,tcp_hndl=%p\n",
 					  tcp_hndl);
+				if (count) {
+					exit = 1;
+					break;
+				}
 				xio_tcp_disconnect_helper(tcp_hndl);
 				return -1;
 			} else if (retval < 0) {
