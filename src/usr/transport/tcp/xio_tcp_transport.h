@@ -391,4 +391,6 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 			 struct xio_tcp_work_req *xio_recv, int block);
 
+void xio_tcp_disconnect_helper(void *xio_tcp_hndl);
+
 #endif /* XIO_TCP_TRANSPORT_H_ */

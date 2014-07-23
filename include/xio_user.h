@@ -234,7 +234,8 @@ enum xio_ev_loop_events {
 	XIO_POLLIN			= 0x001,
 	XIO_POLLOUT			= 0x002,
 	XIO_POLLET			= 0x004,  /**< edge-triggered poll */
-	XIO_ONESHOT			= 0x008
+	XIO_ONESHOT			= 0x008,
+	XIO_POLLRDHUP			= 0x010
 };
 
 /**
