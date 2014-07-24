@@ -707,6 +707,9 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	tcp_hndl->tmp_rx_buf_cur	= NULL;
 	tcp_hndl->tmp_rx_buf_len	= 0;
 
+	tcp_hndl->tx_ready_tasks_num = 0;
+	tcp_hndl->tx_comp_cnt = 0;
+
 	memset(&tcp_hndl->tmp_work, 0, sizeof(struct xio_tcp_work_req));
 	tcp_hndl->tmp_work.msg_iov = tcp_hndl->tmp_iovec;
 
@@ -781,7 +784,7 @@ void xio_tcp_handle_pending_conn(int fd,
 	if (error) {
 		DEBUG_LOG("epoll returned with error=%d for fd=%d\n",
 			  error, fd);
-		goto cleanup2;
+		goto cleanup1;
 	}
 
 
@@ -1020,6 +1023,8 @@ void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
 			XIO_POLLIN | XIO_POLLRDHUP,
 			xio_tcp_pending_conn_ev_handler,
 			parent_hndl);
+	if (retval)
+		ERROR_LOG("adding pending_conn_ev_handler failed\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1154,7 +1159,10 @@ void xio_tcp_conn_established_helper(int fd,
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
 		so_error = errno;
 	}
-	if (so_error || error) {
+	if (so_error || error) {		
+		DEBUG_LOG("fd=%d connection establishment failed\n",
+			  tcp_hndl->sock.cfd);
+		DEBUG_LOG("so_error=%d, epoll_error=%d\n", so_error, error);
 		tcp_hndl->sock.ops->del_ev_handlers = NULL;
 		goto cleanup;
 	}
@@ -2040,6 +2048,7 @@ static int xio_tcp_task_pre_put(
 	tcp_task->req_read_num_sge	= 0;
 	tcp_task->req_recv_num_sge	= 0;
 	tcp_task->sn			= 0;
+	tcp_task->more_in_batch		= 0;
 
 	tcp_task->tcp_op		= XIO_TCP_NULL;
 
