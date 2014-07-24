@@ -704,6 +704,21 @@ static void xio_device_list_release(int del_fd)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_mr_lookup							     */
+/*---------------------------------------------------------------------------*/
+static inline struct ibv_mr *xio_rdma_mr_lookup(struct xio_mr *tmr,
+						struct xio_device *dev)
+{
+	struct xio_mr_elem *tmr_elem;
+
+	list_for_each_entry(tmr_elem, &tmr->dm_list, dm_list_entry) {
+		if (dev == tmr_elem->dev)
+			return tmr_elem->mr;
+	}
+	return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_cm_channel_release						     */
 /*---------------------------------------------------------------------------*/
 static void xio_cm_channel_release(struct xio_cm_channel *channel)
@@ -1429,8 +1444,6 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
 		int alloc_nr, void *pool_dd_data, void *slab_dd_data)
 {
-	struct xio_mr_elem *tmr_elem;
-
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_slab *rdma_slab =
@@ -1447,17 +1460,12 @@ static int xio_rdma_primary_pool_slab_pre_create(
 			return -1;
 		}
 		rdma_slab->data_pool = rdma_slab->io_buf->addr;
-		rdma_slab->data_mr = NULL;
-		list_for_each_entry(tmr_elem,
-				    &rdma_slab->io_buf->mr->dm_list,
-				    dm_list_entry) {
-			if (rdma_hndl->tcq->dev == tmr_elem->dev)  {
-				rdma_slab->data_mr = tmr_elem->mr;
-				break;
-			}
-		}
+		rdma_slab->data_mr = xio_rdma_mr_lookup(
+						rdma_slab->io_buf->mr,
+						rdma_hndl->tcq->dev);
 		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
+			xio_free(&rdma_slab->io_buf);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
 		}
@@ -1512,16 +1520,28 @@ static int xio_rdma_primary_pool_slab_post_create(
 	if (rdma_slab->data_mr->pd == rdma_hndl->tcq->dev->pd)
 		return 0;
 
-	ibv_dereg_mr(rdma_slab->data_mr);
-	rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
-					rdma_slab->data_pool,
-					rdma_hndl->alloc_sz,
-					IBV_ACCESS_LOCAL_WRITE);
-	if (!rdma_slab->data_mr) {
-		xio_set_error(errno);
-		ufree_huge_pages(rdma_slab->data_pool);
-		ERROR_LOG("ibv_reg_mr failed, %m\n");
-		return -1;
+	if (!rdma_slab->io_buf) {
+		ibv_dereg_mr(rdma_slab->data_mr);
+		rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
+						rdma_slab->data_pool,
+						rdma_hndl->alloc_sz,
+						IBV_ACCESS_LOCAL_WRITE);
+		if (!rdma_slab->data_mr) {
+			xio_set_error(errno);
+			ufree_huge_pages(rdma_slab->data_pool);
+			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			return -1;
+		}
+	}else {
+		rdma_slab->data_mr = xio_rdma_mr_lookup(
+						rdma_slab->io_buf->mr,
+						rdma_hndl->tcq->dev);
+		if (!rdma_slab->data_mr) {
+			xio_set_error(errno);
+			xio_free(&rdma_slab->io_buf);
+			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			return -1;
+		}
 	}
 
 	return 0;

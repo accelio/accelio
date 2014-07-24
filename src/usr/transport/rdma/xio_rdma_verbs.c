@@ -281,13 +281,21 @@ cleanup:
 int xio_dereg_mr(struct xio_mr **p_tmr)
 {
 	struct xio_mr		*tmr = *p_tmr;
+	struct xio_mr		*ptmr, *tmp_ptmr;
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
-	int			retval;
+	int			retval, found = 0;
 
 	spin_lock(&mr_list_lock);
-	if (!list_empty(&mr_list)) {
-		list_del(&tmr->mr_list_entry);
-		spin_unlock(&mr_list_lock);
+	list_for_each_entry_safe(ptmr, tmp_ptmr, &mr_list, mr_list_entry) {
+		if (ptmr == tmr) {
+			list_del(&tmr->mr_list_entry);
+			found = 1;
+			break;
+		}
+	}
+	spin_unlock(&mr_list_lock);
+
+	if (found) {
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
@@ -304,8 +312,7 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 		}
 		ufree(tmr);
 		*p_tmr = NULL;
-	} else
-		spin_unlock(&mr_list_lock);
+	}
 
 	return 0;
 }
@@ -383,8 +390,8 @@ retry:
 	}
 
 	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
-	if (!buf->mr && (access & IBV_DEVICE_MR_ALLOCATE)) {
-		access &= ~IBV_DEVICE_MR_ALLOCATE;
+	if (!buf->mr && (access & IBV_ACCESS_ALLOCATE_MR)) {
+		access &= ~IBV_ACCESS_ALLOCATE_MR;
 		retry = 1;
 		goto retry;
 	}
