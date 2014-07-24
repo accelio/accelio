@@ -47,7 +47,7 @@ extern int			page_size;
 extern double			g_mhz;
 extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
-
+extern spinlock_t		dev_list_lock;
 
 #define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
 

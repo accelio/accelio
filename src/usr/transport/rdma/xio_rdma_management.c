@@ -76,7 +76,7 @@ static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
 struct xio_transport			xio_rdma_transport;
 
-static spinlock_t			dev_list_lock;
+spinlock_t				dev_list_lock;
 LIST_HEAD(dev_list);
 LIST_HEAD(dev_del_list);
 static LIST_HEAD(cm_list);

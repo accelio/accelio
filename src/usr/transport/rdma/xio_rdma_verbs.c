@@ -153,10 +153,14 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		init_transport = 0;
 	}
 
+
+	spin_lock(&dev_list_lock);
 	if (list_empty(&dev_list)) {
 		ERROR_LOG("dev_list is empty\n");
+		spin_unlock(&dev_list_lock);
 		goto cleanup2;
 	}
+	spin_unlock(&dev_list_lock);
 
 	tmr = ucalloc(1, sizeof(*tmr));
 	if (tmr == NULL) {
@@ -170,6 +174,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 	 */
 	INIT_LIST_HEAD(&tmr->mr_list_entry);
 
+	spin_lock(&dev_list_lock);
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
 		tmr_elem = xio_reg_mr_ex_dev(dev, addr, length, access);
 		if (tmr_elem == NULL) {
@@ -183,6 +188,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 				     "allocations are not supported on %s\n",
 				     dev->verbs->device->name);
 			}
+			spin_unlock(&dev_list_lock);
 			goto cleanup1;
 		}
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
@@ -193,6 +199,8 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 			*addr = tmr_elem->mr->addr;
 		}
 	}
+	spin_unlock(&dev_list_lock);
+
 
 	/* For dynamically discovered devices */
 	tmr->addr   = *addr;
@@ -239,6 +247,8 @@ int xio_reg_mr_add_dev(struct xio_device *dev)
 	struct xio_mr *tmr;
 	struct xio_mr_elem *tmr_elem;
 
+	spin_lock(&dev_list_lock);
+	spin_lock(&mr_list_lock);
 	list_for_each_entry(tmr, &mr_list, mr_list_entry) {
 		tmr_elem = xio_reg_mr_ex_dev(dev,
 					     &tmr->addr, tmr->length,
@@ -246,11 +256,16 @@ int xio_reg_mr_add_dev(struct xio_device *dev)
 		if (tmr_elem == NULL) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			spin_unlock(&mr_list_lock);
+			spin_unlock(&dev_list_lock);
 			goto cleanup;
 		}
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
 		list_add(&tmr_elem->xm_list_entry, &dev->xm_list);
 	}
+	spin_unlock(&mr_list_lock);
+	spin_unlock(&dev_list_lock);
+
 
 	return 0;
 
@@ -281,8 +296,10 @@ int xio_dereg_mr(struct xio_mr **p_tmr)
 				ERROR_LOG("ibv_dereg_mr failed, %m\n");
 			}
 			/* Remove the item from the list. */
+			spin_lock(&dev_list_lock);
 			list_del(&tmr_elem->dm_list_entry);
 			list_del(&tmr_elem->xm_list_entry);
+			spin_unlock(&dev_list_lock);
 			ufree(tmr_elem);
 		}
 		ufree(tmr);
@@ -301,8 +318,11 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval;
 
-	if (list_empty(&dev->xm_list))
+	spin_lock(&dev_list_lock);
+	if (list_empty(&dev->xm_list)) {
+		spin_unlock(&dev_list_lock);
 		return 0;
+	}
 
 	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
 					 xm_list_entry) {
@@ -318,6 +338,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 		list_del(&tmr_elem->xm_list_entry);
 		ufree(tmr_elem);
 	}
+	spin_unlock(&dev_list_lock);
 
 	return 0;
 }
@@ -332,6 +353,7 @@ struct xio_buf *xio_alloc(size_t length)
 	size_t			real_size;
 	int			access;
 	int			alloced = 0;
+	int			retry = 0;
 
 
 	access = IBV_ACCESS_LOCAL_WRITE |
@@ -345,9 +367,9 @@ struct xio_buf *xio_alloc(size_t length)
 		return NULL;
 	}
 	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
-
-	if (dev && !(dev->device_attr.device_cap_flags &
-		     IBV_DEVICE_MR_ALLOCATE)) {
+retry:
+	if ((dev && !(dev->device_attr.device_cap_flags &
+		     IBV_DEVICE_MR_ALLOCATE)) || retry) {
 		real_size = ALIGN(length, page_size);
 		buf->addr = umemalign(page_size, real_size);
 		if (!buf->addr) {
@@ -361,6 +383,11 @@ struct xio_buf *xio_alloc(size_t length)
 	}
 
 	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
+	if (!buf->mr && (access & IBV_DEVICE_MR_ALLOCATE)) {
+		access &= ~IBV_DEVICE_MR_ALLOCATE;
+		retry = 1;
+		goto retry;
+	}
 	if (!buf->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed. " \
 			 "addr:%p, length:%d, access:0x%x\n",
