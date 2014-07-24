@@ -149,9 +149,9 @@ static int xio_nexus_hash_observer(struct xio_nexus *nexus,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_unhash_observer						     */
+/* xio_nexus_delete_observer						     */
 /*---------------------------------------------------------------------------*/
-static int xio_nexus_unhash_observer(struct xio_nexus *nexus,
+static int xio_nexus_delete_observer(struct xio_nexus *nexus,
 				     struct xio_observer *observer)
 {
 	struct xio_observers_htbl_node	*node, *next_node;
@@ -204,7 +204,7 @@ void xio_nexus_reg_observer(struct xio_nexus *nexus,
 void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 			      struct xio_observer *observer)
 {
-	xio_nexus_unhash_observer(nexus, observer);
+	xio_nexus_delete_observer(nexus, observer);
 	xio_observable_unreg_observer(&nexus->observable, observer);
 }
 
@@ -1980,8 +1980,6 @@ void xio_nexus_close(struct xio_nexus *nexus, struct xio_observer *observer)
 		xio_nexus_notify_observer(
 				nexus, observer,
 				XIO_NEXUS_EVENT_CLOSED, NULL);
-
-		xio_nexus_unhash_observer(nexus, observer);
 		xio_nexus_unreg_observer(nexus, observer);
 	}
 	kref_put(&nexus->kref, xio_nexus_delayed_close);
