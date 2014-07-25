@@ -1934,12 +1934,12 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 					}
 				} else if (errno == ECONNRESET) {
 					xio_set_error(errno);
-					DEBUG_LOG("recvmsg failed.(errno=%d)\n",
+					DEBUG_LOG("recv failed.(errno=%d)\n",
 						  errno);
 					return 0;
 				} else {
 					xio_set_error(errno);
-					ERROR_LOG("recvmsg failed.(errno=%d)\n",
+					ERROR_LOG("recv failed.(errno=%d)\n",
 						  errno);
 					return -1;
 				}
@@ -1989,7 +1989,7 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 			tmp_bytes = 0;
 			for (i = 0; i < xio_recv->msg.msg_iovlen; i++) {
 				if (xio_recv->msg.msg_iov[i].iov_len +
-						tmp_bytes < retval) {
+						tmp_bytes <= retval) {
 					tmp_bytes +=
 					xio_recv->msg.msg_iov[i].iov_len;
 				} else {
@@ -2052,9 +2052,14 @@ void xio_tcp_dual_sock_set_rxd(struct xio_task *task,
 	tcp_task->rxd.msg_iov[0].iov_base = buf;
 	tcp_task->rxd.msg_iov[0].iov_len = len;
 	tcp_task->rxd.tot_iov_byte_len = len;
-	tcp_task->rxd.msg_len = 1;
-	if (len)
+	if (len) {
+		tcp_task->rxd.msg_len = 1;
 		tcp_task->rxd.msg.msg_iovlen = 1;
+		tcp_task->rxd.msg.msg_iov = tcp_task->rxd.msg_iov;
+	} else {
+		tcp_task->rxd.msg_len = 0;
+		tcp_task->rxd.msg.msg_iovlen = 0;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2218,7 +2223,10 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	/* prepare the in side of the message */
 	tcp_task->rxd.tot_iov_byte_len += rlen;
-	tcp_task->rxd.msg.msg_iov = &tcp_task->rxd.msg_iov[1];
+	if (tcp_task->rxd.msg.msg_iovlen)
+		tcp_task->rxd.msg.msg_iov = tcp_task->rxd.msg_iov;
+	else
+		tcp_task->rxd.msg.msg_iov = &tcp_task->rxd.msg_iov[1];
 	tcp_task->rxd.msg.msg_iovlen = tcp_task->rxd.msg_len;
 
 	return 0;
@@ -2394,7 +2402,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	struct xio_msg		*omsg;
 	void			*ulp_hdr;
 	XIO_TO_TCP_TASK(task, tcp_task);
-	XIO_TO_TCP_TASK(task, tcp_sender_task);
+	struct xio_tcp_task	*tcp_sender_task;
 	int			i;
 	struct xio_sg_table_ops	*isgtbl_ops;
 	void			*isgtbl;
@@ -2438,11 +2446,11 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_task->tcp_op = rsp_hdr.opcode;
 
-	tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, rsp_hdr.ulp_hdr_len +
-			rsp_hdr.ulp_pad_len + rsp_hdr.ulp_imm_len);
-
 	switch (rsp_hdr.opcode) {
 	case XIO_TCP_SEND:
+		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, rsp_hdr.ulp_hdr_len +
+					    rsp_hdr.ulp_pad_len +
+					    rsp_hdr.ulp_imm_len);
 		/* if data arrived, set the pointers */
 		sg = sge_first(isgtbl_ops, isgtbl);
 		/* if data arrived, set the pointers */
@@ -2460,6 +2468,9 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_WRITE:
+		tcp_hndl->sock.ops->set_rxd(task->sender_task, ulp_hdr,
+					    rsp_hdr.ulp_hdr_len +
+					    rsp_hdr.ulp_pad_len);
 		if (tcp_task->rsp_write_num_sge >
 		    tcp_sender_task->read_num_sge) {
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
@@ -2489,8 +2500,12 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				tcp_task->rsp_write_num_sge;
 		tcp_sender_task->rxd.tot_iov_byte_len +=
 				rsp_hdr.ulp_imm_len;
-		tcp_sender_task->rxd.msg.msg_iov =
-				&tcp_sender_task->rxd.msg_iov[1];
+		if (tcp_sender_task->rxd.msg.msg_iovlen)
+			tcp_sender_task->rxd.msg.msg_iov =
+					tcp_sender_task->rxd.msg_iov;
+		else
+			tcp_sender_task->rxd.msg.msg_iov =
+					&tcp_sender_task->rxd.msg_iov[1];
 		tcp_sender_task->rxd.msg.msg_iovlen =
 				tcp_sender_task->rxd.msg_len;
 		break;
@@ -2522,7 +2537,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 	struct xio_msg		*omsg;
 	int			i;
 	XIO_TO_TCP_TASK(task, tcp_task);
-	XIO_TO_TCP_TASK(task, tcp_sender_task);
+	struct xio_tcp_task	*tcp_sender_task;
 	struct xio_sg_table_ops	*isgtbl_ops;
 	void			*isgtbl;
 	struct xio_sg_table_ops	*osgtbl_ops;
@@ -2618,6 +2633,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 			if (sge_addr(osgtbl_ops, sg))  {
 				tbl_copy(osgtbl_ops, osgtbl,
 					 isgtbl_ops, isgtbl);
+				tcp_sender_task = task->sender_task->dd_data;
 				/* put buffers back to pool */
 				for (i = 0; i < tcp_sender_task->read_num_sge;
 						i++) {

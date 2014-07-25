@@ -344,6 +344,7 @@ struct xio_tcp_transport {
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[IOV_MAX];
 
+	xio_ctx_event_t			ctl_rx_event;
 	xio_ctx_event_t			disconnect_event;
 };
 

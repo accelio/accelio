@@ -211,6 +211,9 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 			  tcp_hndl);
 		tcp_hndl->state = XIO_STATE_CLOSED;
 
+		xio_ctx_remove_event(tcp_hndl->base.ctx,
+				     &tcp_hndl->ctl_rx_event);
+
 		if (tcp_hndl->sock.ops->del_ev_handlers)
 			tcp_hndl->sock.ops->del_ev_handlers(tcp_hndl);
 
@@ -438,19 +441,36 @@ int xio_tcp_dual_sock_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_consume_ctl_rx						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
+	int retval = 0, count = 0;
+
+	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
+
+	do {
+		retval = tcp_hndl->sock.ops->rx_ctl_handler(tcp_hndl);
+		++count;
+	} while (retval > 0 && count <  RX_POLL_NR_MAX);
+
+	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len) {
+		xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
+				   xio_tcp_consume_ctl_rx, tcp_hndl);
+		xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_ctl_ready_ev_handler						     */
 /*---------------------------------------------------------------------------*/
 void xio_tcp_ctl_ready_ev_handler(int fd, int events, void *user_context)
 {
 	struct xio_tcp_transport	*tcp_hndl = user_context;
-	int retval = 0, count = 0;
 
-	if (events & EPOLLIN) {
-		do {
-			retval = tcp_hndl->sock.ops->rx_ctl_handler(tcp_hndl);
-			++count;
-		} while (retval > 0 && count <  RX_POLL_NR_MAX);
-	}
+	if (events & EPOLLIN)
+		xio_tcp_consume_ctl_rx(NULL, tcp_hndl);
 
 	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
 		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
@@ -738,6 +758,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	INIT_LIST_HEAD(&tcp_hndl->pending_conns);
 
+	memset(&tcp_hndl->ctl_rx_event, 0, sizeof(xio_ctx_event_t));
 	memset(&tcp_hndl->disconnect_event, 0, sizeof(xio_ctx_event_t));
 
 	TRACE_LOG("xio_tcp_open: [new] handle:%p\n", tcp_hndl);
@@ -1159,7 +1180,7 @@ void xio_tcp_conn_established_helper(int fd,
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
 		so_error = errno;
 	}
-	if (so_error || error) {		
+	if (so_error || error) {
 		DEBUG_LOG("fd=%d connection establishment failed\n",
 			  tcp_hndl->sock.cfd);
 		DEBUG_LOG("so_error=%d, epoll_error=%d\n", so_error, error);
@@ -1265,6 +1286,9 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 		so_error = errno;
 	}
 	if (so_error || (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))) {
+		DEBUG_LOG("fd=%d connection establishment failed\n",
+			  tcp_hndl->sock.dfd);
+		DEBUG_LOG("so_error=%d, epoll_events=%d\n", so_error, events);
 		tcp_hndl->sock.ops->del_ev_handlers = NULL;
 		goto cleanup;
 	}
