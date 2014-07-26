@@ -1098,14 +1098,6 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		goto exit;
 	}
 
-	/* add to epoll */
-	retval = xio_context_add_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock.cfd,
-			XIO_POLLIN,
-			xio_tcp_listener_ev_handler,
-			tcp_hndl);
-
 	tcp_hndl->is_listen = 1;
 
 	retval  = listen(tcp_hndl->sock.cfd,
@@ -1115,6 +1107,14 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		ERROR_LOG("tcp listen failed. (errno=%d %m)\n", errno);
 		goto exit;
 	}
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLIN,
+			xio_tcp_listener_ev_handler,
+			tcp_hndl);
 
 	retval  = getsockname(tcp_hndl->sock.cfd,
 			      (struct sockaddr *)&sa.sa_stor,
@@ -1379,6 +1379,12 @@ int xio_tcp_single_sock_connect(struct xio_tcp_transport *tcp_hndl,
 {
 	int retval;
 
+	retval = xio_tcp_connect_helper(tcp_hndl->sock.cfd, sa, sa_len,
+					&tcp_hndl->sock.port_cfd,
+					&tcp_hndl->base.local_addr);
+	if (retval)
+		return retval;
+
 	/* add to epoll */
 	retval = xio_context_add_ev_handler(
 			tcp_hndl->base.ctx,
@@ -1391,12 +1397,6 @@ int xio_tcp_single_sock_connect(struct xio_tcp_transport *tcp_hndl,
 			  errno);
 		return retval;
 	}
-
-	retval = xio_tcp_connect_helper(tcp_hndl->sock.cfd, sa, sa_len,
-					&tcp_hndl->sock.port_cfd,
-					&tcp_hndl->base.local_addr);
-	if (retval)
-		return retval;
 
 	return 0;
 }
@@ -1424,6 +1424,12 @@ int xio_tcp_dual_sock_connect(struct xio_tcp_transport *tcp_hndl,
 	if (retval)
 		return retval;
 
+	retval = xio_tcp_connect_helper(tcp_hndl->sock.dfd, sa, sa_len,
+					&tcp_hndl->sock.port_dfd,
+					NULL);
+	if (retval)
+		return retval;
+
 	/* add to epoll */
 	retval = xio_context_add_ev_handler(
 			tcp_hndl->base.ctx,
@@ -1436,12 +1442,6 @@ int xio_tcp_dual_sock_connect(struct xio_tcp_transport *tcp_hndl,
 			  errno);
 		return retval;
 	}
-
-	retval = xio_tcp_connect_helper(tcp_hndl->sock.dfd, sa, sa_len,
-					&tcp_hndl->sock.port_dfd,
-					NULL);
-	if (retval)
-		return retval;
 
 	return 0;
 }
