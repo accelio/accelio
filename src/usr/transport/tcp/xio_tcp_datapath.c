@@ -2139,6 +2139,8 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			return -1;
 		}
 
+		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_write_num_sge);
+
 		/*
 		for (i = 0;  i < task->imsg.in.data_iovlen; i++) {
 			if (task->imsg.in.pdata_iov[i].mr == NULL) {
@@ -2217,6 +2219,8 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			sge_addr(sgtbl_ops, sg);
 		tcp_task->rxd.msg_iov[i + 1].iov_len =
 			tcp_task->req_write_sge[i].length;
+		sge_set_length(sgtbl_ops, sg,
+			       tcp_task->req_write_sge[i].length);
 		sg = sge_next(sgtbl_ops, sgtbl, sg);
 	}
 	tcp_task->rxd.msg_len += tcp_task->req_write_num_sge;
