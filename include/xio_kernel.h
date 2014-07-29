@@ -302,8 +302,9 @@ struct xio_iovec {
 
 /* In user space these struct xio_iovec and this struct differ */
 struct xio_iovec_ex {
-	void			*iov_base;
-	size_t			iov_len;
+	void			*iov_base;	/**< base address */
+	size_t			iov_len;	/**< base length  */
+	void			*user_context;	/**< private user data    */
 };
 
 /**
