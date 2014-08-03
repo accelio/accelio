@@ -400,11 +400,11 @@ struct xio_connection_attr {
 	void			*user_context;  /**< private user context to */
 						/**< pass to connection      */
 						/**< oriented callbacks      */
-	struct xio_context	*ctx;
-	int			reserved;
+	struct xio_context	*ctx;		/**< context data type	     */
+	int			reserved;	/**< padding		     */
 	enum xio_proto		proto;	        /**< protocol type           */
-	struct sockaddr_storage	peer_addr;	/**< address of peer	      */
-	struct sockaddr_storage	local_addr;	/**< address of local	      */
+	struct sockaddr_storage	peer_addr;	/**< address of peer	     */
+	struct sockaddr_storage	local_addr;	/**< address of local	     */
 };
 
 /**
@@ -471,7 +471,7 @@ struct xio_sg_table {
 };
 
 /**
- * @struct xio_sg_table
+ * @struct xio_sg_iov
  * @brief scatter gather iovec vector data structure
  */
 struct xio_sg_iov {
@@ -484,7 +484,7 @@ struct xio_sg_iov {
 };
 
 /**
- * @struct xio_sg_table
+ * @struct xio_sg_iovptr
  * @brief scatter gather iovec pointer data structure
  */
 struct xio_sg_iovptr {
@@ -500,13 +500,14 @@ struct xio_sg_iovptr {
  * @brief message sub element type
  */
 struct xio_vmsg {
-	struct xio_iovec		header;		/**< header's io vector	    */
-	enum xio_sgl_type		sgl_type;
-	int				pad;
+	struct xio_iovec		header;	    /**< header's io vector  */
+	enum xio_sgl_type		sgl_type;   /**< @ref xio_sgl_type   */
+	int				pad;	    /**< padding	     */
+	/**< union for different scatter gather representations		     */
 	union {
-		struct xio_sg_table	data_tbl;
-		struct xio_sg_iov	data_iov;
-		struct xio_sg_iovptr	pdata_iov;
+		struct xio_sg_table	data_tbl;   /**< data table	     */
+		struct xio_sg_iov	data_iov;   /**< iov vector	     */
+		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
 	};
 };
 
@@ -1432,10 +1433,10 @@ int xio_get_opt(void *xio_obj, int level, int optname,
  * @brief mempool object item
  */
 struct xio_mempool_obj {
-	void		*addr;
-	size_t		length;
-	struct xio_mr	*mr;
-	void		*cache;
+	void		*addr;		/**< allocated address		     */
+	size_t		length;		/**< allocted  length		     */
+	struct xio_mr	*mr;		/**< memory region		     */
+	void		*cache;		/**< private cache - xio internal    */
 };
 
 /**
@@ -1463,6 +1464,12 @@ enum xio_mempool_flag {
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
 /* for backward compatibility - shall be deprecated in the future */
+
+/**
+ * create mempool with NO (!) allocators
+ *
+ * for backward compatibility - shall be deprecated in the future
+ */
 #define xio_mempool_create_ex	xio_mempool_create
 
 /**
