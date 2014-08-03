@@ -97,6 +97,7 @@ struct test_params {
 	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		ncomp;
+	uint64_t		ndelivered;
 	int			ask_for_receipt;
 	uint16_t		finite_run;
 	uint16_t		padding;
@@ -214,6 +215,7 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 			    int more_in_batch, void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
+	test_params->ndelivered++;
 
 	process_message(test_params, msg);
 
@@ -221,9 +223,11 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	msg_pool_put(test_params->pool, msg);
 
 	if (test_params->finite_run) {
-		if (test_params->ncomp > test_params->disconnect_nr)
+		if ((test_params->ncomp+test_params->ndelivered) >
+		       test_params->disconnect_nr)
 			return 0;
-		if (test_params->ncomp == test_params->disconnect_nr) {
+		if ((test_params->ncomp + test_params->ndelivered) ==
+		     test_params->disconnect_nr) {
 			xio_disconnect(test_params->connection);
 			return 0;
 		}
@@ -277,7 +281,6 @@ static int on_msg_send_complete(struct xio_session *session,
 				void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
-
 	process_message(test_params, msg);
 
 	test_params->ncomp++;
