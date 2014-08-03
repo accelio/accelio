@@ -756,14 +756,14 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	     XIO_MSG_RSP_FLAG_FIRST)) {
 		xio_connection_remove_in_flight(connection, omsg);
 	} else {
-		if (task->tlv_type == XIO_ONE_WAY_RSP) {
+		if (task->tlv_type == XIO_ONE_WAY_RSP)
 			if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST)
 				xio_connection_remove_in_flight(connection,
 								omsg);
-			connection->in_flight_sends_budget++;
-		} else {
+			else
+				connection->in_flight_sends_budget++;
+		else
 			connection->in_flight_reqs_budget++;
-		}
 	}
 
 	omsg->type = task->tlv_type;
@@ -916,8 +916,26 @@ static int xio_on_ow_req_send_comp(
 					connection->cb_user_context);
 		}
 		xio_tasks_pool_put(task);
-	}
+	} else {
+		if (task->omsg &&
+		    !(task->omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
+			struct xio_statistics *stats = &connection->ctx->stats;
+			struct xio_msg *omsg = task->omsg;
+			xio_stat_add(stats, XIO_STAT_DELAY,
+				     get_cycles() - omsg->timestamp);
 
+			xio_connection_remove_in_flight(connection, task->omsg);
+			task->omsg->flags = task->omsg_flags;
+
+			if (connection->ses_ops.on_msg_delivered)
+				connection->ses_ops.on_msg_delivered(
+						connection->session,
+						task->omsg,
+						0,
+						connection->cb_user_context);
+			xio_tasks_pool_put(task);
+		}
+	}
 xmit:
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);

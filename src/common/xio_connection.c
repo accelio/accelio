@@ -51,7 +51,8 @@
 #define XIO_CONNECTION_INFLIGHT_BUDGET	64
 #define XIO_CONNECTION_APP_BUDGET	256
 #define XIO_CONNECTION_TIMEOUT		60000
-
+#define XIO_BUF_THRESHOLD		8000
+#define XIO_IOV_THRESHOLD		20
 
 #define		IS_APPLICATION_MSG(msg) \
 		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
@@ -255,6 +256,42 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_connection_discard_receipt_req					     */
+/*---------------------------------------------------------------------------*/
+static void xio_connection_discard_receipt_req(struct xio_msg *msg)
+{
+	struct xio_vmsg		*vmsg;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+
+	/* messages that are planed to send via "SEND" operation can
+	 * discard the read receipt for better performance
+	 */
+
+	if (!((msg->type == XIO_ONE_WAY_REQ) &&
+	      (msg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)))
+		return;
+
+	vmsg		= &msg->out;
+	sgtbl		= xio_sg_table_get(vmsg);
+	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+
+	/* heuristics to guess in which  cases the lower layer will not
+	 * do "rdma read" but will use send/receive
+	 */
+	if (tbl_nents(sgtbl_ops, sgtbl) > XIO_IOV_THRESHOLD)
+		return;
+	if ((vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl)) >
+	    XIO_BUF_THRESHOLD)
+		return;
+
+	msg->flags &= ~XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+	msg->flags &= ~XIO_MSG_FLAG_SMALL_ZERO_COPY; /* no zero copy allowed */
+	msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+}
+
+
+/*---------------------------------------------------------------------------*/
 /* xio_connection_send							     */
 /*---------------------------------------------------------------------------*/
 int xio_connection_send(struct xio_connection *connection,
@@ -346,7 +383,10 @@ int xio_connection_send(struct xio_connection *connection,
 	/* mark as a control message */
 	task->is_control = !IS_APPLICATION_MSG(msg);
 
-	/* write session header */
+	/* try to discard read receipt if not required */
+	if (msg->type == XIO_ONE_WAY_REQ)
+		xio_connection_discard_receipt_req(msg);
+
 	hdr.flags		= msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
 	xio_session_write_header(task, &hdr);
@@ -458,12 +498,14 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 					pmsg, pdata);
 			continue;
 		}
+
 		/* this is read receipt  */
 		if (IS_RESPONSE(pmsg->type) &&
 		    ((pmsg->flags &
 		      (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-				 XIO_MSG_RSP_FLAG_FIRST))
+				 XIO_MSG_RSP_FLAG_FIRST)) {
 			continue;
+		}
 		if (!IS_APPLICATION_MSG(pmsg))
 			continue;
 		xio_session_notify_msg_error(connection, pmsg,
@@ -1671,11 +1713,11 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 		  session->connections_nr);
 
 
-	xio_connection_flush_tasks(connection);
-
 	/* remove the connection from the session's connections list */
-	if (connection->nexus)
+	if (connection->nexus) {
+		xio_connection_flush_tasks(connection);
 		xio_nexus_close(connection->nexus, &session->observer);
+	}
 
 	/* leading connection */
 	if (session->lead_connection &&
@@ -1822,6 +1864,7 @@ int xio_connection_disconnected(struct xio_connection *connection)
 		    connection->nexus)
 			connection->session->redir_connection = NULL;
 		/* free nexus and tasks pools */
+		xio_connection_flush_tasks(connection);
 		xio_nexus_close(connection->nexus,
 				&connection->session->observer);
 	}
