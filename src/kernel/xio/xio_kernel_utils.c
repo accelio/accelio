@@ -98,7 +98,6 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 }
 
 #define NI_MAXSERV 32
-#define NI_MAXHOST 1025
 
 /*---------------------------------------------------------------------------*/
 /* xio_uri_to_ss							     */
@@ -106,7 +105,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 {
 	char		*start;
-	char		host[NI_MAXHOST];
+	char		*host = NULL;
 	char		port[NI_MAXSERV];
 	unsigned long	portul;
 	unsigned short	port16;
@@ -127,7 +126,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			return -1;
 
 		len = p1-(start+4);
-		strncpy(host, (start + 4), len);
+		host = kstrndup((char *)(start + 4), len, GFP_KERNEL);
 		host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
@@ -147,22 +146,22 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				p2 = p1;
 			p1--;
 			if (p1 == uri)
-				return  -1;
+				goto cleanup;
 		}
 
 		if (p2 == NULL) { /* no resource */
 			p1 = strrchr(uri, ':');
 			if (p1 == NULL || p1 == start)
-				return -1;
+				goto cleanup;
 			strcpy(port, (p1 + 1));
 		} else {
 			if (*p2 != '/')
-				return -1;
+				goto cleanup;
 			p1 = p2;
 			while (*p1 != ':') {
 				p1--;
 				if (p1 == uri)
-					return  -1;
+					goto cleanup;
 			}
 
 			len = p2 - (p1 + 1);
@@ -173,7 +172,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 		len = p1 - (start + 3);
 
 		/* extract the address */
-		strncpy(host, (start + 3), len);
+		host = kstrndup((char *)(start + 3), len, GFP_KERNEL);
 		host[len] = 0;
 	}
 
@@ -182,16 +181,16 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	if (strict_strtoul(port, 10, &portul)) {
 		ERROR_LOG("Invalid port specification(%s)\n", port);
-		return -1;
+		goto cleanup;
 	}
 	if (portul > 0xFFFF) {
 		ERROR_LOG("Invalid port specification(%s)\n", port);
-		return -1;
+		goto cleanup;
 	}
 	port16 = portul;
 	port_be16 = htons(port16);
 
-	if (host[0] == '*' || host[0] == 0) {
+	if (!host || (host && (host[0] == '*' || host[0] == 0))) {
 		if (ipv6_hint) {
 			struct sockaddr_in6 *s6 = (struct sockaddr_in6 *) ss;
 			/* what about scope and flow */
@@ -208,11 +207,16 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	} else {
 		if (priv_parse_ip_addr(host, len, port_be16, ss) < 0) {
 			ERROR_LOG("unresolved address\n");
-			return -1;
+			goto cleanup;
 		}
 	}
 
+	kfree(host);
 	return 0;
+
+cleanup:
+	kfree(host);
+	return -1;
 }
 
 int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
