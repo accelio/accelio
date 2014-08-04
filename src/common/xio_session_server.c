@@ -89,7 +89,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	ptr = ptr + len;
 
 	/* private length */
-	len = xio_read_uint16(&req.user_context_len, 0, ptr);
+	len = xio_read_uint16(&req.private_data_len, 0, ptr);
 	ptr = ptr + len;
 
 	if (req.uri_len) {
@@ -105,16 +105,16 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 				     req.uri_len, 0, ptr);
 		ptr = ptr + len;
 	}
-	if (req.user_context_len) {
-		req.user_context = kcalloc(req.user_context_len,
+	if (req.private_data_len) {
+		req.private_data = kcalloc(req.private_data_len,
 					   sizeof(uint8_t), GFP_KERNEL);
-		if (req.user_context == NULL) {
+		if (req.private_data == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("private data allocation failed. len:%d\n",
-				  req.user_context_len);
+				  req.private_data_len);
 			goto cleanup2;
 		}
-		len = xio_read_array(req.user_context, req.user_context_len,
+		len = xio_read_array(req.private_data, req.private_data_len,
 				     0, ptr);
 		ptr = ptr + len;
 	}
@@ -150,13 +150,13 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	xio_session_notify_new_connection(session, connection);
 
-	kfree(req.user_context);
+	kfree(req.private_data);
 	kfree(req.uri);
 
 	return 0;
 
 cleanup2:
-	kfree(req.user_context);
+	kfree(req.private_data);
 
 cleanup1:
 	kfree(req.uri);

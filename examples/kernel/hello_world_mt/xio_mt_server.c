@@ -271,7 +271,7 @@ int on_new_session(struct xio_session *session,
 	spin_unlock(&sdata->lock);
 	synchronize_rcu();
 
-	portals = portals_get(sdata, req->uri, req->user_context);
+	portals = portals_get(sdata, req->uri, req->private_data);
 
 	/* Automatically accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);

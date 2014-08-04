@@ -94,7 +94,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	ptr  = ptr + len;
 
 	/* private length */
-	len = xio_write_uint16((uint16_t)(session->user_context_len),
+	len = xio_write_uint16((uint16_t)(session->hs_private_data_len),
 			       0, ptr);
 	ptr  = ptr + len;
 
@@ -103,9 +103,9 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 				      session->uri_len, 0, ptr);
 		ptr  = ptr + len;
 	}
-	if (session->user_context_len) {
-		len = xio_write_array(session->user_context,
-				      session->user_context_len,
+	if (session->hs_private_data_len) {
+		len = xio_write_array(session->hs_private_data,
+				      session->hs_private_data_len,
 				      0, ptr);
 		ptr  = ptr + len;
 	}
@@ -178,7 +178,7 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 
 			/* send one message to pass sending to the
 			 * right thread */
-			kfree(session->new_ses_rsp.user_context);
+			kfree(session->new_ses_rsp.private_data);
 
 			spin_lock(&session->connections_list_lock);
 			list_for_each_entry(tmp_connection,
@@ -370,7 +370,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		len = xio_read_uint16(&session->portals_array_len, 0, ptr);
 		ptr = ptr + len;
 
-		len = xio_read_uint16(&rsp->user_context_len, 0, ptr);
+		len = xio_read_uint16(&rsp->private_data_len, 0, ptr);
 		ptr = ptr + len;
 
 		if (session->portals_array_len) {
@@ -397,27 +397,27 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 			session->portals_array = NULL;
 		}
 
-		if (session->new_ses_rsp.user_context_len) {
-			rsp->user_context = kcalloc(rsp->user_context_len,
+		if (session->new_ses_rsp.private_data_len) {
+			rsp->private_data = kcalloc(rsp->private_data_len,
 					sizeof(uint8_t), GFP_KERNEL);
-			if (rsp->user_context == NULL) {
+			if (rsp->private_data == NULL) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
 			}
 
-			len = xio_read_array(rsp->user_context,
-					     rsp->user_context_len, 0, ptr);
+			len = xio_read_array(rsp->private_data,
+					     rsp->private_data_len, 0, ptr);
 			ptr = ptr + len;
 		} else {
-			rsp->user_context = NULL;
+			rsp->private_data = NULL;
 		}
 		break;
 	case XIO_ACTION_REDIRECT:
 		len = xio_read_uint16(&session->services_array_len, 0, ptr);
 		ptr = ptr + len;
 
-		len = xio_read_uint16(&rsp->user_context_len, 0, ptr);
+		len = xio_read_uint16(&rsp->private_data_len, 0, ptr);
 		ptr = ptr + len;
 
 		if (session->services_array_len) {
@@ -450,24 +450,24 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		len = xio_read_uint32(&session->reject_reason , 0, ptr);
 		ptr  = ptr + len;
 
-		len = xio_read_uint16(&rsp->user_context_len, 0, ptr);
+		len = xio_read_uint16(&rsp->private_data_len, 0, ptr);
 		ptr = ptr + len;
 
-		if (session->new_ses_rsp.user_context_len) {
-			rsp->user_context = kcalloc(
-						rsp->user_context_len,
+		if (session->new_ses_rsp.private_data_len) {
+			rsp->private_data = kcalloc(
+						rsp->private_data_len,
 						sizeof(uint8_t), GFP_KERNEL);
-			if (rsp->user_context == NULL) {
+			if (rsp->private_data == NULL) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
 			}
 
-			len = xio_read_array(rsp->user_context,
-					     rsp->user_context_len, 0, ptr);
+			len = xio_read_array(rsp->private_data,
+					     rsp->private_data_len, 0, ptr);
 			ptr = ptr + len;
 		} else {
-			rsp->user_context = NULL;
+			rsp->private_data = NULL;
 		}
 		break;
 	default:
@@ -573,8 +573,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 						session, rsp,
 						session->cb_user_context);
 
-				kfree(rsp->user_context);
-				rsp->user_context = NULL;
+				kfree(rsp->private_data);
+				rsp->private_data = NULL;
 			}
 			/* start connection transmission */
 			xio_connection_xmit_msgs(connection);
@@ -661,8 +661,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		if (retval != 0)
 			ERROR_LOG("failed to reject session\n");
 
-		kfree(rsp->user_context);
-		rsp->user_context = NULL;
+		kfree(rsp->private_data);
+		rsp->private_data = NULL;
 
 		return retval;
 

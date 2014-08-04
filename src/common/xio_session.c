@@ -273,8 +273,8 @@ void xio_session_notify_rejected(struct xio_session *session)
 	struct xio_session_event_data  ev_data = {
 		.event =		XIO_SESSION_REJECT_EVENT,
 		.reason =		session->reject_reason,
-		.private_data =		session->new_ses_rsp.user_context,
-		.private_data_len =	session->new_ses_rsp.user_context_len
+		.private_data =		session->new_ses_rsp.private_data,
+		.private_data_len =	session->new_ses_rsp.private_data_len
 	};
 
 	if (session->ses_ops.on_session_event)
@@ -435,7 +435,7 @@ static void xio_session_pre_teardown(struct xio_session *session)
 		kfree(session->portals_array[i]);
 	kfree(session->services_array);
 	kfree(session->portals_array);
-	kfree(session->user_context);
+	kfree(session->hs_private_data);
 	kfree(session->uri);
 	session->state = XIO_SESSION_STATE_CLOSED;
 }
@@ -1430,18 +1430,18 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 
 	INIT_LIST_HEAD(&session->connections_list);
 
-	session->user_context_len = attr->user_context_len;
+	session->hs_private_data_len = attr->user_context_len;
 
 	/* copy private data if exist */
-	if (session->user_context_len) {
-		session->user_context = kmalloc(attr->user_context_len,
+	if (session->hs_private_data_len) {
+		session->hs_private_data = kmalloc(session->hs_private_data_len,
 						GFP_KERNEL);
-		if (session->user_context == NULL) {
+		if (session->hs_private_data  == NULL) {
 			xio_set_error(ENOMEM);
 			goto cleanup;
 		}
-		memcpy(session->user_context, attr->user_context,
-		       session->user_context_len);
+		memcpy(session->hs_private_data , attr->user_context,
+		       session->hs_private_data_len);
 	}
 	mutex_init(&session->lock);
 	spin_lock_init(&session->connections_list_lock);
@@ -1477,7 +1477,7 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 cleanup3:
 	kfree(session->uri);
 cleanup2:
-	kfree(session->user_context);
+	kfree(session->hs_private_data);
 cleanup:
 	kfree(session);
 
@@ -1563,7 +1563,7 @@ int xio_query_session(struct xio_session *session,
 		return -1;
 	}
 	if (attr_mask & XIO_SESSION_ATTR_USER_CTX)
-		attr->user_context = session->user_context;
+		attr->user_context = session->cb_user_context;
 
 	if (attr_mask & XIO_SESSION_ATTR_SES_OPS)
 		attr->ses_ops = &session->ses_ops;
@@ -1588,7 +1588,7 @@ int xio_modify_session(struct xio_session *session,
 	}
 
 	if (attr_mask & XIO_SESSION_ATTR_USER_CTX)
-		session->user_context = attr->user_context;
+		session->cb_user_context = attr->user_context;
 
 	return 0;
 }

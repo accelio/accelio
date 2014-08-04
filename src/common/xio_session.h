@@ -89,10 +89,19 @@ struct xio_session {
 	char				**portals_array;
 	char				**services_array;
 
-	void				*user_context;
+	/*
+	 *  References a user-controlled data buffer. The contents of
+	 *  the buffer are copied and transparently passed to the remote side
+	 *  as part of the communication request.  Maybe NULL if private_data
+	 *  is not required.
+	 */
+	void				*hs_private_data;
 	void				*cb_user_context;
 
-	uint16_t			user_context_len;
+	/*
+	 * Specifies  the  size  of  the user-controlled data buffer.
+	 */
+	uint16_t			hs_private_data_len;
 	uint16_t			uri_len;
 	uint16_t			portals_array_len;
 	uint16_t			services_array_len;

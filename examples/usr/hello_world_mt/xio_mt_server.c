@@ -278,7 +278,7 @@ static int on_new_session(struct xio_session *session,
 	struct portals_vec *portals;
 	struct server_data *server_data = cb_user_context;
 
-	portals = portals_get(server_data, req->uri, req->user_context);
+	portals = portals_get(server_data, req->uri, req->private_data);
 
 	/* automatic accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);

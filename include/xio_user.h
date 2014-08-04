@@ -565,9 +565,9 @@ struct xio_session_event_data {
  */
 struct xio_new_session_req {
 	char			*uri;		  /**< the uri		     */
-	void			*user_context;	  /**< client private data   */
+	void			*private_data;	  /**< client private data   */
 	uint16_t		uri_len;	  /**< uri length            */
-	uint16_t		user_context_len; /**< private data length   */
+	uint16_t		private_data_len; /**< private data length   */
 	enum xio_proto		proto;		  /**< source protocol type  */
 	struct sockaddr_storage	src_addr;	  /**< source address of     */
 						  /**< requester	     */
@@ -578,8 +578,8 @@ struct xio_new_session_req {
  * @brief  new session response message
  */
 struct xio_new_session_rsp {
-	void			*user_context;	 /**< server private data    */
-	uint16_t		user_context_len;/**< private data length    */
+	void			*private_data;	 /**< server private data    */
+	uint16_t		private_data_len;/**< private data length    */
 	uint16_t		reserved[3];	 /**< structure alignment    */
 };
 

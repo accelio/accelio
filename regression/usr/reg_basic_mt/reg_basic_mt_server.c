@@ -573,7 +573,7 @@ static int on_new_session(struct xio_session *session,
 
 	DEBUG("server new session event. session:%p\n", session);
 
-	portals = portals_get(server_data, req->uri, req->user_context);
+	portals = portals_get(server_data, req->uri, req->private_data);
 
 	session_entry = calloc(1, sizeof(*session_entry));
 	TAILQ_INIT(&session_entry->conns_list);
