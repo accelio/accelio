@@ -52,7 +52,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	size_t			slab_alloc_sz;
 	size_t			tasks_alloc_sz;
 	void			*buf;
-	void			*data;
+	void			*data, *ptr;
 	struct xio_tasks_slab	*s;
 	int			retval = 0, i;
 	int			tot_sz;
@@ -97,6 +97,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		return -1;
 	}
 	data = buf;
+	ptr = buf;
 
 	/* slab */
 	s = (void *)((char *)buf + tasks_alloc_sz);
@@ -112,12 +113,15 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	s->nr = alloc_nr;
 	s->huge_alloc = huge_alloc;
 
-	if (q->params.pool_hooks.slab_pre_create)
+	if (q->params.pool_hooks.slab_pre_create) {
 		retval = q->params.pool_hooks.slab_pre_create(
 				q->params.pool_hooks.context,
 				alloc_nr,
 				q->dd_data,
 				s->dd_data);
+		if (retval)
+			goto cleanup;
+	}
 
 	for (i = 0; i < alloc_nr; i++) {
 		s->array[i]		= data;
@@ -149,6 +153,9 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 				s->dd_data,
 				i,
 				s->array[i]);
+			if (retval)
+				goto cleanup;
+
 		}
 		list_add_tail(&s->array[i]->tasks_list_entry, &q->stack);
 	}
@@ -157,13 +164,25 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
 
-	if (q->params.pool_hooks.slab_post_create)
+	if (q->params.pool_hooks.slab_post_create) {
 		retval = q->params.pool_hooks.slab_post_create(
 				q->params.pool_hooks.context,
 				q->dd_data,
 				s->dd_data);
+		if (retval)
+			goto cleanup;
+	}
+
 
 	return retval;
+
+cleanup:
+	if (huge_alloc)
+		ufree_huge_pages(ptr);
+	else
+		ufree(ptr);
+
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
