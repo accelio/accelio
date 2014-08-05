@@ -1844,6 +1844,23 @@ int xio_connection_disconnected(struct xio_connection *connection)
 {
 	int close = 0;
 
+	/* stop all pending timers */
+	if (xio_is_work_pending(&connection->hello_work))
+		xio_ctx_del_work(connection->ctx,
+				 &connection->hello_work);
+
+	if (xio_is_delayed_work_pending(&connection->fin_delayed_work))
+		xio_ctx_del_delayed_work(connection->ctx,
+					 &connection->fin_delayed_work);
+
+	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
+		xio_ctx_del_delayed_work(connection->ctx,
+					 &connection->fin_timeout_work);
+
+	if (xio_is_work_pending(&connection->fin_work))
+		xio_ctx_del_work(connection->ctx,
+				 &connection->fin_work);
+
 	xio_session_notify_connection_disconnected(
 			connection->session, connection,
 			connection->close_reason);
