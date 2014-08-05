@@ -1404,7 +1404,7 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 {
 	struct xio_session	*session = NULL;
 	int			retval;
-	int			uri_len = strlen(uri);
+	int			uri_len = 0;
 
 
 	/* input validation */
@@ -1413,6 +1413,7 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 		ERROR_LOG("xio_session_open: invalid parameter\n");
 		return NULL;
 	}
+	uri_len = strlen(uri);
 
 	/* extract portal from uri */
 	/* create the session */
