@@ -581,6 +581,7 @@ send_response:
 		return -1;
 	}
 
+	return 0;
 cleanup:
 	xio_set_error(XIO_E_MSG_INVALID);
 	ERROR_LOG("receiving setup request failed\n");
