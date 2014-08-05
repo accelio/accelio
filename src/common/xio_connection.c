@@ -1842,6 +1842,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 int xio_connection_disconnected(struct xio_connection *connection)
 {
+	int close = 0;
+
 	xio_session_notify_connection_disconnected(
 			connection->session, connection,
 			connection->close_reason);
@@ -1857,16 +1859,22 @@ int xio_connection_disconnected(struct xio_connection *connection)
 	if (connection->nexus) {
 		if (connection->session->lead_connection &&
 		    connection->session->lead_connection->nexus ==
-		    connection->nexus)
+		    connection->nexus) {
 			connection->session->lead_connection = NULL;
+			close = 1;
+		}
 		if (connection->session->redir_connection &&
 		    connection->session->redir_connection->nexus ==
-		    connection->nexus)
+		    connection->nexus) {
 			connection->session->redir_connection = NULL;
+			close = 1;
+		}
 		/* free nexus and tasks pools */
-		xio_connection_flush_tasks(connection);
-		xio_nexus_close(connection->nexus,
-				&connection->session->observer);
+		if (close) {
+			xio_connection_flush_tasks(connection);
+			xio_nexus_close(connection->nexus,
+					&connection->session->observer);
+		}
 	}
 
 	xio_session_notify_connection_teardown(connection->session,
