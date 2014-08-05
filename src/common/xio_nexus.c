@@ -550,10 +550,12 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 		retval = xio_nexus_primary_pool_create(nexus);
 		if (retval != 0) {
 			ERROR_LOG("create primary pool failed\n");
-			return -1;
+			status = ENOMEM;
+			goto send_response;
 		}
 	}
 
+send_response:
 	/* reset mbuf */
 	xio_mbuf_reset(&task->mbuf);
 
@@ -575,15 +577,14 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 	list_move(&task->tasks_list_entry, &nexus->tx_queue);
 	retval = nexus->transport->send(nexus->transport_hndl, task);
 	if (retval != 0) {
-		ERROR_LOG("send setup respone failed\n");
+		ERROR_LOG("send setup response failed\n");
 		return -1;
 	}
-
-	return 0;
 
 cleanup:
 	xio_set_error(XIO_E_MSG_INVALID);
 	ERROR_LOG("receiving setup request failed\n");
+
 	return -1;
 }
 
@@ -618,6 +619,14 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 					&nexus->observable,
 					XIO_NEXUS_EVENT_DISCONNECTED,
 					NULL);
+		} else {
+			union xio_nexus_event_data nexus_event_data;
+
+			nexus_event_data.error.reason =  XIO_E_CONNECT_ERROR;
+			xio_observable_notify_all_observers(
+					&nexus->observable,
+					XIO_NEXUS_EVENT_ERROR,
+					&nexus_event_data);
 		}
 		return -1;
 	}
