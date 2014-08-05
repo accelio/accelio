@@ -1178,17 +1178,20 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t				hdr_len;
 	size_t				data_len;
+	size_t				xio_hdr_len;
 	struct xio_vmsg			*vmsg = &task->omsg->in;
 	int				i;
 	int				retval;
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
 	void				*sg;
+	int				nents;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->in);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->in.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
-	if (tbl_nents(sgtbl_ops, sgtbl) == 0) {
+	if (nents == 0) {
 		tcp_task->recv_num_sge = 0;
 		tcp_task->read_num_sge = 0;
 		return 0;
@@ -1197,11 +1200,16 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
 
+	/* before working on the out - current place after the session header */
+	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
+	xio_hdr_len += sizeof(struct xio_tcp_rsp_hdr);
+	xio_hdr_len += sizeof(struct xio_sge)*nents;
+
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
-	    data_len + hdr_len + MAX_HDR_SZ < tcp_hndl->max_send_buf_sz) {
+	    data_len + hdr_len + xio_hdr_len < tcp_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		tcp_task->read_num_sge = 0;
 		if (data_len)
@@ -1248,7 +1256,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 					sge_length(sgtbl_ops, sg);
 			}
 		}
-		tcp_task->read_num_sge = tbl_nents(sgtbl_ops, sgtbl);
+		tcp_task->read_num_sge = nents;
 		tcp_task->recv_num_sge = 0;
 	}
 	if (tcp_task->read_num_sge > tcp_hndl->peer_max_out_iovsz) {
@@ -1626,7 +1634,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	ulp_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
-	xio_hdr_len += tcp_task->rsp_write_num_sge*sizeof(struct xio_sge);
+	xio_hdr_len += (tcp_task->req_recv_num_sge +
+			tcp_task->req_read_num_sge)*sizeof(struct xio_sge);
 	small_zero_copy = task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY;
 
 	if (tcp_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
