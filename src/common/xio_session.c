@@ -1253,9 +1253,10 @@ int xio_on_assign_in_buf(struct xio_session *session,
 	}
 
 	if (connection->ses_ops.assign_data_in_buf) {
-		connection->ses_ops.assign_data_in_buf(&task->imsg,
+		int retval = connection->ses_ops.assign_data_in_buf(
+					&task->imsg,
 					connection->cb_user_context);
-		event_data->assign_in_buf.is_assigned = 1;
+		event_data->assign_in_buf.is_assigned = (retval == 0);
 		return 0;
 	}
 	event_data->assign_in_buf.is_assigned = 0;
