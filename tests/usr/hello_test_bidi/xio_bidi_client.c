@@ -235,10 +235,6 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 
 	process_response(rsp);
 
-	if (rsp->status)
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(rsp->status));
-
 	/* message is no longer needed */
 	xio_release_response(rsp);
 
@@ -362,17 +358,37 @@ int on_msg_error(struct xio_session *session,
 	case XIO_MSG_TYPE_REQ:
 		printf("**** [%p] message [%lu] failed. reason: %s\n",
 		       session, msg->sn, xio_strerror(error));
+		msg_pool_put(pool, msg);
+		switch (error) {
+		case XIO_E_MSG_FLUSHED:
+		case XIO_E_MSG_DISCARDED:
+			break;
+		default:
+			xio_assert(0);
+			break;
+		};
 		break;
 	case XIO_MSG_TYPE_RSP:
 		printf("**** [%p] message [%lu] failed. reason: %s\n",
 		       session, msg->request->sn, xio_strerror(error));
+		/* message is no longer needed */
+		switch (error) {
+		case XIO_E_MSG_FLUSHED:
+			xio_release_response(msg);
+			msg_pool_put(pool, msg);
+			break;
+		default:
+			msg_pool_put(pool, msg);
+			xio_assert(0);
+			break;
+		};
 		break;
 	default:
 		printf("unknown message type : %d\n", msg->type);
+		msg_pool_put(pool, msg);
+		xio_assert(0);
 		break;
 	}
-
-	msg_pool_put(pool, msg);
 
 	return 0;
 }

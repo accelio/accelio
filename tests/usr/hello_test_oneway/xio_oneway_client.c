@@ -328,12 +328,6 @@ static int on_server_message(struct xio_session *session,
 	/* process the incoming message */
 	process_rx_message(ow_params, msg);
 
-	if (msg->status) {
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-		xio_assert(msg->status == 0);
-	}
-
 	/* message is no longer needed */
 	xio_release_msg(msg);
 

@@ -178,12 +178,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	struct xio_msg		*rsp;
 	struct thread_data	*tdata = cb_prv_data;
 
-	if (req->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-		xio_assert(req->status == 0);
-	}
-
 	/* process request */
 	process_request(tdata, req);
 
@@ -237,6 +231,16 @@ int on_msg_error(struct xio_session *session,
 	       session, msg->request->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
+
+	switch (error) {
+	case XIO_E_MSG_DISCARDED:
+	case XIO_E_MSG_FLUSHED:
+		break;
+	default:
+		/* need to send response here */
+		xio_assert(0);
+		break;
+	};
 
 	return 0;
 }

@@ -203,12 +203,6 @@ static int on_response(struct xio_session *session,
 
 	process_response(msg);
 
-	if (msg->status) {
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-		xio_assert(msg->status == 0);
-	}
-
 	/* message is no longer needed */
 	xio_release_response(msg);
 
@@ -268,6 +262,14 @@ int on_msg_error(struct xio_session *session,
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(pool, msg);
+
+	switch (error) {
+	case XIO_E_MSG_FLUSHED:
+		break;
+	default:
+		xio_assert(0);
+		break;
+	};
 
 	return 0;
 }

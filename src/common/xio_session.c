@@ -692,11 +692,16 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		     vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl));
 
 	/* notify the upper layer */
-	if (connection->ses_ops.on_msg)
-		connection->ses_ops.on_msg(
-				connection->session, msg,
-				msg->more_in_batch,
-				connection->cb_user_context);
+	if (task->status) {
+		xio_session_notify_msg_error(connection, msg, task->status);
+		task->status = 0;
+	} else {
+		if (connection->ses_ops.on_msg)
+			connection->ses_ops.on_msg(
+					connection->session, msg,
+					msg->more_in_batch,
+					connection->cb_user_context);
+	}
 
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
 		if (task->state == XIO_TASK_STATE_DELIVERED) {
@@ -827,12 +832,18 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				     tbl_length(sgtbl_ops, sgtbl));
 
 			omsg->request	= msg;
-			if (connection->ses_ops.on_msg)
-				connection->ses_ops.on_msg(
-					connection->session,
-					omsg,
-					task->imsg.more_in_batch,
-					connection->cb_user_context);
+			if (task->status) {
+				xio_session_notify_msg_error(
+					connection, omsg, task->status);
+				task->status = 0;
+			} else {
+				if (connection->ses_ops.on_msg)
+					connection->ses_ops.on_msg(
+						connection->session,
+						omsg,
+						task->imsg.more_in_batch,
+						connection->cb_user_context);
+			}
 		}
 	}
 
@@ -1358,7 +1369,6 @@ int xio_on_cancel_response(struct xio_session *sess,
 
 		pmsg		= msg;		/* fake a message */
 		msg->sn		= hdr.sn;
-		msg->status	= 0;
 	} else {
 		session		= event_data->cancel.task->session;
 		pmsg		= event_data->cancel.task->omsg;

@@ -533,11 +533,9 @@ struct xio_msg {
 
 	enum xio_msg_type	type;		/**< message type	      */
 	int		        more_in_batch;	/**< more messages ahead bit  */
-	int			status;		/**< message returned status  */
 	int			flags;		/**< message flags mask       */
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 						/**< required                 */
-	int			reserved;	/**< reserved for padding     */
 	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */

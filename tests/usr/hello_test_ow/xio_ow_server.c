@@ -193,10 +193,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 
 	test_params->nrecv++;
 
-	if (req->status)
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-
 	/* process request */
 	process_request(req);
 

@@ -2415,7 +2415,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		imsg->in.header.iov_base	= NULL;
 		imsg->in.header.iov_len		= 0;
 	}
-	omsg->status = rsp_hdr.status;
+	task->status = rsp_hdr.status;
 
 	/* handle the headers */
 	if (omsg->in.header.iov_base) {
@@ -2423,10 +2423,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		size_t hdr_len = 0;
 		if (imsg->in.header.iov_len > omsg->in.header.iov_len)  {
 			hdr_len = omsg->in.header.iov_len;
-			omsg->status = XIO_E_MSG_SIZE;
+			task->status = XIO_E_MSG_SIZE;
 		} else {
 			hdr_len = imsg->in.header.iov_len;
-			omsg->status = XIO_E_SUCCESS;
+			task->status = XIO_E_SUCCESS;
 		}
 		if (hdr_len)
 			memcpy(omsg->in.header.iov_base,
@@ -2464,10 +2464,10 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					tbl_length(osgtbl_ops, osgtbl);
 
 				if (idata_len > odata_len) {
-					omsg->status = XIO_E_MSG_SIZE;
+					task->status = XIO_E_MSG_SIZE;
 					goto partial_msg;
 				} else {
-					omsg->status = XIO_E_SUCCESS;
+					task->status = XIO_E_SUCCESS;
 				}
 				sg = sge_first(osgtbl_ops, osgtbl);
 				if (sge_addr(osgtbl_ops, sg))  {
@@ -2932,14 +2932,14 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		if (tbl_nents(sgtbl_ops, sgtbl) == 0) {
 			WARN_LOG("application has not provided buffers\n");
 			WARN_LOG("rdma read is ignored\n");
-			task->imsg.status = XIO_E_NO_USER_BUFS;
+			task->status = XIO_E_NO_USER_BUFS;
 			return -1;
 		}
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			if (sge_mr(sgtbl_ops, sg) == NULL) {
 				ERROR_LOG("application has not provided mr\n");
 				ERROR_LOG("rdma read is ignored\n");
-				task->imsg.status = XIO_E_NO_USER_MR;
+				task->status = XIO_E_NO_USER_MR;
 				return -1;
 			}
 			llen += sge_length(sgtbl_ops, sg);
@@ -2950,7 +2950,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				  "local peer provided buffer size %zd bytes\n",
 				  rlen, llen);
 			ERROR_LOG("rdma read is ignored\n");
-			task->imsg.status = XIO_E_USER_BUF_OVERFLOW;
+			task->status = XIO_E_USER_BUF_OVERFLOW;
 			return -1;
 		}
 	} else {
@@ -2958,7 +2958,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				ERROR_LOG(
 					"message /read/write failed - " \
 					"library's memory pool disabled\n");
-				task->imsg.status = XIO_E_NO_BUFS;
+				task->status = XIO_E_NO_BUFS;
 				goto cleanup;
 		}
 
@@ -2974,7 +2974,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				ERROR_LOG("mempool is empty for %zd bytes\n",
 					  rdma_task->read_sge[i].length);
 
-				task->imsg.status = ENOMEM;
+				task->status = ENOMEM;
 				goto cleanup;
 			}
 			sge_set_addr(sgtbl_ops, sg,
@@ -3010,7 +3010,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to validate input iovecs\n");
 		ERROR_LOG("rdma read is ignored\n");
-		task->imsg.status = XIO_E_MSG_INVALID;
+		task->status = XIO_E_MSG_INVALID;
 		goto cleanup;
 	}
 
@@ -3029,7 +3029,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to allocate tasks\n");
 		ERROR_LOG("rdma read is ignored\n");
-		task->imsg.status = XIO_E_WRITE_FAILED;
+		task->status = XIO_E_WRITE_FAILED;
 		goto cleanup;
 	}
 
@@ -3040,7 +3040,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 
 	return 0;
 cleanup:
-	xio_set_error(task->imsg.status);
+	xio_set_error(task->status);
 	for (i = 0; i < rdma_task->read_num_sge; i++)
 		xio_mempool_free(&rdma_task->read_sge[i]);
 
@@ -3147,7 +3147,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (rlen  < llen) {
 		ERROR_LOG("peer provided too small iovec\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = XIO_E_REM_USER_BUF_OVERFLOW;
+		task->status = XIO_E_REM_USER_BUF_OVERFLOW;
 		goto cleanup;
 	}
 	retval = xio_validate_rdma_op(
@@ -3160,7 +3160,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to invalidate input iovecs\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = XIO_E_MSG_INVALID;;
+		task->status = XIO_E_MSG_INVALID;;
 		goto cleanup;
 	}
 
@@ -3178,7 +3178,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to allocate tasks\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->omsg->status = XIO_E_READ_FAILED;
+		task->status = XIO_E_READ_FAILED;
 		goto cleanup;
 	}
 	/* prepare response to peer */
@@ -3303,7 +3303,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	default:
 		ERROR_LOG("unexpected opcode\n");
 		xio_set_error(XIO_E_MSG_INVALID);
-		imsg->status = XIO_E_MSG_INVALID;
+		task->status = XIO_E_MSG_INVALID;
 		break;
 	};
 

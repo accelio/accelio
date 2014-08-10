@@ -197,12 +197,6 @@ static int on_request(struct xio_session *session,
 	struct xio_msg	*rsp;
 	struct test_params *test_params = cb_user_context;
 
-	if (req->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-		xio_assert(req->status == 0);
-	}
-
 	/* process request */
 	process_request(req);
 
@@ -264,8 +258,19 @@ static int on_msg_error(struct xio_session *session,
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
 
-	test_params->ncomp++;
 	msg_pool_put(test_params->pool, msg);
+
+	switch (error) {
+	case XIO_E_MSG_DISCARDED:
+	case XIO_E_MSG_FLUSHED:
+		test_params->ncomp++;
+		break;
+	default:
+		/* need to send response here */
+
+		xio_disconnect(test_params->connection);
+		break;
+	};
 
 	return 0;
 }

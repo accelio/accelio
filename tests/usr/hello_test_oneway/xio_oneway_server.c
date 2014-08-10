@@ -228,12 +228,6 @@ static int on_client_message(struct xio_session *session,
 			     int more_in_batch,
 			     void *cb_prv_data)
 {
-	if (msg->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-		xio_assert(msg->status == 0);
-	}
-
 	/* process message */
 	process_request(msg);
 
