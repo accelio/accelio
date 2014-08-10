@@ -1432,7 +1432,7 @@ int xio_disconnect(struct xio_connection *connection)
 
 	if (!connection || !connection->session) {
 		xio_set_error(EINVAL);
-		ERROR_LOG("xio_disconnect failed %m\n");
+		ERROR_LOG("xio_disconnect failed 'Invalid argument'\n");
 		return -1;
 	}
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
