@@ -2904,10 +2904,8 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
 	if ((nents > rdma_options.max_in_iovsz) ||
-	    (nents > max_nents) ||
-	    (max_nents > rdma_options.max_in_iovsz)) {
+	    (nents > max_nents))
 		return 0;
-	}
 
 	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
@@ -2953,18 +2951,14 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
 	if ((nents > rdma_options.max_out_iovsz) ||
-	    (nents > max_nents) ||
-	    (max_nents > rdma_options.max_out_iovsz)) {
+	    (nents > max_nents))
 		return 0;
-	}
 
 	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
 
-	if (((vmsg->header.iov_base != NULL)  &&
-	     (vmsg->header.iov_len == 0)) ||
-	    ((vmsg->header.iov_base == NULL)  &&
-	     (vmsg->header.iov_len != 0)))
+	if ((vmsg->header.iov_base == NULL)  &&
+	     (vmsg->header.iov_len != 0))
 			return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
