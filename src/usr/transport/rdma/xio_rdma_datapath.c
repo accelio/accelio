@@ -228,7 +228,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	uint16_t		req_nr = 0;
 
 	tx_window = tx_window_sz(rdma_hndl);
-	window = min(rdma_hndl->peer_credits, tx_window);
+	window = min(rdma_hndl->peer_credits - 1, tx_window);
+	window = (window < 0) ? 0 : window;
 	window = min(window, rdma_hndl->sqe_avail);
 	/*
 	TRACE_LOG("XMIT: tx_window:%d, peer_credits:%d, sqe_avail:%d\n",
@@ -1044,7 +1045,12 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (unlikely(err < 0)) {
+		struct xio_rdma_transport *rdma_hndl;
+
 		xio_rearm_completions(tcq);
+		list_for_each_entry(rdma_hndl, &tcq->trans_list, trans_list_entry) {
+			xio_rdma_idle_handler(rdma_hndl);
+		}
 		return;
 	}
 
