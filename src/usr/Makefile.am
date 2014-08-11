@@ -107,12 +107,12 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_workqueue.c		\
 			./xio/xio_sg_iov.c		\
 			./xio/xio_sg_iovptr.c		\
+			./xio/xio_sg_table.c	\
 			$(libxio_rdma_sources)		\
 			./transport/tcp/xio_tcp_management.c	\
 			./transport/tcp/xio_tcp_datapath.c	\
 			./transport/xio_transport_mempool.c	\
 			./transport/xio_usr_transport.c	\
-			../common/xio_sg_table.c	\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\
