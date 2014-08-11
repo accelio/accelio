@@ -57,18 +57,13 @@
 /*---------------------------------------------------------------------------*/
 static LIST_HEAD(mr_list);
 static spinlock_t mr_list_lock;
-static uint32_t mr_num; /* checkpatch doesn't like intializing static vars */
+static uint32_t mr_num; /* checkpatch doesn't like initializing static vars */
 
 /*---------------------------------------------------------------------------*/
 /* ibv_rdma_alloc_mr	                                                     */
 /*---------------------------------------------------------------------------*/
 struct ibv_mr *xio_rdma_alloc_mr(struct xio_device *dev, size_t length)
 {
-	if (!(dev->device_attr.device_cap_flags & IBV_DEVICE_MR_ALLOCATE)) {
-		TRACE_LOG("M-pages not available on %s",
-			  dev->verbs->device->name);
-		return NULL;
-	}
 	return ibv_reg_mr(dev->pd, NULL, length,
 			IBV_ACCESS_LOCAL_WRITE |
 			IBV_ACCESS_REMOTE_WRITE|
@@ -105,11 +100,13 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 	struct xio_mr_elem *mr_elem;
 	struct ibv_mr	   *mr;
 	int retval;
+	int alloc_mr = (*addr == NULL);
 
 	mr = ibv_reg_mr(dev->pd, *addr, length, access);
 	if (!mr) {
 		xio_set_error(errno);
-		ERROR_LOG("ibv_reg_mr failed, %m\n");
+		if (!alloc_mr)
+			ERROR_LOG("ibv_reg_mr failed, %m\n");
 		return NULL;
 	}
 	mr_elem = ucalloc(1, sizeof(*mr_elem));
@@ -153,7 +150,6 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		init_transport = 0;
 	}
 
-
 	spin_lock(&dev_list_lock);
 	if (list_empty(&dev_list)) {
 		ERROR_LOG("dev_list is empty\n");
@@ -179,15 +175,6 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		tmr_elem = xio_reg_mr_ex_dev(dev, addr, length, access);
 		if (tmr_elem == NULL) {
 			xio_set_error(errno);
-			ERROR_LOG("ibv_reg_mr failed, %m\n");
-
-			if ((access & IBV_ACCESS_ALLOCATE_MR) &&
-			    !(dev->device_attr.device_cap_flags &
-			    IBV_DEVICE_MR_ALLOCATE)) {
-				INFO_LOG(
-				     "allocations are not supported on %s\n",
-				     dev->verbs->device->name);
-			}
 			spin_unlock(&dev_list_lock);
 			goto cleanup1;
 		}
@@ -356,12 +343,8 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 struct xio_buf *xio_alloc(size_t length)
 {
 	struct xio_buf		*buf;
-	struct xio_device	*dev;
 	size_t			real_size;
 	int			access;
-	int			alloced = 0;
-	int			retry = 0;
-
 
 	access = IBV_ACCESS_LOCAL_WRITE |
 		 IBV_ACCESS_REMOTE_WRITE|
@@ -373,28 +356,22 @@ struct xio_buf *xio_alloc(size_t length)
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
-retry:
-	if ((dev && !(dev->device_attr.device_cap_flags &
-		     IBV_DEVICE_MR_ALLOCATE)) || retry) {
-		real_size = ALIGN(length, page_size);
-		buf->addr = umemalign(page_size, real_size);
-		if (!buf->addr) {
-			ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
-			goto cleanup;
-		}
-		memset(buf->addr, 0, real_size);
-		alloced = 1;
-	} else {
-		access |= IBV_ACCESS_ALLOCATE_MR;
+	access |= IBV_ACCESS_ALLOCATE_MR;
+	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
+	if (buf->mr) {
+		buf->length		= length;
+		buf->mr->addr_alloced	= 0;
+		goto exit;
 	}
 
-	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
-	if (!buf->mr && (access & IBV_ACCESS_ALLOCATE_MR)) {
-		access &= ~IBV_ACCESS_ALLOCATE_MR;
-		retry = 1;
-		goto retry;
+	access &= ~IBV_ACCESS_ALLOCATE_MR;
+	real_size = ALIGN(length, page_size);
+	buf->addr = umemalign(page_size, real_size);
+	if (!buf->addr) {
+		ERROR_LOG("memalign failed. sz:%zu\n", real_size);
+		goto cleanup;
 	}
+	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
 	if (!buf->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed. " \
 			 "addr:%p, length:%d, access:0x%x\n",
@@ -402,15 +379,15 @@ retry:
 
 		goto cleanup1;
 	}
-	buf->mr->addr_alloced = alloced;
-	buf->length = length;
+	memset(buf->addr, 0, length);
+	buf->length		= length;
+	buf->mr->addr_alloced	= 1;
 
+exit:
 	return buf;
 
 cleanup1:
-	if (alloced)
-		ufree(buf->addr);
-
+	ufree(buf->addr);
 cleanup:
 	ufree(buf);
 	return NULL;

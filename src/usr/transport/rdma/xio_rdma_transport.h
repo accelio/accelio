@@ -86,9 +86,9 @@ extern spinlock_t		dev_list_lock;
 			(struct xio_rdma_task *)(xt)->dd_data
 
 
-#ifndef IBV_DEVICE_MR_ALLOCATE
-#  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
-#endif
+//#ifndef IBV_DEVICE_MR_ALLOCATE
+//#  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
+//#endif
 #ifndef IBV_ACCESS_ALLOCATE_MR
 #  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
 #endif /* M-pages compatibility */
