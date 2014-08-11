@@ -376,6 +376,7 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		return -1;
 	}
 	task->tlv_type = XIO_NEXUS_SETUP_REQ;
+	task->omsg = NULL;
 
 	req.version = XIO_VERSION;
 
@@ -561,6 +562,7 @@ send_response:
 
 	/* write response */
 	task->tlv_type	= XIO_NEXUS_SETUP_RSP;
+	task->omsg	= NULL;
 
 	rsp.cid		= cid;
 	rsp.status	= status;
