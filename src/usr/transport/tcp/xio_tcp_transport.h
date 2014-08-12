@@ -64,6 +64,10 @@ extern double				g_mhz;
 
 #define TX_BATCH			32   /* Number of TX tasks to batch */
 
+#define TX_EAGAIN_RETRY			2    /* Number of retries when send
+					      * fail with EAGAIN before return.
+					      */
+
 #define RX_POLL_NR_MAX			4    /* Max num of RX messages
 					      * to receive in one poll
 					      */
@@ -393,5 +397,7 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 			 struct xio_tcp_work_req *xio_recv, int block);
 
 void xio_tcp_disconnect_helper(void *xio_tcp_hndl);
+
+int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl);
 
 #endif /* XIO_TCP_TRANSPORT_H_ */

@@ -469,6 +469,12 @@ void xio_tcp_ctl_ready_ev_handler(int fd, int events, void *user_context)
 {
 	struct xio_tcp_transport	*tcp_hndl = user_context;
 
+	if (events & EPOLLOUT) {
+		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
+					      XIO_POLLIN | XIO_POLLRDHUP);
+		xio_tcp_xmit(tcp_hndl);
+	}
+
 	if (events & EPOLLIN)
 		xio_tcp_consume_ctl_rx(NULL, tcp_hndl);
 
@@ -488,6 +494,12 @@ void xio_tcp_data_ready_ev_handler(int fd, int events, void *user_context)
 {
 	struct xio_tcp_transport	*tcp_hndl = user_context;
 	int retval = 0, count = 0;
+
+	if (events & EPOLLOUT) {
+		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
+					      XIO_POLLIN | XIO_POLLRDHUP);
+		xio_tcp_xmit(tcp_hndl);
+	}
 
 	if (events & EPOLLIN) {
 		do {
