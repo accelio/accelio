@@ -198,6 +198,8 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 		ev.events |= EPOLLIN;
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
+	if (events & XIO_POLLRDHUP)
+		ev.events |= EPOLLRDHUP;
 	/* default is edge triggered */
 	if (events & XIO_POLLET)
 		ev.events |= EPOLLET;
