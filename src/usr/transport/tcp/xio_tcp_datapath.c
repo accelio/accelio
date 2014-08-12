@@ -798,7 +798,7 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
 
-	if (tcp_hndl->state == XIO_STATE_DISCONNECTED)
+	if (tcp_hndl->state >= XIO_STATE_DISCONNECTED)
 		return;
 
 	xio_ctx_init_event(&tcp_hndl->disconnect_event,

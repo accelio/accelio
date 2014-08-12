@@ -416,8 +416,19 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	TRACE_LOG("tcp transport context_shutdown handle:%p\n", tcp_hndl);
 
-	tcp_hndl->state = XIO_STATE_DISCONNECTED;
-	on_sock_disconnected(tcp_hndl, 0);
+	switch (tcp_hndl->state) {
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_CONNECTED:
+		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+		/*fallthrough*/
+	case XIO_STATE_DISCONNECTED:
+		on_sock_disconnected(tcp_hndl, 0);
+		break;
+	default:
+		break;
+	}
+
+	tcp_hndl->state = XIO_STATE_DESTROYED;
 	xio_tcp_flush_all_tasks(tcp_hndl);
 	xio_tcp_post_close(tcp_hndl);
 
