@@ -501,6 +501,15 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_context_modify_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events)
+{
+	return xio_ev_loop_modify(ctx->ev_loop, fd, events);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_context_del_ev_handler						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_del_ev_handler(struct xio_context *ctx,

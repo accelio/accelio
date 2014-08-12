@@ -199,5 +199,12 @@ void xio_ctx_remove_event(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 int xio_context_is_loop_stopping(struct xio_context *ctx);
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_modify_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events);
+
 #endif /*XIO_CONTEXT_H */
 
