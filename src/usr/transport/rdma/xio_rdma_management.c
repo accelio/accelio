@@ -1893,7 +1893,7 @@ notify_err1:
 static void  on_cm_refused(struct rdma_cm_event *ev,
 		struct xio_rdma_transport *rdma_hndl)
 {
-	ERROR_LOG("on_cm refused. reason:%s\n",
+	DEBUG_LOG("on_cm refused. reason:%s\n",
 		  xio_cm_rej_reason_str(ev->status));
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_REFUSED, NULL);
