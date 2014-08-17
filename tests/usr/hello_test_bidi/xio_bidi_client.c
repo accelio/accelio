@@ -578,13 +578,7 @@ int main(int argc, char *argv[])
 	struct xio_msg		*msg;
 	struct xio_iovec_ex	*sglist;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
+	struct xio_session_params params;
 
 	nrecv = 0;
 	nsent = 0;
@@ -615,8 +609,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, NULL);
+
+	memset(&params, 0, sizeof(params));
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",

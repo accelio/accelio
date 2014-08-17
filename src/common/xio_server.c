@@ -94,30 +94,30 @@ static int xio_on_new_message(struct xio_server *server,
 	struct xio_connection		*connection = NULL;
 	struct xio_connection		*connection1 = NULL;
 	struct xio_task			*task;
-	struct xio_session_attr		attr = { 0 };
 	uint32_t			tlv_type;
+	struct xio_session_params	params;
 
 	if (!server || !nexus || !event_data || !event_data->msg.task) {
 		ERROR_LOG("server [new session]: failed " \
 			  "invalid parameter\n");
 		return -1;
 	}
-	task		= event_data->msg.task;
-	attr.ses_ops	= &server->ops;
+	task			= event_data->msg.task;
+
+	params.type		= XIO_SESSION_SERVER;
+	params.initial_sn	= 0;
+	params.ses_ops		= &server->ops;
+	params.uri		= server->uri;
+	params.private_data	= NULL;
+	params.private_data_len = 0;
+	params.user_context	= server->cb_private_data;
 
 	/* read the first message  type */
 	tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
-		session = xio_session_create(
-				XIO_SESSION_SERVER,
-				&attr,
-				server->uri,
-				0,
-				server->session_flags,
-				server->cb_private_data);
-
+		session = xio_session_create(&params);
 		if (session == NULL) {
 			ERROR_LOG("server [new session]: failed " \
 				"  allocating session failed\n");

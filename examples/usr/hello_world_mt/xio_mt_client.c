@@ -234,32 +234,31 @@ int main(int argc, char *argv[])
 	int			i;
 	char			url[256];
 	struct session_data	session_data;
+	struct xio_session_params params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
 		       argv[0]);
 		exit(1);
 	}
+	memset(&session_data, 0, sizeof(session_data));
+	memset(&params, 0, sizeof(params));
 
 	xio_init();
 
-	memset(&session_data, 0, sizeof(session_data));
 	/* create url to connect to */
 	if (argc > 3)
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_data.session = xio_session_create(XIO_SESSION_CLIENT,
-						&attr, url,
-						0, 0, &session_data);
 
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &session_data;
+	params.uri		= url;
+
+	session_data.session = xio_session_create(&params);
 	if (session_data.session == NULL)
 		goto cleanup;
 

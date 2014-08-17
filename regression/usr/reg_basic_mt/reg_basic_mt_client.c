@@ -526,15 +526,11 @@ int client_main(int argc, char *argv[])
 	int			client_disconnect_nr	= atoi(argv[8]);
 	/*int			server_disconnect_nr	= atoi(argv[9]);*/
 	struct session_entry    *session_entry;
+	struct xio_session_params params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	memset(&client_data, 0, sizeof(client_data));
+	memset(&params, 0, sizeof(params));
 
 	client_data.tdata = calloc(client_threads_num,
 				    sizeof(*client_data.tdata));
@@ -557,10 +553,12 @@ int client_main(int argc, char *argv[])
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_entry->session = xio_session_create(XIO_SESSION_CLIENT,
-						&attr, url,
-						0, 0, &client_data);
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &client_data;
+	params.uri		= url;
 
+	session_entry->session = xio_session_create(&params);
 	if (session_entry->session  == NULL) {
 		free(session_entry);
 		goto cleanup;

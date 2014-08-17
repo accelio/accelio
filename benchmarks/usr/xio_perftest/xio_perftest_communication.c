@@ -223,14 +223,8 @@ void destroy_comm_struct(struct perf_comm *comm)
 /*---------------------------------------------------------------------------*/
 int establish_connection(struct perf_comm *comm)
 {
-	char	url[256];
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,	/* callbacks structure */
-		NULL,		/* no need to pass the server private data */
-		0
-	};
+	char				url[256];
+	struct xio_session_params	params;
 
 	/* create thread context for the client */
 	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
@@ -250,10 +244,14 @@ int establish_connection(struct perf_comm *comm)
 			comm->user_param->transport,
 			comm->user_param->server_addr, CONFIG_PORT);
 
+		memset(&params, 0, sizeof(params));
+		params.type		= XIO_SESSION_CLIENT;
+		params.ses_ops		= &ses_ops;
+		params.user_context	= comm;
+		params.uri		= url;
+
 		/* create url to connect to */
-		comm->control_ctx->session = xio_session_create(
-				XIO_SESSION_CLIENT,
-				&attr, url, 0, 0, comm);
+		comm->control_ctx->session = xio_session_create(&params);
 
 		/* connect the session  */
 		comm->control_ctx->conn = xio_connect(

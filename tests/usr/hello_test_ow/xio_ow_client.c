@@ -519,13 +519,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	struct xio_msg		*msg;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
+	struct xio_session_params params;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -537,6 +531,7 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	memset(&test_params, 0, sizeof(struct test_params));
+	memset(&params, 0, sizeof(params));
 	test_params.stat.first_time = 1;
 	test_params.ask_for_receipt = ASK_FOR_RECEIPT;
 	test_params.finite_run = test_config.finite_run;
@@ -562,8 +557,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, &test_params);
+
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &test_params;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",

@@ -390,17 +390,13 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	struct raio_session_data	*session_data;
 	int				raio_err = 0;
 	int				fd;
+	struct xio_session_params	params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	xio_init();
 
 	session_data = calloc(1, sizeof(*session_data));
+	memset(&params, 0, sizeof(params));
 
 	session_data->cmd_req.out.header.iov_base =
 		calloc(MAX_MSG_LEN, sizeof(char));
@@ -415,9 +411,12 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d",
 		get_ip(addr), get_port(addr));
-	session_data->session = xio_session_create(XIO_SESSION_CLIENT,
-						 &attr, url,
-						 0, 0, session_data);
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= session_data;
+	params.uri		= url;
+
+	session_data->session = xio_session_create(&params);
 	if (session_data->session == NULL)
 		goto cleanup;
 

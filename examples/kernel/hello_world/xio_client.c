@@ -213,17 +213,11 @@ static int xio_client_main(void *data)
 	char **argv = (char **)data;
 
 	struct xio_session	*session;
+	struct xio_session_params params;
 	char			url[256];
 	struct xio_context	*ctx;
 	struct session_data	*session_data;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	atomic_add(2, &module_state);
 
@@ -245,8 +239,14 @@ static int xio_client_main(void *data)
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, session_data);
+
+	memset(&params, 0, sizeof(params));
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= session_data;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 
 	/* connect the session  */
 	session_data->session = session;

@@ -356,13 +356,7 @@ int main(int argc, char *const argv[])
 	char			*addr = NULL;
 	char			*port = NULL;
 	char			*trans = NULL;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
+	struct xio_session_params params;
 
 	while (1) {
 		c = getopt_long(argc, argv, "a:p:r:hdnV", longopts, NULL);
@@ -425,6 +419,7 @@ int main(int argc, char *const argv[])
 		exit(EXIT_FAILURE);
 
 	memset(&session_data, 0, sizeof(session_data));
+	memset(&params, 0, sizeof(params));
 
 	/* initialize library */
 	xio_init();
@@ -458,9 +453,13 @@ int main(int argc, char *const argv[])
 	else
 		sprintf(url, "rdma://%s:%s", addr, port);
 
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &session_data;
+	params.uri		= url;
+
 reconnect:
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, &session_data);
+	session = xio_session_create(&params);
 
 	/* connect the session  */
 	session_data.conn = xio_connect(session, session_data.ctx,

@@ -1406,12 +1406,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 /*---------------------------------------------------------------------------*/
 /* xio_session_create			                                     */
 /*---------------------------------------------------------------------------*/
-struct xio_session *xio_session_create(enum xio_session_type type,
-				       struct xio_session_attr *attr,
-				       const char *uri,
-				       uint32_t initial_sn,
-				       uint32_t flags,
-				       void *cb_user_context)
+struct xio_session *xio_session_create(struct xio_session_params *params)
 {
 	struct xio_session	*session = NULL;
 	int			retval;
@@ -1419,12 +1414,12 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 
 
 	/* input validation */
-	if (attr == NULL || uri == NULL) {
+	if (params == NULL || params->uri == NULL) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("xio_session_open: invalid parameter\n");
 		return NULL;
 	}
-	uri_len = strlen(uri);
+	uri_len = strlen(params->uri);
 
 	/* extract portal from uri */
 	/* create the session */
@@ -1436,13 +1431,13 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 	}
 
 	XIO_OBSERVER_INIT(&session->observer, session,
-			  (type == XIO_SESSION_SERVER) ?
+			  (params->type == XIO_SESSION_SERVER) ?
 					xio_server_on_nexus_event :
 					xio_client_on_nexus_event);
 
 	INIT_LIST_HEAD(&session->connections_list);
 
-	session->hs_private_data_len = attr->user_context_len;
+	session->hs_private_data_len = params->private_data_len;
 
 	/* copy private data if exist */
 	if (session->hs_private_data_len) {
@@ -1452,26 +1447,26 @@ struct xio_session *xio_session_create(enum xio_session_type type,
 			xio_set_error(ENOMEM);
 			goto cleanup;
 		}
-		memcpy(session->hs_private_data , attr->user_context,
+		memcpy(session->hs_private_data , params->private_data,
 		       session->hs_private_data_len);
 	}
 	mutex_init(&session->lock);
 	spin_lock_init(&session->connections_list_lock);
 
 	/* fill session data*/
-	session->type			= type;
-	session->cb_user_context	= cb_user_context;
+	session->type			= params->type;
+	session->cb_user_context	= params->user_context;
 
-	session->trans_sn		= initial_sn;
+	session->trans_sn		= params->initial_sn;
 	session->state			= XIO_SESSION_STATE_INIT;
-	session->session_flags		= flags;
+	session->session_flags		= 0;
 
-	memcpy(&session->ses_ops, attr->ses_ops,
-	       sizeof(*attr->ses_ops));
+	memcpy(&session->ses_ops, params->ses_ops,
+	       sizeof(*params->ses_ops));
 
 
 	session->uri_len = uri_len;
-	session->uri = kstrdup(uri, GFP_KERNEL);
+	session->uri = kstrdup(params->uri, GFP_KERNEL);
 	if (session->uri == NULL) {
 		xio_set_error(ENOMEM);
 		goto cleanup2;

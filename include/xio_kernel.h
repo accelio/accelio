@@ -256,12 +256,33 @@ typedef void (*xio_log_fn)(const char *file, unsigned line,
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
+/**
+ * @struct xio_session_params
+ * @brief session creation params
+ */
+struct xio_session_params {
+	enum xio_session_type	type;		 /**< The type of the session */
+
+	uint32_t		initial_sn;      /**< initial serial number   */
+						 /**< to start with	      */
+
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< session user context     */
+	void			*private_data;  /**< private user data snt to */
+						/**< server upon new session  */
+	size_t			private_data_len; /**< private data length    */
+	char			*uri;		  /**< the uri		      */
+};
+
+
+/**
+ * @struct xio_session_attr
+ * @brief session attributes
+ */
 struct xio_session_attr {
-	struct xio_session_ops	*ses_ops;	/* session's ops callbacks */
-	void			*user_context;  /* sent to server upon new
-						   session */
-	char			*uri;		  /**< the uri		   */
-	size_t			user_context_len;
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< session user context     */
+	char			*uri;		/**< the uri		      */
 };
 
 /**
@@ -368,7 +389,7 @@ struct xio_msg {
 
 /**
  * @struct xio_session_event_data
- * @brief  session enent callback parmaters
+ * @brief  session event callback parameters
  */
 struct xio_session_event_data {
 	struct xio_connection	*conn;		    /**< connection object   */
@@ -728,23 +749,11 @@ int xio_query_context(struct xio_context *ctx,
 /**
  * creates new requester session
  *
- * @param[in] type	The type of the session
- * @param[in] attr	Structure of session attributes
- * @param[in] uri	uri to connect
- * @param[in] initial_sn Initial serial number to start with
- * @param[in] flags	 Session related flags as defined in xio_session_flags
- * @param[in] cb_user_context Private data pointer to pass to each session
- *			       callback
- *
+ * @param[in] params	session creations parameters
+  *
  * @returns xio session context, or NULL upon error
  */
-struct xio_session *xio_session_create(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context);
+struct xio_session *xio_session_create(struct xio_session_params *params);
 
 /**
  * teardown an opened session
@@ -933,25 +942,28 @@ struct xio_connection *xio_get_connection(struct xio_session  *session,
 					  struct xio_context  *ctx);
 
 /**
- * xio_accept - accept new session or "light redirect" it to anther thread
+ * accept new session or "light redirect" it to anther thread
  *
- * @session: The xio session handle.
- * @portals_array: String array of alternative portals to the resource
- *		in form of "rdma://host:port" "rdma://127.0.0.1:1234"
- * @portals_array_len: The string array length
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] portals_array	string array of alternative portals to the
+ *				resource in form of "rdma://host:port"
+ *				"rdma://127.0.0.1:1234"
+ * @param[in] portals_array_len The string array length
+ * @param[in] private_data	References a user-controlled data buffer
+ *			        The contents of the buffer are copied and
+ *			        transparently passed to the remote side as
+ *			        part of the communication request. May be
+ *			        NULL if user_context is not required
+ * @param[in] private_data_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_accept(struct xio_session *session,
-				const char **portals_array,
-				size_t portals_array_len,
-				void *user_context,
-				size_t user_context_len);
+	       const char **portals_array,
+	       size_t portals_array_len,
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * xio_redirect - redirect connecting session to connect to
@@ -969,24 +981,25 @@ int xio_redirect(struct xio_session *session,
 				  size_t portals_array_len);
 
 /**
- * xio_reject - reject connecting session.
+ * reject a connecting session
  *
  *
- * @session: The xio session handle.
- * @reason: reason for rejection
- * @private_status: user provided status as hint to the peer
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] reason		Reason for rejection
+ * @param[in] private_data	References a user-controlled data buffer
+ *				The contents of the buffer are copied and
+ *				transparently passed to the peer as part
+ *				of the communication request. May be NULL
+ *				if user_context is not required
+ * @param[in] private_data_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @return success (0), or a (negative) error value
  */
 int xio_reject(struct xio_session *session,
-				enum xio_status reason,
-				void *user_context,
-				size_t user_context_len);
+	       enum xio_status reason,
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * xio_send_response - send response.

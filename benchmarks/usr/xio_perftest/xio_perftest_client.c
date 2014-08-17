@@ -409,14 +409,9 @@ int run_client_test(struct perf_parameters *user_param)
 	struct perf_command	command;
 	int			size_log2;
 	int			max_size_log2 = 24;
+	struct xio_session_params params;
 
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
 	xio_init();
 
 	g_mhz		= get_cpu_mhz(0);
@@ -457,6 +452,7 @@ int run_client_test(struct perf_parameters *user_param)
 
 		memset(&sess_data, 0, sizeof(sess_data));
 		memset(tdata, 0, user_param->threads_num*sizeof(*tdata));
+		memset(&params, 0, sizeof(params));
 		sess_data.tdata = tdata;
 
 		command.test_param.machine_type	= user_param->machine_type;
@@ -471,8 +467,13 @@ int run_client_test(struct perf_parameters *user_param)
 			user_param->transport,
 			user_param->server_addr,
 			user_param->server_port);
-		sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
-				&attr, url, 0, 0, &sess_data);
+
+		params.type		= XIO_SESSION_CLIENT;
+		params.ses_ops		= &ses_ops;
+		params.user_context	= &sess_data;
+		params.uri		= url;
+
+		sess_data.session = xio_session_create(&params);
 		if (sess_data.session == NULL) {
 			int error = xio_errno();
 			fprintf(stderr,

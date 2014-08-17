@@ -421,13 +421,6 @@ cleanup0:
 	return -1;
 }
 
-/* client session attributes */
-struct xio_session_attr session_attr = {
-	&ses_ops, /* callback structure */
-	NULL,	  /* no need to pass the server private data */
-	0
-};
-
 /*---------------------------------------------------------------------------*/
 /* main									     */
 /*---------------------------------------------------------------------------*/
@@ -437,6 +430,7 @@ static int xio_client_main(void *data)
 	char url[256];
 	struct session_data *sdata;
 	struct xio_session *session;
+	struct xio_session_params params;
 	u16 port;
 	int ret = 0;
 
@@ -463,9 +457,13 @@ static int xio_client_main(void *data)
 
 	/* create URL to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &session_attr, url, 0, 0, sdata);
 
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= sdata;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (!session) {
 		pr_err("session creation failed\n");
 		ret = -1;
