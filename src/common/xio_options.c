@@ -47,13 +47,15 @@
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
+#define XIO_OPTVAL_DEF_QUEUE_DEPTH			256
 
 
 /* xio options */
 struct xio_options			g_options = {
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
-	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT
+	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
+	.queue_depth			= XIO_OPTVAL_DEF_QUEUE_DEPTH
 };
 
 /*---------------------------------------------------------------------------*/
@@ -158,6 +160,13 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.reconnect = *((int *)optval);
 		return 0;
 		break;
+	case XIO_OPTNAME_QUEUE_DEPTH:
+		if (*((int *)optval) > 1024  ||
+			    *((int *)optval) < 1)
+			break;
+		g_options.queue_depth = *((int *)optval);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -190,6 +199,10 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.reconnect;
+		 return 0;
+	case XIO_OPTNAME_QUEUE_DEPTH:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.queue_depth;
 		 return 0;
 	default:
 		break;

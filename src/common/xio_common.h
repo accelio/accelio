@@ -141,7 +141,7 @@ struct xio_options {
 	int			max_in_iovsz;
 	int			max_out_iovsz;
 	int			reconnect;
-	int			pad;
+	int			queue_depth;
 };
 
 struct xio_sge {

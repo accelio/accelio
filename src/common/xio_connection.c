@@ -48,8 +48,6 @@
 #include "xio_sg_table.h"
 
 #define MSG_POOL_SZ			1024
-#define XIO_CONNECTION_INFLIGHT_BUDGET	64
-#define XIO_CONNECTION_APP_BUDGET	256
 #define XIO_CONNECTION_TIMEOUT		60000
 #define XIO_BUF_THRESHOLD		8000
 #define XIO_IOV_THRESHOLD		20
@@ -230,9 +228,9 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 		connection->nexus	= NULL;
 		connection->ctx		= ctx;
 		connection->conn_idx	= conn_idx;
-		connection->in_flight_reqs_budget = XIO_CONNECTION_INFLIGHT_BUDGET;
-		connection->in_flight_sends_budget = XIO_CONNECTION_INFLIGHT_BUDGET;
-		connection->app_io_budget = XIO_CONNECTION_APP_BUDGET;
+		connection->in_flight_reqs_budget = g_options.queue_depth;
+		connection->in_flight_sends_budget = g_options.queue_depth;
+		connection->app_io_budget = g_options.queue_depth;
 		connection->cb_user_context = cb_user_context;
 		memcpy(&connection->ses_ops, &session->ses_ops,
 		       sizeof(session->ses_ops));
