@@ -59,17 +59,6 @@ static LIST_HEAD(mr_list);
 static spinlock_t mr_list_lock;
 static uint32_t mr_num; /* checkpatch doesn't like initializing static vars */
 
-/*---------------------------------------------------------------------------*/
-/* ibv_rdma_alloc_mr	                                                     */
-/*---------------------------------------------------------------------------*/
-struct ibv_mr *xio_rdma_alloc_mr(struct xio_device *dev, size_t length)
-{
-	return ibv_reg_mr(dev->pd, NULL, length,
-			IBV_ACCESS_LOCAL_WRITE |
-			IBV_ACCESS_REMOTE_WRITE|
-			IBV_ACCESS_REMOTE_READ |
-			IBV_ACCESS_ALLOCATE_MR);
-}
 
 /*---------------------------------------------------------------------------*/
 /* ibv_wc_opcode_str	                                                     */
@@ -95,14 +84,20 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode)
 /*---------------------------------------------------------------------------*/
 static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 					     void **addr, size_t length,
-					     int access)
+					     uint64_t access)
 {
 	struct xio_mr_elem *mr_elem;
 	struct ibv_mr	   *mr;
 	int retval;
+	struct ibv_exp_reg_mr_in reg_mr_in;
 	int alloc_mr = (*addr == NULL);
 
-	mr = ibv_reg_mr(dev->pd, *addr, length, access);
+	reg_mr_in.pd = dev->pd;
+	reg_mr_in.addr = *addr;
+	reg_mr_in.length = length;
+	reg_mr_in.exp_access = access;
+	reg_mr_in.comp_mask = 0;
+	mr = ibv_xio_reg_mr(&reg_mr_in);
 	if (!mr) {
 		xio_set_error(errno);
 		if (!alloc_mr)
@@ -131,7 +126,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr_ex							     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
+static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 {
 	struct xio_mr			*tmr;
 	struct xio_mr_elem		*tmr_elem;
@@ -181,8 +176,8 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, int access)
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
 		list_add(&tmr_elem->xm_list_entry, &dev->xm_list);
 
-		if (access & IBV_ACCESS_ALLOCATE_MR) {
-			access  &= ~IBV_ACCESS_ALLOCATE_MR;
+		if (access & IBV_XIO_ACCESS_ALLOCATE_MR) {
+			access  &= ~IBV_XIO_ACCESS_ALLOCATE_MR;
 			*addr = tmr_elem->mr->addr;
 		}
 	}
@@ -319,7 +314,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 	}
 
 	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
-					 xm_list_entry) {
+				 xm_list_entry) {
 		if (tmr_elem->mr) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
 			if (retval != 0) {
@@ -343,8 +338,9 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 struct xio_buf *xio_alloc(size_t length)
 {
 	struct xio_buf		*buf;
+	struct xio_device	*dev;
 	size_t			real_size;
-	int			access;
+	uint64_t		access;
 
 	access = IBV_ACCESS_LOCAL_WRITE |
 		 IBV_ACCESS_REMOTE_WRITE|
@@ -356,15 +352,19 @@ struct xio_buf *xio_alloc(size_t length)
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	access |= IBV_ACCESS_ALLOCATE_MR;
-	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
-	if (buf->mr) {
-		buf->length		= length;
-		buf->mr->addr_alloced	= 0;
-		goto exit;
+
+	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
+
+	if (dev && IBV_IS_MPAGES_AVAIL(&dev->device_attr)) {
+		access |= IBV_XIO_ACCESS_ALLOCATE_MR;
+		buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
+		if (buf->mr) {
+			buf->length		= length;
+			buf->mr->addr_alloced	= 0;
+			goto exit;
+		}
 	}
 
-	access &= ~IBV_ACCESS_ALLOCATE_MR;
 	real_size = ALIGN(length, page_size);
 	buf->addr = umemalign(page_size, real_size);
 	if (!buf->addr) {
@@ -374,7 +374,7 @@ struct xio_buf *xio_alloc(size_t length)
 	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
 	if (!buf->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed. " \
-			 "addr:%p, length:%d, access:0x%x\n",
+			  "addr:%p, length:%d, access:0x%x\n",
 			  buf->addr, length, access);
 
 		goto cleanup1;

@@ -473,7 +473,7 @@ static struct xio_device *xio_device_init(struct ibv_context *ib_ctx)
 		ERROR_LOG("ibv_alloc_pd failed. (errno=%d %m)\n", errno);
 		goto cleanup;
 	}
-	retval = ibv_query_device(dev->verbs, &dev->device_attr);
+	retval = ibv_xio_query_device(dev->verbs, &dev->device_attr);
 	if (retval < 0) {
 		ERROR_LOG("ibv_query_device failed. (errno=%d %m)\n", errno);
 		goto cleanup1;

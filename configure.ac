@@ -44,6 +44,20 @@ AC_TYPE_SIZE_T
 
 AC_CHECK_LIB(numa, numa_available)
 
+#
+# Check for Contiguous Pages support
+#
+AC_CHECK_DECLS(IBV_EXP_ACCESS_ALLOCATE_MR,
+              [AC_DEFINE([HAVE_MPAGES_EXP], 1, [Contiguous pages support, experimental])],
+              [AC_MSG_WARN([Contiguous pages (exp_api) are not supported])],
+              [[#include <infiniband/verbs.h>]])
+
+AC_CHECK_DECLS(IBV_DEVICE_MR_ALLOCATE,
+              [AC_DEFINE([HAVE_MPAGES], 1, [Contiguous pages support])],
+              [AC_MSG_WARN([Contiguous pages are not supported])],
+              [[#include <infiniband/verbs.h>]])
+
+
 ##########################################################################
 # perf support
 ##########################################################################

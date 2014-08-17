@@ -86,12 +86,41 @@ extern spinlock_t		dev_list_lock;
 			(struct xio_rdma_task *)(xt)->dd_data
 
 
-//#ifndef IBV_DEVICE_MR_ALLOCATE
-//#  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
-//#endif
-#ifndef IBV_ACCESS_ALLOCATE_MR
-#  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
-#endif /* M-pages compatibility */
+
+#ifdef HAVE_MPAGES_EXP
+#    define IBV_XIO_ACCESS_ALLOCATE_MR		IBV_EXP_ACCESS_ALLOCATE_MR
+#    define IBV_IS_MPAGES_AVAIL(_attr)		((_attr)->exp_device_cap_flags \
+						& IBV_EXP_DEVICE_MR_ALLOCATE)
+#    define ibv_xio_device_attr			ibv_exp_device_attr
+#    define ibv_xio_query_device		ibv_exp_query_device
+#    define ibv_xio_reg_mr			ibv_exp_reg_mr
+#else
+#    ifdef HAVE_MPAGES
+#        define IBV_XIO_ACCESS_ALLOCATE_MR	IBV_ACCESS_ALLOCATE_MR
+#        define IBV_IS_MPAGES_AVAIL(_attr)	((_attr)->device_cap_flags \
+						& IBV_DEVICE_MR_ALLOCATE)
+#    else
+#        define IBV_XIO_ACCESS_ALLOCATE_MR	(0)
+#        define IBV_IS_MPAGES_AVAIL(_attr)	(0)
+#    endif
+
+#    define ibv_xio_device_attr			ibv_device_attr
+#    define ibv_xio_query_device		ibv_query_device
+
+struct ibv_exp_reg_mr_in {
+	struct ibv_pd *pd;
+	void *addr;
+	size_t length;
+	int exp_access;
+	uint32_t comp_mask;
+};
+
+static inline struct ibv_mr *ibv_xio_reg_mr(struct ibv_exp_reg_mr_in *in)
+{
+	return ibv_reg_mr(in->pd, in->addr, in->length, in->exp_access);
+}
+#endif
+
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -273,7 +302,7 @@ struct xio_device {
 	pthread_rwlock_t		cq_lock;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
-	struct ibv_device_attr		device_attr;
+	struct ibv_xio_device_attr	device_attr;
 	struct list_head		xm_list; /* list of xio_mr_elem */
 	struct kref			kref;
 	uint32_t			kref_pad;
