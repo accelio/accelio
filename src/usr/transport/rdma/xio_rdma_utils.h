@@ -50,6 +50,7 @@ int xio_validate_rdma_op(
 
 const char *xio_cm_rej_reason_str(int reason);
 
+void xio_validate_ulimit_memlock(void);
 
 #endif /*XIO_RDMA_UTILS_H */
 

@@ -206,4 +206,17 @@ const char *xio_cm_rej_reason_str(int reason)
 	};
 }
 
+void xio_validate_ulimit_memlock(void)
+{
+	struct rlimit		mlock_limit;
 
+	if (getrlimit(RLIMIT_MEMLOCK, &mlock_limit)) {
+		ERROR_LOG("getrlimit call failed. (errno=%d %m)\n", errno);
+		return;
+	}
+	if (mlock_limit.rlim_cur != RLIM_INFINITY) {
+		WARN_LOG("Verify that Max Locked Memory (ulimit -l) "
+			 "setting is on unlimited (current is %ld)\n",
+			 mlock_limit.rlim_cur);
+	}
+}

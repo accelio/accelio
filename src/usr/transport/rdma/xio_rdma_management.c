@@ -353,6 +353,8 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	if (tcq->cq == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("ibv_create_cq failed. (errno=%d %m)\n", errno);
+		if (errno == ENOMEM)
+			xio_validate_ulimit_memlock();
 		goto cleanup4;
 	}
 
@@ -882,6 +884,8 @@ static int xio_setup_qp(struct xio_rdma_transport *rdma_hndl)
 		xio_set_error(errno);
 		xio_cq_free_slots(tcq, MAX_CQE_PER_QP);
 		ERROR_LOG("rdma_create_qp failed. (errno=%d %m)\n", errno);
+		if (errno == ENOMEM)
+			xio_validate_ulimit_memlock();
 		return -1;
 	}
 	rdma_hndl->tcq		= tcq;
@@ -1142,6 +1146,8 @@ static int xio_rdma_initial_pool_slab_pre_create(
 		xio_set_error(errno);
 		ufree(rdma_slab->data_pool);
 		ERROR_LOG("ibv_reg_mr conn_setup pool failed, %m\n");
+		if (errno == ENOMEM)
+			xio_validate_ulimit_memlock();
 		return -1;
 	}
 	return 0;
@@ -1490,6 +1496,8 @@ static int xio_rdma_primary_pool_slab_pre_create(
 			xio_set_error(errno);
 			ufree_huge_pages(rdma_slab->data_pool);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			if (errno == ENOMEM)
+				xio_validate_ulimit_memlock();
 			return -1;
 		}
 	}
@@ -1530,6 +1538,8 @@ static int xio_rdma_primary_pool_slab_post_create(
 			xio_set_error(errno);
 			ufree_huge_pages(rdma_slab->data_pool);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			if (errno == ENOMEM)
+				xio_validate_ulimit_memlock();
 			return -1;
 		}
 	}else {

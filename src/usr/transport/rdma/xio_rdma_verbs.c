@@ -50,6 +50,7 @@
 #include "xio_mem.h"
 #include "xio_transport_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_rdma_utils.h"
 
 
 /*---------------------------------------------------------------------------*/
@@ -102,6 +103,8 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 		xio_set_error(errno);
 		if (!alloc_mr)
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
+		if (errno == ENOMEM)
+			xio_validate_ulimit_memlock();
 		return NULL;
 	}
 	mr_elem = ucalloc(1, sizeof(*mr_elem));
@@ -363,6 +366,8 @@ struct xio_buf *xio_alloc(size_t length)
 			buf->mr->addr_alloced	= 0;
 			goto exit;
 		}
+		WARN_LOG("Contig pages allocation failed. (errno=%d %m)\n",
+			 errno);
 	}
 
 	real_size = ALIGN(length, page_size);
