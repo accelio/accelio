@@ -2702,14 +2702,14 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				       &rdma_sender_task->write_sge,
 				       DMA_TO_DEVICE);
 		}
-		sg = sge_first(isgtbl_ops, isgtbl);
 		if (rsp_hdr.ulp_imm_len) {
+			tbl_set_nents(isgtbl_ops, isgtbl, 1);
+			sg = sge_first(isgtbl_ops, isgtbl);
 			sge_set_addr(isgtbl_ops, sg,
 				     (ulp_hdr + imsg->in.header.iov_len +
 				     rsp_hdr.ulp_pad_len));
 			sge_set_length(isgtbl_ops, sg,
 				       rsp_hdr.ulp_imm_len);
-			tbl_set_nents(isgtbl_ops, isgtbl, 1);
 		} else {
 			tbl_set_nents(isgtbl_ops, isgtbl, 0);
 		}
@@ -2760,6 +2760,9 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				  rdma_task->rsp_write_num_sge);
 			goto partial_msg;
 		}
+		tbl_set_nents(isgtbl_ops, isgtbl,
+			      rdma_task->rsp_write_num_sge);
+
 		sg = sge_first(isgtbl_ops, isgtbl);
 		for (i = 0; i < rdma_task->rsp_write_num_sge; i++) {
 			sge_set_addr(isgtbl_ops, sg,
@@ -2768,39 +2771,42 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				rdma_task->rsp_write_sge[i].length);
 			sg = sge_next(isgtbl_ops, isgtbl, sg);
 		}
-		tbl_set_nents(isgtbl_ops, isgtbl,
-			      rdma_task->rsp_write_num_sge);
-
-		sg = sge_first(osgtbl_ops, osgtbl);
-		if (sge_addr(osgtbl_ops, sg))  {
-			void *isg;
-			/* user provided buffer */
-			if (!rdma_sender_task->read_sge.mp_sge[0].cache) {
-				/* user buffers were aligned no bounce buffer
-				 * data was copied directly to user buffer
-				 * need to update the buffer length
-				 */
-				for_each_sge(isgtbl, isgtbl_ops, isg, i) {
-					sge_set_length(osgtbl_ops, sg,
-						       sge_length(isgtbl_ops, isg));
-					sg = sge_next(osgtbl_ops, osgtbl, sg);
+		if (tbl_nents(osgtbl_ops, osgtbl)) {
+			sg = sge_first(osgtbl_ops, osgtbl);
+			if (sge_addr(osgtbl_ops, sg))  {
+				void *isg;
+				/* user provided buffer */
+				if (!rdma_sender_task->read_sge.mp_sge[0].cache) {
+					/* user buffers were aligned no bounce buffer
+					 * data was copied directly to user buffer
+					 * need to update the buffer length
+					 */
+					for_each_sge(isgtbl, isgtbl_ops, isg, i) {
+						     sge_set_length(osgtbl_ops, sg,
+								    sge_length(isgtbl_ops,
+									       isg));
+						sg = sge_next(osgtbl_ops, osgtbl, sg);
+					}
+					tbl_set_nents(osgtbl_ops, osgtbl,
+						      tbl_nents(isgtbl_ops, isgtbl));
+				} else {
+					/* Bounce buffer */
+					tbl_copy(osgtbl_ops, osgtbl,
+						 isgtbl_ops, isgtbl);
+					/* put bounce buffer back to pool */
+					xio_rdma_mempool_free(
+							&rdma_sender_task->read_sge);
+					rdma_sender_task->read_num_sge = 0;
 				}
-				tbl_set_nents(osgtbl_ops, osgtbl,
-					      tbl_nents(isgtbl_ops, isgtbl));
 			} else {
-				/* Bounce buffer */
-				tbl_copy(osgtbl_ops, osgtbl,
-					 isgtbl_ops, isgtbl);
-				/* put bounce buffer back to pool */
-				xio_rdma_mempool_free(
-						&rdma_sender_task->read_sge);
-				rdma_sender_task->read_num_sge = 0;
-			}
-		} else {
-			/* use provided only length - set user
-			 * pointers */
-			tbl_clone(osgtbl_ops, osgtbl,
+				/* use provided only length - set user
+				 * pointers */
+				tbl_clone(osgtbl_ops, osgtbl,
 					  isgtbl_ops, isgtbl);
+			}
+
+		} else {
+			ERROR_LOG("empty out message\n");
 		}
 		break;
 	default:
