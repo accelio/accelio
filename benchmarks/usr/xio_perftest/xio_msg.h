@@ -86,17 +86,5 @@ struct perf_buf *xio_buf_alloc(size_t size);
 
 void  xio_buf_free(struct perf_buf *pbuf);
 
-#define vmsg_sglist(vmsg)					\
-		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
-		 (vmsg)->data_iov.sglist :			\
-		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
-		 (vmsg)->pdata_iov.sglist : NULL))
-
-#define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
-
-#define vmsg_sglist_set_nents(vmsg, n)				\
-		 (vmsg)->data_tbl.nents = (n)
-
 
 #endif /* #define MSG_API_H */

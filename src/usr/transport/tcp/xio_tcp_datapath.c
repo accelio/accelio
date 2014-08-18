@@ -2310,20 +2310,19 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	case XIO_TCP_SEND:
 		sgtbl		= xio_sg_table_get(&imsg->in);
 		sgtbl_ops	= xio_sg_table_ops_get(imsg->in.sgl_type);
-		sg		= sge_first(sgtbl_ops, sgtbl);
-
 		if (req_hdr.ulp_imm_len) {
 			/* incoming data via SEND */
 			/* if data arrived, set the pointers */
+			tbl_set_nents(sgtbl_ops, sgtbl, 1);
+			sg = sge_first(sgtbl_ops, sgtbl);
+
+
 			sge_set_addr(sgtbl_ops, sg,
 				     (ulp_hdr + imsg->in.header.iov_len +
 				     req_hdr.ulp_pad_len));
 			sge_set_length(sgtbl_ops, sg, req_hdr.ulp_imm_len);
-			tbl_set_nents(sgtbl_ops, sgtbl, 1);
 		} else {
 			/* no data at all */
-			if (sg)
-				sge_set_addr(sgtbl_ops, sg, NULL);
 			tbl_set_nents(sgtbl_ops, sgtbl, 0);
 		}
 		break;
@@ -2449,18 +2448,15 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 					    rsp_hdr.ulp_pad_len +
 					    rsp_hdr.ulp_imm_len);
 		/* if data arrived, set the pointers */
-		sg = sge_first(isgtbl_ops, isgtbl);
-		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
+			tbl_set_nents(isgtbl_ops, isgtbl, 1);
+			sg = sge_first(isgtbl_ops, isgtbl);
 			sge_set_addr(isgtbl_ops, sg,
 				     (ulp_hdr + imsg->in.header.iov_len +
 				     rsp_hdr.ulp_pad_len));
 			sge_set_length(isgtbl_ops, sg,
 				       rsp_hdr.ulp_imm_len);
-			tbl_set_nents(isgtbl_ops, isgtbl, 1);
 		} else {
-			sge_set_addr(isgtbl_ops, sg, NULL);
-			sge_set_length(isgtbl_ops, sg, 0);
 			tbl_set_nents(isgtbl_ops, isgtbl, 0);
 		}
 		break;
@@ -2476,6 +2472,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 			goto partial_msg;
 		}
 
+		tbl_set_nents(isgtbl_ops, isgtbl,
+			      tcp_task->rsp_write_num_sge);
 		sg = sge_first(isgtbl_ops, isgtbl);
 		for (i = 0; i < tcp_task->rsp_write_num_sge; i++) {
 			sge_set_addr(isgtbl_ops, sg,
@@ -2488,10 +2486,6 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 					tcp_task->rsp_write_sge[i].length;
 			sg = sge_next(isgtbl_ops, isgtbl, sg);
 		}
-
-		tbl_set_nents(isgtbl_ops, isgtbl,
-			      tcp_task->rsp_write_num_sge);
-
 
 		tcp_sender_task->rxd.msg_len +=
 				tcp_task->rsp_write_num_sge;

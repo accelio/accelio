@@ -48,19 +48,6 @@
 #define TEST_DISCONNECT		1
 #define DISCONNECT_NR		3000000
 
-#define vmsg_sglist(vmsg)					\
-		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
-		 (vmsg)->data_iov.sglist :			\
-		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
-		 (vmsg)->pdata_iov.sglist : NULL))
-
-#define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
-
-#define vmsg_sglist_set_nents(vmsg, n)				\
-		 (vmsg)->data_tbl.nents = (n)
-
-
 struct thread_data {
 	int			cid;
 	int			affinity;
@@ -145,9 +132,6 @@ static void process_response(struct thread_data  *tdata,
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	vmsg_sglist_set_nents(&rsp->in, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -207,7 +191,9 @@ static int on_response(struct xio_session *session,
 	if (tdata->nsent == DISCONNECT_NR)
 		return 0;
 #endif
-
+	tdata->req.in.header.iov_base	  = NULL;
+	tdata->req.in.header.iov_len	  = 0;
+	vmsg_sglist_set_nents(&tdata->req.in, 0);
 
 	/* resend the message */
 	xio_send_request(tdata->conn, &tdata->req);

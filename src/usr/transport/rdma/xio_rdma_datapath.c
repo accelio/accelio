@@ -2449,15 +2449,15 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	switch (rsp_hdr.opcode) {
 	case XIO_IB_SEND:
-		sg = sge_first(isgtbl_ops, isgtbl);
-		/* if data arrived, set the pointers */
+			/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
+			tbl_set_nents(isgtbl_ops, isgtbl, 1);
+			sg = sge_first(isgtbl_ops, isgtbl);
 			sge_set_addr(isgtbl_ops, sg,
 				     (ulp_hdr + imsg->in.header.iov_len +
 				     rsp_hdr.ulp_pad_len));
 			sge_set_length(isgtbl_ops, sg,
 				       rsp_hdr.ulp_imm_len);
-			tbl_set_nents(isgtbl_ops, isgtbl, 1);
 		} else {
 			tbl_set_nents(isgtbl_ops, isgtbl, 0);
 		}
@@ -2503,6 +2503,9 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			goto partial_msg;
 		}
 
+		tbl_set_nents(isgtbl_ops, isgtbl,
+			      rdma_task->rsp_write_num_sge);
+
 		sg = sge_first(isgtbl_ops, isgtbl);
 		for (i = 0; i < rdma_task->rsp_write_num_sge; i++) {
 			sge_set_addr(isgtbl_ops, sg,
@@ -2512,42 +2515,44 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				       rdma_task->rsp_write_sge[i].length);
 			sg = sge_next(isgtbl_ops, isgtbl, sg);
 		}
-		tbl_set_nents(isgtbl_ops, isgtbl,
-			      rdma_task->rsp_write_num_sge);
 
-		/* user provided mr */
-		sg = sge_first(osgtbl_ops, osgtbl);
-		if (sge_mr(osgtbl_ops, sg))  {
-			void *isg;
-			/* data was copied directly to user buffer */
-			/* need to update the buffer length */
-			for_each_sge(isgtbl, isgtbl_ops, isg, i) {
-				sge_set_length(osgtbl_ops, sg,
-					       sge_length(isgtbl_ops, isg));
-				sg = sge_next(osgtbl_ops, osgtbl, sg);
-			}
-			tbl_set_nents(osgtbl_ops, osgtbl,
-				      tbl_nents(isgtbl_ops, isgtbl));
-		} else  {
-			/* user provided buffer but not mr */
-			/* deep copy */
-			if (sge_addr(osgtbl_ops, sg))  {
-				tbl_copy(osgtbl_ops, osgtbl,
-					 isgtbl_ops, isgtbl);
-				/* put buffers back to pool */
-				for (i = 0; i < rdma_sender_task->read_num_sge;
-						i++) {
-					xio_mempool_free(
-						&rdma_sender_task->read_sge[i]);
-					rdma_sender_task->read_sge[i].cache = 0;
+		if (tbl_nents(osgtbl_ops, osgtbl)) {
+			/* user provided mr */
+			sg = sge_first(osgtbl_ops, osgtbl);
+			if (sge_mr(osgtbl_ops, sg))  {
+				void *isg;
+				/* data was copied directly to user buffer */
+				/* need to update the buffer length */
+				for_each_sge(isgtbl, isgtbl_ops, isg, i) {
+					sge_set_length(osgtbl_ops, sg,
+							sge_length(isgtbl_ops, isg));
+					sg = sge_next(osgtbl_ops, osgtbl, sg);
 				}
-				rdma_sender_task->read_num_sge = 0;
-			} else {
-				/* use provided only length - set user
-				 * pointers */
-				tbl_clone(osgtbl_ops, osgtbl,
-					  isgtbl_ops, isgtbl);
+				tbl_set_nents(osgtbl_ops, osgtbl,
+						tbl_nents(isgtbl_ops, isgtbl));
+			} else  {
+				/* user provided buffer but not mr */
+				/* deep copy */
+				if (sge_addr(osgtbl_ops, sg))  {
+					tbl_copy(osgtbl_ops, osgtbl,
+							isgtbl_ops, isgtbl);
+					/* put buffers back to pool */
+					for (i = 0; i < rdma_sender_task->read_num_sge;
+							i++) {
+						xio_mempool_free(
+								&rdma_sender_task->read_sge[i]);
+						rdma_sender_task->read_sge[i].cache = 0;
+					}
+					rdma_sender_task->read_num_sge = 0;
+				} else {
+					/* use provided only length - set user
+					 * pointers */
+					tbl_clone(osgtbl_ops, osgtbl,
+							isgtbl_ops, isgtbl);
+				}
 			}
+		} else {
+			ERROR_LOG("empty out message\n");
 		}
 		break;
 	default:
@@ -3280,20 +3285,17 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	case XIO_IB_SEND:
 		sgtbl		= xio_sg_table_get(&imsg->in);
 		sgtbl_ops	= xio_sg_table_ops_get(imsg->in.sgl_type);
-		sg		= sge_first(sgtbl_ops, sgtbl);
-
 		if (req_hdr.ulp_imm_len) {
 			/* incoming data via SEND */
 			/* if data arrived, set the pointers */
+			tbl_set_nents(sgtbl_ops, sgtbl, 1);
+			sg = sge_first(sgtbl_ops, sgtbl);
 			sge_set_addr(sgtbl_ops, sg,
 				     (ulp_hdr + imsg->in.header.iov_len +
 				     req_hdr.ulp_pad_len));
 			sge_set_length(sgtbl_ops, sg, req_hdr.ulp_imm_len);
-			tbl_set_nents(sgtbl_ops, sgtbl, 1);
 		} else {
 			/* no data at all */
-			if (sg)
-				sge_set_addr(sgtbl_ops, sg, NULL);
 			tbl_set_nents(sgtbl_ops, sgtbl, 0);
 		}
 		break;

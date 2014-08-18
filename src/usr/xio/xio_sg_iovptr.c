@@ -107,7 +107,7 @@ static inline void xio_sgve_set_mr(struct xio_iovec_ex *sg, void *mr)
 /*---------------------------------------------------------------------------*/
 static struct xio_iovec_ex *xio_sgve_first(struct xio_sg_iovptr *sgv)
 {
-	return ((!sgv || sgv->max_nents == 0) ? NULL : &sgv->sglist[0]);
+	return ((!sgv || sgv->nents == 0) ? NULL : &sgv->sglist[0]);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -115,7 +115,7 @@ static struct xio_iovec_ex *xio_sgve_first(struct xio_sg_iovptr *sgv)
 /*---------------------------------------------------------------------------*/
 static struct xio_iovec_ex *xio_sgve_last(struct xio_sg_iovptr *sgv)
 {
-	return ((!sgv || sgv->max_nents == 0 || sgv->nents == 0) ?
+	return ((!sgv || sgv->nents == 0) ?
 		NULL : &sgv->sglist[sgv->nents - 1]);
 }
 
