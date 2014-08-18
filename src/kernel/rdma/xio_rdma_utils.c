@@ -58,9 +58,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 int op_size,
 			 int *tasks_used)
 {
-	struct xio_iovec_ex *liov;
-	struct xio_sg_table_ops	*sgtbl_ops;
-	void		*sgtbl;
+	struct sg_table *sgtbl;
+	struct scatterlist *liov;
 	uint64_t	raddr;
 	uint32_t	rlen;
 	uint64_t	laddr;
@@ -75,9 +74,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 		*tasks_used = 0;
 		return -1;
 	}
-	sgtbl		= xio_sg_table_get(vmsg);
-	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
-	lnents		= tbl_nents(sgtbl_ops, sgtbl);
+	sgtbl		= &vmsg->data_tbl;
+	lnents		= sgtbl->nents;
 
 
 	if (lnents > XIO_MAX_IOV || lnents == 0) {
@@ -88,15 +86,15 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 
 
 	lsize = lnents;
-	liov  = tbl_sglist(sgtbl_ops, sgtbl);
+	liov  = sgtbl->sgl;
 
 	r = 0;
 	rlen  = rsg_list[r].length;
 	raddr = rsg_list[r].addr;
 
 	l = 0;
-	laddr = uint64_from_ptr(liov[l].iov_base);
-	llen  = liov[l].iov_len;
+	laddr = uint64_from_ptr(sg_virt(liov));
+	llen  = liov->length;
 
 	/* At least one task */
 	*tasks_used = 1;
@@ -128,8 +126,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			}
 			rlen	-= llen;
 			raddr	+= llen;
-			laddr	= uint64_from_ptr(liov[l].iov_base);
-			llen	= liov[l].iov_len;
+			laddr	= uint64_from_ptr(sg_virt(liov));
+			llen	= liov->length;
 		} else {
 			l++;
 			r++;
@@ -137,8 +135,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			if ((l == lsize) || (r == rsize))
 				break;
 
-			laddr	= uint64_from_ptr(liov[l].iov_base);
-			llen	= liov[l].iov_len;
+			laddr	= uint64_from_ptr(sg_virt(liov));
+			llen	= liov->length;
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			(*tasks_used)++;

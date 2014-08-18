@@ -221,10 +221,11 @@ struct xio_work_req {
 		struct ib_send_wr	send_wr;
 		struct ib_recv_wr	recv_wr;
 	};
-	struct ib_sge			*sge;
-	struct scatterlist		*sgl;
-	int				nents; /* number of sgl entries */
-	int				mapped; /* number of mapped entries */
+	struct ib_sge		*sge;
+	struct sg_table	sgt; /* same as sg_table with pointer to last*/
+	struct scatterlist	*last_sg;
+	int			nents; /* number of sgl entries */
+	int			mapped; /* number of mapped entries */
 };
 
 struct xio_rdma_task {
@@ -234,6 +235,12 @@ struct xio_rdma_task {
 	 * used to transfer the headers
 	 */
 	void				*buf;
+	/* for txd & rxd
+	 * txd needs to chain the header sgl
+	 * with task->omsg->out so sgl[1] is needed
+	 */
+	struct scatterlist		tx_sgl[2];
+	struct scatterlist		rx_sgl[1];
 	unsigned long			size;
 	struct xio_work_req		txd;
 	struct xio_work_req		rxd;
@@ -545,23 +552,35 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 
 /* Should create a xio_memory.h */
+void xio_unmap_rx_work_req(struct xio_device *dev, struct xio_work_req *xd);
+void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd);
+int xio_map_rx_work_req(struct xio_device *dev, struct xio_work_req *xd);
+int xio_map_tx_work_req(struct xio_device *dev, struct xio_work_req *xd);
+void xio_unmap_rxmad_work_req(struct xio_device *dev, struct xio_work_req *xd);
+void xio_unmap_txmad_work_req(struct xio_device *dev, struct xio_work_req *xd);
+int xio_map_rxmad_work_req(struct xio_device *dev, struct xio_work_req *xd);
+int xio_map_txmad_work_req(struct xio_device *dev, struct xio_work_req *xd);
+int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
+		       struct xio_work_req *xd,
+		       enum dma_data_direction direction);
+
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 		    struct xio_rdma_mem_desc *desc,
 		    enum dma_data_direction direction);
-
-void xio_unmap_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
-			enum dma_data_direction direction);
-
-int xio_map_work_req(struct ib_device *ib_dev, struct xio_work_req *xd,
-		     enum dma_data_direction direction);
 
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 		 struct xio_rdma_mem_desc *desc,
 		 enum dma_data_direction direction);
 
+int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
+		   struct xio_rdma_transport *rdma_nhndl,
+		   struct xio_rdma_mem_desc *desc,
+		   enum dma_data_direction direction);
+
 void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len);
 
-int xio_vmsg_to_sgl(struct xio_vmsg *vmsg, struct scatterlist *sgl, int *nents);
+int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents);
+int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents);
 
 int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops);
 

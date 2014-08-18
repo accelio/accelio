@@ -260,10 +260,9 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 		  tbl_nents(sgtbl_ops, sgtbl));
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
-		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n", i,
+		ERROR_LOG("in data[%d]: length:%zd, address:%p\n", i,
 			  sge_length(sgtbl_ops, sge),
-			  sge_addr(sgtbl_ops, sge),
-			  sge_mr(sgtbl_ops, sge));
+			  sge_addr(sgtbl_ops, sge));
 	}
 
 	sgtbl		= xio_sg_table_get(&xio_msg->out);
@@ -276,10 +275,9 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	ERROR_LOG("out data size:%d\n", tbl_nents(sgtbl_ops, sgtbl));
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
-		ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n", i,
+		ERROR_LOG("out data[%d]: length:%zd, address:%p\n", i,
 			  sge_length(sgtbl_ops, sge),
-			  sge_addr(sgtbl_ops, sge),
-			  sge_mr(sgtbl_ops, sge));
+			  sge_addr(sgtbl_ops, sge));
 	}
 	ERROR_LOG("*********************************************\n");
 }

@@ -166,3 +166,5 @@ EXPORT_SYMBOL(xio_iov_length);
 EXPORT_SYMBOL(xio_tasks_pool_create);
 EXPORT_SYMBOL(xio_tasks_pool_destroy);
 EXPORT_SYMBOL(xio_tasks_pool_alloc_slab);
+
+EXPORT_SYMBOL(xio_msg_dump);

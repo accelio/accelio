@@ -68,19 +68,6 @@ static struct completion cleanup_complete;
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
 
-#define vmsg_sglist(vmsg)					\
-		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
-		 (vmsg)->data_iov.sglist :			\
-		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
-		 (vmsg)->pdata_iov.sglist : NULL))
-
-#define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
-
-#define vmsg_sglist_set_nents(vmsg, n)				\
-		 (vmsg)->data_tbl.nents = (n)
-
-
 /* server private data */
 struct server_data {
 	struct xio_context	*ctx;
@@ -98,9 +85,9 @@ atomic_t module_state;
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	struct xio_iovec_ex	*sglist = vmsg_sglist(&req->in);
+	struct sg_table *sgt = &req->in.data_tbl;
+	struct scatterlist	*sg;
 	char			*str;
-	int			nents = vmsg_sglist_nents(&req->in);
 	int			len, i;
 	char			tmp;
 
@@ -121,9 +108,10 @@ static void process_request(struct xio_msg *req)
 				(req->sn + 1), str);
 			str[len] = tmp;
 		}
-		for (i = 0; i < nents; i++) {
-			str = (char *)sglist[i].iov_base;
-			len = sglist[i].iov_len;
+		sg = sgt->sgl;
+		for (i = 0; i < sgt->nents; i++) {
+			str = (char *)sg_virt(sg);
+			len = sg->length;
 			if (str) {
 				if (((unsigned) len) > 64)
 					len = 64;
@@ -133,12 +121,18 @@ static void process_request(struct xio_msg *req)
 					(req->sn + 1), i, len, str);
 				str[len] = tmp;
 			}
+			sg = sg_next(sg);
 		}
 		g_server_data->cnt = 0;
 	}
-	req->in.header.iov_base	  = NULL;
-	req->in.header.iov_len	  = 0;
-	vmsg_sglist_set_nents(&req->in, 0);
+
+#if 0
+	/* Server didn't allocate this memory */
+	req->in.header.iov_base = NULL;
+	req->in.header.iov_len  = 0;
+	/* Server didn't allocate in data table to reset it */
+	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -290,6 +284,10 @@ static int xio_server_main(void *data)
 			kstrdup("hello world header response", GFP_KERNEL);
 		server_data->rsp[i].out.header.iov_len =
 			strlen(server_data->rsp[i].out.header.iov_base) + 1;
+		server_data->rsp[i].out.sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		server_data->rsp[i].out.data_tbl.orig_nents = 0;
+		server_data->rsp[i].out.data_tbl.nents = 0;
+		server_data->rsp[i].out.data_tbl.sgl = NULL;
 	}
 
 	/* create url to connect to */

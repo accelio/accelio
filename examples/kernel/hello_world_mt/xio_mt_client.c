@@ -109,7 +109,7 @@ static void process_response(struct thread_data *tdata, struct xio_msg *rsp)
 	}
 	rsp->in.header.iov_base	 = NULL;
 	rsp->in.header.iov_len	 = 0;
-	rsp->in.data_iov.nents	 = 0;
+	rsp->in.data_tbl.nents	 = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -189,9 +189,11 @@ static int on_response(struct xio_session *session,
 	/* acknowledge XIO that response is no longer needed */
 	xio_release_response(rsp);
 
-	req->in.header.iov_base	 = NULL;
-	req->in.header.iov_len	 = 0;
-	req->in.data_iov.nents	 = 0;
+	/* Client didn't allocate this memory */
+	req->in.header.iov_base = NULL;
+	req->in.header.iov_len  = 0;
+	/* Client didn't allocate in data table to reset it */
+	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
 
 	/* re-send the message */
 	rcu_read_lock();
@@ -284,15 +286,20 @@ static int xio_client_thread(void *data)
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		char msg[128];
+		struct xio_msg *req = &tdata->req[i];
+		struct xio_vmsg *out = &req->out;
 		sprintf(msg,
 			"hello world header request [cpu(%d) port(%d)-req(%d)]",
 			cpu, tdata->port, i);
-		tdata->req[i].out.header.iov_base = kstrdup(msg, GFP_KERNEL);
-		if (!tdata->req[i].out.header.iov_base)
+		out->header.iov_base = kstrdup(msg, GFP_KERNEL);
+		if (!out->header.iov_base)
 			goto cleanup1;
 
-		tdata->req[i].out.header.iov_len = strlen(msg) + 1;
-		tdata->req[i].user_context = &tdata->req[i];
+		out->header.iov_len = strlen(msg) + 1;
+		out->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		memset(&out->data_tbl, 0, sizeof(out->data_tbl));
+
+		req->user_context = req;
 	}
 
 	/* create thread context for the client */

@@ -43,6 +43,7 @@
 #include <linux/sched.h>
 #include <linux/llist.h>
 #include <linux/debugfs.h>
+#include <linux/scatterlist.h>
 
 #define DRV_VERSION "0.1"
 #define DRV_RELDATE "2013-Oct-01"
@@ -319,7 +320,7 @@ struct xio_iovec {
 	size_t			iov_len;
 };
 
-/* In user space these struct xio_iovec and this struct differ */
+/* In user space xio_iovec and this structure differ */
 struct xio_iovec_ex {
 	void			*iov_base;	/**< base address */
 	size_t			iov_len;	/**< base length  */
@@ -328,40 +329,49 @@ struct xio_iovec_ex {
 
 /**
  * @struct xio_msg_pdata
- * @brief message private data structure used internaly by the library
+ * @brief message private data structure used internally by the library
  */
 struct xio_msg_pdata {
-	struct xio_msg		*next;          /**< internal library usage   */
+	struct xio_msg		*next;		/**< internal library usage   */
 	struct xio_msg		**prev;		/**< internal library usage   */
 };
 
-struct xio_sg_table {
-	unsigned int			nents;
-	unsigned int			max_nents;
-	void				*sglist;
-};
-
+/**
+ * @struct xio_sg_iov
+ * @brief scatter gather iovec vector data structure
+ */
 struct xio_sg_iov {
-	unsigned int			nents;
-	unsigned int			max_nents;
-	struct xio_iovec_ex		sglist[XIO_IOVLEN];
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		sglist[XIO_IOVLEN]; /**< scatter vec */
+
 };
 
+/**
+ * @struct xio_sg_iovptr
+ * @brief scatter gather iovec pointer data structure
+ */
 struct xio_sg_iovptr {
-	unsigned int			nents;
-	unsigned int			max_nents;
-	struct xio_iovec_ex		*sglist;
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		*sglist;    /**< scatter list	   */
 };
 
 struct xio_vmsg {
-	struct xio_iovec		header;	/**< header's io vector	    */
-	enum xio_sgl_type		sgl_type;
-	int				pad;
+	struct xio_iovec	header;	    /**< header's io vector  */
+	enum xio_sgl_type	sgl_type;
+	int			pad;
+	/* Only sg_table is used in the kernel other are ignored!!!*/
 	union {
-		struct xio_sg_iov	data_iov;
-		struct xio_sg_iovptr	pdata_iov;
-		struct xio_sg_table	data_tbl;
+		struct xio_sg_iov	data_iov;   /**< iov vector	     */
+		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
+		struct sg_table		data_tbl;   /**< data table	     */
 	};
+	void			*user_context;	/**< private user data */
 };
 
 struct xio_msg {

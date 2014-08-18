@@ -68,19 +68,6 @@ static struct completion cleanup_complete;
 #define QUEUE_DEPTH		512
 #define HW_PRINT_COUNTER	4000000
 
-#define vmsg_sglist(vmsg)					\
-		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
-		 (vmsg)->data_iov.sglist :			\
-		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
-		 (vmsg)->pdata_iov.sglist : NULL))
-
-#define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
-
-#define vmsg_sglist_set_nents(vmsg, n)				\
-		 (vmsg)->data_tbl.nents = (n)
-
-
 /* private session data */
 struct session_data {
 	struct xio_context	*ctx;
@@ -106,9 +93,12 @@ static void process_response(struct xio_msg *rsp)
 			(char *)rsp->in.header.iov_base);
 		cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	vmsg_sglist_set_nents(&rsp->in, 0);
+
+	/* Client didn't allocate this memory */
+	rsp->in.header.iov_base = NULL;
+	rsp->in.header.iov_len  = 0;
+	/* Client didn't allocate in data table to reset it */
+	memset(&rsp->in.data_tbl, 0, sizeof(rsp->in.data_tbl));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -255,20 +245,26 @@ static int xio_client_main(void *data)
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
+		struct xio_vmsg *omsg;
+		void *buf;
+
+		omsg = &session_data->req[i].out;
+
 		memset(&session_data->req[i], 0, sizeof(session_data->req[i]));
+
 		/* header */
-		session_data->req[i].out.header.iov_base =
-			kstrdup("hello world header request", GFP_KERNEL);
-		session_data->req[i].out.header.iov_len =
-			strlen(session_data->req[i].out.header.iov_base) + 1;
+		buf = kstrdup("hello world header request", GFP_KERNEL);
+		session_data->req[i].out.header.iov_base = buf;
+		session_data->req[i].out.header.iov_len = strlen(buf) + 1;
 		/* iovec[0]*/
-		session_data->req[i].out.sgl_type	    = XIO_SGL_TYPE_IOV;
-		session_data->req[i].out.data_iov.max_nents = XIO_IOVLEN;
-		session_data->req[i].out.data_iov.sglist[0].iov_base =
-			kstrdup("hello world iovec request", GFP_KERNEL);
-		session_data->req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data->req[i].out.data_iov.sglist[0].iov_base) + 1;
-		session_data->req[i].out.data_iov.nents = 1;
+		omsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		sg_alloc_table(&omsg->data_tbl, XIO_IOVLEN, GFP_KERNEL);
+
+		/* currently only one entry */
+		buf = kstrdup("hello world iovec request", GFP_KERNEL);
+		sg_init_one(omsg->data_tbl.sgl, buf, strlen(buf) + 1);
+		/* orig_nents is XIO_IOVLEN */
+		omsg->data_tbl.nents = 1;
 	}
 
 	/* send first message */
@@ -288,7 +284,9 @@ static int xio_client_main(void *data)
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(session_data->req[i].out.header.iov_base);
-		kfree(session_data->req[i].out.data_iov.sglist[0].iov_base);
+		/* Currently need to release only one entry */
+		kfree(sg_virt(session_data->req[i].out.data_tbl.sgl));
+		sg_free_table(&session_data->req[i].out.data_tbl);
 	}
 
 	/* free the context */

@@ -43,13 +43,14 @@
 
 extern struct  xio_sg_table_ops sgtbl_ops_iov;
 extern struct  xio_sg_table_ops sgtbl_ops_iovptr;
+extern struct  xio_sg_table_ops sgtbl_ops_sg;
 
 void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type)
 {
 	static void *vec[XIO_SGL_TYPE_LAST] = {
-		[XIO_SGL_TYPE_IOV] = (void *)&sgtbl_ops_iov,
-		[XIO_SGL_TYPE_IOV_PTR] = (void *)&sgtbl_ops_iovptr,
-		[XIO_SGL_TYPE_SCATTERLIST] = NULL
+		[XIO_SGL_TYPE_IOV]		= (void *) &sgtbl_ops_iov,
+		[XIO_SGL_TYPE_IOV_PTR]		= (void *) &sgtbl_ops_iovptr,
+		[XIO_SGL_TYPE_SCATTERLIST]	= (void *) &sgtbl_ops_sg
 	};
 
 	return vec[sgl_type];

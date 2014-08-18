@@ -678,7 +678,8 @@ static void xio_release_qp(struct xio_rdma_transport *rdma_hndl)
 static void xio_rxd_init(struct xio_work_req *rxd,
 			 size_t rxd_nr,
 			 struct xio_task *task,
-			 void *buf, unsigned size,
+			 struct scatterlist *sgl,
+			 unsigned size,
 			 struct ib_mr *srmr)
 {
 	int i;
@@ -690,19 +691,22 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 			rxd->sge[i].lkey = srmr->lkey;
 	}
 
+	if (size) {
+		rxd->sgt.sgl = sgl;
+		rxd->sgt.orig_nents = 1;
+		rxd->sgt.nents = 1;
+		rxd->nents  = 1;
+	} else {
+		rxd->sgt.sgl = NULL;
+		rxd->sgt.orig_nents = 0;
+		rxd->sgt.nents = 0;
+		rxd->nents  = 0;
+	}
+
 	rxd->recv_wr.wr_id	= uint64_from_ptr(task);
 	rxd->recv_wr.sg_list	= rxd->sge;
-	rxd->recv_wr.num_sge	= size ? 1 : 0;
+	rxd->recv_wr.num_sge	= rxd->nents;
 	rxd->recv_wr.next	= NULL;
-
-	sg_init_table(rxd->sgl, rxd_nr);
-	if (size) {
-		sg_set_page(rxd->sgl, virt_to_page(buf), size, offset_in_page(buf));
-		rxd->nents  = 1;
-	} else
-		rxd->nents  = 0;
-
-	rxd->mapped = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -711,7 +715,8 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 static void xio_txd_init(struct xio_work_req *txd,
 			 size_t txd_nr,
 			 struct xio_task *task,
-			 void *buf, unsigned size,
+			 struct scatterlist *sgl,
+			 unsigned size,
 			 struct ib_mr *srmr)
 {
 	int i;
@@ -723,21 +728,25 @@ static void xio_txd_init(struct xio_work_req *txd,
 			txd->sge[i].lkey = srmr->lkey;
 	}
 
+	if (size) {
+		txd->sgt.sgl = sgl;
+		txd->sgt.orig_nents = 1;
+		txd->sgt.nents = 1;
+		txd->nents  = 1;
+	} else {
+		txd->sgt.sgl = NULL;
+		txd->sgt.orig_nents = 0;
+		txd->sgt.nents = 0;
+		txd->nents  = 0;
+	}
+
 	txd->send_wr.wr_id	= uint64_from_ptr(task);
 	txd->send_wr.next	= NULL;
 	txd->send_wr.sg_list	= txd->sge;
-	txd->send_wr.num_sge	= size ? 1 : 0;
+	txd->send_wr.num_sge	= txd->sgt.nents;
 	txd->send_wr.opcode	= IB_WR_SEND;
 
-	sg_init_table(txd->sgl, txd_nr);
-
-	if (size) {
-		sg_set_page(txd->sgl, virt_to_page(buf), size, offset_in_page(buf));
-		txd->nents  = 1;
-	} else
-		txd->nents  = 0;
 	txd->mapped = 0;
-
 	/* txd->send_wr.send_flags = IB_SEND_SIGNALED; */
 }
 
@@ -754,7 +763,10 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 	rdmad->send_wr.next = NULL;
 	rdmad->send_wr.send_flags = IB_SEND_SIGNALED;
 
-	sg_init_table(rdmad->sgl, rdmad_nr);
+	/* rdmad has no sgl of it's own since it doesn't have a buffer */
+	rdmad->sgt.sgl = NULL;
+	rdmad->sgt.orig_nents = 0;
+	rdmad->sgt.nents = 0;
 
 	rdmad->nents  = 1;
 	rdmad->mapped = 0;
@@ -782,10 +794,24 @@ static int xio_rdma_task_init(struct xio_task *task,
 	rdma_task->rdma_hndl = rdma_hndl;
 	rdma_task->buf = buf;
 
+	if (buf) {
+		sg_init_one(rdma_task->rx_sgl, buf, size);
+		/* txd's scatterlist has and extra entry for chaining
+		 * with the application's scatterlist
+		 */
+		sg_init_table(rdma_task->tx_sgl, 2);
+		sg_set_buf(rdma_task->tx_sgl, buf, size);
+		sg_mark_end(rdma_task->tx_sgl);
+		/* The link entry shoulden't be marked end */
+		sg_unmark_end(&rdma_task->tx_sgl[1]);
+	}
+
 	if (rxd_nr)
-		xio_rxd_init(&rdma_task->rxd, rxd_nr ,task, buf, size, srmr);
+		xio_rxd_init(&rdma_task->rxd, rxd_nr ,task, rdma_task->rx_sgl,
+			     size, srmr);
 	if (txd_nr)
-		xio_txd_init(&rdma_task->txd, txd_nr, task, buf, size, srmr);
+		xio_txd_init(&rdma_task->txd, txd_nr, task, rdma_task->tx_sgl,
+			     size, srmr);
 	if (rdmad_nr)
 		xio_rdmad_init(&rdma_task->rdmad, rdmad_nr, task);
 
@@ -1004,8 +1030,7 @@ static int xio_rdma_initial_pool_post_create(
 	} else {
 		DEBUG_LOG("post_recv conn_setup rx task:%p\n", task);
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
-		if (xio_map_work_req(rdma_hndl->dev->ib_dev, &rdma_task->rxd,
-				     DMA_FROM_DEVICE)) {
+		if (xio_map_rx_work_req(rdma_hndl->dev, &rdma_task->rxd)) {
 			ERROR_LOG("DMA map from device failed\n");
 			return -1;
 		}
@@ -1091,29 +1116,29 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
-	struct ib_device *dev;
+	struct xio_device *dev;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	if (!rdma_pool->dev)
+	dev = rdma_pool->dev;
+	if (!dev)
 		return 0;
 
-	dev = rdma_pool->dev->ib_dev;
-	if (!dev) {
+	if (!dev->ib_dev) {
 		ERROR_LOG("ib_dev not set\n");
 		return -1;
 	}
 
 	if (rdma_task->rxd.mapped)
-		xio_unmap_work_req(dev, &rdma_task->rxd, DMA_FROM_DEVICE);
+		xio_unmap_rx_work_req(dev, &rdma_task->rxd);
 
 	if (rdma_task->txd.mapped)
-		xio_unmap_work_req(dev, &rdma_task->txd, DMA_TO_DEVICE);
+		xio_unmap_tx_work_req(dev, &rdma_task->txd);
 
 	if (rdma_task->rdmad.mapped) {
-		enum dma_data_direction direction =
-				(rdma_task->ib_op == XIO_IB_RDMA_WRITE) ?
-					DMA_TO_DEVICE : DMA_FROM_DEVICE;
-		xio_unmap_work_req(dev, &rdma_task->rdmad, direction);
+		if (rdma_task->ib_op == XIO_IB_RDMA_WRITE)
+			xio_unmap_txmad_work_req(dev, &rdma_task->rdmad);
+		else
+			xio_unmap_rxmad_work_req(dev, &rdma_task->rdmad);
 	}
 
 	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
@@ -1123,6 +1148,15 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
 		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
 			       DMA_TO_DEVICE);
+
+	if (rdma_task->rdmad.sgt.sgl)
+		sg_free_table(&rdma_task->rdmad.sgt);
+
+	if (rdma_task->write_sge.sgt.sgl)
+		sg_free_table(&rdma_task->write_sge.sgt);
+
+	if (rdma_task->read_sge.sgt.sgl)
+		sg_free_table(&rdma_task->read_sge.sgt);
 
 	/* Phantom tasks have no buffer */
 	if (rdma_task->buf) {
@@ -1160,13 +1194,9 @@ static int xio_rdma_initial_pool_slab_init_task(
 	/* fill xio_work_req */
 	rdma_task->txd.sge = (void *)ptr;
 	ptr += sizeof(struct ib_sge);
-	rdma_task->txd.sgl = (void *)ptr;
-	ptr += sizeof(struct scatterlist);
 
 	rdma_task->rxd.sge = (void *)ptr;
 	ptr += sizeof(struct ib_sge);
-	rdma_task->rxd.sgl = (void *)ptr;
-	ptr += sizeof(struct scatterlist);
 	/*****************************************/
 
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
@@ -1201,8 +1231,7 @@ static void xio_rdma_initial_pool_get_params(
 	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
-		      2*sizeof(struct ib_sge) +
-		      2*sizeof(struct scatterlist);
+		      2 * sizeof(struct ib_sge);
 }
 
 static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
@@ -1224,6 +1253,9 @@ static int xio_rdma_phantom_pool_slab_init_task(
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
+	int  max_iovsz = max(rdma_options.max_out_iovsz,
+			     rdma_options.max_in_iovsz) + 1;
+	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	char *ptr;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -1234,9 +1266,12 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	/* fill xio_work_req */
 	rdma_task->rdmad.sge = (void *)ptr;
 	ptr += rdma_hndl->max_sge*sizeof(struct ib_sge);
-	rdma_task->rdmad.sgl = (void *)ptr;
-	ptr += rdma_hndl->max_sge*sizeof(struct scatterlist);
 	/*****************************************/
+
+	if (sg_alloc_table(&rdma_task->rdmad.sgt, max_sge, GFP_KERNEL)) {
+		ERROR_LOG("sg_weite_table(rdmad)\n");
+		return -1;
+	}
 
 	rdma_task->ib_op = 0x200;
 	xio_rdma_task_init(
@@ -1285,8 +1320,7 @@ static int xio_rdma_phantom_pool_create(struct xio_rdma_transport *rdma_hndl)
 	params.pool_dd_data_sz		   = sizeof(struct xio_rdma_tasks_pool);
 	params.slab_dd_data_sz		   = sizeof(struct xio_rdma_tasks_slab);
 	params.task_dd_data_sz		   = sizeof(struct xio_rdma_task) +
-				rdma_hndl->max_sge*(sizeof(struct ib_sge) +
-						    sizeof(struct scatterlist));
+				rdma_hndl->max_sge*sizeof(struct ib_sge);
 	params.pool_hooks.context	   = rdma_hndl;
 	params.pool_hooks.slab_init_task   =
 		(void *)xio_rdma_phantom_pool_slab_init_task;
@@ -1422,18 +1456,18 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		(struct xio_rdma_transport *) old_th;
 	struct xio_rdma_transport *new_hndl =
 		(struct xio_rdma_transport *) new_th;
-	struct ib_device *old_dev = old_hndl->dev->ib_dev;
-	struct ib_device *new_dev = new_hndl->dev->ib_dev;
+	struct xio_device *old_dev = old_hndl->dev;
+	struct xio_device *new_dev = new_hndl->dev;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rkey_tbl *te;
 
 	rdma_task->rdma_hndl = new_hndl;
 
 	/* if the same device is used then there is no need to remap */
-	if (old_hndl->dev == new_hndl->dev)
+	if (old_dev == new_dev)
 		return 0;
 
-	xio_rdma_task_reinit(task, new_hndl, new_hndl->dev->mr);
+	xio_rdma_task_reinit(task, new_hndl, new_dev->mr);
 
 	if (!new_hndl->rkey_tbl) {
 		/* one for each possible desc and one for device mr */
@@ -1445,21 +1479,17 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	}
 
 	if (rdma_task->rxd.mapped) {
-		xio_unmap_work_req(old_dev, &rdma_task->rxd,
-				   DMA_FROM_DEVICE);
-		if (xio_map_work_req(new_dev, &rdma_task->rxd,
+		if (xio_remap_work_req(old_dev, new_dev, &rdma_task->rxd,
 				DMA_FROM_DEVICE)) {
-			ERROR_LOG("DMA map from device failed\n");
+			ERROR_LOG("DMA re-map failed\n");
 			return -1;
 		}
 	}
 
 	if (rdma_task->txd.mapped) {
-		xio_unmap_work_req(old_dev, &rdma_task->txd,
-				DMA_TO_DEVICE);
-		if (xio_map_work_req(new_dev, &rdma_task->txd,
+		if (xio_remap_work_req(old_dev, new_dev, &rdma_task->txd,
 				     DMA_TO_DEVICE)) {
-			ERROR_LOG("DMA map to device failed\n");
+			ERROR_LOG("DMA re-map failed\n");
 			return -1;
 		}
 	}
@@ -1468,11 +1498,9 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		enum dma_data_direction direction =
 				(rdma_task->ib_op == XIO_IB_RDMA_WRITE) ?
 					DMA_TO_DEVICE : DMA_FROM_DEVICE;
-		xio_unmap_work_req(old_dev, &rdma_task->rdmad,
-				   direction);
-		if (xio_map_work_req(new_dev, &rdma_task->rdmad,
+		if (xio_remap_work_req(old_dev, new_dev, &rdma_task->rdmad,
 				     direction)) {
-			ERROR_LOG("DMA map to/from device failed\n");
+			ERROR_LOG("DMA re-map to/from device failed\n");
 			return -1;
 		}
 	}
@@ -1487,10 +1515,8 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		} else {
 			used_fast = 0;
 		}
-		xio_unmap_desc(old_hndl, &rdma_task->read_sge,
+		xio_remap_desc(old_hndl, new_hndl, &rdma_task->read_sge,
 			       DMA_FROM_DEVICE);
-		xio_map_desc(new_hndl, &rdma_task->read_sge,
-			     DMA_FROM_DEVICE);
 		if (used_fast) {
 			if (rdma_task->read_sge.mem_reg.mem_h == NULL) {
 				ERROR_LOG("Fast re-reg from device failed\n");
@@ -1511,10 +1537,8 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		} else {
 			used_fast = 0;
 		}
-		xio_unmap_desc(old_hndl, &rdma_task->write_sge,
+		xio_remap_desc(old_hndl, new_hndl, &rdma_task->write_sge,
 			       DMA_TO_DEVICE);
-		xio_map_desc(new_hndl, &rdma_task->write_sge,
-			     DMA_TO_DEVICE);
 		if (used_fast) {
 			if (rdma_task->write_sge.mem_reg.mem_h == NULL) {
 				ERROR_LOG("Fast re-reg tom device failed\n");
@@ -1547,7 +1571,6 @@ static int xio_rdma_primary_pool_slab_init_task(
 	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	void *buf;
 	char *ptr;
-	int ret;
 
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
@@ -1556,29 +1579,16 @@ static int xio_rdma_primary_pool_slab_init_task(
 	/* fill xio_work_req */
 	rdma_task->txd.sge = (void *)ptr;
 	ptr += max_sge*sizeof(struct ib_sge);
-	rdma_task->txd.sgl = (void *)ptr;
-	ptr += max_sge*sizeof(struct scatterlist);
 	rdma_task->rxd.sge = (void *)ptr;
 	ptr += sizeof(struct ib_sge);
-	rdma_task->rxd.sgl = (void *)ptr;
-	ptr += sizeof(struct scatterlist);
 	rdma_task->rdmad.sge = (void *)ptr;
 	ptr += max_sge*sizeof(struct ib_sge);
-	rdma_task->rdmad.sgl = (void *)ptr;
-	ptr += max_sge*sizeof(struct scatterlist);
 
-
-	rdma_task->read_sge.sgl = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct scatterlist);
 	rdma_task->read_sge.mp_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
 
-	rdma_task->write_sge.sgl = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct scatterlist);
 	rdma_task->write_sge.mp_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
-
-
 
 	rdma_task->req_read_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
@@ -1590,33 +1600,51 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
+	if (sg_alloc_table(&rdma_task->read_sge.sgt, max_iovsz, GFP_KERNEL)) {
+		ERROR_LOG("sg_alloc_table(read_sge)\n");
+		goto cleanup0;
+	}
+
+	if (sg_alloc_table(&rdma_task->write_sge.sgt, max_iovsz, GFP_KERNEL)) {
+		ERROR_LOG("sg_alloc_table(write_sge)\n");
+		goto cleanup1;
+	}
+
+	if (sg_alloc_table(&rdma_task->rdmad.sgt, max_sge, GFP_KERNEL)) {
+		ERROR_LOG("sg_weite_table(rdmad)\n");
+		goto cleanup2;
+	}
+
 	rdma_task->ib_op = 0x200;
 
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
-		xio_set_error(ENOMEM);
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
-		return -ENOMEM;
+		goto cleanup3;
 	}
 
 	rdma_slab->count++;
 
-	ret = xio_rdma_task_init(task,
-				 rdma_hndl,
-				 buf,
-				 rdma_slab->buf_size,
-				 rdma_hndl->dev->mr,
-				 max_sge,	/* txd_nr */
-				 1,		/* rxd_nr */
-				 max_sge);	/* rdmad_nr */
-
-	if (ret)
-		return ret;
-
-	sg_init_table(rdma_task->read_sge.sgl, max_iovsz);
-	sg_init_table(rdma_task->write_sge.sgl, max_iovsz);
+	xio_rdma_task_init(task,
+			   rdma_hndl,
+			   buf,
+			   rdma_slab->buf_size,
+			   rdma_hndl->dev->mr,
+			   max_sge,	/* txd_nr */
+			   1,		/* rxd_nr */
+			   max_sge);	/* rdmad_nr */
 
 	return 0;
+
+cleanup3:
+	sg_free_table(&rdma_task->rdmad.sgt);
+cleanup2:
+	sg_free_table(&rdma_task->write_sge.sgt);
+cleanup1:
+	sg_free_table(&rdma_task->read_sge.sgt);
+cleanup0:
+	xio_set_error(ENOMEM);
+	return -ENOMEM;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1640,10 +1668,8 @@ static void xio_rdma_primary_pool_get_params(
 	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
-		(max_sge + 1 + max_sge)*(sizeof(struct ib_sge) +
-					 sizeof(struct scatterlist)) +
-		 2 * max_iovsz * (sizeof(struct xio_rdma_mp_mem) +
-				  sizeof(struct scatterlist)) +
+		(max_sge + 1 + max_sge) * sizeof(struct ib_sge) +
+		 2 * max_iovsz * sizeof(struct xio_rdma_mp_mem) +
 		 4 * max_iovsz * sizeof(struct xio_sge);
 }
 
@@ -2647,21 +2673,33 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	void			*sge;
 	unsigned int		nents, max_nents;
 
+	/* kernel works only with kernel's scatterlist */
+	if (unlikely(vmsg->sgl_type != XIO_SGL_TYPE_SCATTERLIST)) {
+		/* src/common/xio_session_client.c uses XIO_SGL_TYPE_IOV but len
+		 * should be zero. Note, other types are not supported!
+		 */
+		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV)
+			return 0;
+		if (vmsg->data_iov.nents)
+			return 0;
+		/* Just check header */
+		if ((vmsg->header.iov_base != NULL)  &&
+		    (vmsg->header.iov_len == 0))
+			return 0;
+		else
+			return 1;
+	}
 
 	sgtbl		= xio_sg_table_get(vmsg);
 	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
-
 	if ((nents > rdma_options.max_in_iovsz) ||
 	    (nents > max_nents) ||
 	    (max_nents > rdma_options.max_in_iovsz)) {
 		return 0;
 	}
-
-	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
-		return 0;
 
 	if ((vmsg->header.iov_base != NULL)  &&
 	    (vmsg->header.iov_len == 0))
@@ -2688,30 +2726,45 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	void			*sge;
 	unsigned int		nents, max_nents;
 
+	/* kernel works only with kernel's scatterlist */
+	if (unlikely(vmsg->sgl_type != XIO_SGL_TYPE_SCATTERLIST)) {
+		/* src/common/xio_session_client.c uses XIO_SGL_TYPE_IOV but len
+		 * should be zero. Note, other types are not supported!
+		 */
+		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV)
+			return 0;
+		if (vmsg->data_iov.nents)
+			return 0;
 
-	sgtbl		= xio_sg_table_get(&msg->out);
-	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+		/* Just check header */
+		if (((vmsg->header.iov_base != NULL)  &&
+		     (vmsg->header.iov_len == 0)) ||
+		    ((vmsg->header.iov_base == NULL)  &&
+		     (vmsg->header.iov_len != 0)))
+			return 0;
+		else
+			return 1;
+	}
+
+	sgtbl		= xio_sg_table_get(vmsg);
+	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
 	if ((nents > rdma_options.max_out_iovsz) ||
 	    (nents > max_nents) ||
-	    (max_nents > rdma_options.max_out_iovsz)) {
-		return 0;
-	}
-
-	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
+	    (max_nents > rdma_options.max_out_iovsz))
 		return 0;
 
 	if (((vmsg->header.iov_base != NULL)  &&
 	     (vmsg->header.iov_len == 0)) ||
 	    ((vmsg->header.iov_base == NULL)  &&
 	     (vmsg->header.iov_len != 0)))
-			return 0;
+		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		if ((sge_addr(sgtbl_ops, sge) == NULL) ||
-		    (sge_length(sgtbl_ops, sge)  == 0))
+		    (sge_length(sgtbl_ops, sge) == 0))
 			return 0;
 	}
 

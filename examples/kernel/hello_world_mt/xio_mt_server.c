@@ -145,9 +145,13 @@ void process_request(struct thread_data *tdata, struct xio_msg *req)
 		       (req->sn + 1), (char *)req->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-	req->in.header.iov_base	  = NULL;
-	req->in.header.iov_len	  = 0;
-	req->in.data_iov.nents	  = 0;
+#if 0
+	/* Server didn't allocate this memory */
+	req->in.header.iov_base = NULL;
+	req->in.header.iov_len  = 0;
+	/* Server didn't allocate in data table to reset it */
+	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -318,14 +322,18 @@ int xio_portal_thread(void *data)
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		char msg[128];
+		struct xio_msg *rsp = &tdata->rsp[i];
+		struct xio_vmsg *out = &rsp->out;
 		sprintf(msg,
 			"hello world header response [cpu(%d)-port(%d)-rsp(%d)]",
 			cpu, tdata->port, i);
-		tdata->rsp[i].out.header.iov_base = kstrdup(msg, GFP_KERNEL);
-		if (!tdata->rsp[i].out.header.iov_base)
+		out->header.iov_base = kstrdup(msg, GFP_KERNEL);
+		if (!out->header.iov_base)
 			goto cleanup1;
 
-		tdata->rsp[i].out.header.iov_len = strlen(msg) + 1;
+		out->header.iov_len = strlen(msg) + 1;
+		out->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		memset(&out->data_tbl, 0, sizeof(out->data_tbl));
 	}
 
 	/* create thread context for the server */
