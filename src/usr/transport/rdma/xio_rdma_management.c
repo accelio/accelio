@@ -2126,35 +2126,39 @@ static void xio_connection_ev_handler(int fd, int events, void *user_context)
 	struct xio_rdma_transport	*rdma_hndl;
 	int				retval;
 
-	/* get the event */
-	retval = rdma_get_cm_event(p_cm_channel, &ev);
-	if (retval) {
-		if (errno == EAGAIN)
-			return;
-		xio_set_error(errno);
-		ERROR_LOG("rdma_get_cm_event failed. " \
-			  "(errno=%d %m)\n", errno);
-		return;
-	}
+	do {
+		/* get the event */
+		retval = rdma_get_cm_event(p_cm_channel, &ev);
+		if (retval) {
+			if (errno == EAGAIN)
+				break;
+			xio_set_error(errno);
+			ERROR_LOG("rdma_get_cm_event failed. " \
+					"(errno=%d %m)\n", errno);
+			break;;
+		}
 
-	rdma_hndl = (struct xio_rdma_transport *)ev->id->context;
+		rdma_hndl = (struct xio_rdma_transport *)ev->id->context;
 
-	DEBUG_LOG("cm_event: [%s] rdma_hndl:%p\n",
-		  rdma_event_str(ev->event), rdma_hndl);
+		DEBUG_LOG("cm_event: [%s] rdma_hndl:%p\n",
+				rdma_event_str(ev->event), rdma_hndl);
 
-	/* reconnect needs to ack the event before destroying the cm id */
-	rdma_hndl->ev_to_ack = ev;
-	xio_handle_cm_event(ev, rdma_hndl);
+		/* reconnect needs to ack the event before destroying the cm id */
+		rdma_hndl->ev_to_ack = ev;
+		xio_handle_cm_event(ev, rdma_hndl);
 
-	/* reconnect ack-ed before destroying the old id */
-	if (rdma_hndl->ev_to_ack) {
-		rdma_ack_cm_event(rdma_hndl->ev_to_ack);
-		rdma_hndl->ev_to_ack = NULL;
-	}
+		/* reconnect ack-ed before destroying the old id */
+		if (rdma_hndl->ev_to_ack) {
+			rdma_ack_cm_event(rdma_hndl->ev_to_ack);
+			rdma_hndl->ev_to_ack = NULL;
+		}
 
-	if (rdma_hndl->state == XIO_STATE_DESTROYED)
-		xio_rdma_post_close(
-				(struct xio_transport_base *)rdma_hndl);
+		if (rdma_hndl->state == XIO_STATE_DESTROYED) {
+			xio_rdma_post_close(
+					(struct xio_transport_base *)rdma_hndl);
+			break;
+		}
+	} while (1);
 }
 
 /*---------------------------------------------------------------------------*/
