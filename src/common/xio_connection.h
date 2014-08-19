@@ -77,16 +77,12 @@ struct xio_connection {
 	 */
 	uint16_t			conn_idx;
 	uint16_t			state;
-	uint32_t			close_reason;
-
 	uint16_t			disable_notify;
-	uint16_t			in_flight_reqs_budget;
-	/* one way msgs */
-	uint16_t			in_flight_sends_budget;
-	int16_t				app_io_budget;
 	uint16_t			in_close;
 	uint16_t			is_flushed;
-	uint32_t			pad;
+	uint16_t			pad[3];
+	uint32_t			close_reason;
+	uint32_t			queued_msgs;
 	struct kref			kref;
 	int32_t				send_req_toggle;
 

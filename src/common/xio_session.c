@@ -765,10 +765,6 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST)
 				xio_connection_remove_in_flight(connection,
 								omsg);
-			else
-				connection->in_flight_sends_budget++;
-		else
-			connection->in_flight_reqs_budget++;
 	}
 
 	omsg->type = task->tlv_type;
@@ -786,6 +782,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
+		connection->queued_msgs--;
 		if (connection->ses_ops.on_msg_delivered)
 			connection->ses_ops.on_msg_delivered(
 				    connection->session,
@@ -917,6 +914,7 @@ static int xio_on_ow_req_send_comp(
 			     get_cycles() - omsg->timestamp);
 
 		xio_connection_remove_in_flight(connection, task->omsg);
+		connection->queued_msgs--;
 
 		/* send completion notification to
 		 * release request
@@ -937,6 +935,7 @@ static int xio_on_ow_req_send_comp(
 
 			xio_connection_remove_in_flight(connection, task->omsg);
 			task->omsg->flags = task->omsg_flags;
+			connection->queued_msgs--;
 
 			if (connection->ses_ops.on_msg_delivered)
 				connection->ses_ops.on_msg_delivered(
@@ -1459,7 +1458,6 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 
 	session->trans_sn		= params->initial_sn;
 	session->state			= XIO_SESSION_STATE_INIT;
-	session->session_flags		= 0;
 
 	memcpy(&session->ses_ops, params->ses_ops,
 	       sizeof(*params->ses_ops));

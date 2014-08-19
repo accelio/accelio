@@ -47,7 +47,7 @@
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
-#define XIO_OPTVAL_DEF_QUEUE_DEPTH			256
+#define XIO_OPTVAL_DEF_QUEUE_DEPTH			512
 
 
 /* xio options */
@@ -161,8 +161,7 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		return 0;
 		break;
 	case XIO_OPTNAME_QUEUE_DEPTH:
-		if (*((int *)optval) > 1024  ||
-			    *((int *)optval) < 1)
+		if (*((int *)optval) < 1)
 			break;
 		g_options.queue_depth = *((int *)optval);
 		return 0;
