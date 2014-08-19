@@ -170,11 +170,8 @@ enum xio_status {
 	XIO_E_NO_USER_MR		= (XIO_BASE_STATUS + 32),
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 35)
-};
-
-enum xio_session_flags {
-	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
+	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
 };
 
 enum xio_msg_flags {
@@ -197,8 +194,8 @@ enum xio_session_event {
 	XIO_SESSION_ERROR_EVENT,		  /**< session error event    */
 };
 
-#define XIO_REQUEST			2
-#define XIO_RESPONSE			4
+#define XIO_REQUEST			(1 << 1)
+#define XIO_RESPONSE			(1 << 2)
 
 #define XIO_MESSAGE			(1 << 4)
 #define XIO_ONE_WAY			(1 << 5)

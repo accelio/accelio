@@ -224,7 +224,8 @@ enum xio_status {
 	XIO_E_NO_USER_MR		= (XIO_BASE_STATUS + 32),
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 35)
+	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
 };
 
 /**
@@ -237,14 +238,6 @@ enum xio_ev_loop_events {
 	XIO_POLLET			= 0x004,  /**< edge-triggered poll */
 	XIO_ONESHOT			= 0x008,
 	XIO_POLLRDHUP			= 0x010
-};
-
-/**
- * @enum xio_session_flags
- * @brief session level specific flags
- */
-enum xio_session_flags {
-	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /**<  do not queue messages */
 };
 
 /**
@@ -285,9 +278,9 @@ enum xio_receipt_result {
 };
 
 /** message request referred type  */
-#define XIO_REQUEST			2
+#define XIO_REQUEST			(1 << 1)
 /** message response referred type */
-#define XIO_RESPONSE			4
+#define XIO_RESPONSE			(1 << 2)
 
 /** general message family type   */
 #define XIO_MESSAGE			(1 << 4)

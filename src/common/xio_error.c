@@ -116,6 +116,8 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Local user buffers overflow";
 	case XIO_E_REM_USER_BUF_OVERFLOW:
 		return "Remote user buffers overflow";
+	case XIO_E_TX_QUEUE_OVERFLOW:
+		return "send queue overflow";
 	default:
 		return "Unknown error";
 	};
