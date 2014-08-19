@@ -63,6 +63,8 @@ typedef enum { READ, WRITE} Verb;
 
 #define XIO_DEF_TRANSPORT		"rdma"
 
+#define XIO_DEF_INTERFACE		"ib0"
+
 #if defined(TEST_LAT)
 #define XIO_TEST_TYPE			LAT
 #define XIO_DEF_QUEUE_DEPTH		LAT_QUEUE_DEPTH
@@ -104,6 +106,7 @@ struct perf_parameters {
 	char			*transport;
 	char			**portals_arr;
 	char			*server_addr;
+	char			*intf_name;
 };
 
 

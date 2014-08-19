@@ -62,8 +62,22 @@ int ctx_hand_shake(struct perf_comm *comm);
 
 int ctx_close_connection(struct perf_comm *comm);
 
+/************* interface helpers ********************/
 
+#define cpusmask_test_bit(nr, addr)	(*(addr) & (1ULL << (nr)))
+#define cpusmask_set_bit(nr, addr)	(*(addr) |=  (1ULL << (nr)))
 
+int intf_name(const char *addr, char *if_name);
+
+int intf_numa_node(const char *iface);
+
+int intf_master_name(const char *iface, char *master);
+
+int intf_best_cpus(const char *addr, uint64_t *cpusmask, int *nr);
+
+int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr);
+
+char *intf_cpusmask_str(uint64_t cpusmask, int nr, char *str);
 
 #endif /* XIO_PERFTEST_COMMUNICATION_H */
 

@@ -94,7 +94,7 @@ struct session_data {
 	double			max_lat_us;
 	double			avg_bw;
 	int			abort;
-	int			pad;
+	int			hs_connected;
 	struct xio_session	*session;
 	struct thread_data	*tdata;
 };
@@ -288,6 +288,7 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:
+	case XIO_SESSION_CONNECTION_REFUSED_EVENT:
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 		fprintf(stderr, "%s. reason: %s\n",
@@ -404,7 +405,10 @@ int run_client_test(struct perf_parameters *user_param)
 	struct thread_data	*tdata;
 	char			url[256];
 	int			i = 0;
+	int			cpu;
 	int			max_cpus;
+	int			cpusnr;
+	uint64_t		cpusmask;
 	pthread_t		statistics_thread_id;
 	struct perf_command	command;
 	int			size_log2;
@@ -441,7 +445,11 @@ int run_client_test(struct perf_parameters *user_param)
 		fprintf(fd, "size, threads, tps, bw[Mbps], lat[usec]\n");
 		fflush(fd);
 	}
-
+	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
+	if (i == 0) {
+		printf("best cpus [%d] %s\n", cpusnr,
+		       intf_cpusmask_str(cpusmask, cpusnr, user_param->intf_name));
+	}
 
 	printf("%s", RESULT_FMT);
 	printf("%s", RESULT_LINE);
@@ -486,10 +494,15 @@ int run_client_test(struct perf_parameters *user_param)
 			       statistics_thread_cb, &sess_data);
 
 		/* spawn threads to handle connection */
-		for (i = 0; i < threads_iter; i++) {
-			sess_data.tdata[i].affinity		=
-				((user_param->cpu + i) % max_cpus);
-			sess_data.tdata[i].cid			= i;
+		for (i = 0, cpu = 0; i < threads_iter; i++, cpu++) {
+			while (1) {
+				if (cpusmask_test_bit(cpu, &cpusmask))
+					break;
+				if (++cpu == max_cpus)
+					cpu = 0;
+			}
+			sess_data.tdata[i].affinity		= cpu;
+			sess_data.tdata[i].cid			= 0;
 			sess_data.tdata[i].sdata		= &sess_data;
 			sess_data.tdata[i].user_param		= user_param;
 			sess_data.tdata[i].data_len		= data_len;
