@@ -3692,6 +3692,7 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 		ERROR_LOG("primary tasks pool is empty\n");
 		return -1;
 	}
+	task->omsg = NULL;
 
 	task->tlv_type	= XIO_CREDIT_NOP;
 	rdma_task	= (struct xio_rdma_task *)task->dd_data;
@@ -3710,7 +3711,10 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
 	rdma_task->txd.send_wr.send_flags =
-		IBV_SEND_SIGNALED | IBV_SEND_INLINE | IBV_SEND_FENCE;
+		IBV_SEND_SIGNALED | IBV_SEND_FENCE;
+	if (rdma_task->txd.sge[0].length < rdma_hndl->max_inline_data)
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->ib_op		= XIO_IB_SEND;
 	rdma_task->txd.send_wr.num_sge	= 1;
@@ -3846,7 +3850,10 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 
 	/* set the length */
 	rdma_task->txd.sge[0].length	= xio_mbuf_data_length(&task->mbuf);
-	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE;
+	rdma_task->txd.send_wr.send_flags = IBV_SEND_SIGNALED;
+	if (rdma_task->txd.sge[0].length < rdma_hndl->max_inline_data)
+		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+
 	rdma_task->txd.send_wr.next	= NULL;
 	rdma_task->txd.send_wr.num_sge	= 1;
 
