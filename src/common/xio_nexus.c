@@ -77,6 +77,7 @@ static void xio_nexus_on_transport_closed(struct xio_nexus *nexus,
 					  *event_data);
 static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
+static int xio_nexus_xmit(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_server_reconnect		                                     */
@@ -1607,6 +1608,9 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 			xio_nexus_on_transport_error(nexus, ev_data);
 		break;
 	};
+
+	if (!list_empty(&nexus->tx_queue))
+		xio_nexus_xmit(nexus);
 
 	return 0;
 }
