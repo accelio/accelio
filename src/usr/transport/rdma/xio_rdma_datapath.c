@@ -223,14 +223,16 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	struct xio_work_req	*curr_wr = NULL;
 	struct xio_work_req	*prev_wr = &rdma_hndl->dummy_wr;
 	uint16_t		tx_window;
-	uint16_t		window;
+	uint16_t		window = 0;
 	uint16_t		retval;
 	uint16_t		req_nr = 0;
 
 	tx_window = tx_window_sz(rdma_hndl);
-	window = min(rdma_hndl->peer_credits - 1, tx_window);
-	window = (window < 0) ? 0 : window;
-	window = min(window, rdma_hndl->sqe_avail);
+	/* save one credit for nop */
+	if (rdma_hndl->peer_credits > 1) {
+		window = min(rdma_hndl->peer_credits - 1, tx_window);
+		window = min(window, rdma_hndl->sqe_avail);
+	}
 	/*
 	TRACE_LOG("XMIT: tx_window:%d, peer_credits:%d, sqe_avail:%d\n",
 		  tx_window,
