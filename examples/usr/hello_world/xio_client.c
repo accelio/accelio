@@ -64,15 +64,19 @@ struct session_data {
 static void process_response(struct session_data *session_data,
 			     struct xio_msg *rsp)
 {
+
 	if (++session_data->cnt == PRINT_COUNTER) {
-		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
+		struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+		int			inents = vmsg_sglist_nents(&rsp->in);
+
 		printf("message: [%lu] - %s\n",
-		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
+		       (rsp->request->sn + 1),
+		       (char *)rsp->in.header.iov_base);
+		printf("message: [%lu] - %s\n",
+		       (rsp->request->sn + 1),
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		session_data->cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -130,6 +134,10 @@ static int on_response(struct xio_session *session,
 		return 0;
 #endif
 
+	session_data->req[i].in.header.iov_base	  = NULL;
+	session_data->req[i].in.header.iov_len	  = 0;
+	vmsg_sglist_set_nents(&session_data->req[i].in, 0);
+
 	/* resend the message */
 	xio_send_request(session_data->conn, &session_data->req[i]);
 	session_data->nsent++;
@@ -156,20 +164,15 @@ int main(int argc, char *argv[])
 	char			url[256];
 	struct session_data	session_data;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
-	memset(&session_data, 0, sizeof(session_data));
+	struct xio_session_params params;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
 		       argv[0]);
 		exit(1);
 	}
+	memset(&session_data, 0, sizeof(session_data));
+	memset(&params, 0, sizeof(params));
 
 	/* initialize library */
 	xio_init();
@@ -183,8 +186,13 @@ int main(int argc, char *argv[])
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, &session_data);
+
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &session_data;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 
 	/* connect the session  */
 	session_data.conn = xio_connect(session, session_data.ctx,
@@ -199,11 +207,19 @@ int main(int argc, char *argv[])
 		session_data.req[i].out.header.iov_len =
 			strlen(session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
-		session_data.req[i].out.data_iov[0].iov_base =
-			strdup("hello world iovec request");
-		session_data.req[i].out.data_iov[0].iov_len =
-			strlen(session_data.req[i].out.data_iov[0].iov_base);
-		session_data.req[i].out.data_iovlen = 1;
+		session_data.req[i].in.sgl_type		  = XIO_SGL_TYPE_IOV;
+		session_data.req[i].in.data_iov.max_nents = XIO_IOVLEN;
+
+		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
+		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
+
+		session_data.req[i].out.data_iov.sglist[0].iov_base =
+			strdup("hello world data request");
+
+		session_data.req[i].out.data_iov.sglist[0].iov_len =
+			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+
+		session_data.req[i].out.data_iov.nents = 1;
 	}
 	/* send first message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -220,7 +236,7 @@ int main(int argc, char *argv[])
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(session_data.req[i].out.header.iov_base);
-		free(session_data.req[i].out.data_iov[0].iov_base);
+		free(session_data.req[i].out.data_iov.sglist[0].iov_base);
 	}
 
 	/* free the context */

@@ -44,8 +44,7 @@
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_proto							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_proto(const char *uri,
-			char *proto, int proto_len)
+int xio_uri_get_proto(const char *uri, char *proto, int proto_len)
 {
 	char *start = (char *)uri;
 	char *end;
@@ -104,8 +103,7 @@ char *xio_uri_get_resource_ptr(const char *uri)
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_portal							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_portal(const char *uri,
-		char *portal, int portal_len)
+int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 {
 	char *res = xio_uri_get_resource_ptr(uri);
 	int len = (res == NULL) ? strlen(uri) : (res - uri);
@@ -119,10 +117,9 @@ int xio_uri_get_portal(const char *uri,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_uri_get_resource						     */
+/* xio_uri_get_resource							     */
 /*---------------------------------------------------------------------------*/
-int xio_uri_get_resource(const char *uri,
-		char *resource, int resource_len)
+int xio_uri_get_resource(const char *uri, char *resource, int resource_len)
 {
 	char *res = xio_uri_get_resource_ptr(uri);
 	if (res != NULL) {
@@ -151,10 +148,10 @@ size_t xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_read_tlv							     */
+/* xio_read_tlv								     */
 /*---------------------------------------------------------------------------*/
 size_t xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
-		      uint8_t *buffer)
+		    uint8_t *buffer)
 {
 	struct xio_tlv *tlv;
 
@@ -445,64 +442,5 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 	}
 
 	return d;
-}
-
-
-void xio_msg_map(struct xio_msg *msg)
-{
-	if (msg->in.data_type == XIO_DATA_TYPE_ARRAY &&
-	    msg->in.data_iovlen <= XIO_IOVLEN) {
-		msg->in.pdata_iov = msg->in.data_iov;
-		msg->in.data_iovsz = XIO_IOVLEN;
-	}
-
-	if (msg->out.data_type == XIO_DATA_TYPE_ARRAY &&
-	    msg->out.data_iovlen && msg->out.data_iovlen <= XIO_IOVLEN) {
-		msg->out.pdata_iov = msg->out.data_iov;
-		msg->out.data_iovsz = XIO_IOVLEN;
-	}
-}
-
-void xio_msg_unmap(struct xio_msg *msg)
-{
-	if (msg->in.data_type == XIO_DATA_TYPE_ARRAY &&
-	    msg->in.data_iovlen <= XIO_IOVLEN) {
-		msg->in.pdata_iov = NULL;
-		msg->in.data_iovsz = 0;
-	}
-
-	if (msg->out.data_type == XIO_DATA_TYPE_ARRAY &&
-	    msg->out.data_iovlen <= XIO_IOVLEN) {
-		msg->out.pdata_iov = NULL;
-		msg->out.data_iovsz = 0;
-	}
-}
-
-void xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg)
-{
-	int i;
-
-	if (vmsg->data_iovsz <  vmsg->data_iovlen)
-		return;
-
-	if (vmsg->data_iovlen > XIO_IOVLEN)
-		return;
-
-	for (i = 0; i < vmsg->data_iovlen; i++)
-		vmsg->pdata_iov[i] = vmsg->data_iov[i];
-}
-
-void xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg)
-{
-	int i;
-
-	if (vmsg->data_iovsz < vmsg->data_iovlen)
-		return;
-
-	if (vmsg->data_iovlen > XIO_IOVLEN)
-		return;
-
-	for (i = 0; i < vmsg->data_iovlen; i++)
-		vmsg->data_iov[i] = vmsg->pdata_iov[i];
 }
 

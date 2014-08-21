@@ -46,6 +46,7 @@
 
 #include "libxio.h"
 #include "xio_msg.h"
+#include "xio_intf.h"
 #include "xio_test_utils.h"
 
 #define MAX_HEADER_SIZE		32
@@ -59,11 +60,13 @@
 #define XIO_DEF_CPU		0
 #define XIO_DEF_POLL		0
 #define XIO_TEST_VERSION	"1.0.0"
+#define MAX_OUTSTANDING_REQS	50
 
-#define MAX_POOL_SIZE		400
+#define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
 #define MAX_THREADS		4
 #define DISCONNECT_FACTOR	3
+#define HCA_NAME		"ib0"
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -131,18 +134,23 @@ static struct msg_params msg_params;
 /*---------------------------------------------------------------------------*/
 static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 {
-	if (tdata->stat.first_time) {
-		size_t	data_len = 0;
-		int	i;
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+	int			inents = vmsg_sglist_nents(&rsp->in);
 
-		for (i = 0; i < rsp->out.data_iovlen; i++)
-			data_len += rsp->out.data_iov[i].iov_len;
+	if (tdata->stat.first_time) {
+		struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+		int			onents = vmsg_sglist_nents(&rsp->out);
+		size_t			data_len = 0;
+		int			i;
+
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		tdata->stat.txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		for (i = 0; i < rsp->in.data_iovlen; i++)
-			data_len += rsp->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		tdata->stat.rxlen = rsp->in.header.iov_len + data_len;
 
@@ -156,6 +164,8 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 					     PRINT_COUNTER/data_len :
 					     PRINT_COUNTER);
 		tdata->stat.print_counter /=  MAX_THREADS;
+		if (tdata->stat.print_counter <  1000)
+			tdata->stat.print_counter = 1000;
 		tdata->disconnect_nr =
 			tdata->stat.print_counter * DISCONNECT_FACTOR;
 	}
@@ -180,7 +190,7 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 		       (void *)pthread_self(),
 		       (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		tdata->stat.cnt = 0;
 		tdata->stat.start_time = get_cpu_usecs();
 	}
@@ -191,6 +201,7 @@ static void *worker_thread(void *data)
 	struct thread_data	*tdata = data;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
+	struct xio_iovec_ex	*sglist;
 	int			i;
 
 	/* set affinity to thread */
@@ -215,7 +226,7 @@ static void *worker_thread(void *data)
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
 				  tdata->cid, NULL, tdata);
 
-	for (i = 0;  i < 50; i++) {
+	for (i = 0;  i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(tdata->pool);
 		if (msg == NULL)
@@ -224,10 +235,13 @@ static void *worker_thread(void *data)
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 1);
+
+		sglist[0].iov_base = NULL;
+		sglist[0].iov_len  = ONE_MB;
+		sglist[0].mr = NULL;
 
 		/* create "hello world" message */
 		msg_write(&msg_params, msg,
@@ -308,16 +322,11 @@ static int on_response(struct xio_session *session,
 		       void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
+	struct xio_iovec_ex *sglist;
 
 	tdata->nrecv++;
 
 	process_response(tdata, msg);
-
-	if (msg->status) {
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-		xio_assert(msg->status == 0);
-	}
 
 	/* message is no longer needed */
 	xio_release_response(msg);
@@ -336,10 +345,14 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 1;
-	msg->in.data_iov[0].iov_base = NULL;
-	msg->in.data_iov[0].iov_len  = ONE_MB;
-	msg->in.data_iov[0].mr = NULL;
+
+	sglist = vmsg_sglist(&msg->in);
+	vmsg_sglist_set_nents(&msg->in, 1);
+
+
+	sglist[0].iov_base = NULL;
+	sglist[0].iov_len  = ONE_MB;
+	sglist[0].mr = NULL;
 
 	msg->sn = 0;
 	msg->more_in_batch = 0;
@@ -376,6 +389,14 @@ int on_msg_error(struct xio_session *session,
 	       session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(tdata->pool, msg);
+
+	switch (error) {
+	case XIO_E_MSG_FLUSHED:
+		break;
+	default:
+		xio_disconnect(tdata->conn);
+		break;
+	};
 
 	return 0;
 }
@@ -566,24 +587,31 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			i = 0;
 	int			max_cpus;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
+	uint64_t		cpusmask;
+	int			cpusnr;
+	int			cpu;
+	struct xio_session_params params;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
 	print_test_config(&test_config);
 
+	i = intf_name_best_cpus(HCA_NAME, &cpusmask, &cpusnr);
+	if (i == 0) {
+		if (!cpusmask_test_bit(test_config.cpu, &cpusmask)) {
+			printf("warning: cpu %d is not best cpu for %s\n",
+			       test_config.cpu, HCA_NAME);
+			printf("best cpus [%d] %s\n", cpusnr,
+			       intf_cpusmask_str(cpusmask, cpusnr, url));
+		}
+	}
+
 	set_cpu_affinity(test_config.cpu);
 
 	memset(&sess_data, 0, sizeof(sess_data));
+	memset(&params, 0, sizeof(params));
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-
 
 	/* prepare buffers for this test */
 	if (msg_api_init(&msg_params,
@@ -594,8 +622,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
-				   &attr, url, 0, 0, &sess_data);
+
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &sess_data;
+	params.uri		= url;
+
+	sess_data.session = xio_session_create(&params);
 	if (sess_data.session == NULL) {
 		int error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
@@ -604,9 +637,14 @@ int main(int argc, char *argv[])
 	}
 
 	/* spawn threads to handle connection */
-	for (i = 0; i < MAX_THREADS; i++) {
-		sess_data.tdata[i].affinity		=
-				((test_config.cpu + i + 1) % max_cpus);
+	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
+		while (1) {
+			if (cpusmask_test_bit(cpu, &cpusmask))
+				break;
+			if (++cpu == max_cpus)
+				cpu = 0;
+		}
+		sess_data.tdata[i].affinity		= cpu;
 		sess_data.tdata[i].cid			= i+1;
 		sess_data.tdata[i].stat.first_time	= 1;
 		sess_data.tdata[i].stat.print_counter	= PRINT_COUNTER;

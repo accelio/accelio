@@ -72,31 +72,27 @@ struct xio_connection {
 	struct xio_nexus		*nexus;
 	struct xio_session		*session;
 	struct xio_context		*ctx;	/* connection context */
-	struct xio_session_ops		ses_ops;
 	/* server's session may have multiple connections each has
 	 * private data assignd by bind
 	 */
-	void				*cb_user_context;
-
-	int				conn_idx;
-	int				state;
-	int32_t				send_req_toggle;
-	int				disable_notify;
-	int				close_reason;
-	int				in_flight_reqs_budget;
-	int				in_flight_sends_budget; /* one way msgs */
-	int				app_io_budget;
-	int				in_close;
-	int				is_flushed;
-	int				pad;
+	uint16_t			conn_idx;
+	uint16_t			state;
+	uint16_t			disable_notify;
+	uint16_t			in_close;
+	uint16_t			is_flushed;
+	uint16_t			pad[3];
+	uint32_t			close_reason;
+	uint32_t			queued_msgs;
 	struct kref			kref;
+	int32_t				send_req_toggle;
+
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
 	struct xio_msg_list		in_flight_reqs_msgq;
 	struct xio_msg_list		in_flight_rsps_msgq;
 
-	struct xio_msg_list		one_way_msg_pool;
 	struct xio_msg			*msg_array;
+	struct xio_msg_list		one_way_msg_pool;
 	xio_work_handle_t		hello_work;
 	xio_work_handle_t		fin_work;
 	xio_delayed_work_handle_t	fin_delayed_work;
@@ -107,6 +103,9 @@ struct xio_connection {
 	struct list_head		pre_send_list;
 	struct list_head		connections_list_entry;
 	struct list_head		ctx_list_entry;
+	struct xio_session_ops		ses_ops;
+	void				*cb_user_context;
+
 };
 
 struct xio_connection *xio_connection_init(
@@ -131,12 +130,12 @@ static inline void xio_connection_set_ops(
 }
 
 int xio_connection_send(struct xio_connection *connection,
-			  struct xio_msg *msg);
+			struct xio_msg *msg);
 
 int xio_connection_xmit_msgs(struct xio_connection *connection);
 
 void xio_connection_queue_io_task(struct xio_connection *connection,
-				    struct xio_task *task);
+				  struct xio_task *task);
 
 struct xio_task *xio_connection_find_io_task(struct xio_connection *connection,
 					     uint64_t msg_sn);
@@ -153,10 +152,10 @@ struct xio_transition *xio_connection_next_transit(
 					int fin_ack);
 
 int xio_connection_send_read_receipt(struct xio_connection *connection,
-			      struct xio_msg *msg);
+				     struct xio_msg *msg);
 
 int xio_connection_release_read_receipt(struct xio_connection *connection,
-				  struct xio_msg *msg);
+					struct xio_msg *msg);
 
 void xio_release_response_task(struct xio_task *task);
 
@@ -166,7 +165,7 @@ int xio_connection_fin_addref(struct xio_connection *connection);
 int xio_connection_fin_put(struct xio_connection *connection);
 
 int xio_connection_release_fin(struct xio_connection *connection,
-				   struct xio_msg *msg);
+			       struct xio_msg *msg);
 
 int xio_send_fin_ack(struct xio_connection *connection,
 		     struct xio_task *task);

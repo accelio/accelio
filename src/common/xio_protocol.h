@@ -80,7 +80,7 @@ static inline size_t xio_write_uint8(uint8_t b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_uint8(uint8_t *b, int bindex,
-				      const uint8_t *buffer)
+				    const uint8_t *buffer)
 {
 	*b = *(buffer + bindex);
 	return sizeof(*b);
@@ -107,7 +107,7 @@ static inline size_t xio_write_int8(int8_t b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_int8(int8_t *b, int bindex,
-				     const uint8_t *buffer)
+				   const uint8_t *buffer)
 {
 	*b = (int8_t)*(buffer + bindex);
 	return sizeof(*b);
@@ -121,7 +121,7 @@ static inline size_t xio_read_int8(int8_t *b, int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_write_uint16(uint16_t b, const int bindex,
-					uint8_t *buffer)
+				      uint8_t *buffer)
 {
 	buffer[bindex]   = (b >> 8) & 0xff;
 	buffer[bindex+1] = (b)	& 0xff;
@@ -137,7 +137,7 @@ static inline size_t xio_write_uint16(uint16_t b, const int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_uint16(uint16_t *b, const int bindex,
-				       const uint8_t *buffer)
+				     const uint8_t *buffer)
 {
 	*b = ((((uint32_t)buffer[bindex]) << 8)
 			|  ((uint32_t)buffer[bindex+1]));
@@ -165,7 +165,7 @@ static inline size_t xio_write_int16(int16_t b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_int16(int16_t *b, int bindex,
-				      const uint8_t *buffer)
+				    const uint8_t *buffer)
 {
 	return xio_read_uint16((uint16_t *)b, bindex, buffer);
 }
@@ -179,7 +179,7 @@ static inline size_t xio_read_int16(int16_t *b, int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_write_uint32(uint32_t b, const int bindex,
-					uint8_t *buffer)
+				      uint8_t *buffer)
 {
 	buffer[bindex]   = (b >> 24) & 0xff;
 	buffer[bindex+1] = (b >> 16) & 0xff;
@@ -196,7 +196,7 @@ static inline size_t xio_write_uint32(uint32_t b, const int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_uint32(uint32_t *b, const int bindex,
-				       const uint8_t *buffer)
+				     const uint8_t *buffer)
 {
 	*b = (uint32_t)(buffer[bindex]) << 24 |
 	     (uint32_t)(buffer[bindex+1]) << 16 |
@@ -230,7 +230,7 @@ static inline size_t xio_write_int32(int32_t b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_int32(int32_t *b, int bindex,
-				      const uint8_t *buffer)
+				    const uint8_t *buffer)
 {
 	*b = ((((uint32_t)buffer[bindex])   << 24) |
 	      (((uint32_t)buffer[bindex+1]) << 16) |
@@ -248,7 +248,7 @@ static inline size_t xio_read_int32(int32_t *b, int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_write_uint64(uint64_t b, const int bindex,
-					uint8_t *buffer)
+				      uint8_t *buffer)
 {
 	buffer[bindex]   = (b >> 56) & 0xff;
 	buffer[bindex+1] = (b >> 48) & 0xff;
@@ -269,7 +269,7 @@ static inline size_t xio_write_uint64(uint64_t b, const int bindex,
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_uint64(uint64_t *b, const int bindex,
-				       const uint8_t *buffer)
+				     const uint8_t *buffer)
 {
 	*b = ((((uint64_t)buffer[bindex])   << 56)
 			| (((uint64_t)buffer[bindex+1]) << 48)
@@ -303,7 +303,7 @@ static inline size_t xio_write_int64(int64_t b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_int64(int64_t *b, int bindex,
-				      const uint8_t *buffer)
+				    const uint8_t *buffer)
 {
 	return xio_read_uint64((uint64_t *)b, bindex, buffer);
 }
@@ -330,7 +330,7 @@ static inline size_t xio_write_float(float b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_float(float *b, int bindex,
-				      const uint8_t *buffer)
+				    const uint8_t *buffer)
 {
 	union generic_32bit g;
 	size_t len =  xio_read_int32(&g.i, bindex, buffer);
@@ -361,7 +361,7 @@ static inline size_t xio_write_double(double b, int bindex, uint8_t *buffer)
  * @return the new position of the last used byte in the buffer
  */
 static inline size_t xio_read_double(double *b, int bindex,
-				       const uint8_t *buffer)
+				     const uint8_t *buffer)
 {
 	union generic_64bit g;
 	size_t len =  xio_read_int64(&g.ll, bindex, buffer);
@@ -379,7 +379,7 @@ static inline size_t xio_read_double(double *b, int bindex,
  * @return new position of the last used byte in the buffer
  */
 static inline size_t xio_write_array(const uint8_t *b, size_t length,
-				       int bindex, uint8_t *buffer)
+				     int bindex, uint8_t *buffer)
 {
 	memcpy(buffer+bindex, b, length);
 	return length;
@@ -394,7 +394,7 @@ static inline size_t xio_write_array(const uint8_t *b, size_t length,
  * @return new position of the last used byte in the buffer
  */
 static inline size_t xio_read_array(uint8_t *b, size_t length,
-				      int bindex, const uint8_t *buffer)
+				    int bindex, const uint8_t *buffer)
 {
 	memcpy(b, buffer+bindex, length);
 	return length;
@@ -409,7 +409,7 @@ static inline size_t xio_read_array(uint8_t *b, size_t length,
  * @return new position of the last used byte in the buffer
  */
 static inline size_t xio_write_string(const char *b, size_t maxlength,
-					int bindex, uint8_t *buffer)
+				      int bindex, uint8_t *buffer)
 {
 	size_t length = 0;
 	/* Copy string into buffer, ensuring not to exceed the buffer size */
@@ -447,7 +447,7 @@ static inline size_t xio_read_string(char *b, size_t maxlength,
 	xio_read_uint16(&length, bindex, buffer);
 
 	/* Copy string into buffer, ensuring not to exceed the buffer size */
-	for (i = 0; i < min((size_t) length, maxlength); i++)
+	for (i = 0; i < min(((size_t)length), maxlength); i++)
 		b[i] = buffer[bindex+i+2];
 
 	/* Enforce null termination at end of buffer */

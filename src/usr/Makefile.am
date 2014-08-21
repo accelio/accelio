@@ -1,11 +1,28 @@
 # this is example-file: src/Makefile.am
 
 # additional include paths necessary to compile the C library
+
+if HAVE_INFINIBAND_VERBS
+    libxio_rdma_srcdir = -I$(top_srcdir)/src/usr/transport/rdma
+    libxio_rdma_headers = ./transport/rdma/xio_rdma_transport.h   \
+			  ./transport/rdma/xio_rdma_utils.h
+    libxio_rdma_sources = ./transport/rdma/xio_rdma_utils.c       \
+                          ./transport/rdma/xio_rdma_verbs.c       \
+                          ./transport/rdma/xio_rdma_management.c  \
+                          ./transport/rdma/xio_rdma_datapath.c
+    libxio_rdma_ldflags = -lrdmacm -libverbs
+else
+    libxio_rdma_srcdir =
+    libxio_rdma_headers =
+    libxio_rdma_sources =
+    libxio_rdma_ldflags =
+endif
+
 AM_CFLAGS = -fPIC -DPIC  			\
 	    -I$(top_srcdir)/src/usr 		\
 	    -I$(top_srcdir)/src/usr/xio		\
 	    -I$(top_srcdir)/src/usr/transport	\
-	    -I$(top_srcdir)/src/usr/transport/rdma	\
+	    $(libxio_rdma_srcdir)		\
 	    -I$(top_srcdir)/src/usr/transport/tcp	\
 	    -I$(top_srcdir)/src/common  	\
 	    -I$(top_srcdir)/include		\
@@ -42,8 +59,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./xio/xio_ev_loop.h			\
 			./transport/xio_transport_mempool.h	\
 			./transport/xio_usr_transport.h		\
-			./transport/rdma/xio_rdma_transport.h	\
-			./transport/rdma/xio_rdma_utils.h	\
+			$(libxio_rdma_headers)			\
 			./transport/tcp/xio_tcp_transport.h	\
 			../common/xio_workqueue.h		\
 			../common/xio_workqueue_priv.h		\
@@ -62,6 +78,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_sessions_cache.h		\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
+			../common/xio_sg_table.h		\
 			../common/xio_transport.h		\
 			../common/sys/hashtable.h		\
 			./linux/atomic.h 			\
@@ -88,10 +105,10 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
 			./xio/xio_workqueue.c		\
-			./transport/rdma/xio_rdma_utils.c	\
-			./transport/rdma/xio_rdma_verbs.c	\
-			./transport/rdma/xio_rdma_management.c	\
-			./transport/rdma/xio_rdma_datapath.c	\
+			./xio/xio_sg_iov.c		\
+			./xio/xio_sg_iovptr.c		\
+			./xio/xio_sg_table.c	\
+			$(libxio_rdma_sources)		\
 			./transport/tcp/xio_tcp_management.c	\
 			./transport/tcp/xio_tcp_datapath.c	\
 			./transport/xio_transport_mempool.c	\
@@ -114,7 +131,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lnuma -lrdmacm -libverbs -lrt -lpthread \
+libxio_la_LDFLAGS = -lnuma $(libxio_rdma_ldflags) -lrt -lpthread \
 		     $(libxio_version_script)
 
 libxio_la_DEPENDENCIES =  $(top_srcdir)/src/usr/libxio.map

@@ -102,11 +102,11 @@ static int on_request(struct xio_session *session,
 	rsp->request		= req;
 	rsp->more_in_batch	= more_in_batch;
 	rsp->in.header.iov_len	= 0;
-	rsp->in.data_iovlen	= 0;
 	rsp->out.header.iov_len = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 
 	if (tdata->user_param->verb == READ)
-		rsp->out.data_iovlen = 0;
+		vmsg_sglist_set_nents(&rsp->out, 0);
 
 	if (xio_send_response(rsp) == -1) {
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
@@ -153,18 +153,20 @@ static int on_msg_error(struct xio_session *session,
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	if (!tdata->in_xbuf) {
-		tdata->in_xbuf = xio_alloc(msg->in.data_iov[0].iov_len);
-	} else if (tdata->in_xbuf->length < msg->in.data_iov[0].iov_len) {
+		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
+	} else if (tdata->in_xbuf->length < sglist[0].iov_len) {
 		xio_free(&tdata->in_xbuf);
-		tdata->in_xbuf = xio_alloc(msg->in.data_iov[0].iov_len);
+		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
 	}
 
-	msg->in.data_iovlen		= 1;
-	msg->in.data_iov[0].iov_base	= tdata->in_xbuf->addr;
-	msg->in.data_iov[0].iov_len	= tdata->in_xbuf->length;
-	msg->in.data_iov[0].mr		= tdata->in_xbuf->mr;
+	vmsg_sglist_set_nents(&msg->in, 1);
+
+	sglist[0].iov_base	= tdata->in_xbuf->addr;
+	sglist[0].iov_len	= tdata->in_xbuf->length;
+	sglist[0].mr		= tdata->in_xbuf->mr;
 
 	return 0;
 }
@@ -199,7 +201,7 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
 	/* prepare data for the cuurent thread */
-	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth + 32);
+	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth + 64);
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout,
@@ -350,15 +352,22 @@ static void on_test_results(struct test_results *results)
 int run_server_test(struct perf_parameters *user_param)
 {
 	struct server_data	server_data;
+	struct perf_command	command;
 	int			i, len, retval;
 	int			max_cpus;
-	struct perf_command	command;
-
+	uint64_t		cpusmask;
+	int			cpusnr;
+	int			cpu;
 
 	xio_init();
 
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
+	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
+	if (i == 0) {
+		printf("best cpus [%d] %s\n", cpusnr,
+		       intf_cpusmask_str(cpusmask, cpusnr, user_param->intf_name));
+	}
 
 	server_data.my_test_param.machine_type	= user_param->machine_type;
 	server_data.my_test_param.test_type	= user_param->test_type;
@@ -370,9 +379,15 @@ int run_server_test(struct perf_parameters *user_param)
 				   sizeof(*server_data.tdata));
 
 	/* spawn portals */
-	for (i = 0; i < user_param->threads_num; i++) {
-		server_data.tdata[i].affinity =
-					((user_param->cpu + i)%max_cpus);
+	for (i = 0, cpu = 0; i < user_param->threads_num; i++, cpu++) {
+		while (1) {
+			if (cpusmask_test_bit(cpu, &cpusmask))
+				break;
+			if (++cpu == max_cpus)
+				cpu = 0;
+		}
+		server_data.tdata[i].affinity = cpu;
+
 		server_data.tdata[i].portal_index =
 					(i % user_param->portals_arr_len);
 		server_data.tdata[i].user_param = user_param;
@@ -386,7 +401,10 @@ int run_server_test(struct perf_parameters *user_param)
 		       balancer_server_cb, &server_data);
 
 	server_data.comm = create_comm_struct(user_param);
-	establish_connection(server_data.comm);
+	if (establish_connection(server_data.comm)) {
+		fprintf(stderr, "failed to establish connection\n");
+		goto cleanup;
+	}
 
 
 	printf("%s", RESULT_FMT);
@@ -424,6 +442,7 @@ int run_server_test(struct perf_parameters *user_param)
 	/* normal exit phase */
 	ctx_close_connection(server_data.comm);
 
+cleanup:
 	for (i = 0; i < user_param->threads_num; i++)
 		xio_context_stop_loop(server_data.tdata[i].ctx, 0);
 

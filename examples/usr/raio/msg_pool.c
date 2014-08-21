@@ -216,19 +216,23 @@ void msg_write(struct msg_params *msg_params,
 	/* don't do the memcpy */
 	pmsg->header.iov_len		= hdrlen;
 	pmsg->header.iov_base		= msg_params->g_hdr;
-	pmsg->data_iovlen		= datalen ? data_iovlen : 0;
+	pmsg->data_iov.nents		= datalen ? data_iovlen : 0;
 
-	if (pmsg->data_iovlen > XIO_IOVLEN) {
-		for (i = 0; i < pmsg->data_iovlen; i++) {
-			pmsg->pdata_iov[i].iov_base	= msg_params->g_data;
-			pmsg->pdata_iov[i].iov_len	= datalen;
-			pmsg->pdata_iov[i].mr		= msg_params->g_data_mr;
+	if (pmsg->data_iov.nents > XIO_IOVLEN) {
+		for (i = 0; i < pmsg->data_iov.nents; i++) {
+			pmsg->pdata_iov.sglist[i].iov_base	=
+				msg_params->g_data;
+			pmsg->pdata_iov.sglist[i].iov_len	= datalen;
+			pmsg->pdata_iov.sglist[i].mr		=
+				msg_params->g_data_mr;
 		}
 	} else {
-		for (i = 0; i < pmsg->data_iovlen; i++) {
-			pmsg->data_iov[i].iov_base	= msg_params->g_data;
-			pmsg->data_iov[i].iov_len	= datalen;
-			pmsg->data_iov[i].mr		= msg_params->g_data_mr;
+		for (i = 0; i < pmsg->data_iov.nents; i++) {
+			pmsg->data_iov.sglist[i].iov_base	=
+				msg_params->g_data;
+			pmsg->data_iov.sglist[i].iov_len	= datalen;
+			pmsg->data_iov.sglist[i].mr		=
+				msg_params->g_data_mr;
 		}
 	}
 }
@@ -282,21 +286,21 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 		msg = msg_pool->array[i];
 
 		if (in_iovsz) {
-			msg->in.data_type  = XIO_DATA_TYPE_PTR;
-			msg->in.data_iovsz = in_iovsz;
-			msg->in.pdata_iov  = (void *)buf;
+			msg->in.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
+			msg->in.data_iov.max_nents	= in_iovsz;
+			msg->in.pdata_iov.sglist	= (void *)buf;
 			buf = buf + in_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
-			msg->in.data_type  = XIO_DATA_TYPE_ARRAY;
+			msg->in.sgl_type		= XIO_SGL_TYPE_IOV;
 		}
 
 		if (out_iovsz) {
-			msg->out.data_type  = XIO_DATA_TYPE_PTR;
-			msg->out.data_iovsz = out_iovsz;
-			msg->out.pdata_iov  = (void *)buf;
+			msg->out.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
+			msg->out.data_iov.max_nents	 = out_iovsz;
+			msg->out.pdata_iov.sglist	= (void *)buf;
 			buf = buf + out_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
-			msg->out.data_type  = XIO_DATA_TYPE_ARRAY;
+			msg->out.sgl_type		= XIO_SGL_TYPE_IOV;
 		}
 		msg_pool->stack[i] = msg;
 	}

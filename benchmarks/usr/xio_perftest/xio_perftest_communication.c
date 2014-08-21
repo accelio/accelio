@@ -39,11 +39,18 @@
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <unistd.h>
+#include <numa.h>
+#include <fcntl.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+
 
 #include "libxio.h"
 #include "xio_perftest_parameters.h"
 #include "xio_perftest_communication.h"
-
+#include "xio_msg.h"
 
 #define CONFIG_PORT	20610
 
@@ -89,6 +96,7 @@ static int on_session_event(struct xio_session *session,
 					event_data->conn_user_context);
 		break;
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:
+	case XIO_SESSION_CONNECTION_REFUSED_EVENT:
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 		comm->control_ctx->failed = 1;
@@ -223,14 +231,8 @@ void destroy_comm_struct(struct perf_comm *comm)
 /*---------------------------------------------------------------------------*/
 int establish_connection(struct perf_comm *comm)
 {
-	char	url[256];
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,	/* callbacks structure */
-		NULL,		/* no need to pass the server private data */
-		0
-	};
+	char				url[256];
+	struct xio_session_params	params;
 
 	/* create thread context for the client */
 	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
@@ -250,10 +252,14 @@ int establish_connection(struct perf_comm *comm)
 			comm->user_param->transport,
 			comm->user_param->server_addr, CONFIG_PORT);
 
+		memset(&params, 0, sizeof(params));
+		params.type		= XIO_SESSION_CLIENT;
+		params.ses_ops		= &ses_ops;
+		params.user_context	= comm;
+		params.uri		= url;
+
 		/* create url to connect to */
-		comm->control_ctx->session = xio_session_create(
-				XIO_SESSION_CLIENT,
-				&attr, url, 0, 0, comm);
+		comm->control_ctx->session = xio_session_create(&params);
 
 		/* connect the session  */
 		comm->control_ctx->conn = xio_connect(
@@ -280,9 +286,9 @@ int ctx_xchg_data(struct perf_comm *comm,
 	if (comm->user_param->machine_type == CLIENT) {
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
-		comm->control_ctx->msg.out.data_iovlen		= 0;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
-		comm->control_ctx->msg.in.data_iovlen		= 0;
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
 
 		xio_send_request(comm->control_ctx->conn,
 				 &comm->control_ctx->msg);
@@ -312,9 +318,10 @@ int ctx_xchg_data(struct perf_comm *comm,
 
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
-		comm->control_ctx->msg.out.data_iovlen		= 0;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
-		comm->control_ctx->msg.in.data_iovlen		= 0;
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+		vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
+
 
 		comm->control_ctx->msg.request = comm->control_ctx->reply;
 
@@ -337,14 +344,15 @@ cleanup:
 int ctx_write_data(struct perf_comm *comm, void *data, int size)
 {
 	if (!comm || !comm->control_ctx ||
-	    !comm->control_ctx->conn || !comm->control_ctx->failed)
+	    !comm->control_ctx->conn || comm->control_ctx->failed)
 		return -1;
 
 	comm->control_ctx->msg.out.header.iov_base	= data;
 	comm->control_ctx->msg.out.header.iov_len	= size;
-	comm->control_ctx->msg.out.data_iovlen		= 0;
 	comm->control_ctx->msg.in.header.iov_len	= 0;
-	comm->control_ctx->msg.in.data_iovlen		= 0;
+	vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
+	vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
+
 
 	return xio_send_msg(comm->control_ctx->conn, &comm->control_ctx->msg);
 }
@@ -354,7 +362,7 @@ int ctx_write_data(struct perf_comm *comm, void *data, int size)
 /*---------------------------------------------------------------------------*/
 int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 {
-	if (!comm || !comm->control_ctx || !comm->control_ctx->failed)
+	if (!comm || !comm->control_ctx || comm->control_ctx->failed)
 		goto cleanup;
 
 	xio_context_run_loop(comm->control_ctx->ctx, XIO_INFINITE);
@@ -437,3 +445,185 @@ cleanup:
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* intf_name								     */
+/*---------------------------------------------------------------------------*/
+int intf_name(const char *addr, char *if_name)
+{
+	struct ifaddrs		*ifaddr, *ifa;
+	struct sockaddr_in	iaddr;
+	struct sockaddr_in	*saddr;
+	int			retval = -1;
+
+	if (getifaddrs(&ifaddr) == -1) {
+		perror("getifaddrs");
+		goto cleanup;
+	}
+	if (inet_pton(AF_INET, addr, &iaddr.sin_addr) == -1) {
+		perror("inet_pton");
+		goto cleanup1;
+	}
+
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (!(ifa->ifa_addr && (ifa->ifa_flags & IFF_UP) &&
+		      ifa->ifa_addr->sa_family == AF_INET))
+			continue;
+
+		saddr = (struct sockaddr_in *)ifa->ifa_addr;
+		if (saddr->sin_addr.s_addr == iaddr.sin_addr.s_addr) {
+			strcpy(if_name, ifa->ifa_name);
+			retval = 0;
+			break;
+		}
+	}
+
+cleanup1:
+	freeifaddrs(ifaddr);
+cleanup:
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* intf_numa_node							     */
+/*---------------------------------------------------------------------------*/
+int intf_numa_node(const char *iface)
+{
+	int	fd, numa_node = -1, len;
+	char	buf[256];
+
+	snprintf(buf, 256, "/sys/class/net/%s/device/numa_node", iface);
+	fd = open(buf, O_RDONLY);
+	if (fd == -1)
+		return -1;
+
+	len = read(fd, buf, sizeof(buf));
+	if (len < 0)
+		goto cleanup;
+
+	numa_node = strtol(buf, NULL, 0);
+
+cleanup:
+	close(fd);
+
+	return numa_node;
+}
+
+/*---------------------------------------------------------------------------*/
+/* intf_master_name							     */
+/*---------------------------------------------------------------------------*/
+int intf_master_name(const char *iface, char *master)
+{
+	int	fd, len;
+	char	path[256];
+	char	buf[256];
+	char    *ptr;
+
+	snprintf(path, 256, "/sys/class/net/%s/master", iface);
+	fd = open(path, O_RDONLY);
+	if (fd == -1)
+		return -1;
+
+	len = read(fd, buf, sizeof(buf)-1);
+	if (len < 0) {
+		len = readlink(path, buf, sizeof(buf) - 1);
+		if (len < 0)
+			goto cleanup;
+	}
+	buf[len] = '\0';
+	ptr = strrchr(buf, '/');
+	if (ptr) {
+		ptr++;
+		strcpy(buf, ptr);
+	}
+	strcpy(master, buf);
+cleanup:
+	close(fd);
+
+	return (len > 0) ? 0 : -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* numa_node_to_cpusmask						     */
+/*---------------------------------------------------------------------------*/
+static int numa_node_to_cpusmask(int node, uint64_t *cpusmask, int *nr)
+{
+	struct bitmask *mask;
+	uint64_t	bmask = 0;
+	int		retval = -1, i;
+
+	mask = numa_allocate_cpumask();
+	retval = numa_node_to_cpus(node, mask);
+	if (retval < 0)
+		goto cleanup;
+
+	*nr = 0;
+	for (i = 0; i < mask->size && i < 64; i++) {
+		if (numa_bitmask_isbitset(mask, i)) {
+			cpusmask_set_bit(i, &bmask);
+			(*nr)++;
+		}
+	}
+
+	retval = 0;
+cleanup:
+	*cpusmask = bmask;
+
+	numa_free_cpumask(mask);
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* intf_best_cpus							     */
+/*---------------------------------------------------------------------------*/
+int intf_best_cpus(const char *addr, uint64_t *cpusmask, int *nr)
+{
+	char		if_name[32];
+	int		numa_node, retval;
+
+	retval = intf_name(addr, if_name);
+	if (retval < 0)
+		return  -1;
+
+	numa_node = intf_numa_node(if_name);
+	if (numa_node < 0)
+		return -1;
+
+	retval = numa_node_to_cpusmask(numa_node, cpusmask, nr);
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* intf_name_best_cpus							     */
+/*---------------------------------------------------------------------------*/
+int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr)
+{
+	int		numa_node, retval;
+
+	numa_node = intf_numa_node(if_name);
+	if (numa_node < 0)
+		return -1;
+
+	retval = numa_node_to_cpusmask(numa_node, cpusmask, nr);
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* intf_name_best_cpus							     */
+/*---------------------------------------------------------------------------*/
+char *intf_cpusmask_str(uint64_t cpusmask, int nr, char *str)
+{
+	int len = 0, i, cpus;
+
+	for (i = 0, cpus = 0; i < 64 && cpus < nr; i++) {
+		if (cpusmask_test_bit(i, &cpusmask)) {
+			len += sprintf(&str[len], "%d ", i);
+			cpus++;
+		}
+	}
+	return str;
+}
+
+

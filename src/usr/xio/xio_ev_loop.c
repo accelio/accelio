@@ -52,6 +52,8 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
+#define MAX_DELETED_EVENTS	1024
+
 extern double                    g_mhz;
 
 /*---------------------------------------------------------------------------*/
@@ -62,6 +64,9 @@ struct xio_ev_loop {
 	int				stop_loop;
 	int				wakeup_event;
 	int				wakeup_armed;
+	int				pad;
+	int				deleted_events_nr;
+	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 	struct list_head		poll_events_list;
 	struct list_head		events_list;
 };
@@ -70,7 +75,7 @@ struct xio_ev_loop {
 /* xio_event_add                                                           */
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_add(void *loop_hndl, int fd, int events,
-		xio_ev_handler_t handler, void *data)
+		    xio_ev_handler_t handler, void *data)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
 	struct epoll_event	ev;
@@ -82,6 +87,8 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		ev.events |= EPOLLIN;
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
+	if (events & XIO_POLLRDHUP)
+		ev.events |= EPOLLRDHUP;
 	/* default is edge triggered */
 	if (events & XIO_POLLET)
 		ev.events |= EPOLLET;
@@ -150,7 +157,12 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 			return -1;
 		}
 		list_del(&tev->events_list_entry);
-		ufree(tev);
+		if (loop->deleted_events_nr < MAX_DELETED_EVENTS) {
+			loop->deleted_events[loop->deleted_events_nr] = tev;
+			loop->deleted_events_nr++;
+		} else {
+			ERROR_LOG("failed to delete event\n");
+		}
 	}
 
 	ret = epoll_ctl(loop->efd, EPOLL_CTL_DEL, fd, NULL);
@@ -186,6 +198,8 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 		ev.events |= EPOLLIN;
 	if (events & XIO_POLLOUT)
 		ev.events |= EPOLLOUT;
+	if (events & XIO_POLLRDHUP)
+		ev.events |= EPOLLRDHUP;
 	/* default is edge triggered */
 	if (events & XIO_POLLET)
 		ev.events |= EPOLLET;
@@ -224,6 +238,7 @@ void *xio_ev_loop_create()
 
 	loop->stop_loop		= 0;
 	loop->wakeup_armed	= 0;
+	loop->deleted_events_nr = 0;
 	loop->efd		= epoll_create(4096);
 	if (loop->efd == -1) {
 		xio_set_error(errno);
@@ -260,7 +275,7 @@ cleanup:
 /* xio_ev_loop_init_event						     */
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_init_event(struct xio_ev_data *evt,
-			  xio_event_handler_t event_handler, void *data)
+			    xio_event_handler_t event_handler, void *data)
 {
 	evt->event_handler = event_handler;
 	evt->scheduled = 0;
@@ -324,7 +339,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
-	int			nevent = 0, i;
+	int			nevent = 0, i, j, found;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
 	int			work_remains;
@@ -337,6 +352,11 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 retry:
 	work_remains = xio_ev_loop_exec_scheduled(loop);
 	tmout = work_remains ? 0 : timeout;
+
+	/* free deleted event handlers */
+	if (unlikely(loop->deleted_events_nr))
+		while (loop->deleted_events_nr)
+			ufree(loop->deleted_events[--loop->deleted_events_nr]);
 
 	nevent = epoll_wait(loop->efd, events, ARRAY_SIZE(events), tmout);
 	if (unlikely(nevent < 0)) {
@@ -351,6 +371,21 @@ retry:
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
 			if (likely(tev != NULL)) {
+				/* look for deleted event handlers */
+				if (unlikely(loop->deleted_events_nr)) {
+					for (j = 0; j < loop->deleted_events_nr;
+							j++) {
+						if (loop->deleted_events[j] ==
+								tev) {
+							found = 1;
+							break;
+						}
+					}
+					if (found) {
+						found = 0;
+						continue;
+					}
+				}
 				/* (fd != loop->wakeup_event) */
 				tev->handler(tev->fd, events[i].events,
 						tev->data);
@@ -378,21 +413,24 @@ retry:
 	}
 	/* calculate the remaining timeout */
 	if (timeout != -1 && !loop->stop_loop) {
-		 int time_passed = (int)((get_cycles() -
-					  start_cycle)/(1000*g_mhz) + 0.5);
-		 if (time_passed >= wait_time)
-			 loop->stop_loop = 1;
-		 else
-			 timeout = wait_time - time_passed;
+		int time_passed = (int)((get_cycles() -
+				start_cycle)/(1000*g_mhz) + 0.5);
+		if (time_passed >= wait_time)
+			loop->stop_loop = 1;
+		else
+			timeout = wait_time - time_passed;
 	}
 
-	if (likely(loop->stop_loop == 0))
+	if (likely(loop->stop_loop == 0)) {
 		goto retry;
-	else {
+	} else {
 		/* drain events before returning */
-		while (!list_empty(&loop->events_list)) {
+		while (!list_empty(&loop->events_list))
 			xio_ev_loop_exec_scheduled(loop);
-		}
+
+		/* free deleted event handlers */
+		while (loop->deleted_events_nr)
+			ufree(loop->deleted_events[--loop->deleted_events_nr]);
 	}
 
 	loop->stop_loop = 0;

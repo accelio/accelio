@@ -85,8 +85,11 @@ atomic_t module_state;
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	char *str, tmp;
-	int len, i;
+	struct sg_table *sgt = &req->in.data_tbl;
+	struct scatterlist	*sg;
+	char			*str;
+	int			len, i;
+	char			tmp;
 
 	/* note all data is packed together so in order to print each
 	 * part on its own NULL character is temporarily stuffed
@@ -105,9 +108,10 @@ static void process_request(struct xio_msg *req)
 				(req->sn + 1), str);
 			str[len] = tmp;
 		}
-		for (i = 0; i < req->in.data_iovlen; i++) {
-			str = (char *)req->in.data_iov[i].iov_base;
-			len = req->in.data_iov[i].iov_len;
+		sg = sgt->sgl;
+		for (i = 0; i < sgt->nents; i++) {
+			str = (char *)sg_virt(sg);
+			len = sg->length;
 			if (str) {
 				if (((unsigned) len) > 64)
 					len = 64;
@@ -117,12 +121,18 @@ static void process_request(struct xio_msg *req)
 					(req->sn + 1), i, len, str);
 				str[len] = tmp;
 			}
+			sg = sg_next(sg);
 		}
 		g_server_data->cnt = 0;
 	}
-	req->in.header.iov_base	  = NULL;
-	req->in.header.iov_len	  = 0;
-	req->in.data_iovlen	  = 0;
+
+#if 0
+	/* Server didn't allocate this memory */
+	req->in.header.iov_base = NULL;
+	req->in.header.iov_len  = 0;
+	/* Server didn't allocate in data table to reset it */
+	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -273,7 +283,11 @@ static int xio_server_main(void *data)
 		server_data->rsp[i].out.header.iov_base =
 			kstrdup("hello world header response", GFP_KERNEL);
 		server_data->rsp[i].out.header.iov_len =
-			strlen(server_data->rsp[i].out.header.iov_base);
+			strlen(server_data->rsp[i].out.header.iov_base) + 1;
+		server_data->rsp[i].out.sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		server_data->rsp[i].out.data_tbl.orig_nents = 0;
+		server_data->rsp[i].out.data_tbl.nents = 0;
+		server_data->rsp[i].out.data_tbl.sgl = NULL;
 	}
 
 	/* create url to connect to */

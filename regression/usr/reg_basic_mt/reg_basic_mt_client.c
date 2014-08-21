@@ -48,6 +48,7 @@
 #define PRINT_COUNTER		400000
 #define TEST_DISCONNECT		1
 
+
 struct  connection_entry {
 	struct xio_connection		*connection;
 	struct thread_data		*tdata;
@@ -129,37 +130,40 @@ static void msg_obj_init(void *user_context, void *obj)
 	struct xio_msg		*req	= obj;
 	struct xio_buf		**out_iobuf;
 	struct xio_buf		**in_iobuf;
+	struct xio_iovec_ex	*sglist;
 	struct thread_data	*tdata	= user_context;
 
+	sglist = vmsg_sglist(&req->out);
 	if (tdata->client_data->client_dlen) {
 		out_iobuf = obj_pool_get(tdata->out_iobuf_pool);
-		req->out.data_iov[0].iov_base	  = (*out_iobuf)->addr;
-		req->out.data_iov[0].iov_len	  = (*out_iobuf)->length;
-		req->out.data_iov[0].mr		  = (*out_iobuf)->mr;
-		req->out.data_iov[0].user_context = out_iobuf;
-		req->out.data_iovlen		  = 1;
+		sglist[0].iov_base	= (*out_iobuf)->addr;
+		sglist[0].iov_len	= (*out_iobuf)->length;
+		sglist[0].mr		= (*out_iobuf)->mr;
+		sglist[0].user_context	= out_iobuf;
+		vmsg_sglist_set_nents(&req->out, 1);
 	} else {
-		req->out.data_iov[0].iov_base	  = NULL;
-		req->out.data_iov[0].iov_len	  = 0;
-		req->out.data_iov[0].mr		  = NULL;
-		req->out.data_iov[0].user_context = NULL;
-		req->out.data_iovlen		  = 0;
+		sglist[0].iov_base	= NULL;
+		sglist[0].iov_len	= 0;
+		sglist[0].mr		= NULL;
+		sglist[0].user_context	= NULL;
+		vmsg_sglist_set_nents(&req->out, 0);
 	}
 
+	sglist = vmsg_sglist(&req->in);
 	if (tdata->client_data->server_dlen > 8000) {
 		in_iobuf = obj_pool_get(tdata->in_iobuf_pool);
 
-		req->in.data_iov[0].iov_base	  = (*in_iobuf)->addr;
-		req->in.data_iov[0].iov_len	  = (*in_iobuf)->length;
-		req->in.data_iov[0].mr		  = (*in_iobuf)->mr;
-		req->in.data_iov[0].user_context  = in_iobuf;
-		req->in.data_iovlen		  = 1;
+		sglist[0].iov_base	= (*in_iobuf)->addr;
+		sglist[0].iov_len	= (*in_iobuf)->length;
+		sglist[0].mr		= (*in_iobuf)->mr;
+		sglist[0].user_context  = in_iobuf;
+		vmsg_sglist_set_nents(&req->in, 1);
 	} else {
-		req->in.data_iov[0].iov_base	  = NULL;
-		req->in.data_iov[0].iov_len	  = 0;
-		req->in.data_iov[0].mr		  = NULL;
-		req->in.data_iov[0].user_context  = NULL;
-		req->in.data_iovlen		  = 0;
+		sglist[0].iov_base	= NULL;
+		sglist[0].iov_len	= 0;
+		sglist[0].mr		= NULL;
+		sglist[0].user_context  = NULL;
+		vmsg_sglist_set_nents(&req->in, 0);
 	}
 
 	req->in.header.iov_len		  = 0;
@@ -373,11 +377,14 @@ static int on_msg_error(struct xio_session *session,
 {
 	struct connection_entry	*conn_entry	= cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
-	struct xio_buf	**out_iobuf	= req->out.data_iov[0].user_context;
-	struct xio_buf	**in_iobuf	= req->in.data_iov[0].user_context;
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&req->out);
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&req->in);
 
-	req->in.data_iov[0].user_context = NULL;
-	req->out.data_iov[0].user_context = NULL;
+	struct xio_buf	**out_iobuf	= osglist[0].user_context;
+	struct xio_buf	**in_iobuf	= isglist[0].user_context;
+
+	isglist[0].user_context = NULL;
+	osglist[0].user_context = NULL;
 	obj_pool_put(tdata->req_pool, req);
 	if (out_iobuf)
 		obj_pool_put(tdata->out_iobuf_pool, out_iobuf);
@@ -402,6 +409,8 @@ static int on_response(struct xio_session *session,
 	struct connection_entry *connection_entry;
 #endif
 	struct xio_buf		**in_iobuf;
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
 
 	/* acknowledge xio that response is no longer needed */
 	xio_release_response(rsp);
@@ -423,10 +432,11 @@ static int on_response(struct xio_session *session,
 		}
 	}
 	if (tdata->client_data->nsent >= tdata->client_data->disconnect_nr) {
-		struct xio_buf	**out_iobuf = rsp->out.data_iov[0].user_context;
-		struct xio_buf	**in_iobuf = rsp->in.data_iov[0].user_context;
-		rsp->in.data_iov[0].user_context = NULL;
-		rsp->out.data_iov[0].user_context = NULL;
+		struct xio_buf		**out_iobuf = osglist[0].user_context;
+		struct xio_buf		**in_iobuf = isglist[0].user_context;
+
+		isglist[0].user_context = NULL;
+		osglist[0].user_context = NULL;
 		obj_pool_put(tdata->req_pool, rsp);
 		if (out_iobuf)
 			obj_pool_put(tdata->out_iobuf_pool, out_iobuf);
@@ -441,18 +451,18 @@ static int on_response(struct xio_session *session,
 
 	/* resend the message */
 	if (tdata->client_data->server_dlen &&
-	    rsp->in.data_iov[0].user_context) {
-		in_iobuf = rsp->in.data_iov[0].user_context;
+	    isglist[0].user_context) {
+		in_iobuf = isglist[0].user_context;
 
-		rsp->in.data_iov[0].iov_base	= (*in_iobuf)->addr;
-		rsp->in.data_iov[0].iov_len	= (*in_iobuf)->length;
-		rsp->in.data_iov[0].mr		= (*in_iobuf)->mr;
-		rsp->in.data_iovlen		= 1;
+		isglist[0].iov_base	= (*in_iobuf)->addr;
+		isglist[0].iov_len	= (*in_iobuf)->length;
+		isglist[0].mr		= (*in_iobuf)->mr;
+		vmsg_sglist_set_nents(&rsp->in, 1);
 	} else {
-		rsp->in.data_iov[0].iov_base	= NULL;
-		rsp->in.data_iov[0].iov_len	= 0;
-		rsp->in.data_iov[0].mr		= NULL;
-		rsp->in.data_iovlen		= 0;
+		isglist[0].iov_base	= NULL;
+		isglist[0].iov_len	= 0;
+		isglist[0].mr		= NULL;
+		vmsg_sglist_set_nents(&rsp->in, 0);
 	}
 
 	rsp->in.header.iov_len			= 0;
@@ -504,15 +514,11 @@ int client_main(int argc, char *argv[])
 	int			client_disconnect_nr	= atoi(argv[8]);
 	/*int			server_disconnect_nr	= atoi(argv[9]);*/
 	struct session_entry    *session_entry;
+	struct xio_session_params params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	memset(&client_data, 0, sizeof(client_data));
+	memset(&params, 0, sizeof(params));
 
 	client_data.tdata = calloc(client_threads_num,
 				    sizeof(*client_data.tdata));
@@ -535,10 +541,12 @@ int client_main(int argc, char *argv[])
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_entry->session = xio_session_create(XIO_SESSION_CLIENT,
-						&attr, url,
-						0, 0, &client_data);
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &client_data;
+	params.uri		= url;
 
+	session_entry->session = xio_session_create(&params);
 	if (session_entry->session  == NULL) {
 		free(session_entry);
 		goto cleanup;

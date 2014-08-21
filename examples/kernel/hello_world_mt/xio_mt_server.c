@@ -145,9 +145,13 @@ void process_request(struct thread_data *tdata, struct xio_msg *req)
 		       (req->sn + 1), (char *)req->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-	req->in.header.iov_base	  = NULL;
-	req->in.header.iov_len	  = 0;
-	req->in.data_iovlen	  = 0;
+#if 0
+	/* Server didn't allocate this memory */
+	req->in.header.iov_base = NULL;
+	req->in.header.iov_len  = 0;
+	/* Server didn't allocate in data table to reset it */
+	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -194,12 +198,15 @@ int on_session_event(struct xio_session *session,
 		void *cb_user_context)
 {
 	struct server_data *sdata;
-	struct thread_data *tdata = event_data->conn_user_context;
+	struct thread_data *tdata;
 	struct xio_context *tctx[MAX_THREADS];
 	struct xio_context *ctx;
 	int i;
 
 	sdata = cb_user_context;
+	tdata = (event_data->conn_user_context == sdata) ? NULL :
+		event_data->conn_user_context;
+
 
 	printk("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -207,12 +214,14 @@ int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		tdata->connection = event_data->conn;
+		if (tdata)
+			tdata->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		/* NULL assignment is done with preemption disabled */
 		xio_connection_destroy(event_data->conn);
-		tdata->connection = NULL;
+		if (tdata)
+			tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		spin_lock(&sdata->lock);
@@ -266,7 +275,7 @@ int on_new_session(struct xio_session *session,
 	spin_unlock(&sdata->lock);
 	synchronize_rcu();
 
-	portals = portals_get(sdata, req->uri, req->user_context);
+	portals = portals_get(sdata, req->uri, req->private_data);
 
 	/* Automatically accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);
@@ -313,14 +322,18 @@ int xio_portal_thread(void *data)
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		char msg[128];
+		struct xio_msg *rsp = &tdata->rsp[i];
+		struct xio_vmsg *out = &rsp->out;
 		sprintf(msg,
 			"hello world header response [cpu(%d)-port(%d)-rsp(%d)]",
 			cpu, tdata->port, i);
-		tdata->rsp[i].out.header.iov_base = kstrdup(msg, GFP_KERNEL);
-		if (!tdata->rsp[i].out.header.iov_base)
+		out->header.iov_base = kstrdup(msg, GFP_KERNEL);
+		if (!out->header.iov_base)
 			goto cleanup1;
 
-		tdata->rsp[i].out.header.iov_len = strlen(msg);
+		out->header.iov_len = strlen(msg) + 1;
+		out->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		memset(&out->data_tbl, 0, sizeof(out->data_tbl));
 	}
 
 	/* create thread context for the server */

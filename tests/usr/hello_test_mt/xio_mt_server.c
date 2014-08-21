@@ -47,6 +47,7 @@
 #include "libxio.h"
 #include "xio_msg.h"
 #include "xio_test_utils.h"
+#include "xio_intf.h"
 
 #define MAX_POOL_SIZE		512
 
@@ -60,7 +61,7 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
-#define MAX_THREADS		4
+#define MAX_THREADS		6
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -89,15 +90,14 @@ struct thread_stat_data {
 };
 
 struct  thread_data {
-	char			portal[64];
 	struct thread_stat_data	stat;
-	int			affinity;
-	int			cnt;
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	void			*loop;
-	char			*buf;
-	struct xio_mr		*mr;
+	struct xio_buf		*xbuf;
+	char			portal[64];
+	int			affinity;
+	int			cnt;
 	pthread_t		thread_id;
 };
 
@@ -158,11 +158,13 @@ static void process_request(struct thread_data *tdata, struct xio_msg *msg)
 	}
 
 	if (++tdata->stat.cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("thread [%d] - message [%lu] %s - %s\n",
 		       tdata->affinity,
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		tdata->stat.cnt = 0;
 	}
 }
@@ -175,12 +177,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 {
 	struct xio_msg		*rsp;
 	struct thread_data	*tdata = cb_prv_data;
-
-	if (req->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-		xio_assert(req->status == 0);
-	}
 
 	/* process request */
 	process_request(tdata, req);
@@ -236,6 +232,16 @@ int on_msg_error(struct xio_session *session,
 
 	msg_pool_put(tdata->pool, msg);
 
+	switch (error) {
+	case XIO_E_MSG_DISCARDED:
+	case XIO_E_MSG_FLUSHED:
+		break;
+	default:
+		/* need to send response here */
+		xio_assert(0);
+		break;
+	};
+
 	return 0;
 }
 
@@ -245,22 +251,15 @@ int on_msg_error(struct xio_session *session,
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	msg->in.data_iovlen = 1;
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (tdata->xbuf == NULL)
+		tdata->xbuf = xio_alloc(XIO_READ_BUF_LEN);
 
-	if (tdata->buf == NULL) {
-		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr =
-			xio_reg_mr(msg->in.data_iov[0].iov_base,
-				   msg->in.data_iov[0].iov_len);
-		tdata->buf = msg->in.data_iov[0].iov_base;
-		tdata->mr = msg->in.data_iov[0].mr;
-	} else {
-		msg->in.data_iov[0].iov_base = tdata->buf;
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = tdata->mr;
-	}
+	sglist[0].iov_base = tdata->xbuf->addr;
+	sglist[0].mr = tdata->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -324,11 +323,8 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->mr)
-		xio_dereg_mr(&tdata->mr);
-
-	if (tdata->buf)
-		free(tdata->buf);
+	if (tdata->xbuf)
+		xio_free(&tdata->xbuf);
 
 cleanup:
 	/* free the context */
@@ -385,7 +381,7 @@ static int on_new_session(struct xio_session *session,
 	       get_ip((struct sockaddr *)&req->src_addr),
 	       get_port((struct sockaddr *)&req->src_addr));
 
-	portals = portals_get(server_data, req->uri, req->user_context);
+	portals = portals_get(server_data, req->uri, req->private_data);
 
 	/* automatic accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);
@@ -557,6 +553,10 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port;
 	int			max_cpus;
+	uint64_t		cpusmask;
+	int			cpusnr;
+	int			cpu;
+
 
 
 	memset(&server_data, 0, sizeof(server_data));
@@ -572,6 +572,15 @@ int main(int argc, char *argv[])
 		return -1;
 
 	print_test_config(&test_config);
+	i = intf_best_cpus(test_config.server_addr, &cpusmask, &cpusnr);
+	if (i == 0) {
+		if (!cpusmask_test_bit(test_config.cpu, &cpusmask)) {
+			printf("warning: cpu %d is not best cpu for %s\n",
+			       test_config.cpu, test_config.server_addr);
+			printf("best cpus [%d] %s\n", cpusnr,
+			       intf_cpusmask_str(cpusmask, cpusnr, url));
+		}
+	}
 
 	set_cpu_affinity(test_config.cpu);
 
@@ -597,9 +606,14 @@ int main(int argc, char *argv[])
 
 	/* spawn portals */
 	port = test_config.server_port;
-	for (i = 0; i < server_data.tdata_nr; i++) {
-		server_data.tdata[i].affinity =
-			((test_config.cpu + i)%max_cpus);
+	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
+		while (1) {
+			if (cpusmask_test_bit(cpu, &cpusmask))
+				break;
+			if (++cpu == max_cpus)
+				cpu = 0;
+		}
+		server_data.tdata[i].affinity = cpu;
 		port++;
 		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
 			test_config.transport,

@@ -43,6 +43,7 @@
 #include <linux/sched.h>
 #include <linux/llist.h>
 #include <linux/debugfs.h>
+#include <linux/scatterlist.h>
 
 #define DRV_VERSION "0.1"
 #define DRV_RELDATE "2013-Oct-01"
@@ -72,9 +73,15 @@ enum xio_log_level {
 	XIO_LOG_LEVEL_LAST
 };
 
-enum xio_data_type {
-	XIO_DATA_TYPE_ARRAY = 0,
-	XIO_DATA_TYPE_PTR   = 1,
+/**
+ * @enum xio_sgl_type
+ * @brief message data scatter gather type
+ */
+enum xio_sgl_type {
+	XIO_SGL_TYPE_IOV		= 0,
+	XIO_SGL_TYPE_IOV_PTR		= 1,
+	XIO_SGL_TYPE_SCATTERLIST	= 2,
+	XIO_SGL_TYPE_LAST
 };
 
 enum xio_session_type {
@@ -107,6 +114,8 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
+	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
+	XIO_OPTNAME_QUEUE_DEPTH,	  /**< application max queued msgs    */
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
@@ -162,11 +171,8 @@ enum xio_status {
 	XIO_E_NO_USER_MR		= (XIO_BASE_STATUS + 32),
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 35)
-};
-
-enum xio_session_flags {
-	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /*  do not queue messages */
+	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
 };
 
 enum xio_msg_flags {
@@ -189,8 +195,8 @@ enum xio_session_event {
 	XIO_SESSION_ERROR_EVENT,		  /**< session error event    */
 };
 
-#define XIO_REQUEST			2
-#define XIO_RESPONSE			4
+#define XIO_REQUEST			(1 << 1)
+#define XIO_RESPONSE			(1 << 2)
 
 #define XIO_MESSAGE			(1 << 4)
 #define XIO_ONE_WAY			(1 << 5)
@@ -210,7 +216,8 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_CTX                 = 1 << 0,
 	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1,
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
-	XIO_CONNECTION_ATTR_SRC_ADDR		= 1 << 3
+	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
+	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4
 };
 
 enum xio_context_attr_mask {
@@ -248,12 +255,33 @@ typedef void (*xio_log_fn)(const char *file, unsigned line,
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
+/**
+ * @struct xio_session_params
+ * @brief session creation params
+ */
+struct xio_session_params {
+	enum xio_session_type	type;		 /**< The type of the session */
+
+	uint32_t		initial_sn;      /**< initial serial number   */
+						 /**< to start with	      */
+
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< session user context     */
+	void			*private_data;  /**< private user data snt to */
+						/**< server upon new session  */
+	size_t			private_data_len; /**< private data length    */
+	char			*uri;		  /**< the uri		      */
+};
+
+
+/**
+ * @struct xio_session_attr
+ * @brief session attributes
+ */
 struct xio_session_attr {
-	struct xio_session_ops	*ses_ops;	/* session's ops callbacks */
-	void			*user_context;  /* sent to server upon new
-						   session */
-	char			*uri;		  /**< the uri		   */
-	size_t			user_context_len;
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< session user context     */
+	char			*uri;		/**< the uri		      */
 };
 
 /**
@@ -267,8 +295,8 @@ struct xio_connection_attr {
 	struct xio_context	*ctx;
 	int			reserved;
 	enum xio_proto		proto;		/**< protocol type	     */
-	struct sockaddr_storage	src_addr;	/**< source address of       */
-						/**< requester	             */
+	struct sockaddr_storage	peer_addr;	/**< address of peer	      */
+	struct sockaddr_storage	local_addr;	/**< address of local	      */
 };
 
 /**
@@ -292,29 +320,58 @@ struct xio_iovec {
 	size_t			iov_len;
 };
 
-/* In user space these struct xio_iovec and this struct differ */
+/* In user space xio_iovec and this structure differ */
 struct xio_iovec_ex {
-	void			*iov_base;
-	size_t			iov_len;
+	void			*iov_base;	/**< base address */
+	size_t			iov_len;	/**< base length  */
+	void			*user_context;	/**< private user data    */
 };
 
 /**
  * @struct xio_msg_pdata
- * @brief message private data structure used internaly by the library
+ * @brief message private data structure used internally by the library
  */
 struct xio_msg_pdata {
-	struct xio_msg		*next;          /**< internal library usage   */
+	struct xio_msg		*next;		/**< internal library usage   */
 	struct xio_msg		**prev;		/**< internal library usage   */
 };
 
+/**
+ * @struct xio_sg_iov
+ * @brief scatter gather iovec vector data structure
+ */
+struct xio_sg_iov {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		sglist[XIO_IOVLEN]; /**< scatter vec */
+
+};
+
+/**
+ * @struct xio_sg_iovptr
+ * @brief scatter gather iovec pointer data structure
+ */
+struct xio_sg_iovptr {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		*sglist;    /**< scatter list	   */
+};
+
 struct xio_vmsg {
-	struct xio_iovec	header;		/**< header's io vector	    */
-	enum xio_data_type	data_type;
+	struct xio_iovec	header;	    /**< header's io vector  */
+	enum xio_sgl_type	sgl_type;
 	int			pad;
-	size_t			data_iovsz;	/**< data iovecs alloced    */
-	size_t			data_iovlen;	/**< data iovecs count	    */
-	struct xio_iovec_ex	*pdata_iov;
-	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
+	/* Only sg_table is used in the kernel other are ignored!!!*/
+	union {
+		struct xio_sg_iov	data_iov;   /**< iov vector	     */
+		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
+		struct sg_table		data_tbl;   /**< data table	     */
+	};
+	void			*user_context;	/**< private user data */
 };
 
 struct xio_msg {
@@ -330,11 +387,9 @@ struct xio_msg {
 	};
 	enum xio_msg_type	type;
 	int		        more_in_batch;	/* more messages are expected */
-	int			status;
 	int			flags;
 	enum xio_receipt_result	receipt_res;
 	uint64_t		timestamp;	/**< submission timestamp     */
-	int			reserved;
 	void			*user_context;	/* for user usage - not sent */
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /* internal use */
@@ -342,7 +397,7 @@ struct xio_msg {
 
 /**
  * @struct xio_session_event_data
- * @brief  session enent callback parmaters
+ * @brief  session event callback parameters
  */
 struct xio_session_event_data {
 	struct xio_connection	*conn;		    /**< connection object   */
@@ -356,16 +411,16 @@ struct xio_session_event_data {
 
 struct xio_new_session_req {
 	char			*uri;		  /* the uri */
-	void			*user_context;	  /* private data form client */
+	void			*private_data;	  /* private data form client */
 	uint16_t		uri_len;	  /* uri length */
-	uint16_t		user_context_len; /* private data length */
+	uint16_t		private_data_len; /* private data length */
 	enum xio_proto		proto;
 	struct sockaddr_storage	src_addr;
 };
 
 struct xio_new_session_rsp {
-	void			*user_context;	/* private data form server */
-	uint16_t		user_context_len;  /* private data length */
+	void			*private_data;	/* private data form server */
+	uint16_t		private_data_len;  /* private data length */
 	uint16_t		reserved[3];
 };
 
@@ -702,23 +757,11 @@ int xio_query_context(struct xio_context *ctx,
 /**
  * creates new requester session
  *
- * @param[in] type	The type of the session
- * @param[in] attr	Structure of session attributes
- * @param[in] uri	uri to connect
- * @param[in] initial_sn Initial serial number to start with
- * @param[in] flags	 Session related flags as defined in xio_session_flags
- * @param[in] cb_user_context Private data pointer to pass to each session
- *			       callback
- *
+ * @param[in] params	session creations parameters
+  *
  * @returns xio session context, or NULL upon error
  */
-struct xio_session *xio_session_create(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context);
+struct xio_session *xio_session_create(struct xio_session_params *params);
 
 /**
  * teardown an opened session
@@ -907,25 +950,28 @@ struct xio_connection *xio_get_connection(struct xio_session  *session,
 					  struct xio_context  *ctx);
 
 /**
- * xio_accept - accept new session or "light redirect" it to anther thread
+ * accept new session or "light redirect" it to anther thread
  *
- * @session: The xio session handle.
- * @portals_array: String array of alternative portals to the resource
- *		in form of "rdma://host:port" "rdma://127.0.0.1:1234"
- * @portals_array_len: The string array length
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] portals_array	string array of alternative portals to the
+ *				resource in form of "rdma://host:port"
+ *				"rdma://127.0.0.1:1234"
+ * @param[in] portals_array_len The string array length
+ * @param[in] private_data	References a user-controlled data buffer
+ *			        The contents of the buffer are copied and
+ *			        transparently passed to the remote side as
+ *			        part of the communication request. May be
+ *			        NULL if user_context is not required
+ * @param[in] private_data_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @returns	success (0), or a (negative) error value
  */
 int xio_accept(struct xio_session *session,
-				const char **portals_array,
-				size_t portals_array_len,
-				void *user_context,
-				size_t user_context_len);
+	       const char **portals_array,
+	       size_t portals_array_len,
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * xio_redirect - redirect connecting session to connect to
@@ -943,24 +989,25 @@ int xio_redirect(struct xio_session *session,
 				  size_t portals_array_len);
 
 /**
- * xio_reject - reject connecting session.
+ * reject a connecting session
  *
  *
- * @session: The xio session handle.
- * @reason: reason for rejection
- * @private_status: user provided status as hint to the peer
- * @user_context: References a user-controlled data buffer. The contents of
- *		  the buffer are copied and transparently passed to the remote
- *		  side as part of the communication request. May be NULL
- *		  if user_context is not required.
- * @user_context_len: Specifies the size of the user-controlled data buffer.
+ * @param[in] session		The xio session handle
+ * @param[in] reason		Reason for rejection
+ * @param[in] private_data	References a user-controlled data buffer
+ *				The contents of the buffer are copied and
+ *				transparently passed to the peer as part
+ *				of the communication request. May be NULL
+ *				if user_context is not required
+ * @param[in] private_data_len	Specifies the size of the user-controlled
+ *				data buffer
  *
- * RETURNS: success (0), or a (negative) error value.
+ * @return success (0), or a (negative) error value
  */
 int xio_reject(struct xio_session *session,
-				enum xio_status reason,
-				void *user_context,
-				size_t user_context_len);
+	       enum xio_status reason,
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * xio_send_response - send response.

@@ -61,6 +61,8 @@
 #define MAX_POOL_SIZE		2048
 #define ONE_MB			(1 << 20)
 #define DISCONNECT_FACTOR	3
+#define MAX_OUTSTANDING_REQS	50
+#define XIO_READ_BUF_LEN	ONE_MB
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -81,11 +83,11 @@ static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
 static struct xio_context	*ctx;
+static struct xio_buf		*xbuf;
 static struct msg_params	msg_params;
-static uint64_t nrecv;
-static uint64_t nsent;
-static uint64_t	disconnect_nr;
-
+static uint64_t			nrecv;
+static uint64_t			nsent;
+static uint64_t			disconnect_nr;
 
 
 static struct xio_test_config  test_config = {
@@ -110,10 +112,12 @@ static void process_request(struct xio_msg *req)
 	}
 
 	if (++cnt == print_counter) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&req->in);
+
 		printf("**** request [%lu] %s - %s\n",
 		       (req->sn+1),
 		       (char *)req->in.header.iov_base,
-		       (char *)req->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -123,24 +127,27 @@ static void process_request(struct xio_msg *req)
 /*---------------------------------------------------------------------------*/
 static void process_response(struct xio_msg *rsp)
 {
-	static uint64_t cnt;
-	static int first_time = 1;
-	static uint64_t start_time;
-	static size_t	txlen, rxlen;
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
+	int			inents = vmsg_sglist_nents(&rsp->in);
+	static uint64_t		cnt;
+	static int		first_time = 1;
+	static uint64_t		start_time;
+	static size_t		txlen, rxlen;
 
 	if (first_time) {
-		size_t	data_len = 0;
-		int	i;
+		struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
+		int			onents = vmsg_sglist_nents(&rsp->out);
+		size_t			data_len = 0;
+		int			i;
 
-
-		for (i = 0; i < rsp->out.data_iovlen; i++)
-			data_len += rsp->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		txlen = rsp->out.header.iov_len + data_len;
 
 		data_len = 0;
-		for (i = 0; i < rsp->in.data_iovlen; i++)
-			data_len += rsp->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		rxlen = rsp->in.header.iov_len + data_len;
 
@@ -150,6 +157,8 @@ static void process_response(struct xio_msg *rsp)
 		data_len = data_len/1024;
 		print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		if (print_counter < 1000)
+			print_counter = 1000;
 		disconnect_nr = print_counter * DISCONNECT_FACTOR;
 	}
 
@@ -169,7 +178,7 @@ static void process_response(struct xio_msg *rsp)
 		printf("**** [%s] - response [%lu] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
-		       (char *)rsp->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		cnt = 0;
 		start_time = get_cpu_usecs();
 	}
@@ -222,11 +231,9 @@ static int on_session_established(struct xio_session *session,
 static int on_response(struct xio_session *session, struct xio_msg *rsp,
 		       int more_in_batch, void *cb_user_context)
 {
-	process_response(rsp);
+	struct xio_iovec_ex	*sglist;
 
-	if (rsp->status)
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(rsp->status));
+	process_response(rsp);
 
 	/* message is no longer needed */
 	xio_release_response(rsp);
@@ -245,10 +252,12 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 	/* reset message */
 	rsp->in.header.iov_base = NULL;
 	rsp->in.header.iov_len = 0;
-	rsp->in.data_iovlen = 1;
-	rsp->in.data_iov[0].iov_base = NULL;
-	rsp->in.data_iov[0].iov_len  = ONE_MB;
-	rsp->in.data_iov[0].mr = NULL;
+	sglist = vmsg_sglist(&rsp->in);
+	vmsg_sglist_set_nents(&rsp->in, 1);
+
+	sglist[0].iov_base = NULL;
+	sglist[0].iov_len  = ONE_MB;
+	sglist[0].mr = NULL;
 
 	rsp->sn = 0;
 	rsp->more_in_batch = 0;
@@ -266,7 +275,7 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 				       session,
 				       xio_strerror(xio_errno()));
 			msg_pool_put(pool, rsp);
-			return 0;
+			xio_assert(0);
 		}
 		nsent++;
 	} while (0);
@@ -349,20 +358,59 @@ int on_msg_error(struct xio_session *session,
 	case XIO_MSG_TYPE_REQ:
 		printf("**** [%p] message [%lu] failed. reason: %s\n",
 		       session, msg->sn, xio_strerror(error));
+		msg_pool_put(pool, msg);
+		switch (error) {
+		case XIO_E_MSG_FLUSHED:
+		case XIO_E_MSG_DISCARDED:
+			break;
+		default:
+			xio_assert(0);
+			break;
+		};
 		break;
 	case XIO_MSG_TYPE_RSP:
 		printf("**** [%p] message [%lu] failed. reason: %s\n",
 		       session, msg->request->sn, xio_strerror(error));
+		/* message is no longer needed */
+		switch (error) {
+		case XIO_E_MSG_FLUSHED:
+			xio_release_response(msg);
+			msg_pool_put(pool, msg);
+			break;
+		default:
+			msg_pool_put(pool, msg);
+			xio_assert(0);
+			break;
+		};
 		break;
 	default:
 		printf("unknown message type : %d\n", msg->type);
+		msg_pool_put(pool, msg);
+		xio_assert(0);
 		break;
 	}
 
-	msg_pool_put(pool, msg);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (xbuf == NULL)
+		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = xbuf->addr;
+	sglist[0].mr = xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -371,9 +419,9 @@ struct xio_session_ops ses_ops = {
 	.on_msg_send_complete		=  on_send_response_complete,
 	.on_session_established		=  on_session_established,
 	.on_msg				=  on_message,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
-
 
 /*---------------------------------------------------------------------------*/
 /* usage                                                                     */
@@ -528,17 +576,14 @@ int main(int argc, char *argv[])
 	int			retval;
 	char			url[256];
 	struct xio_msg		*msg;
+	struct xio_iovec_ex	*sglist;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
+	struct xio_session_params params;
 
 	nrecv = 0;
 	nsent = 0;
+	xbuf = NULL;
+
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
@@ -564,8 +609,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, NULL);
+
+	memset(&params, 0, sizeof(params));
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
@@ -587,10 +637,13 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 1;
-		msg->in.data_iov[0].iov_base = NULL;
-		msg->in.data_iov[0].iov_len  = ONE_MB;
-		msg->in.data_iov[0].mr = NULL;
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 1);
+
+
+		sglist[0].iov_base = NULL;
+		sglist[0].iov_len  = ONE_MB;
+		sglist[0].mr = NULL;
 
 		/* recycle the message and fill new request */
 		msg_write(&msg_params, msg,
@@ -606,11 +659,11 @@ int main(int argc, char *argv[])
 					session,
 					xio_strerror(xio_errno()));
 			msg_pool_put(pool, msg);
-			return 0;
+			xio_assert(0);
 		}
 		nsent++;
 		i++;
-		if (i == 256)
+		if (i == MAX_OUTSTANDING_REQS)
 			break;
 	}
 
@@ -639,6 +692,11 @@ exit3:
 exit1:
 
 	msg_api_free(&msg_params);
+
+	if (xbuf) {
+		xio_free(&xbuf);
+		xbuf = NULL;
+	}
 
 	fprintf(stdout, "exit complete\n");
 

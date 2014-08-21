@@ -98,12 +98,14 @@ enum xio_log_level {
 };
 
 /**
- * @enum xio_data_type
- * @brief message data iovec allocation type
+ * @enum xio_sgl_type
+ * @brief message data scatter gather type
  */
-enum xio_data_type {
-	XIO_DATA_TYPE_ARRAY = 0,
-	XIO_DATA_TYPE_PTR   = 1,
+enum xio_sgl_type {
+	XIO_SGL_TYPE_IOV		= 0,
+	XIO_SGL_TYPE_IOV_PTR		= 1,
+	XIO_SGL_TYPE_SCATTERLIST	= 2,
+	XIO_SGL_TYPE_LAST
 };
 
 /**
@@ -154,6 +156,8 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
+	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
+	XIO_OPTNAME_QUEUE_DEPTH,	  /**< application max queued msgs    */
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
@@ -165,10 +169,12 @@ enum xio_optname {
 	XIO_OPTNAME_RDMA_PLACE_HOLDER = 300,   /**< place holder for rdma opt */
 
 	/* XIO_OPTLEVEL_TCP */
-	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400,  /**< check tcp mr validity    */
-	XIO_OPTNAME_TCP_NO_DELAY,	        /**< turn-off Nagle algorithm */
-	XIO_OPTNAME_TCP_SO_SNDBUF,	        /**< tcp socket send buffer   */
-	XIO_OPTNAME_TCP_SO_RCVBUF,	        /**< tcp socket receive buffer*/
+	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400, /**< check tcp mr validity     */
+	XIO_OPTNAME_TCP_NO_DELAY,	       /**< turn-off Nagle algorithm  */
+	XIO_OPTNAME_TCP_SO_SNDBUF,	       /**< tcp socket send buffer    */
+	XIO_OPTNAME_TCP_SO_RCVBUF,	       /**< tcp socket receive buffer */
+	XIO_OPTNAME_TCP_DUAL_STREAM,	       /**< performance boost for the */
+					       /**< price of two fd resources */
 };
 
 /**
@@ -218,7 +224,8 @@ enum xio_status {
 	XIO_E_NO_USER_MR		= (XIO_BASE_STATUS + 32),
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 35)
+	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
 };
 
 /**
@@ -229,15 +236,8 @@ enum xio_ev_loop_events {
 	XIO_POLLIN			= 0x001,
 	XIO_POLLOUT			= 0x002,
 	XIO_POLLET			= 0x004,  /**< edge-triggered poll */
-	XIO_ONESHOT			= 0x008
-};
-
-/**
- * @enum xio_session_flags
- * @brief session level specific flags
- */
-enum xio_session_flags {
-	XIO_SESSION_FLAG_DONTQUEUE	= 0x001, /**<  do not queue messages */
+	XIO_ONESHOT			= 0x008,
+	XIO_POLLRDHUP			= 0x010
 };
 
 /**
@@ -278,9 +278,9 @@ enum xio_receipt_result {
 };
 
 /** message request referred type  */
-#define XIO_REQUEST			2
+#define XIO_REQUEST			(1 << 1)
 /** message response referred type */
-#define XIO_RESPONSE			4
+#define XIO_RESPONSE			(1 << 2)
 
 /** general message family type   */
 #define XIO_MESSAGE			(1 << 4)
@@ -305,7 +305,8 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_CTX                 = 1 << 0,
 	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1,
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
-	XIO_CONNECTION_ATTR_SRC_ADDR		= 1 << 3
+	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
+	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4
 };
 
 /**
@@ -374,15 +375,32 @@ typedef void (*xio_log_fn)(const char *file, unsigned line,
 /* structs								     */
 /*---------------------------------------------------------------------------*/
 /**
+ * @struct xio_session_params
+ * @brief session creation params
+ */
+struct xio_session_params {
+	enum xio_session_type	type;		 /**< The type of the session */
+
+	uint32_t		initial_sn;      /**< initial serial number   */
+						 /**< to start with	      */
+
+	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
+	void			*user_context;  /**< session user context     */
+	void			*private_data;  /**< private user data snt to */
+						/**< server upon new session  */
+	size_t			private_data_len; /**< private data length    */
+	char			*uri;		  /**< the uri		      */
+};
+
+
+/**
  * @struct xio_session_attr
  * @brief session attributes
  */
 struct xio_session_attr {
 	struct xio_session_ops	*ses_ops;	/**< session's ops callbacks  */
-	void			*user_context;  /**< private user data snt to */
-						/**< server upon new session  */
-	size_t			user_context_len; /**< private data length    */
-	char			*uri;		  /**< the uri		      */
+	void			*user_context;  /**< session user context     */
+	char			*uri;		/**< the uri		      */
 };
 
 /**
@@ -393,11 +411,11 @@ struct xio_connection_attr {
 	void			*user_context;  /**< private user context to */
 						/**< pass to connection      */
 						/**< oriented callbacks      */
-	struct xio_context	*ctx;
-	int			reserved;
+	struct xio_context	*ctx;		/**< context data type	     */
+	int			reserved;	/**< padding		     */
 	enum xio_proto		proto;	        /**< protocol type           */
-	struct sockaddr_storage	src_addr;	/**< source address of       */
-						/**< requester	             */
+	struct sockaddr_storage	peer_addr;	/**< address of peer	     */
+	struct sockaddr_storage	local_addr;	/**< address of local	     */
 };
 
 /**
@@ -451,20 +469,74 @@ struct xio_msg_pdata {
 	struct xio_msg		**prev;		/**< internal library usage   */
 };
 
+/**
+ * @struct xio_sg_table
+ * @brief scatter gather table data structure
+ */
+struct xio_sg_table {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	void				*sglist;  /**< scatter list	   */
+};
+
+/**
+ * @struct xio_sg_iov
+ * @brief scatter gather iovec vector data structure
+ */
+struct xio_sg_iov {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		sglist[XIO_IOVLEN]; /**< scatter vec */
+
+};
+
+/**
+ * @struct xio_sg_iovptr
+ * @brief scatter gather iovec pointer data structure
+ */
+struct xio_sg_iovptr {
+	uint32_t			nents;	    /**< number of entries */
+	uint32_t			max_nents;  /**< maximum entries   */
+						    /**< allowed	   */
+
+	struct xio_iovec_ex		*sglist;    /**< scatter list	   */
+};
 
 /**
  * @struct xio_vmsg
  * @brief message sub element type
  */
 struct xio_vmsg {
-	struct xio_iovec	header;		/**< header's io vector	    */
-	enum xio_data_type	data_type;
-	int			pad;
-	size_t			data_iovsz;	/**< data iovecs alloced    */
-	size_t			data_iovlen;	/**< data iovecs count	    */
-	struct xio_iovec_ex	*pdata_iov;
-	struct xio_iovec_ex	data_iov[XIO_IOVLEN];  /**< data io vector */
+	struct xio_iovec		header;	    /**< header's io vector  */
+	enum xio_sgl_type		sgl_type;   /**< @ref xio_sgl_type   */
+	int				pad;	    /**< padding	     */
+	/**< union for different scatter gather representations		     */
+	union {
+		struct xio_sg_table	data_tbl;   /**< data table	     */
+		struct xio_sg_iov	data_iov;   /**< iov vector	     */
+		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
+	};
 };
+
+/**
+ *  helper macros to iterate over scatter lists
+ */
+#define vmsg_sglist(vmsg)					\
+		(((vmsg)->sgl_type == XIO_SGL_TYPE_IOV) ?	\
+		 (vmsg)->data_iov.sglist :			\
+		 (((vmsg)->sgl_type ==  XIO_SGL_TYPE_IOV_PTR) ?	\
+		 (vmsg)->pdata_iov.sglist : NULL))
+
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
 
 /**
  * @struct xio_msg
@@ -488,11 +560,9 @@ struct xio_msg {
 
 	enum xio_msg_type	type;		/**< message type	      */
 	int		        more_in_batch;	/**< more messages ahead bit  */
-	int			status;		/**< message returned status  */
 	int			flags;		/**< message flags mask       */
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 						/**< required                 */
-	int			reserved;	/**< reserved for padding     */
 	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
@@ -520,9 +590,9 @@ struct xio_session_event_data {
  */
 struct xio_new_session_req {
 	char			*uri;		  /**< the uri		     */
-	void			*user_context;	  /**< client private data   */
+	void			*private_data;	  /**< client private data   */
 	uint16_t		uri_len;	  /**< uri length            */
-	uint16_t		user_context_len; /**< private data length   */
+	uint16_t		private_data_len; /**< private data length   */
 	enum xio_proto		proto;		  /**< source protocol type  */
 	struct sockaddr_storage	src_addr;	  /**< source address of     */
 						  /**< requester	     */
@@ -533,8 +603,8 @@ struct xio_new_session_req {
  * @brief  new session response message
  */
 struct xio_new_session_rsp {
-	void			*user_context;	 /**< server private data    */
-	uint16_t		user_context_len;/**< private data length    */
+	void			*private_data;	 /**< server private data    */
+	uint16_t		private_data_len;/**< private data length    */
 	uint16_t		reserved[3];	 /**< structure alignment    */
 };
 
@@ -1022,23 +1092,11 @@ int xio_query_context(struct xio_context *ctx,
 /**
  * creates new requester session
  *
- * @param[in] type	The type of the session
- * @param[in] attr	Structure of session attributes
- * @param[in] uri	uri to connect
- * @param[in] initial_sn Initial serial number to start with
- * @param[in] flags	 Session related flags as defined in xio_session_flags
- * @param[in] cb_user_context Private data pointer to pass to each session
- *			       callback
+ * @param[in] params	session creations parameters
  *
  * @returns xio session context, or NULL upon error
  */
-struct xio_session *xio_session_create(
-		enum xio_session_type type,
-		struct xio_session_attr *attr,
-		const char *uri,
-		uint32_t initial_sn,
-		uint32_t flags,
-		void *cb_user_context);
+struct xio_session *xio_session_create(struct xio_session_params *params);
 
 /**
  * teardown an opened session
@@ -1281,12 +1339,12 @@ struct xio_connection *xio_get_connection(
  *				resource in form of "rdma://host:port"
  *				"rdma://127.0.0.1:1234"
  * @param[in] portals_array_len The string array length
- * @param[in] user_context	References a user-controlled data buffer
+ * @param[in] private_data	References a user-controlled data buffer
  *			        The contents of the buffer are copied and
  *			        transparently passed to the remote side as
  *			        part of the communication request. May be
  *			        NULL if user_context is not required
- * @param[in] user_context_len	Specifies the size of the user-controlled
+ * @param[in] private_data_len	Specifies the size of the user-controlled
  *				data buffer
  *
  * @returns	success (0), or a (negative) error value
@@ -1294,8 +1352,8 @@ struct xio_connection *xio_get_connection(
 int xio_accept(struct xio_session *session,
 	       const char **portals_array,
 	       size_t portals_array_len,
-	       void *user_context,
-	       size_t user_context_len);
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * redirect connecting session to connect to alternative resources
@@ -1318,20 +1376,20 @@ int xio_redirect(struct xio_session *session,
  *
  * @param[in] session		The xio session handle
  * @param[in] reason		Reason for rejection
- * @param[in] user_context	References a user-controlled data buffer
+ * @param[in] private_data	References a user-controlled data buffer
  *				The contents of the buffer are copied and
  *				transparently passed to the peer as part
  *				of the communication request. May be NULL
  *				if user_context is not required
- * @param[in] user_context_len	Specifies the size of the user-controlled
+ * @param[in] private_data_len	Specifies the size of the user-controlled
  *				data buffer
  *
  * @return success (0), or a (negative) error value
  */
 int xio_reject(struct xio_session *session,
-				enum xio_status reason,
-				void *user_context,
-				size_t user_context_len);
+	       enum xio_status reason,
+	       void *private_data,
+	       size_t private_data_len);
 
 /**
  * send response back to requester
@@ -1388,10 +1446,10 @@ int xio_get_opt(void *xio_obj, int level, int optname,
  * @brief mempool object item
  */
 struct xio_mempool_obj {
-	void		*addr;
-	size_t		length;
-	struct xio_mr	*mr;
-	void		*cache;
+	void		*addr;		/**< allocated address		     */
+	size_t		length;		/**< allocted  length		     */
+	struct xio_mr	*mr;		/**< memory region		     */
+	void		*cache;		/**< private cache - xio internal    */
 };
 
 /**
@@ -1406,16 +1464,6 @@ enum xio_mempool_flag {
 	XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC	= 0x0008
 };
 
-/**
- * create mempool with default allocators
- *
- * @param[in] nodeid	  numa node id. -1 if don't care
- * @param[in] flags	  mask of mempool creation flags
- *			  defined (@ref xio_mempool_flag)
- *
- * @returns success (0), or a (negative) error value
- */
-struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
 /**
  * create mempool with NO (!) allocators
@@ -1426,7 +1474,16 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  *
  * @returns success (0), or a (negative) error value
  */
-struct xio_mempool *xio_mempool_create_ex(int nodeid, uint32_t flags);
+struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
+
+/* for backward compatibility - shall be deprecated in the future */
+
+/**
+ * create mempool with NO (!) allocators
+ *
+ * for backward compatibility - shall be deprecated in the future
+ */
+#define xio_mempool_create_ex	xio_mempool_create
 
 /**
  * add an allocator to current set (setup only)

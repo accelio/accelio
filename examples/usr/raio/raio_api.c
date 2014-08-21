@@ -390,23 +390,19 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	struct raio_session_data	*session_data;
 	int				raio_err = 0;
 	int				fd;
+	struct xio_session_params	params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	xio_init();
 
 	session_data = calloc(1, sizeof(*session_data));
+	memset(&params, 0, sizeof(params));
 
 	session_data->cmd_req.out.header.iov_base =
 		calloc(MAX_MSG_LEN, sizeof(char));
 	session_data->cmd_req.out.header.iov_len =
 		MAX_MSG_LEN;
-	session_data->cmd_req.out.data_iovlen = 0;
+	session_data->cmd_req.out.data_iov.nents = 0;
 
 
 	/* create thread context for the client */
@@ -415,9 +411,12 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%d",
 		get_ip(addr), get_port(addr));
-	session_data->session = xio_session_create(XIO_SESSION_CLIENT,
-						 &attr, url,
-						 0, 0, session_data);
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= session_data;
+	params.uri		= url;
+
+	session_data->session = xio_session_create(&params);
 	if (session_data->session == NULL)
 		goto cleanup;
 
@@ -618,7 +617,7 @@ __RAIO_PUBLIC int raio_setup(int fd, int maxevents, raio_context_t *ctxp)
 			session_data->cmd_req.out.header.iov_base,
 			&session_data->cmd_req.out.header.iov_len);
 
-	session_data->cmd_req.out.data_iovlen = 0;
+	session_data->cmd_req.out.data_iov.nents = 0;
 
 	/* send first message */
 	xio_send_request(session_data->conn, &session_data->cmd_req);
@@ -717,6 +716,7 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 			      long nr, struct raio_iocb *ios[])
 {
 	struct raio_session_data	*session_data;
+	struct xio_iovec_ex		*sglist;
 	struct raio_io_u		*io_u;
 	int				i;
 
@@ -757,25 +757,29 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 				io_u->req.out.header.iov_base,
 				&io_u->req.out.header.iov_len);
 		if (ios[i]->raio_lio_opcode == RAIO_CMD_PWRITE) {
-			io_u->req.out.data_iov[0].iov_base = ios[i]->u.c.buf;
-			io_u->req.out.data_iov[0].iov_len = ios[i]->u.c.nbytes;
+			sglist = vmsg_sglist(&io_u->req.out);
+
+			sglist[0].iov_base = ios[i]->u.c.buf;
+			sglist[0].iov_len = ios[i]->u.c.nbytes;
 			if (ios[i]->u.c.mr)
-				io_u->req.out.data_iov[0].mr =
-					ios[i]->u.c.mr->omr;
+				sglist[0].mr = ios[i]->u.c.mr->omr;
 			else
-				io_u->req.out.data_iov[0].mr = NULL;
-			io_u->req.in.data_iovlen  = 0;
-			io_u->req.out.data_iovlen = 1;
+				sglist[0].mr = NULL;
+
+			vmsg_sglist_set_nents(&io_u->req.in, 0);
+			vmsg_sglist_set_nents(&io_u->req.out, 1);
 		} else {
-			io_u->req.in.data_iov[0].iov_base = ios[i]->u.c.buf;
-			io_u->req.in.data_iov[0].iov_len = ios[i]->u.c.nbytes;
+			sglist = vmsg_sglist(&io_u->req.in);
+
+			sglist[0].iov_base = ios[i]->u.c.buf;
+			sglist[0].iov_len = ios[i]->u.c.nbytes;
 			if (ios[i]->u.c.mr)
-				io_u->req.in.data_iov[0].mr =
-					ios[i]->u.c.mr->omr;
+				sglist[0].mr = ios[i]->u.c.mr->omr;
 			else
-				io_u->req.in.data_iov[0].mr = NULL;
-			io_u->req.in.data_iovlen  = 1;
-			io_u->req.out.data_iovlen = 0;
+				sglist[0].mr = NULL;
+
+			vmsg_sglist_set_nents(&io_u->req.in, 1);
+			vmsg_sglist_set_nents(&io_u->req.out, 0);
 		}
 		io_u->req.user_context = io_u;
 		io_u->iocb = ios[i];
@@ -805,6 +809,7 @@ __RAIO_PUBLIC int raio_getevents(raio_context_t ctx, long min_nr, long nr,
 				 struct raio_event *events, struct timespec *t)
 {
 	struct raio_session_data	*session_data;
+	struct xio_iovec_ex		*sglist;
 	struct raio_io_u		*io_u;
 	struct timespec			start;
 	int				i, r;
@@ -858,7 +863,9 @@ restart:
 		ctx->io_u_completed_nr--;
 
 		io_u->iocb->raio_fildes	= session_data->key;
-		io_u->iocb->u.c.buf	= io_u->rsp->in.data_iov[0].iov_base;
+		sglist = vmsg_sglist(&io_u->rsp->in);
+
+		io_u->iocb->u.c.buf	= sglist[0].iov_base;
 
 		events[i].data		= io_u->iocb->data;
 		events[i].obj		= io_u->iocb;

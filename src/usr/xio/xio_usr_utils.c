@@ -39,6 +39,10 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
+#include "xio_sg_table.h"
+#include "xio_observer.h"
+#include "xio_usr_transport.h"
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_host_port_to_ss							     */
@@ -140,7 +144,6 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	default:
 		ERROR_LOG("unknown family :%d\n", result->ai_family);
 		break;
-
 	}
 cleanup:
 	freeaddrinfo(result);
@@ -310,13 +313,19 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 	return node_id;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_msg_dump								     */
+/*---------------------------------------------------------------------------*/
 void xio_msg_dump(struct xio_msg *xio_msg)
 {
-	int i;
+	struct  xio_sg_table_ops *sgtbl_ops;
+	struct  xio_mr		 *mr;
+	void			 *sgtbl;
+	void			 *sge;
+	int			i;
 
-	ERROR_LOG("*********************************************\n");
+	ERROR_LOG("********************************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
-	ERROR_LOG("status:%d\n", xio_msg->status);
 	if (xio_msg->type == XIO_MSG_TYPE_REQ)
 		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
@@ -324,28 +333,56 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 			  xio_msg->request,
 			  ((xio_msg->request) ? xio_msg->request->sn : -1));
 
+	sgtbl		= xio_sg_table_get(&xio_msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);
+
 	ERROR_LOG("in header: length:%zd, address:%p\n",
-		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
-	ERROR_LOG("in data type:%d iovsz:%zd\n",xio_msg->in.data_type,
-		  xio_msg->in.data_iovsz);
-	ERROR_LOG("in data size:%zd\n", xio_msg->in.data_iovlen);
-	for (i = 0; i < xio_msg->in.data_iovlen; i++)
-		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n", i,
-			  xio_msg->in.pdata_iov[i].iov_len,
-			  xio_msg->in.pdata_iov[i].iov_base,
-			  xio_msg->in.pdata_iov[i].mr);
+		  xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
+	ERROR_LOG("in sgl type:%d iovsz:%zd\n", xio_msg->in.sgl_type,
+		  tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("in data size:%zd\n",
+		  tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		mr = sge_mr(sgtbl_ops, sge);
+		if (mr)
+		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p " \
+			  "- [addr:%p, len:%d]\n", i,
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge),
+			  mr, mr->addr, mr->length);
+		else
+		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n",
+			  i,
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge), mr);
+	}
+
+	sgtbl		= xio_sg_table_get(&xio_msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->out.sgl_type);
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
 		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
-	ERROR_LOG("out data type:%d iovsz:%zd\n",xio_msg->out.data_type,
-		  xio_msg->out.data_iovsz);
-	ERROR_LOG("out data size:%zd\n", xio_msg->out.data_iovlen);
-	for (i = 0; i < xio_msg->out.data_iovlen; i++)
-		ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n", i,
-			  xio_msg->out.pdata_iov[i].iov_len,
-			  xio_msg->out.pdata_iov[i].iov_base,
-			  xio_msg->out.pdata_iov[i].mr);
-	ERROR_LOG("*********************************************\n");
+	ERROR_LOG("out sgl type:%d iovsz:%zd\n", xio_msg->out.sgl_type,
+		  tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("out data size:%zd\n", tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		mr = sge_mr(sgtbl_ops, sge);
+		if (mr)
+			ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p " \
+				  "- [addr:%p, len:%d]\n", i,
+				  sge_length(sgtbl_ops, sge),
+				  sge_addr(sgtbl_ops, sge),
+				  mr, mr->addr, mr->length);
+		else
+			ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n",
+				  i,
+				  sge_length(sgtbl_ops, sge),
+				  sge_addr(sgtbl_ops, sge), mr);
+
+	}
+	ERROR_LOG("*******************************************************\n");
 }
 
 /*

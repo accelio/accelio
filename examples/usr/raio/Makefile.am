@@ -1,8 +1,14 @@
 # this is example file: examples/hello_world/Makefile.am
 
 # additional include pathes necessary to compile the C programs
+if HAVE_INFINIBAND_VERBS
+    libxio_rdma_ldflags = -lrdmacm -libverbs
+else
+    libxio_rdma_ldflags =
+endif
+
 AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
-AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt -lpthread -laio \
+AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lpthread -laio \
 	     -L$(top_builddir)/src/usr/ 
 
 ###############################################################################
@@ -45,7 +51,7 @@ raio_server_SOURCES = raio_server.c		\
 raio_client_SOURCES = raio_client.c		\
 		      get_clock.c
 
-libraio_la_LDFLAGS = -lxio -lrdmacm -libverbs -laio -lrt -lpthread \
+libraio_la_LDFLAGS = -lxio $(libxio_rdma_ldflags) -laio -lrt -lpthread \
 	     	     -L$(top_builddir)/src/usr/ 
 
 #libraio_la_LDFLAGS = -shared -rdynamic	 	\

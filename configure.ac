@@ -32,14 +32,31 @@ AC_CHECK_HEADERS([numa.h],
 AC_CHECK_HEADERS([event2/event.h],
 		 [mypj_found_event_headers=yes; break;])
 
+AM_CONDITIONAL(HAVE_INFINIBAND_VERBS, test "x$mypj_found_verbs_headers" = "xyes")
+
 AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
-      [AC_MSG_ERROR([Unable to find the infiniband header files])])
+      [AC_MSG_WARN([Unable to find the infiniband header files,
+				rdma transport will not be available.])])
 AS_IF([test "x$mypj_found_numa_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the numactl-devel header files])])
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
 
 AC_CHECK_LIB(numa, numa_available)
+
+#
+# Check for Contiguous Pages support
+#
+AC_CHECK_DECLS(IBV_EXP_ACCESS_ALLOCATE_MR,
+              [AC_DEFINE([HAVE_MPAGES_EXP], 1, [Contiguous pages support, experimental])],
+              [AC_MSG_WARN([Contiguous pages (exp_api) are not supported])],
+              [[#include <infiniband/verbs.h>]])
+
+AC_CHECK_DECLS(IBV_DEVICE_MR_ALLOCATE,
+              [AC_DEFINE([HAVE_MPAGES], 1, [Contiguous pages support])],
+              [AC_MSG_WARN([Contiguous pages are not supported])],
+              [[#include <infiniband/verbs.h>]])
+
 
 ##########################################################################
 # perf support

@@ -65,26 +65,28 @@ struct xio_task {
 	struct xio_mbuf		mbuf;
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
+	struct xio_msg		imsg;		/* message to the user */
 	struct xio_session	*session;
-	struct xio_nexus	*nexus;
 	struct xio_connection	*connection;
+	struct xio_nexus	*nexus;
 
 	void			*pool;
 
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
-	uint64_t		magic;
 	uint64_t		stag;		/* session unique tag */
-	uint32_t		is_control;
-	uint32_t		tlv_type;
-	uint32_t		ltid;		/* local task id	*/
-	uint32_t		rtid;		/* remote task id	*/
-	uint32_t		omsg_flags;
-	uint32_t		imsg_flags;
-	struct xio_msg		imsg;		/* message to the user */
+	uint16_t		is_control;
+	uint16_t		tlv_type;
+	uint16_t		omsg_flags;
+	uint16_t		imsg_flags;
+	uint16_t		ltid;		/* local task id	*/
+	uint16_t		rtid;		/* remote task id	*/
+	uint32_t		magic;
+	int32_t			status;
+	int32_t			pad;
+
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */
-
 };
 
 struct xio_tasks_pool_hooks {
@@ -101,10 +103,10 @@ struct xio_tasks_pool_hooks {
 				  int tid, struct xio_task *task);
 	int	(*slab_uninit_task)(void *context,
 				    void *pool_dd_data,
-			            void *slab_dd_data,
+				    void *slab_dd_data,
 				    struct xio_task *task);
 	int	(*slab_remap_task)(void *old_context,
-			           void *new_context,
+				   void *new_context,
 				   void *pool_dd_data,
 				   void *slab_dd_data,
 				   struct xio_task *task);
@@ -112,11 +114,11 @@ struct xio_tasks_pool_hooks {
 				    void *pool_dd_data,
 				    void *slab_dd_data);
 	int	(*pool_pre_create)(void *context, void *pool,
-				    void *pool_dd_data);
+				   void *pool_dd_data);
 	int	(*pool_post_create)(void *context, void *pool,
 				    void *pool_dd_data);
 	int	(*pool_destroy)(void *context, void *pool,
-			        void *pool_dd_data);
+				void *pool_dd_data);
 	int	(*task_pre_put)(void *context, struct xio_task *task);
 	int	(*task_post_get)(void *context, struct xio_task *task);
 };
@@ -147,12 +149,13 @@ struct xio_tasks_pool {
 	/* LIFO */
 	struct list_head		stack;
 	struct xio_tasks_pool_params	params;
-	int				curr_idx;
-	int				max_used;
-	int				curr_free;
-	int				curr_used;
-	int				curr_alloced;
-	int				node_id; /* numa node id */
+	uint16_t			curr_free;
+	uint16_t			curr_used;
+	uint16_t			curr_alloced;
+	uint16_t			max_used;
+	uint16_t			curr_idx;
+	uint16_t			node_id; /* numa node id */
+	uint32_t			pad;
 	void				*dd_data;
 };
 
@@ -161,12 +164,15 @@ struct xio_tasks_pool {
 /*---------------------------------------------------------------------------*/
 static void xio_task_reset(struct xio_task *task)
 {
-	task->imsg.user_context		= 0;
+	if (task->imsg.user_context)
+		task->imsg.user_context	= 0;
+	/*
 	task->imsg.flags		= 0;
 	task->tlv_type			= 0xdead;
 	task->omsg_flags		= 0;
 	task->state			= XIO_TASK_STATE_INIT;
 	xio_mbuf_reset(&task->mbuf);
+	*/
 }
 
 /*---------------------------------------------------------------------------*/
@@ -190,21 +196,16 @@ static inline void xio_task_release(struct kref *kref)
 
 	pool = (struct xio_tasks_pool *)task->pool;
 
+	xio_task_reset(task);
+
 	if (pool->params.pool_hooks.task_pre_put)
 		pool->params.pool_hooks.task_pre_put(
 				pool->params.pool_hooks.context, task);
-
-	xio_task_reset(task);
-
 	pool->curr_free++;
 	pool->curr_used--;
 
 	list_move(&task->tasks_list_entry, &pool->stack);
 }
-
-
-
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_create						     */

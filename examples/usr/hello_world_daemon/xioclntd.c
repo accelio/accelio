@@ -57,7 +57,6 @@
 	logit(LOG_ERR, fmt ": %s", ##__VA_ARGS__, strerror(errno))
 
 
-
 /* private session data */
 struct session_data {
 	struct xio_context	*ctx;
@@ -127,7 +126,7 @@ static void process_response(struct session_data *session_data,
 	}
 	rsp->in.header.iov_base	  = NULL;
 	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
 }
 /*---------------------------------------------------------------------------*/
 /* on_connection_established						     */
@@ -333,13 +332,7 @@ int main(int argc, char *const argv[])
 	char			*addr = NULL;
 	char			*port = NULL;
 	char			*trans = NULL;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
+	struct xio_session_params params;
 
 	while (1) {
 		c = getopt_long(argc, argv, "a:p:r:hdnV", longopts, NULL);
@@ -402,6 +395,7 @@ int main(int argc, char *const argv[])
 		exit(EXIT_FAILURE);
 
 	memset(&session_data, 0, sizeof(session_data));
+	memset(&params, 0, sizeof(params));
 
 	/* initialize library */
 	xio_init();
@@ -415,11 +409,16 @@ int main(int argc, char *const argv[])
 		session_data.req[i].out.header.iov_len =
 			strlen(session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
-		session_data.req[i].out.data_iov[0].iov_base =
+		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
+		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
+
+		session_data.req[i].out.data_iov.sglist[0].iov_base =
 			strdup("hello world iovec request");
-		session_data.req[i].out.data_iov[0].iov_len =
-			strlen(session_data.req[i].out.data_iov[0].iov_base);
-		session_data.req[i].out.data_iovlen = 1;
+
+		session_data.req[i].out.data_iov.sglist[0].iov_len =
+			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+
+		session_data.req[i].out.data_iov.nents = 1;
 	}
 	/* create thread context for the client */
 	session_data.ctx = xio_context_create(NULL, 0, -1);
@@ -430,9 +429,13 @@ int main(int argc, char *const argv[])
 	else
 		sprintf(url, "rdma://%s:%s", addr, port);
 
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &session_data;
+	params.uri		= url;
+
 reconnect:
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, &session_data);
+	session = xio_session_create(&params);
 
 	/* connect the session  */
 	session_data.conn = xio_connect(session, session_data.ctx,
@@ -456,7 +459,7 @@ reconnect:
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(session_data.req[i].out.header.iov_base);
-		free(session_data.req[i].out.data_iov[0].iov_base);
+		free(session_data.req[i].out.data_iov.sglist[0].iov_base);
 	}
 
 	/* free the context */

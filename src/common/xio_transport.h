@@ -112,6 +112,7 @@ struct xio_transport_base {
 	atomic_t			refcnt;
 	char				*portal_uri;
 	struct sockaddr_storage		peer_addr;
+	struct sockaddr_storage		local_addr;
 	enum   xio_proto		proto;
 	int				pad;
 };
@@ -123,18 +124,18 @@ struct xio_transport_msg_validators_cls {
 
 struct xio_tasks_pool_ops {
 	void	(*pool_get_params)(struct xio_transport_base *transport_hndl,
-				int *start_nr,
-				int *max_nr,
-				int *alloc_nr,
-				int *pool_dd_size,
-				int *slab_dd_size,
-				int *task_dd_size);
+				   int *start_nr,
+				   int *max_nr,
+				   int *alloc_nr,
+				   int *pool_dd_size,
+				   int *slab_dd_size,
+				   int *task_dd_size);
 
 	int	(*slab_pre_create)(struct xio_transport_base *trans_hndl,
 				   int alloc_nr,
 				   void *pool_dd_data, void *slab_dd_data);
 	int	(*slab_destroy)(struct xio_transport_base *trans_hndl,
-				 void *pool_dd_data,void *slab_dd_data);
+				void *pool_dd_data, void *slab_dd_data);
 	int	(*slab_init_task)(struct xio_transport_base *trans_hndl,
 				  void *pool_dd_data, void *slab_dd_data,
 				  int tid, struct xio_task *task);
@@ -148,7 +149,7 @@ struct xio_tasks_pool_ops {
 	int	(*slab_post_create)(struct xio_transport_base *trans_hndl,
 				    void *pool_dd_data, void *slab_dd_data);
 	int	(*pool_pre_create)(struct xio_transport_base *trans_hndl,
-			void *pool, void *pool_dd_data);
+				   void *pool, void *pool_dd_data);
 	int	(*pool_post_create)(struct xio_transport_base *trans_hndl,
 				    void *pool, void *pool_dd_data);
 	int	(*pool_destroy)(struct xio_transport_base *trans_hndl,
@@ -185,18 +186,19 @@ struct xio_transport {
 				    struct xio_context *ctx);
 
 	/* task pools managment */
-	void	(*get_pools_setup_ops)(struct xio_transport_base *trans_hndl,
+	void	(*get_pools_setup_ops)(
+				struct xio_transport_base *trans_hndl,
 				struct xio_tasks_pool_ops **initial_pool_ops,
 				struct xio_tasks_pool_ops **primary_pool_ops);
 
 	void	(*set_pools_cls)(struct xio_transport_base *trans_hndl,
-				struct xio_tasks_pool_cls *initial_pool_cls,
-				struct xio_tasks_pool_cls *primary_pool_cls);
+				 struct xio_tasks_pool_cls *initial_pool_cls,
+				 struct xio_tasks_pool_cls *primary_pool_cls);
 
 	/* connection */
 	struct xio_transport_base *(*open)(struct xio_transport *self,
-				struct xio_context *ctx,
-				struct xio_observer *observer);
+					   struct xio_context *ctx,
+					   struct xio_observer *observer);
 
 	int	(*connect)(struct xio_transport_base *trans_hndl,
 			   const char *portal_uri,

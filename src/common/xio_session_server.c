@@ -89,7 +89,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	ptr = ptr + len;
 
 	/* private length */
-	len = xio_read_uint16(&req.user_context_len, 0, ptr);
+	len = xio_read_uint16(&req.private_data_len, 0, ptr);
 	ptr = ptr + len;
 
 	if (req.uri_len) {
@@ -102,34 +102,35 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 		}
 
 		len = xio_read_array((uint8_t *)req.uri,
-					req.uri_len, 0, ptr);
+				     req.uri_len, 0, ptr);
 		ptr = ptr + len;
 	}
-	if (req.user_context_len) {
-		req.user_context = kcalloc(req.user_context_len,
-					  sizeof(uint8_t), GFP_KERNEL);
-		if (req.user_context == NULL) {
+	if (req.private_data_len) {
+		req.private_data = kcalloc(req.private_data_len,
+					   sizeof(uint8_t), GFP_KERNEL);
+		if (req.private_data == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("private data allocation failed. len:%d\n",
-				  req.user_context_len);
+				  req.private_data_len);
 			goto cleanup2;
 		}
-		len = xio_read_array(req.user_context, req.user_context_len,
-				       0, ptr);
+		len = xio_read_array(req.private_data, req.private_data_len,
+				     0, ptr);
 		ptr = ptr + len;
 	}
 
 	req.proto = xio_nexus_get_proto(connection->nexus);
-	xio_nexus_get_src_addr(connection->nexus,
-			      &req.src_addr, sizeof(req.src_addr));
+	xio_nexus_get_peer_addr(connection->nexus,
+				&req.src_addr, sizeof(req.src_addr));
 
 	/* cache the task in io queue*/
 	xio_connection_queue_io_task(connection, task);
 
 	/* notify the upper layer */
 	if (connection->ses_ops.on_new_session) {
-		retval = connection->ses_ops.on_new_session(session, &req,
-						connection->cb_user_context);
+		retval = connection->ses_ops.on_new_session(
+					session, &req,
+					connection->cb_user_context);
 		if (retval)
 			goto cleanup2;
 	} else {
@@ -149,13 +150,13 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	xio_session_notify_new_connection(session, connection);
 
-	kfree(req.user_context);
+	kfree(req.private_data);
 	kfree(req.uri);
 
 	return 0;
 
 cleanup2:
-	kfree(req.user_context);
+	kfree(req.private_data);
 
 cleanup1:
 	kfree(req.uri);
@@ -193,13 +194,12 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
 /*---------------------------------------------------------------------------*/
-struct xio_msg *xio_session_write_accept_rsp(
-		struct xio_session *session,
-		uint16_t action,
-		const char **portals_array,
-		uint16_t portals_array_len,
-		void *user_context,
-		uint16_t user_context_len)
+struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
+					     uint16_t action,
+					     const char **portals_array,
+					     uint16_t portals_array_len,
+					     void *user_context,
+					     uint16_t user_context_len)
 {
 	struct xio_msg		*msg;
 	uint8_t			*buf;
@@ -221,7 +221,7 @@ struct xio_msg *xio_session_write_accept_rsp(
 
 	/* allocate message */
 	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
-		     sizeof(uint8_t), GFP_KERNEL);
+		      sizeof(uint8_t), GFP_KERNEL);
 	if (buf == NULL) {
 		ERROR_LOG("message allocation failed\n");
 		xio_set_error(ENOMEM);
@@ -263,14 +263,14 @@ struct xio_msg *xio_session_write_accept_rsp(
 		ptr  = ptr + len;
 
 		len = xio_write_array((uint8_t *)portals_array[i],
-					 str_len, 0, ptr);
+				      str_len, 0, ptr);
 		ptr  = ptr + len;
 	}
 
 	if (user_context_len) {
 		len = xio_write_array(user_context,
-					user_context_len,
-					0, ptr);
+				      user_context_len,
+				      0, ptr);
 		ptr  = ptr + len;
 	}
 
@@ -287,11 +287,10 @@ struct xio_msg *xio_session_write_accept_rsp(
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_reject_rsp						     */
 /*---------------------------------------------------------------------------*/
-struct xio_msg *xio_session_write_reject_rsp(
-		struct xio_session *session,
-		enum xio_status reason,
-		void *user_context,
-		uint16_t user_context_len)
+struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
+					     enum xio_status reason,
+					     void *user_context,
+					     uint16_t user_context_len)
 {
 	struct xio_msg	*msg;
 	uint8_t			*buf;
@@ -349,8 +348,8 @@ struct xio_msg *xio_session_write_reject_rsp(
 
 	if (user_context_len) {
 		len = xio_write_array(user_context,
-					user_context_len,
-					0, ptr);
+				      user_context_len,
+				      0, ptr);
 		ptr  = ptr + len;
 	}
 
@@ -368,10 +367,10 @@ struct xio_msg *xio_session_write_reject_rsp(
 /* xio_accept								     */
 /*---------------------------------------------------------------------------*/
 int xio_accept(struct xio_session *session,
-		const char **portals_array,
-		size_t portals_array_len,
-		void *user_context,
-		size_t user_context_len)
+	       const char **portals_array,
+	       size_t portals_array_len,
+	       void *user_context,
+	       size_t user_context_len)
 {
 	int			retval = 0;
 	struct xio_msg		*msg;
@@ -425,8 +424,8 @@ int xio_accept(struct xio_session *session,
 /* xio_redirect								     */
 /*---------------------------------------------------------------------------*/
 int xio_redirect(struct xio_session *session,
-	       const char **portals_array,
-	       size_t portals_array_len)
+		 const char **portals_array,
+		 size_t portals_array_len)
 {
 	int			retval = 0;
 	struct xio_msg		*msg;
@@ -482,10 +481,8 @@ int xio_reject(struct xio_session *session,
 	struct xio_msg		*msg;
 	struct xio_task		*task;
 
-	msg = xio_session_write_reject_rsp(session,
-		reason,
-		user_context,
-		user_context_len);
+	msg = xio_session_write_reject_rsp(session, reason, user_context,
+					   user_context_len);
 	if (msg == NULL) {
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
@@ -562,8 +559,8 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 /* xio_on_server_nexus_established					     */
 /*---------------------------------------------------------------------------*/
 int xio_on_server_nexus_established(struct xio_session *session,
-				   struct xio_nexus *nexus,
-				   union xio_nexus_event_data *event_data)
+				    struct xio_nexus *nexus,
+				    union xio_nexus_event_data *event_data)
 {
 	return 0;
 }
@@ -572,7 +569,7 @@ int xio_on_server_nexus_established(struct xio_session *session,
 /* xio_server_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
 int xio_server_on_nexus_event(void *observer, void *sender, int event,
-			     void *event_data)
+			      void *event_data)
 {
 	struct xio_session	*session = observer;
 	struct xio_nexus	*nexus	= sender;

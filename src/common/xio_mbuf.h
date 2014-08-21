@@ -45,20 +45,19 @@ struct xio_mbuf {
 	void			*curr;
 
 	struct {
-		void		*tail;
 		void		*head;
+		void		*tail;
+		uint64_t	len;
 		uint32_t	type;
 		uint32_t	pad;
-		uint64_t	len;
-
 		void		*val;
 	} tlv;
 
 	struct {
-		void		*tail;
 		void		*head;
-		size_t		buflen;
-		size_t		datalen;
+		void		*tail;
+		uint32_t	buflen;
+		uint32_t	datalen;
 	} buf;
 
 	void			*marker;
@@ -113,7 +112,7 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 {
 	DEBUG_LOG("########################################################" \
 		  "#############\n");
-	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%zd, datalen:%zd\n",
+	DEBUG_LOG("buf: mbuf:%p head:%p, tail:%p, buflen:%u, datalen:%u\n",
 		  mbuf, mbuf->buf.head, mbuf->buf.tail, mbuf->buf.buflen,
 		  mbuf->buf.datalen);
 	DEBUG_LOG("tlv: mbuf:%p head:%p, tail:%p, type:%d, len:%llu, val:%p\n",
@@ -127,7 +126,7 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 /* xio_mbuf_init							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_mbuf_init(struct xio_mbuf *mbuf, void *buf,
-				   uint32_t buflen, uint32_t datalen)
+				 uint32_t buflen, uint32_t datalen)
 {
 	memset(&mbuf->tlv, 0, sizeof(mbuf->tlv));
 	mbuf->buf.head		= buf;
@@ -207,7 +206,7 @@ static inline int xio_mbuf_read_next_tlv(struct xio_mbuf *mbuf)
 /* xio_mbuf_write_tlv							     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint16_t type,
-				       uint16_t len)
+				     uint16_t len)
 {
 	int retval;
 
@@ -229,7 +228,7 @@ static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint16_t type,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_read_tlv							     */
+/* xio_read_tlv								     */
 /*---------------------------------------------------------------------------*/
 static inline uint32_t xio_read_tlv_type(struct xio_mbuf *mbuf)
 {
@@ -378,7 +377,7 @@ static inline int xio_mbuf_read_u64(struct xio_mbuf *mbuf, uint64_t *val)
 /* xio_mbuf_write_array						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_write_array(struct xio_mbuf *mbuf, void *array,
-					 size_t len)
+				       size_t len)
 {
 	if ((mbuf->curr + len) <= mbuf->buf.tail) {
 		mbuf->curr += xio_write_array(array, len, 0, mbuf->curr);
@@ -392,10 +391,10 @@ static inline int xio_mbuf_write_array(struct xio_mbuf *mbuf, void *array,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mbuf_read_array						     */
+/* xio_mbuf_read_array							     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_read_array(struct xio_mbuf *mbuf, void *array,
-					size_t len)
+				      size_t len)
 {
 	if ((mbuf->curr + len) <= mbuf->tlv.tail) {
 		mbuf->curr += xio_read_array(array, len, 0, mbuf->curr);
@@ -412,7 +411,7 @@ static inline int xio_mbuf_read_array(struct xio_mbuf *mbuf, void *array,
 /* xio_mbuf_write_string						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_write_string(struct xio_mbuf *mbuf,
-				const char *str, size_t maxlen)
+					const char *str, size_t maxlen)
 {
 	size_t len = strnlen(str, maxlen);
 
@@ -429,10 +428,10 @@ static inline int xio_mbuf_write_string(struct xio_mbuf *mbuf,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_mbuf_read_string						     */
+/* xio_mbuf_read_string							     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_read_string(struct xio_mbuf *mbuf, char *str,
-				uint16_t maxlen, size_t *len)
+				       uint16_t maxlen, size_t *len)
 {
 	*len = xio_read_string(str, maxlen, 0, mbuf->curr);
 	mbuf->curr += *len;
@@ -444,14 +443,14 @@ static inline int xio_mbuf_read_string(struct xio_mbuf *mbuf, char *str,
 /* xio_mbuf_set_data_length						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_set_data_length(struct xio_mbuf *mbuf,
-				size_t datalen)
+					   size_t datalen)
 {
 	if (likely(datalen <= mbuf->buf.buflen)) {
 		mbuf->buf.datalen = datalen;
 		return 0;
 	}
 	ERROR_LOG("xio_mbuf_set_data_length failed. datalen:%zd, " \
-		  "buf.buflen:%zd\n", datalen, mbuf->buf.buflen);
+		  "buf.buflen:%u\n", datalen, mbuf->buf.buflen);
 
 	return -1;
 }

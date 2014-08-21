@@ -435,7 +435,7 @@ static int on_new_session(struct xio_session *session,
 	struct raio_session_data *session_data;
 	int i;
 
-	portals = portals_get(server_data, req->uri, req->user_context);
+	portals = portals_get(server_data, req->uri, req->private_data);
 
 	/* alloc and  and initialize */
 	session_data = calloc(1, sizeof(*session_data));

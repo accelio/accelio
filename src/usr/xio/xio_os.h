@@ -70,6 +70,7 @@
 #include <sys/socket.h>
 #include <sys/timerfd.h>
 #include <sys/syscall.h>
+#include <sys/resource.h>
 #include <arpa/inet.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

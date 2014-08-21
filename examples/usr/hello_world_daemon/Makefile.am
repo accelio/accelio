@@ -1,9 +1,15 @@
 # this is example file: examples/hello_world/Makefile.am
 
 # additional include pathes necessary to compile the C programs
+if HAVE_INFINIBAND_VERBS
+    libxio_rdma_ldflags = -lrdmacm -libverbs
+else
+    libxio_rdma_ldflags =
+endif
+
 AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@
 
-AM_LDFLAGS = -lxio -libverbs -lrdmacm -lrt \
+AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lrt \
 	     -L$(top_builddir)/src/usr/
 
 ###############################################################################

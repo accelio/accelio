@@ -109,7 +109,7 @@ struct xio_session *xio_sessions_cache_lookup(uint32_t session_id)
 /* xio_sessions_cache_add			                             */
 /*---------------------------------------------------------------------------*/
 int xio_sessions_cache_add(struct xio_session *session,
-		uint32_t *session_id)
+			   uint32_t *session_id)
 {
 	static uint32_t sid;  /* = 0 global session provider */
 	int retval;

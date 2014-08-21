@@ -73,12 +73,9 @@ struct xio_test_config {
 };
 
 struct test_params {
-	struct msg_pool		*pool;
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
-	char			*buf;
-	struct xio_mr		*mr;
-	struct msg_params	msg_params;
+	struct xio_buf		*xbuf;
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
@@ -111,10 +108,12 @@ static void process_request(struct xio_msg *msg)
 	}
 
 	if (++cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("**** message [%lu] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -194,10 +193,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 
 	test_params->nrecv++;
 
-	if (req->status)
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-
 	/* process request */
 	process_request(req);
 
@@ -218,34 +213,27 @@ static int on_msg_error(struct xio_session *session,
 			enum xio_status error, struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
-
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
-
-	msg_pool_put(test_params->pool, msg);
 
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
-	msg->in.data_iovlen = 1;
+	struct test_params	*test_params = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	if (test_params->mr == NULL) {
-		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr =
-			xio_reg_mr(msg->in.data_iov[0].iov_base,
-				   msg->in.data_iov[0].iov_len);
-		test_params->buf = msg->in.data_iov[0].iov_base;
-		test_params->mr = msg->in.data_iov[0].mr;
-	} else {
-		msg->in.data_iov[0].iov_base = test_params->buf;
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = test_params->mr;
-	}
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (test_params->xbuf == NULL)
+		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = test_params->xbuf->addr;
+	sglist[0].mr = test_params->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -423,15 +411,6 @@ int main(int argc, char *argv[])
 	test_params.finite_run = test_config.finite_run;
 	test_params.disconnect_nr = PRINT_COUNTER * DISCONNECT_FACTOR;
 
-	/* prepare buffers for this test */
-	if (msg_api_init(&test_params.msg_params,
-			 test_config.hdr_len, test_config.data_len, 0) != 0)
-		return -1;
-
-	test_params.pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
-	if (test_params.pool == NULL)
-		goto cleanup;
-
 	test_params.ctx = xio_context_create(NULL, 0, test_config.cpu);
 	if (test_params.ctx == NULL) {
 		int error = xio_errno();
@@ -464,20 +443,8 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.pool)
-		msg_pool_free(test_params.pool);
-
-	if (test_params.mr) {
-		xio_dereg_mr(&test_params.mr);
-		test_params.mr = NULL;
-	}
-
-	if (test_params.buf) {
-		free(test_params.buf);
-		test_params.buf = NULL;
-	}
-cleanup:
-	msg_api_free(&test_params.msg_params);
+	if (test_params.xbuf)
+		xio_free(&test_params.xbuf);
 
 	xio_shutdown();
 

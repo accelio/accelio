@@ -36,13 +36,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "linux/tcp.h"
+#include <linux/tcp.h>
+#include <sys/epoll.h>
 #include "xio_common.h"
 #include "xio_observer.h"
 #include "xio_log.h"
 #include "xio_task.h"
 #include "xio_transport_mempool.h"
 #include "xio_tcp_transport.h"
+#include "xio_sg_table.h"
 
 /* default option values */
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
@@ -54,6 +56,7 @@
 #define XIO_OPTVAL_DEF_TCP_NO_DELAY			0
 #define XIO_OPTVAL_DEF_TCP_SO_SNDBUF			4194304
 #define XIO_OPTVAL_DEF_TCP_SO_RCVBUF			4194304
+#define XIO_OPTVAL_DEF_TCP_DUAL_SOCK			1
 
 #define XIO_OPTVAL_MIN_TCP_BUF_THRESHOLD		256
 #define XIO_OPTVAL_MAX_TCP_BUF_THRESHOLD		65536
@@ -68,6 +71,8 @@ static spinlock_t			mngmt_lock;
 static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
 struct xio_transport			xio_tcp_transport;
+struct xio_tcp_socket_ops		single_sock_ops;
+struct xio_tcp_socket_ops		dual_sock_ops;
 
 static int				cdl_fd = -1;
 
@@ -83,6 +88,7 @@ struct xio_tcp_options			tcp_options = {
 	.tcp_no_delay			= XIO_OPTVAL_DEF_TCP_NO_DELAY,
 	.tcp_so_sndbuf			= XIO_OPTVAL_DEF_TCP_SO_SNDBUF,
 	.tcp_so_rcvbuf			= XIO_OPTVAL_DEF_TCP_SO_RCVBUF,
+	.tcp_dual_sock			= XIO_OPTVAL_DEF_TCP_DUAL_SOCK,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -133,54 +139,109 @@ static void on_sock_close(struct xio_tcp_transport *tcp_hndl)
 
 	xio_tcp_flush_all_tasks(tcp_hndl);
 
-	if (tcp_hndl->state == XIO_STATE_CLOSED) {
-		xio_transport_notify_observer(&tcp_hndl->base,
-					      XIO_TRANSPORT_CLOSED,
-					      NULL);
-		tcp_hndl->state = XIO_STATE_DESTROYED;
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CLOSED,
+				      NULL);
+
+	tcp_hndl->state = XIO_STATE_DESTROYED;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_del_ev_handlers		                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_del_ev_handlers(struct xio_tcp_transport *tcp_hndl)
+{
+	int retval;
+
+	/* remove from epoll */
+	retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					    tcp_hndl->sock.cfd);
+
+	if (retval) {
+		ERROR_LOG("tcp_hndl:%p fd=%d del_ev_handler failed, %m\n",
+			  tcp_hndl, tcp_hndl->sock.cfd);
 	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_del_ev_handlers		                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_del_ev_handlers(struct xio_tcp_transport *tcp_hndl)
+{
+	int retval1, retval2;
+
+	/* remove from epoll */
+	retval1 = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					     tcp_hndl->sock.cfd);
+	if (retval1) {
+		ERROR_LOG("tcp_hndl:%p fd=%d del_ev_handler failed, %m\n",
+			  tcp_hndl, tcp_hndl->sock.cfd);
+	}
+
+	if (tcp_hndl->is_listen)
+		return retval1;
+
+	/* remove from epoll */
+	retval2 = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					     tcp_hndl->sock.dfd);
+
+	if (retval2) {
+		ERROR_LOG("tcp_hndl:%p fd=%d del_ev_handler failed, %m\n",
+			  tcp_hndl, tcp_hndl->sock.dfd);
+	}
+
+	return retval1 | retval2;
 }
 
 /*---------------------------------------------------------------------------*/
 /* on_sock_disconnected							     */
 /*---------------------------------------------------------------------------*/
 void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
-			  int notify_observer)
+			  int passive_close)
 {
+	struct xio_tcp_pending_conn *pconn, *next_pconn;
 	int retval;
 
 	TRACE_LOG("on_sock_disconnected. tcp_hndl:%p, state:%d\n",
 		  tcp_hndl, tcp_hndl->state);
-	if (tcp_hndl->state == XIO_STATE_CONNECTED ||
-	    tcp_hndl->state == XIO_STATE_LISTEN) {
+	if (tcp_hndl->state == XIO_STATE_DISCONNECTED) {
 		TRACE_LOG("call to close. tcp_hndl:%p\n",
 			  tcp_hndl);
-		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+		tcp_hndl->state = XIO_STATE_CLOSED;
 
-		retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
-						    tcp_hndl->sock_fd);
-		if (retval)
-			DEBUG_LOG("tcp_hndl:%p del_ev_handler failed, %m\n",
-				  tcp_hndl);
+		xio_ctx_remove_event(tcp_hndl->base.ctx,
+				     &tcp_hndl->ctl_rx_event);
 
-		if (!notify_observer) { /*active close*/
-			retval = shutdown(tcp_hndl->sock_fd, SHUT_RDWR);
-			if (retval) {
-				xio_set_error(errno);
-				DEBUG_LOG("tcp shutdown failed.(errno=%d %m)\n",
-					  errno);
-			}
+		if (tcp_hndl->sock.ops->del_ev_handlers)
+			tcp_hndl->sock.ops->del_ev_handlers(tcp_hndl);
+
+		if (!passive_close && !tcp_hndl->is_listen) { /*active close*/
+			tcp_hndl->sock.ops->shutdown(&tcp_hndl->sock);
 		}
-		retval = close(tcp_hndl->sock_fd);
-		if (retval)
-			DEBUG_LOG("tcp_hndl:%p close failed, %m\n",
-				  tcp_hndl);
+		tcp_hndl->sock.ops->close(&tcp_hndl->sock);
 
-		if (notify_observer)
-			xio_transport_notify_observer
-				(&tcp_hndl->base,
-				 XIO_TRANSPORT_DISCONNECTED,
-				 NULL);
+		list_for_each_entry_safe(pconn, next_pconn,
+					 &tcp_hndl->pending_conns,
+					 conns_list_entry) {
+			retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+							    pconn->fd);
+			if (retval) {
+				ERROR_LOG(
+				"removing conn handler failed.(errno=%d %m)\n",
+				errno);
+			}
+			list_del(&pconn->conns_list_entry);
+			ufree(pconn);
+		}
+
+		if (passive_close) {
+			xio_transport_notify_observer(
+					&tcp_hndl->base,
+					XIO_TRANSPORT_DISCONNECTED,
+					NULL);
+		}
 	}
 }
 
@@ -192,7 +253,14 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 	TRACE_LOG("tcp transport: [post close] handle:%p\n",
 		  tcp_hndl);
 
+	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+
 	xio_observable_unreg_all_observers(&tcp_hndl->base.observable);
+
+	if (tcp_hndl->tmp_rx_buf) {
+		ufree(tcp_hndl->tmp_rx_buf);
+		tcp_hndl->tmp_rx_buf = NULL;
+	}
 
 	ufree(tcp_hndl->base.portal_uri);
 
@@ -215,15 +283,17 @@ static void xio_tcp_close(struct xio_transport_base *transport)
 	if (was == 1) {
 		/* now it is zero */
 		TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
-			  tcp_hndl, tcp_hndl->sock_fd);
+			  tcp_hndl, tcp_hndl->sock.cfd);
 
 		switch (tcp_hndl->state) {
 		case XIO_STATE_LISTEN:
 		case XIO_STATE_CONNECTED:
-			on_sock_disconnected(tcp_hndl, 0);
+			tcp_hndl->state = XIO_STATE_DISCONNECTED;
 			/*fallthrough*/
 		case XIO_STATE_DISCONNECTED:
-			tcp_hndl->state = XIO_STATE_CLOSED;
+			on_sock_disconnected(tcp_hndl, 0);
+			/*fallthrough*/
+		case XIO_STATE_CLOSED:
 			on_sock_close(tcp_hndl);
 			break;
 		default:
@@ -240,6 +310,82 @@ static void xio_tcp_close(struct xio_transport_base *transport)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_shutdown		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_shutdown(struct xio_tcp_socket *sock)
+{
+	int retval;
+
+	retval = shutdown(sock->cfd, SHUT_RDWR);
+	if (retval) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_close		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_close(struct xio_tcp_socket *sock)
+{
+	int retval;
+
+	retval = close(sock->cfd);
+	if (retval) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_shutdown		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_shutdown(struct xio_tcp_socket *sock)
+{
+	int retval1, retval2;
+
+	retval1 = shutdown(sock->cfd, SHUT_RDWR);
+	if (retval1) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+	}
+
+	retval2 = shutdown(sock->dfd, SHUT_RDWR);
+	if (retval2) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+	}
+
+	return (retval1 | retval2);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_close		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_close(struct xio_tcp_socket *sock)
+{
+	int retval1, retval2;
+
+	retval1 = close(sock->cfd);
+	if (retval1) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+	}
+
+	retval2 = close(sock->dfd);
+	if (retval2) {
+		xio_set_error(errno);
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+	}
+
+	return (retval1 | retval2);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_reject		                                             */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_reject(struct xio_transport_base *transport)
@@ -248,18 +394,12 @@ static int xio_tcp_reject(struct xio_transport_base *transport)
 		(struct xio_tcp_transport *)transport;
 	int				retval;
 
-	retval = shutdown(tcp_hndl->sock_fd, SHUT_RDWR);
-	if (retval) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
-	}
+	tcp_hndl->sock.ops->shutdown(&tcp_hndl->sock);
 
-	retval = close(tcp_hndl->sock_fd);
-	if (retval) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+	retval = tcp_hndl->sock.ops->close(&tcp_hndl->sock);
+	if (retval)
 		return -1;
-	}
+
 	TRACE_LOG("tcp transport: [reject] handle:%p\n", tcp_hndl);
 
 	return 0;
@@ -276,8 +416,19 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	TRACE_LOG("tcp transport context_shutdown handle:%p\n", tcp_hndl);
 
-	on_sock_disconnected(tcp_hndl, 0);
-	tcp_hndl->state = XIO_STATE_CLOSED;
+	switch (tcp_hndl->state) {
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_CONNECTED:
+		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+		/*fallthrough*/
+	case XIO_STATE_DISCONNECTED:
+		on_sock_disconnected(tcp_hndl, 0);
+		break;
+	default:
+		break;
+	}
+
+	tcp_hndl->state = XIO_STATE_DESTROYED;
 	xio_tcp_flush_all_tasks(tcp_hndl);
 	xio_tcp_post_close(tcp_hndl);
 
@@ -285,19 +436,155 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_conn_ev_handler						     */
+/* xio_tcp_single_sock_rx_ctl_handler					     */
 /*---------------------------------------------------------------------------*/
-void xio_tcp_conn_ready_ev_handler(int fd, int events, void *user_context)
+int xio_tcp_single_sock_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl)
+{
+	return xio_tcp_rx_ctl_handler(tcp_hndl, 1);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_rx_ctl_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl)
+{
+	return xio_tcp_rx_ctl_handler(tcp_hndl, RX_BATCH);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_consume_ctl_rx						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
+	int retval = 0, count = 0;
+
+	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
+
+	do {
+		retval = tcp_hndl->sock.ops->rx_ctl_handler(tcp_hndl);
+		++count;
+	} while (retval > 0 && count <  RX_POLL_NR_MAX);
+
+	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len) {
+		xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
+				   xio_tcp_consume_ctl_rx, tcp_hndl);
+		xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_ctl_ready_ev_handler						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_ctl_ready_ev_handler(int fd, int events, void *user_context)
+{
+	struct xio_tcp_transport	*tcp_hndl = user_context;
+
+	if (events & EPOLLOUT) {
+		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
+					      XIO_POLLIN | XIO_POLLRDHUP);
+		xio_tcp_xmit(tcp_hndl);
+	}
+
+	if (events & EPOLLIN)
+		xio_tcp_consume_ctl_rx(NULL, tcp_hndl);
+
+	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
+		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
+			  events, fd);
+		xio_tcp_disconnect_helper(tcp_hndl);
+	}
+
+	/* ORK todo add work instead of poll_nr? */
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_data_ready_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_data_ready_ev_handler(int fd, int events, void *user_context)
 {
 	struct xio_tcp_transport	*tcp_hndl = user_context;
 	int retval = 0, count = 0;
 
-	if (events & XIO_POLLIN) {
+	if (events & EPOLLOUT) {
+		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
+					      XIO_POLLIN | XIO_POLLRDHUP);
+		xio_tcp_xmit(tcp_hndl);
+	}
+
+	if (events & EPOLLIN) {
 		do {
-			retval = xio_tcp_rx_handler(tcp_hndl);
+			retval = tcp_hndl->sock.ops->rx_data_handler(
+							tcp_hndl, RX_BATCH);
 			++count;
 		} while (retval > 0 && count <  RX_POLL_NR_MAX);
 	}
+
+	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
+		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
+			  events, fd);
+		xio_tcp_disconnect_helper(tcp_hndl);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_add_ev_handlers		                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
+{
+	/* add to epoll */
+	int retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLIN | XIO_POLLRDHUP,
+			xio_tcp_ctl_ready_ev_handler,
+			tcp_hndl);
+
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_add_ev_handlers		                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
+{
+	int retval = 0;
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLIN | XIO_POLLRDHUP,
+			xio_tcp_ctl_ready_ev_handler,
+			tcp_hndl);
+
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		return retval;
+	}
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.dfd,
+			XIO_POLLIN | XIO_POLLRDHUP,
+			xio_tcp_data_ready_ev_handler,
+			tcp_hndl);
+
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					   tcp_hndl->sock.cfd);
+	}
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -308,13 +595,10 @@ static int xio_tcp_accept(struct xio_transport_base *transport)
 	struct xio_tcp_transport *tcp_hndl =
 			(struct xio_tcp_transport *)transport;
 
-	/* add to epoll */
-	xio_context_add_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock_fd,
-			XIO_POLLIN,
-			xio_tcp_conn_ready_ev_handler,
-			tcp_hndl);
+	if (tcp_hndl->sock.ops->add_ev_handlers(tcp_hndl)) {
+		xio_transport_notify_observer_error(&tcp_hndl->base,
+						    XIO_E_UNSUCCESSFUL);
+	}
 
 	TRACE_LOG("tcp transport: [accept] handle:%p\n", tcp_hndl);
 
@@ -323,6 +607,100 @@ static int xio_tcp_accept(struct xio_transport_base *transport)
 			XIO_TRANSPORT_ESTABLISHED,
 			NULL);
 
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_socket_create		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_socket_create(void)
+{
+	int sock_fd, retval, optval = 1;
+
+	sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	if (sock_fd < 0) {
+		xio_set_error(errno);
+		ERROR_LOG("create socket failed. (errno=%d %m)\n", errno);
+		return sock_fd;
+	}
+
+	retval = setsockopt(sock_fd,
+			    SOL_SOCKET,
+			    SO_REUSEADDR,
+			    &optval,
+			    sizeof(optval));
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		goto cleanup;
+	}
+
+	if (tcp_options.tcp_no_delay) {
+		retval = setsockopt(sock_fd,
+				    IPPROTO_TCP,
+				    TCP_NODELAY,
+				    (char *)&optval,
+				    sizeof(int));
+		if (retval) {
+			xio_set_error(errno);
+			ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+			goto cleanup;
+		}
+	}
+
+
+	optval = tcp_options.tcp_so_sndbuf;
+	retval = setsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF,
+			    (char *)&optval, sizeof(optval));
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		goto cleanup;
+	}
+	optval = tcp_options.tcp_so_rcvbuf;
+	retval = setsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF,
+			    (char *)&optval, sizeof(optval));
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		goto cleanup;
+	}
+
+	return sock_fd;
+
+cleanup:
+	close(sock_fd);
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_create		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_create(struct xio_tcp_socket *sock)
+{
+	sock->cfd = xio_tcp_socket_create();
+	if (sock->cfd < 0)
+		return -1;
+
+	sock->dfd = sock->cfd;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_create		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_create(struct xio_tcp_socket *sock)
+{
+	sock->cfd = xio_tcp_socket_create();
+	if (sock->cfd < 0)
+		return -1;
+
+	sock->dfd = xio_tcp_socket_create();
+	if (sock->dfd < 0) {
+		close(sock->cfd);
+		return -1;
+	}
 	return 0;
 }
 
@@ -336,8 +714,6 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 		int			create_socket)
 {
 	struct xio_tcp_transport	*tcp_hndl;
-	int				optval = 1;
-	int				retval;
 
 
 	/*allocate tcp handl */
@@ -368,63 +744,24 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	atomic_set(&tcp_hndl->base.refcnt, 1);
 	tcp_hndl->transport		= transport;
 	tcp_hndl->base.ctx		= ctx;
+	tcp_hndl->is_listen		= 0;
+
+	tcp_hndl->tmp_rx_buf		= NULL;
+	tcp_hndl->tmp_rx_buf_cur	= NULL;
+	tcp_hndl->tmp_rx_buf_len	= 0;
+
+	tcp_hndl->tx_ready_tasks_num = 0;
+	tcp_hndl->tx_comp_cnt = 0;
+
+	memset(&tcp_hndl->tmp_work, 0, sizeof(struct xio_tcp_work_req));
+	tcp_hndl->tmp_work.msg_iov = tcp_hndl->tmp_iovec;
 
 	/* create tcp socket */
 	if (create_socket) {
-		tcp_hndl->sock_fd = socket(AF_INET,
-					   SOCK_STREAM | SOCK_NONBLOCK,
-					   0);
-		if (tcp_hndl->sock_fd < 0) {
-			xio_set_error(errno);
-			ERROR_LOG("create socket failed. (errno=%d %m)\n",
-				  errno);
+		tcp_hndl->sock.ops = tcp_options.tcp_dual_sock ?
+					&dual_sock_ops : &single_sock_ops;
+		if (tcp_hndl->sock.ops->open(&tcp_hndl->sock))
 			goto cleanup;
-		}
-
-		retval = setsockopt(tcp_hndl->sock_fd,
-				    SOL_SOCKET,
-				    SO_REUSEADDR,
-				    &optval,
-				    sizeof(optval));
-		if (retval) {
-			xio_set_error(errno);
-			ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
-				  errno);
-			goto cleanup;
-		}
-
-		if (tcp_options.tcp_no_delay) {
-			retval = setsockopt(tcp_hndl->sock_fd,
-					    IPPROTO_TCP,
-					    TCP_NODELAY,
-					    (char *)&optval,
-					    sizeof(int));
-			if (retval) {
-				xio_set_error(errno);
-				ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
-					  errno);
-				goto cleanup;
-			}
-		}
-
-
-		optval = tcp_options.tcp_so_sndbuf;
-		retval = setsockopt(tcp_hndl->sock_fd, SOL_SOCKET, SO_SNDBUF,
-				    (char *)&optval, sizeof(optval));
-		if (retval) {
-			xio_set_error(errno);
-			ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
-			goto cleanup;
-		}
-		optval = tcp_options.tcp_so_rcvbuf;
-		retval = setsockopt(tcp_hndl->sock_fd, SOL_SOCKET, SO_RCVBUF,
-				    (char *)&optval, sizeof(optval));
-		if (retval) {
-			xio_set_error(errno);
-			ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
-				  errno);
-			goto cleanup;
-		}
 	}
 
 	/* from now on don't allow changes */
@@ -442,6 +779,11 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	INIT_LIST_HEAD(&tcp_hndl->rx_list);
 	INIT_LIST_HEAD(&tcp_hndl->io_list);
 
+	INIT_LIST_HEAD(&tcp_hndl->pending_conns);
+
+	memset(&tcp_hndl->ctl_rx_event, 0, sizeof(xio_ctx_event_t));
+	memset(&tcp_hndl->disconnect_event, 0, sizeof(xio_ctx_event_t));
+
 	TRACE_LOG("xio_tcp_open: [new] handle:%p\n", tcp_hndl);
 
 	return tcp_hndl;
@@ -453,16 +795,145 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_new_connection						     */
+/* xio_tcp_handle_pending_conn						     */
 /*---------------------------------------------------------------------------*/
-void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
+void xio_tcp_handle_pending_conn(int fd,
+				 struct xio_tcp_transport *parent_hndl,
+				 int error)
 {
-	struct xio_tcp_transport *child_hndl;
-	union xio_transport_event_data ev_data;
 	int retval;
-	socklen_t		 len = sizeof(struct sockaddr_storage);
+	struct xio_tcp_pending_conn *pconn, *next_pconn;
+	struct xio_tcp_pending_conn *pending_conn = NULL, *matching_conn = NULL;
+	struct xio_tcp_pending_conn *ctl_conn = NULL, *data_conn = NULL;
+	void *buf;
+	int cfd = 0, dfd = 0, is_single = 1;
+	socklen_t len = 0;
+	struct xio_tcp_transport *child_hndl = NULL;
+	union xio_transport_event_data ev_data;
 
-	/* no observer , don't create socket yet */
+	list_for_each_entry_safe(pconn, next_pconn,
+				 &parent_hndl->pending_conns,
+				 conns_list_entry) {
+		if (pconn->fd == fd) {
+			pending_conn = pconn;
+			break;
+		}
+	}
+
+	if (!pending_conn) {
+		ERROR_LOG("could not find pending fd [%d] on the list\n", fd);
+		goto cleanup2;
+	}
+
+	if (error) {
+		DEBUG_LOG("epoll returned with error=%d for fd=%d\n",
+			  error, fd);
+		goto cleanup1;
+	}
+
+
+	buf = &pending_conn->msg;
+	buf += sizeof(struct xio_tcp_connect_msg) -
+			pending_conn->waiting_for_bytes;
+	while (pending_conn->waiting_for_bytes) {
+		retval = recv(fd, buf, pending_conn->waiting_for_bytes, 0);
+		if (retval > 0) {
+			pending_conn->waiting_for_bytes -= retval;
+			buf += retval;
+		} else if (retval == 0) {
+			ERROR_LOG("got EOF while establishing connection\n");
+			goto cleanup1;
+		} else {
+			if (errno != EAGAIN) {
+				ERROR_LOG("recv return with errno=%d\n", errno);
+				goto cleanup1;
+			}
+			return;
+		}
+	}
+
+	UNPACK_LVAL(&pending_conn->msg, &pending_conn->msg, sock_type);
+	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, second_port);
+	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, pad);
+
+	if (pending_conn->msg.sock_type == XIO_TCP_SINGLE_SOCK) {
+		ctl_conn = pending_conn;
+		goto single_sock;
+	}
+
+	is_single = 0;
+
+	list_for_each_entry_safe(pconn, next_pconn,
+				 &parent_hndl->pending_conns,
+				 conns_list_entry) {
+		if (pconn->waiting_for_bytes)
+			continue;
+
+		if (pconn->sa.sa.sa_family == AF_INET) {
+			if ((pconn->msg.second_port ==
+			    ntohs(pending_conn->sa.sa_in.sin_port)) &&
+			    (pconn->sa.sa_in.sin_addr.s_addr ==
+			    pending_conn->sa.sa_in.sin_addr.s_addr)) {
+				matching_conn = pconn;
+				if (ntohs(matching_conn->sa.sa_in.sin_port) !=
+				    pending_conn->msg.second_port) {
+					ERROR_LOG("ports mismatch\n");
+					return;
+				}
+				break;
+			}
+		} else if (pconn->sa.sa.sa_family == AF_INET6) {
+			if ((pconn->msg.second_port ==
+			     ntohs(pending_conn->sa.sa_in6.sin6_port)) &&
+			     !memcmp(&pconn->sa.sa_in6.sin6_addr,
+				     &pending_conn->sa.sa_in6.sin6_addr,
+				     sizeof(pconn->sa.sa_in6.sin6_addr))) {
+				matching_conn = pconn;
+				if (ntohs(matching_conn->sa.sa_in6.sin6_port)
+				    != pending_conn->msg.second_port) {
+					ERROR_LOG("ports mismatch\n");
+					return;
+				}
+				break;
+			}
+		} else {
+			ERROR_LOG("unknown family %d\n",
+				  pconn->sa.sa.sa_family);
+		}
+	}
+
+	if (!matching_conn)
+		return;
+
+	if (pending_conn->msg.sock_type == XIO_TCP_CTL_SOCK) {
+		ctl_conn = pending_conn;
+		data_conn = matching_conn;
+	} else if (pending_conn->msg.sock_type == XIO_TCP_DATA_SOCK) {
+		ctl_conn = matching_conn;
+		data_conn = pending_conn;
+	}
+	cfd = ctl_conn->fd;
+	dfd = data_conn->fd;
+
+	retval = xio_context_del_ev_handler(parent_hndl->base.ctx,
+					    data_conn->fd);
+	list_del(&data_conn->conns_list_entry);
+	if (retval) {
+		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
+			  errno);
+	}
+	ufree(data_conn);
+
+single_sock:
+
+	list_del(&ctl_conn->conns_list_entry);
+	retval = xio_context_del_ev_handler(parent_hndl->base.ctx,
+					    ctl_conn->fd);
+	if (retval) {
+		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
+			  errno);
+	}
+
 	child_hndl = xio_tcp_transport_create(parent_hndl->transport,
 					      parent_hndl->base.ctx,
 					      NULL,
@@ -471,29 +942,133 @@ void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
 		ERROR_LOG("failed to create tcp child\n");
 		xio_transport_notify_observer_error(&parent_hndl->base,
 						    xio_errno());
-		return;
+		ufree(ctl_conn);
+		goto cleanup3;
 	}
 
-	/* "accept" the connection */
-	retval = accept4(parent_hndl->sock_fd,
-			 (struct sockaddr *)&child_hndl->base.peer_addr,
-			 &len,
-			 SOCK_NONBLOCK);
-	if (retval < 0) {
+	memcpy(&child_hndl->base.peer_addr,
+	       &ctl_conn->sa.sa_stor,
+	       sizeof(child_hndl->base.peer_addr));
+	ufree(ctl_conn);
+
+	if (is_single) {
+		child_hndl->sock.cfd = fd;
+		child_hndl->sock.dfd = fd;
+		child_hndl->sock.ops = &single_sock_ops;
+
+	} else {
+		child_hndl->sock.cfd = cfd;
+		child_hndl->sock.dfd = dfd;
+		child_hndl->sock.ops = &dual_sock_ops;
+
+		child_hndl->tmp_rx_buf = ucalloc(1, TMP_RX_BUF_SIZE);
+		if (!child_hndl->tmp_rx_buf) {
+			xio_set_error(ENOMEM);
+			ERROR_LOG("ucalloc failed. %m\n");
+			goto cleanup3;
+		}
+		child_hndl->tmp_rx_buf_cur = child_hndl->tmp_rx_buf;
+	}
+
+
+	len = sizeof(child_hndl->base.local_addr);
+	retval = getsockname(child_hndl->sock.cfd,
+			     (struct sockaddr *)&child_hndl->base.local_addr,
+			     &len);
+	if (retval) {
 		xio_set_error(errno);
-		ERROR_LOG("tcp accept failed. (errno=%d %m)\n", errno);
-		child_hndl->sock_fd = retval;
-		return;
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
 	}
-	child_hndl->sock_fd = retval;
-
-	child_hndl->base.proto = XIO_PROTO_TCP;
 
 	ev_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
 	xio_transport_notify_observer((struct xio_transport_base *)parent_hndl,
 				      XIO_TRANSPORT_NEW_CONNECTION,
 				      &ev_data);
+
+	return;
+
+cleanup1:
+	list_del(&pending_conn->conns_list_entry);
+	ufree(pending_conn);
+cleanup2:
+	/* remove from epoll */
+	retval = xio_context_del_ev_handler(parent_hndl->base.ctx, fd);
+	if (retval) {
+		ERROR_LOG(
+		"removing connection handler failed.(errno=%d %m)\n",
+		errno);
+	}
+cleanup3:
+	if (is_single) {
+		close(fd);
+	} else {
+		close(cfd);
+		close(dfd);
+	}
+
+	if (child_hndl)
+		xio_tcp_post_close(child_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_pending_conn_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_pending_conn_ev_handler(int fd, int events, void *user_context)
+{
+	struct xio_tcp_transport *tcp_hndl = user_context;
+
+	xio_tcp_handle_pending_conn(fd, tcp_hndl,
+				    events &
+				    (EPOLLHUP | EPOLLRDHUP | EPOLLERR));
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_new_connection						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
+{
+	int retval;
+	socklen_t len = sizeof(struct sockaddr_storage);
+	struct xio_tcp_pending_conn *pending_conn;
+
+	/*allocate pending fd struct */
+	pending_conn = ucalloc(1, sizeof(struct xio_tcp_pending_conn));
+	if (!pending_conn) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("ucalloc failed. %m\n");
+		xio_transport_notify_observer_error(&parent_hndl->base,
+						    xio_errno());
+		return;
+	}
+
+	pending_conn->waiting_for_bytes = sizeof(struct xio_tcp_connect_msg);
+
+	/* "accept" the connection */
+	retval = accept4(parent_hndl->sock.cfd,
+			 (struct sockaddr *)&pending_conn->sa.sa_stor,
+			 &len,
+			 SOCK_NONBLOCK);
+	if (retval < 0) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp accept failed. (errno=%d %m)\n", errno);
+		ufree(pending_conn);
+		return;
+	}
+	pending_conn->fd = retval;
+
+	list_add_tail(&pending_conn->conns_list_entry,
+		      &parent_hndl->pending_conns);
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			parent_hndl->base.ctx,
+			pending_conn->fd,
+			XIO_POLLIN | XIO_POLLRDHUP,
+			xio_tcp_pending_conn_ev_handler,
+			parent_hndl);
+	if (retval)
+		ERROR_LOG("adding pending_conn_ev_handler failed\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -503,12 +1078,14 @@ void xio_tcp_listener_ev_handler(int fd, int events, void *user_context)
 {
 	struct xio_tcp_transport *tcp_hndl = user_context;
 
-	if (events | XIO_POLLIN)
+	if (events & EPOLLIN)
 		xio_tcp_new_connection(tcp_hndl);
-	/* ORK TODO */
-	/*else if (events | XIO_HUP) {
-		 notify_observable(..., DISCONNECTED/CLOSED)
-	}*/
+
+	if ((events & (EPOLLHUP | EPOLLERR))) {
+		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
+			  events, fd);
+		xio_tcp_disconnect_helper(tcp_hndl);
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -535,7 +1112,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	tcp_hndl->base.is_client = 0;
 
 	/* bind */
-	retval = bind(tcp_hndl->sock_fd,
+	retval = bind(tcp_hndl->sock.cfd,
 		      (struct sockaddr *)&sa.sa_stor,
 		      sa_len);
 	if (retval) {
@@ -544,22 +1121,25 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		goto exit;
 	}
 
-	/* add to epoll */
-	retval = xio_context_add_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock_fd,
-			XIO_POLLIN, /* ORK ToDo: XIO_ERR, XIO_HUP */
-			xio_tcp_listener_ev_handler,
-			tcp_hndl);
+	tcp_hndl->is_listen = 1;
 
-	retval  = listen(tcp_hndl->sock_fd, backlog);
+	retval  = listen(tcp_hndl->sock.cfd,
+			 backlog > 0 ? backlog : MAX_BACKLOG);
 	if (retval) {
 		xio_set_error(errno);
 		ERROR_LOG("tcp listen failed. (errno=%d %m)\n", errno);
 		goto exit;
 	}
 
-	retval  = getsockname(tcp_hndl->sock_fd,
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLIN,
+			xio_tcp_listener_ev_handler,
+			tcp_hndl);
+
+	retval  = getsockname(tcp_hndl->sock.cfd,
 			      (struct sockaddr *)&sa.sa_stor,
 			      (socklen_t *)&sa_len);
 	if (retval) {
@@ -594,39 +1174,132 @@ exit:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_conn_established_ev_handler	                                     */
+/* xio_tcp_conn_established_helper	                                     */
 /*---------------------------------------------------------------------------*/
-void xio_tcp_conn_established_ev_handler(int fd, int events, void *user_context)
+void xio_tcp_conn_established_helper(int fd,
+				     struct xio_tcp_transport *tcp_hndl,
+				     struct xio_tcp_connect_msg	*msg,
+				     int error)
+{
+	int				retval = 0;
+	int				so_error = 0;
+	socklen_t			len = sizeof(so_error);
+
+	/* remove from epoll */
+	retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					    tcp_hndl->sock.cfd);
+	if (retval) {
+		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
+			  errno);
+		goto cleanup;
+	}
+
+	retval = getsockopt(tcp_hndl->sock.cfd,
+			    SOL_SOCKET,
+			    SO_ERROR,
+			    &so_error,
+			    &len);
+	if (retval) {
+		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
+		so_error = errno;
+	}
+	if (so_error || error) {
+		DEBUG_LOG("fd=%d connection establishment failed\n",
+			  tcp_hndl->sock.cfd);
+		DEBUG_LOG("so_error=%d, epoll_error=%d\n", so_error, error);
+		tcp_hndl->sock.ops->del_ev_handlers = NULL;
+		goto cleanup;
+	}
+
+	/* add to epoll */
+	retval = tcp_hndl->sock.ops->add_ev_handlers(tcp_hndl);
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		goto cleanup;
+	}
+
+	len = sizeof(tcp_hndl->base.peer_addr);
+	retval = getpeername(tcp_hndl->sock.cfd,
+			     (struct sockaddr *)&tcp_hndl->base.peer_addr,
+			     &len);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp getpeername failed. (errno=%d %m)\n", errno);
+		so_error = errno;
+		goto cleanup;
+	}
+
+	retval = xio_tcp_send_connect_msg(tcp_hndl->sock.cfd, msg);
+	if (retval)
+		goto cleanup;
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_ESTABLISHED,
+				      NULL);
+
+	return;
+
+cleanup:
+	xio_transport_notify_observer_error(&tcp_hndl->base,
+					    so_error ? so_error :
+					    XIO_E_CONNECT_ERROR);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_conn_established_ev_handler	                             */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_single_conn_established_ev_handler(int fd,
+						int events, void *user_context)
+{
+	struct xio_tcp_transport	*tcp_hndl = user_context;
+	struct xio_tcp_connect_msg	msg;
+	msg.sock_type = XIO_TCP_SINGLE_SOCK;
+	msg.second_port = 0;
+	msg.pad = 0;
+	xio_tcp_conn_established_helper(fd, tcp_hndl, &msg,
+					events &
+					(EPOLLERR | EPOLLHUP | EPOLLRDHUP));
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_cfd_conn_established_ev_handler	                             */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_cfd_conn_established_ev_handler(int fd,
+					     int events, void *user_context)
+{
+	struct xio_tcp_transport	*tcp_hndl = user_context;
+	struct xio_tcp_connect_msg	msg;
+	msg.sock_type = XIO_TCP_CTL_SOCK;
+	msg.second_port = tcp_hndl->sock.port_dfd;
+	msg.pad = 0;
+	xio_tcp_conn_established_helper(fd, tcp_hndl, &msg,
+					events &
+					(EPOLLERR | EPOLLHUP | EPOLLRDHUP));
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dfd_conn_established_ev_handler	                             */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_dfd_conn_established_ev_handler(int fd,
+					     int events, void *user_context)
 {
 	struct xio_tcp_transport	*tcp_hndl = user_context;
 	int				retval = 0;
 	int				so_error = 0;
 	socklen_t			so_error_len = sizeof(so_error);
+	struct xio_tcp_connect_msg	msg;
 
 	/* remove from epoll */
-	retval = xio_context_del_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock_fd);
+	retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
+					    tcp_hndl->sock.dfd);
 	if (retval) {
 		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
 			  errno);
-		so_error = errno;
+		goto cleanup;
 	}
 
-	/* add to epoll */
-	retval = xio_context_add_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock_fd,
-			XIO_POLLIN,
-			xio_tcp_conn_ready_ev_handler,
-			tcp_hndl);
-	if (retval) {
-		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
-		so_error = errno;
-	}
-
-	retval = getsockopt(tcp_hndl->sock_fd,
+	retval = getsockopt(tcp_hndl->sock.dfd,
 			    SOL_SOCKET,
 			    SO_ERROR,
 			    &so_error,
@@ -635,16 +1308,165 @@ void xio_tcp_conn_established_ev_handler(int fd, int events, void *user_context)
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
 		so_error = errno;
 	}
-
-	if (so_error) {
-		xio_transport_notify_observer_error(&tcp_hndl->base,
-						    so_error ? so_error :
-						    XIO_E_CONNECT_ERROR);
-	} else {
-		xio_transport_notify_observer(&tcp_hndl->base,
-					      XIO_TRANSPORT_ESTABLISHED,
-					      NULL);
+	if (so_error || (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))) {
+		DEBUG_LOG("fd=%d connection establishment failed\n",
+			  tcp_hndl->sock.dfd);
+		DEBUG_LOG("so_error=%d, epoll_events=%d\n", so_error, events);
+		tcp_hndl->sock.ops->del_ev_handlers = NULL;
+		goto cleanup;
 	}
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLOUT | XIO_POLLRDHUP,
+			xio_tcp_cfd_conn_established_ev_handler,
+			tcp_hndl);
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		goto cleanup;
+	}
+
+	msg.sock_type = XIO_TCP_DATA_SOCK;
+	msg.second_port = tcp_hndl->sock.port_cfd;
+	msg.pad = 0;
+	retval = xio_tcp_send_connect_msg(tcp_hndl->sock.dfd, &
+			msg);
+	if (retval)
+		goto cleanup;
+
+	return;
+
+cleanup:
+	xio_transport_notify_observer_error(&tcp_hndl->base,
+					    so_error ? so_error :
+					    XIO_E_CONNECT_ERROR);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_connect_helper	                                             */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_connect_helper(int fd, struct sockaddr *sa,
+				  socklen_t sa_len, uint16_t *bound_port,
+				  struct sockaddr_storage *lss)
+{
+	int retval;
+	union xio_sockaddr *lsa = (union xio_sockaddr *)lss;
+	struct sockaddr_storage sa_stor;
+	socklen_t lsa_len = sizeof(struct sockaddr_storage);
+
+	retval = connect(fd, sa, sa_len);
+	if (retval) {
+		if (errno == EINPROGRESS) {
+			/*set iomux for write event*/
+		} else {
+			xio_set_error(errno);
+			ERROR_LOG("tcp connect failed. (errno=%d %m)\n", errno);
+			return retval;
+		}
+	} else {
+		/*handle in ev_handler*/
+	}
+
+	if (!lss)
+		lsa = (union xio_sockaddr *)&sa_stor;
+
+	retval = getsockname(fd, &lsa->sa, &lsa_len);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
+		return retval;
+	}
+
+	if (lsa->sa.sa_family == AF_INET) {
+		*bound_port = ntohs(lsa->sa_in.sin_port);
+	} else if (lsa->sa.sa_family == AF_INET6) {
+		*bound_port = ntohs(lsa->sa_in6.sin6_port);
+	} else {
+		ERROR_LOG("getsockname unknown family = %d\n",
+			  lsa->sa.sa_family);
+		return -1;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_single_sock_connect	                                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_single_sock_connect(struct xio_tcp_transport *tcp_hndl,
+				struct sockaddr *sa,
+				socklen_t sa_len)
+{
+	int retval;
+
+	retval = xio_tcp_connect_helper(tcp_hndl->sock.cfd, sa, sa_len,
+					&tcp_hndl->sock.port_cfd,
+					&tcp_hndl->base.local_addr);
+	if (retval)
+		return retval;
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.cfd,
+			XIO_POLLOUT | XIO_POLLRDHUP,
+			xio_tcp_single_conn_established_ev_handler,
+			tcp_hndl);
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		return retval;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_dual_sock_connect	                                             */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_dual_sock_connect(struct xio_tcp_transport *tcp_hndl,
+			      struct sockaddr *sa,
+			      socklen_t sa_len)
+{
+	int retval;
+
+	tcp_hndl->tmp_rx_buf = ucalloc(1, TMP_RX_BUF_SIZE);
+	if (!tcp_hndl->tmp_rx_buf) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("ucalloc failed. %m\n");
+		return -1;
+	}
+	tcp_hndl->tmp_rx_buf_cur = tcp_hndl->tmp_rx_buf;
+
+	retval = xio_tcp_connect_helper(tcp_hndl->sock.cfd, sa, sa_len,
+					&tcp_hndl->sock.port_cfd,
+					&tcp_hndl->base.local_addr);
+	if (retval)
+		return retval;
+
+	retval = xio_tcp_connect_helper(tcp_hndl->sock.dfd, sa, sa_len,
+					&tcp_hndl->sock.port_dfd,
+					NULL);
+	if (retval)
+		return retval;
+
+	/* add to epoll */
+	retval = xio_context_add_ev_handler(
+			tcp_hndl->base.ctx,
+			tcp_hndl->sock.dfd,
+			XIO_POLLOUT | XIO_POLLRDHUP,
+			xio_tcp_dfd_conn_established_ev_handler,
+			tcp_hndl);
+	if (retval) {
+		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
+			  errno);
+		return retval;
+	}
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -655,12 +1477,13 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 {
 	struct xio_tcp_transport	*tcp_hndl =
 					(struct xio_tcp_transport *)transport;
-	int				ss_len = 0;
+	union xio_sockaddr		rsa;
+	socklen_t			rsa_len = 0;
 	int				retval = 0;
 
 	/* resolve the portal_uri */
-	ss_len = xio_uri_to_ss(portal_uri, &tcp_hndl->sa.sa_stor);
-	if (ss_len == -1) {
+	rsa_len = xio_uri_to_ss(portal_uri, &rsa.sa_stor);
+	if (rsa_len == -1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
 		return -1;
@@ -685,7 +1508,7 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 				  out_if_addr);
 			goto exit;
 		}
-		retval = bind(tcp_hndl->sock_fd,
+		retval = bind(tcp_hndl->sock.cfd,
 			      (struct sockaddr *)&if_sa.sa_stor,
 			      sa_len);
 		if (retval) {
@@ -696,34 +1519,12 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 		}
 	}
 
-	/* add to epoll */
-	retval = xio_context_add_ev_handler(
-			tcp_hndl->base.ctx,
-			tcp_hndl->sock_fd,
-			XIO_POLLOUT,
-			xio_tcp_conn_established_ev_handler,
-			tcp_hndl);
-	if (retval) {
-		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+	/* connect */
+	retval = tcp_hndl->sock.ops->connect(tcp_hndl,
+					     (struct sockaddr *)&rsa.sa_stor,
+					     rsa_len);
+	if (retval)
 		goto exit;
-	}
-
-	/* connect tcp_hndl->sock_fd */
-	retval = connect(tcp_hndl->sock_fd,
-			 (struct sockaddr *)&tcp_hndl->sa.sa_stor,
-			 ss_len);
-	if (retval) {
-		if (errno == EINPROGRESS) {
-			/*set iomux for write event*/
-		} else {
-			xio_set_error(errno);
-			ERROR_LOG("tcp connect failed. (errno=%d %m)\n", errno);
-			goto exit;
-		}
-	} else {
-		/*handle in ev_handler*/
-	}
 
 	return 0;
 
@@ -884,11 +1685,14 @@ static void xio_tcp_rxd_init(struct xio_tcp_work_req *rxd,
 static void xio_tcp_txd_init(struct xio_tcp_work_req *txd,
 			     void *buf, unsigned size)
 {
+	txd->ctl_msg = buf;
+	txd->ctl_msg_len = 0;
 	txd->msg_iov[0].iov_base = buf;
 	txd->msg_iov[0].iov_len	= size;
 	txd->msg_len = 1;
 	txd->tot_iov_byte_len = 0;
 
+	txd->stage = XIO_TCP_TX_BEFORE;
 	txd->msg.msg_control = NULL;
 	txd->msg.msg_controllen = 0;
 	txd->msg.msg_flags = 0;
@@ -1290,6 +2094,8 @@ static int xio_tcp_task_pre_put(
 	tcp_task->rsp_write_num_sge	= 0;
 	tcp_task->req_read_num_sge	= 0;
 	tcp_task->req_recv_num_sge	= 0;
+	tcp_task->sn			= 0;
+	tcp_task->more_in_batch		= 0;
 
 	tcp_task->tcp_op		= XIO_TCP_NULL;
 
@@ -1299,6 +2105,10 @@ static int xio_tcp_task_pre_put(
 	xio_tcp_txd_init(&tcp_task->txd,
 			 task->mbuf.buf.head,
 			 task->mbuf.buf.buflen);
+
+	if (xio_is_work_pending(&tcp_task->comp_work))
+		xio_ctx_del_work(tcp_task->tcp_hndl->base.ctx,
+				 &tcp_task->comp_work);
 
 	return 0;
 }
@@ -1365,7 +2175,7 @@ static void xio_tcp_set_pools_cls(struct xio_transport_base *trans_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_set_opt                                                          */
+/* xio_tcp_set_opt                                                           */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_set_opt(void *xio_obj,
 			   int optname, const void *optval, int optlen)
@@ -1430,6 +2240,11 @@ static int xio_tcp_set_opt(void *xio_obj,
 		tcp_options.tcp_so_rcvbuf = *((int *)optval);
 		return 0;
 		break;
+	case XIO_OPTNAME_TCP_DUAL_STREAM:
+		VALIDATE_SZ(sizeof(int));
+		tcp_options.tcp_dual_sock = *((int *)optval);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -1438,7 +2253,7 @@ static int xio_tcp_set_opt(void *xio_obj,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_get_opt                                                          */
+/* xio_tcp_get_opt                                                           */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_get_opt(void  *xio_obj,
 			   int optname, void *optval, int *optlen)
@@ -1490,6 +2305,11 @@ static int xio_tcp_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
+	case XIO_OPTNAME_TCP_DUAL_STREAM:
+		*((int *)optval) = tcp_options.tcp_dual_sock;
+		*optlen = sizeof(int);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -1505,34 +2325,42 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 	int		i;
 	int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->in;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sge;
+	unsigned long		nents, max_nents;
 
-	if ((vmsg->data_iovlen > tcp_options.max_in_iovsz) ||
-	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
-	    (vmsg->data_iovsz > tcp_options.max_in_iovsz)) {
+	sgtbl		= xio_sg_table_get(&msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
+	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
+
+	if ((nents > tcp_options.max_in_iovsz) ||
+	    (nents > max_nents) ||
+	    (max_nents > tcp_options.max_in_iovsz)) {
 		return 0;
 	}
 
-	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
-	    vmsg->data_iovlen > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
 
 	if ((vmsg->header.iov_base != NULL)  &&
 	    (vmsg->header.iov_len == 0))
 		return 0;
 
-	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->pdata_iov[i].mr)
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		if (sge_mr(sgtbl_ops, sge))
 			mr_found++;
-		if (vmsg->pdata_iov[i].iov_base == NULL) {
-			if (vmsg->pdata_iov[i].mr)
+		if (sge_addr(sgtbl_ops, sge) == NULL) {
+			if (sge_mr(sgtbl_ops, sge))
 				return 0;
 		} else {
-			if (vmsg->pdata_iov[i].iov_len == 0)
+			if (sge_length(sgtbl_ops, sge)  == 0)
 				return 0;
 		}
 	}
 	if (tcp_options.enable_mr_check &&
-	    (mr_found != vmsg->data_iovlen) && mr_found)
+	    (mr_found != nents) && mr_found)
 		return 0;
 
 	return 1;
@@ -1543,17 +2371,25 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 {
-	int		i;
-	int		mr_found = 0;
-	struct xio_vmsg *vmsg = &msg->out;
+	int			i;
+	int			mr_found = 0;
+	struct xio_vmsg		*vmsg = &msg->out;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	void			*sge;
+	unsigned long		nents, max_nents;
 
-	if ((vmsg->data_iovlen > tcp_options.max_out_iovsz) ||
-	    (vmsg->data_iovlen > vmsg->data_iovsz) ||
-	    (vmsg->data_iovsz > tcp_options.max_out_iovsz))
+	sgtbl		= xio_sg_table_get(&msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
+	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
+
+	if ((nents > tcp_options.max_out_iovsz) ||
+	    (nents > max_nents) ||
+	    (max_nents > tcp_options.max_out_iovsz))
 		return 0;
 
-	if (vmsg->data_type == XIO_DATA_TYPE_ARRAY &&
-	    vmsg->data_iovlen > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
 		return 0;
 
 	if (((vmsg->header.iov_base != NULL)  &&
@@ -1562,16 +2398,16 @@ static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 	     (vmsg->header.iov_len != 0)))
 			return 0;
 
-	for (i = 0; i < vmsg->data_iovlen; i++) {
-		if (vmsg->pdata_iov[i].mr)
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		if (sge_mr(sgtbl_ops, sge))
 			mr_found++;
-		if ((vmsg->pdata_iov[i].iov_base == NULL) ||
-		    (vmsg->pdata_iov[i].iov_len == 0))
-				return 0;
+		if ((sge_addr(sgtbl_ops, sge) == NULL) ||
+		    (sge_length(sgtbl_ops, sge)  == 0))
+			return 0;
 	}
 
 	if (tcp_options.enable_mr_check &&
-	    (mr_found != vmsg->data_iovlen) && mr_found)
+	    (mr_found != nents) && mr_found)
 		return 0;
 
 	return 1;
@@ -1594,6 +2430,34 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
+struct xio_tcp_socket_ops single_sock_ops = {
+	.open			= xio_tcp_single_sock_create,
+	.add_ev_handlers	= xio_tcp_single_sock_add_ev_handlers,
+	.del_ev_handlers	= xio_tcp_single_sock_del_ev_handlers,
+	.connect		= xio_tcp_single_sock_connect,
+	.set_txd		= xio_tcp_single_sock_set_txd,
+	.set_rxd		= xio_tcp_single_sock_set_rxd,
+	.rx_ctl_work		= xio_tcp_recvmsg_work,
+	.rx_ctl_handler		= xio_tcp_single_sock_rx_ctl_handler,
+	.rx_data_handler	= xio_tcp_rx_data_handler,
+	.shutdown		= xio_tcp_single_sock_shutdown,
+	.close			= xio_tcp_single_sock_close,
+};
+
+struct xio_tcp_socket_ops dual_sock_ops = {
+	.open			= xio_tcp_dual_sock_create,
+	.add_ev_handlers	= xio_tcp_dual_sock_add_ev_handlers,
+	.del_ev_handlers	= xio_tcp_dual_sock_del_ev_handlers,
+	.connect		= xio_tcp_dual_sock_connect,
+	.set_txd		= xio_tcp_dual_sock_set_txd,
+	.set_rxd		= xio_tcp_dual_sock_set_rxd,
+	.rx_ctl_work		= xio_tcp_recv_ctl_work,
+	.rx_ctl_handler		= xio_tcp_dual_sock_rx_ctl_handler,
+	.rx_data_handler	= xio_tcp_rx_data_handler,
+	.shutdown		= xio_tcp_dual_sock_shutdown,
+	.close			= xio_tcp_dual_sock_close,
+};
+
 struct xio_transport xio_tcp_transport = {
 	.name			= "tcp",
 	.ctor			= xio_tcp_transport_constructor,
@@ -1613,8 +2477,8 @@ struct xio_transport xio_tcp_transport = {
 	.poll			= xio_tcp_poll,
 	.set_opt		= xio_tcp_set_opt,
 	.get_opt		= xio_tcp_get_opt,
-/*	.cancel_req		= xio_tcp_cancel_req,*/
-/*	.cancel_rsp		= xio_tcp_cancel_rsp,*/
+	.cancel_req		= xio_tcp_cancel_req,
+	.cancel_rsp		= xio_tcp_cancel_rsp,
 	.get_pools_setup_ops	= xio_tcp_get_pools_ops,
 	.set_pools_cls		= xio_tcp_set_pools_cls,
 

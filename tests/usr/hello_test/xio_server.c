@@ -47,7 +47,7 @@
 #include "xio_msg.h"
 #include "xio_test_utils.h"
 
-#define MAX_POOL_SIZE		6000
+#define MAX_POOL_SIZE		512
 #define PRINT_COUNTER		4000000
 
 #define XIO_DEF_ADDRESS		"127.0.0.1"
@@ -80,9 +80,9 @@ struct test_params {
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
 	struct xio_buf		*xbuf;
-	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		ncomp;
+	struct msg_params	msg_params;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -109,12 +109,13 @@ static void process_request(struct xio_msg *msg)
 		cnt = 0;
 		return;
 	}
-
 	if (++cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("**** message [%lu] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.pdata_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -196,12 +197,6 @@ static int on_request(struct xio_session *session,
 	struct xio_msg	*rsp;
 	struct test_params *test_params = cb_user_context;
 
-	if (req->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-		xio_assert(req->status == 0);
-	}
-
 	/* process request */
 	process_request(req);
 
@@ -263,33 +258,43 @@ static int on_msg_error(struct xio_session *session,
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
 
-	test_params->ncomp++;
 	msg_pool_put(test_params->pool, msg);
+
+	switch (error) {
+	case XIO_E_MSG_DISCARDED:
+	case XIO_E_MSG_FLUSHED:
+		test_params->ncomp++;
+		break;
+	default:
+		/* need to send response here */
+
+		xio_disconnect(test_params->connection);
+		break;
+	};
 
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params	*test_params = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	int			nents = vmsg_sglist_nents(&msg->in);
 	int i;
+
 	if (test_params->xbuf == NULL)
 		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
 
-	for (i = 0; i < msg->in.data_iovlen; i++) {
-		if (msg->in.data_iovlen > XIO_IOVLEN) {
-			msg->in.pdata_iov[i].iov_base = test_params->xbuf->addr;
-			msg->in.pdata_iov[i].mr = test_params->xbuf->mr;
-		} else {
-			msg->in.data_iov[i].iov_base = test_params->xbuf->addr;
-			msg->in.data_iov[i].mr = test_params->xbuf->mr;
-		}
+	for (i = 0; i < nents; i++) {
+		sglist[i].iov_base = test_params->xbuf->addr;
+	        sglist[i].mr = test_params->xbuf->mr;
 	}
 
 	return 0;
 }
-
-
 
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */

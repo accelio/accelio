@@ -164,10 +164,9 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_work							     */
 /*---------------------------------------------------------------------------*/
-int xio_ctx_add_work(struct xio_context *ctx,
-			     void *data,
-			     void (*function)(void *data),
-			     xio_ctx_work_t *work);
+int xio_ctx_add_work(struct xio_context *ctx, void *data,
+		     void (*function)(void *data),
+		     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_del_work							     */
@@ -178,10 +177,9 @@ int xio_ctx_del_work(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_init_event							     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_init_event(
-		xio_ctx_event_t *evt,
-		void (*event_handler)(xio_ctx_event_t *tev, void *data),
-		void *data);
+void xio_ctx_init_event(xio_ctx_event_t *evt,
+			void (*event_handler)(xio_ctx_event_t *tev, void *data),
+			void *data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_event							     */
@@ -200,6 +198,13 @@ void xio_ctx_remove_event(struct xio_context *ctx,
 /* xio_context_is_loop_stopping						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_is_loop_stopping(struct xio_context *ctx);
+
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_modify_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events);
 
 #endif /*XIO_CONTEXT_H */
 

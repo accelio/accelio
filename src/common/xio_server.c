@@ -66,14 +66,14 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 /* xio_on_new_nexus							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_new_nexus(struct xio_server *server,
-			   struct xio_nexus *nexus,
-			   union xio_nexus_event_data *event_data)
+			    struct xio_nexus *nexus,
+			    union xio_nexus_event_data *event_data)
 {
 	int		retval;
 
 	/* set the server as observer */
 	xio_nexus_set_server_observer(event_data->new_nexus.child_nexus,
-				     &server->observer);
+				      &server->observer);
 
 	retval = xio_nexus_accept(event_data->new_nexus.child_nexus);
 	if (retval != 0) {
@@ -94,30 +94,30 @@ static int xio_on_new_message(struct xio_server *server,
 	struct xio_connection		*connection = NULL;
 	struct xio_connection		*connection1 = NULL;
 	struct xio_task			*task;
-	struct xio_session_attr		attr = { 0 };
 	uint32_t			tlv_type;
+	struct xio_session_params	params;
 
 	if (!server || !nexus || !event_data || !event_data->msg.task) {
 		ERROR_LOG("server [new session]: failed " \
 			  "invalid parameter\n");
 		return -1;
 	}
-	task		= event_data->msg.task;
-	attr.ses_ops	= &server->ops;
+	task			= event_data->msg.task;
+
+	params.type		= XIO_SESSION_SERVER;
+	params.initial_sn	= 0;
+	params.ses_ops		= &server->ops;
+	params.uri		= server->uri;
+	params.private_data	= NULL;
+	params.private_data_len = 0;
+	params.user_context	= server->cb_private_data;
 
 	/* read the first message  type */
 	tlv_type = xio_read_tlv_type(&event_data->msg.task->mbuf);
 
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
-		session = xio_session_init(
-				XIO_SESSION_SERVER,
-				&attr,
-				server->uri,
-				0,
-				server->session_flags,
-				server->cb_private_data);
-
+		session = xio_session_create(&params);
 		if (session == NULL) {
 			ERROR_LOG("server [new session]: failed " \
 				"  allocating session failed\n");
@@ -164,9 +164,10 @@ static int xio_on_new_message(struct xio_server *server,
 			  "session:%p, nexus:%p, session_id:%d\n",
 			   server, session, nexus, session->session_id);
 
-		connection = xio_session_alloc_connection(task->session,
-						  server->ctx, 0,
-						  server->cb_private_data);
+		connection = xio_session_alloc_connection(
+				task->session,
+				server->ctx, 0,
+				server->cb_private_data);
 
 		if (!connection) {
 			ERROR_LOG("server failed to allocate new connection\n");
@@ -195,7 +196,8 @@ static int xio_on_new_message(struct xio_server *server,
 
 	/* route the message to the session */
 	if (session)
-		xio_nexus_notify_observer(nexus, &session->observer, event, event_data);
+		xio_nexus_notify_observer(nexus, &session->observer,
+					  event, event_data);
 
 	return 0;
 
@@ -214,7 +216,7 @@ cleanup:
 /* xio_on_nexus_event				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
-			void *event_data)
+			      void *event_data)
 {
 	struct xio_server	*server = observer;
 	struct xio_nexus	*nexus	= notifier;
@@ -256,11 +258,11 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 /* xio_bind								     */
 /*---------------------------------------------------------------------------*/
 struct xio_server *xio_bind(struct xio_context *ctx,
-				struct xio_session_ops *ops,
-				const char *uri,
-				uint16_t *src_port,
-				uint32_t session_flags,
-				void *cb_private_data)
+			    struct xio_session_ops *ops,
+			    const char *uri,
+			    uint16_t *src_port,
+			    uint32_t session_flags,
+			    void *cb_private_data)
 {
 	struct xio_server	*server;
 	int			retval;
@@ -299,10 +301,10 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	}
 
 	xio_nexus_set_server_observer(server->listener,
-				     &server->observer);
+				      &server->observer);
 
 	retval = xio_nexus_listen(server->listener,
-				 uri, src_port, backlog);
+				  uri, src_port, backlog);
 	if (retval != 0) {
 		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;

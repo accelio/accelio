@@ -47,6 +47,7 @@
 #include "xio_task.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
+#include "xio_sg_table.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_validate_rdma_op							     */
@@ -57,13 +58,14 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 int op_size,
 			 int *tasks_used)
 {
-	struct xio_iovec_ex *liov;
+	struct sg_table *sgtbl;
+	struct scatterlist *liov;
 	uint64_t	raddr;
 	uint32_t	rlen;
 	uint64_t	laddr;
 	uint32_t	llen;
 	uint32_t	tot_len = 0;
-	size_t		lsize;
+	size_t		lsize, lnents;
 	int		l, r;
 	int		k = 0;
 
@@ -72,23 +74,27 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 		*tasks_used = 0;
 		return -1;
 	}
+	sgtbl		= &vmsg->data_tbl;
+	lnents		= sgtbl->nents;
 
-	if (vmsg->data_iovlen > XIO_MAX_IOV || vmsg->data_iovlen == 0) {
-		WARN_LOG("IOV size %zu\n", vmsg->data_iovlen);
+
+	if (lnents > XIO_MAX_IOV || lnents == 0) {
+		WARN_LOG("IOV size %zu\n", lnents);
 		*tasks_used = 0;
 		return -EINVAL;
 	}
 
-	lsize = vmsg->data_iovlen;
-	liov  = vmsg->pdata_iov;
+
+	lsize = lnents;
+	liov  = sgtbl->sgl;
 
 	r = 0;
 	rlen  = rsg_list[r].length;
 	raddr = rsg_list[r].addr;
 
 	l = 0;
-	laddr = uint64_from_ptr(liov[l].iov_base);
-	llen  = liov[l].iov_len;
+	laddr = uint64_from_ptr(sg_virt(liov));
+	llen  = liov->length;
 
 	/* At least one task */
 	*tasks_used = 1;
@@ -120,8 +126,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			}
 			rlen	-= llen;
 			raddr	+= llen;
-			laddr	= uint64_from_ptr(liov[l].iov_base);
-			llen	= liov[l].iov_len;
+			laddr	= uint64_from_ptr(sg_virt(liov));
+			llen	= liov->length;
 		} else {
 			l++;
 			r++;
@@ -129,8 +135,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			if ((l == lsize) || (r == rsize))
 				break;
 
-			laddr	= uint64_from_ptr(liov[l].iov_base);
-			llen	= liov[l].iov_len;
+			laddr	= uint64_from_ptr(sg_virt(liov));
+			llen	= liov->length;
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			(*tasks_used)++;
@@ -141,7 +147,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	/* not enough buffers to complete */
 	if (tot_len < op_size) {
 		*tasks_used = 0;
-		ERROR_LOG("iovec exausted\n");
+		ERROR_LOG("iovec exhausted\n");
 		return -1;
 	}
 

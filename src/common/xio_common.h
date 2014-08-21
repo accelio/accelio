@@ -140,6 +140,8 @@ void xio_set_error(int errnum);
 struct xio_options {
 	int			max_in_iovsz;
 	int			max_out_iovsz;
+	int			reconnect;
+	int			queue_depth;
 };
 
 struct xio_sge {
@@ -220,14 +222,14 @@ union xio_sockaddr {
 /* xio_utils.c								     */
 /*---------------------------------------------------------------------------*/
 
-int		xio_uri_get_proto(const char *uri,
-			char *proto, int proto_len);
+int		xio_uri_get_proto(const char *uri, char *proto,
+				  int proto_len);
 
-int		xio_uri_get_portal(const char *uri,
-			char *portal, int portal_len);
+int		xio_uri_get_portal(const char *uri, char *portal,
+				   int portal_len);
 
-int		xio_uri_get_resource(const char *uri,
-			char *resource, int resource_len);
+int		xio_uri_get_resource(const char *uri, char *resource,
+				     int resource_len);
 
 char		*xio_uri_get_resource_ptr(const char *uri);
 
@@ -244,33 +246,15 @@ size_t		xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
 size_t		memcpyv(struct xio_iovec *dst, int dsize,
 			struct xio_iovec *src, int ssize);
 
-size_t		memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
-			   struct xio_iovec_ex *src, int ssize);
-
 size_t		memclonev(struct xio_iovec *dst, int dsize,
 			  struct xio_iovec *src, int ssize);
-
-size_t		memclonev_ex(struct xio_iovec_ex *dst, int dsize,
-			  struct xio_iovec_ex *src, int ssize);
-
 
 size_t		xio_iov_length(const struct xio_iovec *iov,
 			       unsigned long nr_segs);
 
-size_t		xio_iovex_length(const struct xio_iovec_ex *iov,
-				 unsigned long nr_segs);
-
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 void		xio_msg_dump(struct xio_msg *xio_msg);
-
-void		xio_msg_map(struct xio_msg *xio_msg);
-
-void		xio_msg_unmap(struct xio_msg *xio_msg);
-
-void		xio_msg_cp_vec2ptr(struct xio_vmsg *vmsg);
-
-void		xio_msg_cp_ptr2vec(struct xio_vmsg *vmsg);
 
 #endif /*XIO_COMMON_H */
 

@@ -49,6 +49,7 @@
 #define TEST_DISCONNECT		1
 #define EXTRA_QDEPTH		128
 
+
 struct portals_vec {
 	int				vec_len;
 	int				pad;
@@ -167,10 +168,10 @@ static void msg_obj_init(void *user_context, void *obj)
 {
 	struct xio_msg *rsp = obj;
 
-	rsp->out.data_iovlen		= 0;
 	rsp->out.header.iov_len		= 0;
-	rsp->in.data_iovlen		= 0;
 	rsp->in.header.iov_len		= 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
+	vmsg_sglist_set_nents(&rsp->out, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -182,13 +183,14 @@ static int on_request(struct xio_session *session,
 		      void *cb_user_context)
 {
 	struct thread_data	*tdata  = cb_user_context;
-	struct xio_buf		**iobuf = req->in.data_iov[0].user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&req->in);
+	struct xio_buf		**iobuf = sglist[0].user_context;
 	struct xio_msg		*rsp;
 
 	/* process request */
-	if (iobuf && req->in.data_iovlen) {
+	if (iobuf && vmsg_sglist_nents(&req->in)) {
 		obj_pool_put(tdata->in_iobuf_pool, iobuf);
-		req->in.data_iov[0].user_context = NULL;
+		sglist[0].user_context = NULL;
 	}
 
 	rsp = obj_pool_get(tdata->rsp_pool);
@@ -196,20 +198,21 @@ static int on_request(struct xio_session *session,
 	/* attach request to response */
 	rsp->request = req;
 
-	rsp->in.header.iov_len		= 0;
-	rsp->in.data_iovlen		= 0;
-
+	rsp->in.header.iov_len	= 0;
+	vmsg_sglist_set_nents(&rsp->in, 0);
+//
+	sglist = vmsg_sglist(&rsp->out);
 	if (tdata->server_data->server_dlen) {
 		iobuf = obj_pool_get(tdata->out_iobuf_pool);
 
-		rsp->out.data_iov[0].iov_base	= (*iobuf)->addr;
-		rsp->out.data_iov[0].iov_len	=
+		sglist[0].iov_base	= (*iobuf)->addr;
+		sglist[0].iov_len	=
 				tdata->server_data->server_dlen;
-		rsp->out.data_iov[0].mr		= (*iobuf)->mr;
-		rsp->out.data_iov[0].user_context = iobuf;
-		rsp->out.data_iovlen		= 1;
+		sglist[0].mr		= (*iobuf)->mr;
+		sglist[0].user_context = iobuf;
+		vmsg_sglist_set_nents(&rsp->out, 1);
 	} else {
-		rsp->out.data_iovlen		= 0;
+		vmsg_sglist_set_nents(&rsp->out, 0);
 	}
 	rsp->out.header.iov_len	= 0;
 
@@ -261,15 +264,16 @@ static int on_request(struct xio_session *session,
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 	struct xio_buf		**iobuf;
 
 	iobuf = obj_pool_get(tdata->in_iobuf_pool);
 
-	msg->in.data_iovlen			= 1;
-	msg->in.data_iov[0].iov_base		= (*iobuf)->addr;
-	msg->in.data_iov[0].iov_len		= (*iobuf)->length;
-	msg->in.data_iov[0].mr			= (*iobuf)->mr;
-	msg->in.data_iov[0].user_context	= iobuf;
+	vmsg_sglist_set_nents(&msg->in, 1);
+	sglist[0].iov_base	= (*iobuf)->addr;
+	sglist[0].iov_len	= (*iobuf)->length;
+	sglist[0].mr		= (*iobuf)->mr;
+	sglist[0].user_context	= iobuf;
 
 	return 0;
 }
@@ -282,17 +286,18 @@ static int on_send_rsp_complete(struct xio_session *session,
 				void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&rsp->out);
 
 	if (tdata->server_data->server_dlen) {
 		obj_pool_put(tdata->out_iobuf_pool,
-			     rsp->out.data_iov[0].user_context);
+			     sglist[0].user_context);
 
-		rsp->out.data_iov[0].iov_base		= NULL;
-		rsp->out.data_iov[0].iov_len		= 0;
-		rsp->out.data_iov[0].mr			= NULL;
-		rsp->out.data_iov[0].user_context	= NULL;
+		sglist[0].iov_base	= NULL;
+		sglist[0].iov_len	= 0;
+		sglist[0].mr		= NULL;
+		sglist[0].user_context	= NULL;
 	}
-	rsp->out.data_iovlen				= 0;
+	vmsg_sglist_set_nents(&rsp->out, 0);
 
 	/* can be safely freed */
 	obj_pool_put(tdata->rsp_pool, rsp);
@@ -308,22 +313,26 @@ int on_msg_error(struct xio_session *session,
 		 void *cb_prv_data)
 {
 	struct thread_data	*tdata = cb_prv_data;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&rsp->out);
 
 	if (tdata->server_data->server_dlen) {
 		obj_pool_put(tdata->out_iobuf_pool,
-			     rsp->out.data_iov[0].user_context);
+			     sglist[0].user_context);
 
-		rsp->out.data_iov[0].iov_base		= NULL;
-		rsp->out.data_iov[0].iov_len		= 0;
-		rsp->out.data_iov[0].mr			= NULL;
-		rsp->out.data_iov[0].user_context	= NULL;
+		sglist[0].iov_base		= NULL;
+		sglist[0].iov_len		= 0;
+		sglist[0].mr			= NULL;
+		sglist[0].user_context		= NULL;
 	}
-	rsp->out.data_iovlen				= 0;
+	vmsg_sglist_set_nents(&rsp->out, 0);
 
 	obj_pool_put(tdata->rsp_pool, rsp);
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* asynchronous callbacks						     */
 
 /*---------------------------------------------------------------------------*/
 /* asynchronous callbacks						     */
@@ -552,7 +561,7 @@ static int on_new_session(struct xio_session *session,
 
 	DEBUG("server new session event. session:%p\n", session);
 
-	portals = portals_get(server_data, req->uri, req->user_context);
+	portals = portals_get(server_data, req->uri, req->private_data);
 
 	session_entry = calloc(1, sizeof(*session_entry));
 	TAILQ_INIT(&session_entry->conns_list);
@@ -562,7 +571,6 @@ static int on_new_session(struct xio_session *session,
 	TAILQ_INSERT_TAIL(&server_data->sessions_list,
 			  session_entry, sessions_list_entry);
 	pthread_spin_unlock(&server_data->lock);
-
 	/* automatic accept the request */
 	xio_accept(session, portals->vec, portals->vec_len, NULL, 0);
 

@@ -94,7 +94,7 @@ struct session_data {
 	double			max_lat_us;
 	double			avg_bw;
 	int			abort;
-	int			pad;
+	int			hs_connected;
 	struct xio_session	*session;
 	struct thread_data	*tdata;
 };
@@ -192,6 +192,7 @@ static void *statistics_thread_cb(void *data)
 static void *worker_thread(void *data)
 {
 	struct thread_data	*tdata = data;
+	struct xio_iovec_ex	*sglist;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
 	int			i;
@@ -226,15 +227,19 @@ static void *worker_thread(void *data)
 
 		/* get pointers to internal buffers */
 		msg->in.header.iov_len = 0;
-		msg->in.data_iovlen = 0;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, 0);
+
 		msg->out.header.iov_len = 0;
+		sglist = vmsg_sglist(&msg->out);
 		if (tdata->data_len) {
-			msg->out.data_iovlen		= 1;
-			msg->out.data_iov[0].iov_base	= tdata->xbuf->addr;
-			msg->out.data_iov[0].iov_len	= tdata->xbuf->length;
-			msg->out.data_iov[0].mr		= tdata->xbuf->mr;
+			vmsg_sglist_set_nents(&msg->out, 1);
+			sglist[0].iov_base	= tdata->xbuf->addr;
+			sglist[0].iov_len	= tdata->xbuf->length;
+			sglist[0].mr		= tdata->xbuf->mr;
 		} else {
-			msg->out.data_iovlen = 0;
+			vmsg_sglist_set_nents(&msg->out, 0);
 		}
 		msg->user_context = (void *)get_cycles();
 		/* send first message */
@@ -283,6 +288,7 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_ERROR_EVENT:
+	case XIO_SESSION_CONNECTION_REFUSED_EVENT:
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 		fprintf(stderr, "%s. reason: %s\n",
@@ -317,6 +323,7 @@ static int on_response(struct xio_session *session,
 			void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
+
 	cycles_t rtt = (get_cycles()-(cycles_t)msg->user_context);
 
 	if (tdata->do_stat) {
@@ -343,7 +350,7 @@ static int on_response(struct xio_session *session,
 
 	/* reset message */
 	msg->in.header.iov_len = 0;
-	msg->in.data_iovlen = 0;
+	vmsg_sglist_set_nents(&msg->in, 0);
 
 	msg->user_context = (void *)get_cycles();
 	if (xio_send_request(tdata->conn, msg) == -1) {
@@ -398,19 +405,17 @@ int run_client_test(struct perf_parameters *user_param)
 	struct thread_data	*tdata;
 	char			url[256];
 	int			i = 0;
+	int			cpu;
 	int			max_cpus;
+	int			cpusnr;
+	uint64_t		cpusmask;
 	pthread_t		statistics_thread_id;
 	struct perf_command	command;
 	int			size_log2;
 	int			max_size_log2 = 24;
+	struct xio_session_params params;
 
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
 	xio_init();
 
 	g_mhz		= get_cpu_mhz(0);
@@ -440,7 +445,11 @@ int run_client_test(struct perf_parameters *user_param)
 		fprintf(fd, "size, threads, tps, bw[Mbps], lat[usec]\n");
 		fflush(fd);
 	}
-
+	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
+	if (i == 0) {
+		printf("best cpus [%d] %s\n", cpusnr,
+		       intf_cpusmask_str(cpusmask, cpusnr, user_param->intf_name));
+	}
 
 	printf("%s", RESULT_FMT);
 	printf("%s", RESULT_LINE);
@@ -451,6 +460,7 @@ int run_client_test(struct perf_parameters *user_param)
 
 		memset(&sess_data, 0, sizeof(sess_data));
 		memset(tdata, 0, user_param->threads_num*sizeof(*tdata));
+		memset(&params, 0, sizeof(params));
 		sess_data.tdata = tdata;
 
 		command.test_param.machine_type	= user_param->machine_type;
@@ -465,8 +475,13 @@ int run_client_test(struct perf_parameters *user_param)
 			user_param->transport,
 			user_param->server_addr,
 			user_param->server_port);
-		sess_data.session = xio_session_create(XIO_SESSION_CLIENT,
-				&attr, url, 0, 0, &sess_data);
+
+		params.type		= XIO_SESSION_CLIENT;
+		params.ses_ops		= &ses_ops;
+		params.user_context	= &sess_data;
+		params.uri		= url;
+
+		sess_data.session = xio_session_create(&params);
 		if (sess_data.session == NULL) {
 			int error = xio_errno();
 			fprintf(stderr,
@@ -479,10 +494,15 @@ int run_client_test(struct perf_parameters *user_param)
 			       statistics_thread_cb, &sess_data);
 
 		/* spawn threads to handle connection */
-		for (i = 0; i < threads_iter; i++) {
-			sess_data.tdata[i].affinity		=
-				((user_param->cpu + i) % max_cpus);
-			sess_data.tdata[i].cid			= i;
+		for (i = 0, cpu = 0; i < threads_iter; i++, cpu++) {
+			while (1) {
+				if (cpusmask_test_bit(cpu, &cpusmask))
+					break;
+				if (++cpu == max_cpus)
+					cpu = 0;
+			}
+			sess_data.tdata[i].affinity		= cpu;
+			sess_data.tdata[i].cid			= 0;
 			sess_data.tdata[i].sdata		= &sess_data;
 			sess_data.tdata[i].user_param		= user_param;
 			sess_data.tdata[i].data_len		= data_len;

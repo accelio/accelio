@@ -47,7 +47,9 @@ extern int			page_size;
 extern double			g_mhz;
 extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
+extern spinlock_t		dev_list_lock;
 
+#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -60,8 +62,8 @@ extern struct list_head		dev_list;
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR)
-#define CQE_ALLOC_SIZE			(10*(MAX_SEND_WR+MAX_RECV_WR))
+#define MAX_CQE_PER_QP			MAX_SEND_WR
+#define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
@@ -84,12 +86,41 @@ extern struct list_head		dev_list;
 			(struct xio_rdma_task *)(xt)->dd_data
 
 
-#ifndef IBV_DEVICE_MR_ALLOCATE
-#  define IBV_DEVICE_MR_ALLOCATE     (1ULL<<23)
+
+#ifdef HAVE_MPAGES_EXP
+#    define IBV_XIO_ACCESS_ALLOCATE_MR		IBV_EXP_ACCESS_ALLOCATE_MR
+#    define IBV_IS_MPAGES_AVAIL(_attr)		((_attr)->exp_device_cap_flags \
+						& IBV_EXP_DEVICE_MR_ALLOCATE)
+#    define ibv_xio_device_attr			ibv_exp_device_attr
+#    define ibv_xio_query_device		ibv_exp_query_device
+#    define ibv_xio_reg_mr			ibv_exp_reg_mr
+#else
+#    ifdef HAVE_MPAGES
+#        define IBV_XIO_ACCESS_ALLOCATE_MR	IBV_ACCESS_ALLOCATE_MR
+#        define IBV_IS_MPAGES_AVAIL(_attr)	((_attr)->device_cap_flags \
+						& IBV_DEVICE_MR_ALLOCATE)
+#    else
+#        define IBV_XIO_ACCESS_ALLOCATE_MR	(0)
+#        define IBV_IS_MPAGES_AVAIL(_attr)	(0)
+#    endif
+
+#    define ibv_xio_device_attr			ibv_device_attr
+#    define ibv_xio_query_device		ibv_query_device
+
+struct ibv_exp_reg_mr_in {
+	struct ibv_pd *pd;
+	void *addr;
+	size_t length;
+	int exp_access;
+	uint32_t comp_mask;
+};
+
+static inline struct ibv_mr *ibv_xio_reg_mr(struct ibv_exp_reg_mr_in *in)
+{
+	return ibv_reg_mr(in->pd, in->addr, in->length, in->exp_access);
+}
 #endif
-#ifndef IBV_ACCESS_ALLOCATE_MR
-#  define IBV_ACCESS_ALLOCATE_MR     (1ULL<<5)
-#endif /* M-pages compatibility */
+
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -202,21 +233,6 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
-	enum xio_ib_op_code		ib_op;
-	uint32_t			phantom_idx;
-	uint32_t			recv_num_sge;
-	uint32_t			read_num_sge;
-	uint32_t			write_num_sge;
-	uint32_t			req_write_num_sge;
-	uint32_t			rsp_write_num_sge;
-	uint32_t			req_read_num_sge;
-	uint32_t			req_recv_num_sge;
-	uint16_t			sn;
-	uint16_t			more_in_batch;
-	uint8_t				rflags;
-	uint8_t				pad[7];
-
-
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */
@@ -225,11 +241,19 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
+	uint16_t			pad0;
+	uint16_t			read_num_sge;
+	uint16_t			write_num_sge;
+	uint16_t			recv_num_sge;
 	struct xio_mempool_obj		*read_sge;
 	struct xio_mempool_obj		*write_sge;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
+	uint16_t			req_read_num_sge;
+	uint16_t			req_write_num_sge;
+	uint16_t			req_recv_num_sge;
+	uint16_t			rsp_write_num_sge;
 	struct xio_sge			*req_read_sge;
 	struct xio_sge			*req_write_sge;
 
@@ -241,6 +265,12 @@ struct xio_rdma_task {
 	 */
 	struct xio_sge			*rsp_write_sge;
 
+	enum xio_ib_op_code		ib_op;
+	uint16_t			more_in_batch;
+	uint16_t			sn;
+	uint16_t			phantom_idx;
+	uint8_t				rflags;
+	uint8_t				pad[5];
 };
 
 struct xio_cq  {
@@ -272,7 +302,7 @@ struct xio_device {
 	pthread_rwlock_t		cq_lock;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
-	struct ibv_device_attr		device_attr;
+	struct ibv_xio_device_attr	device_attr;
 	struct list_head		xm_list; /* list of xio_mr_elem */
 	struct kref			kref;
 	uint32_t			kref_pad;
@@ -283,16 +313,6 @@ struct xio_mr_elem {
 	struct xio_device		*dev;
 	struct list_head		dm_list_entry; /* entry in mr list */
 	struct list_head		xm_list_entry; /* entry in dev list */
-};
-
-struct xio_mr {
-	void				*addr;  /* for new devices */
-	size_t				length; /* for new devices */
-	int				access; /* for new devices */
-	int				addr_alloced;	/* address was
-							   allocated by xio */
-	struct list_head		dm_list;
-	struct list_head		mr_list_entry;
 };
 
 struct xio_rdma_tasks_slab {
@@ -418,6 +438,7 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
+	xio_delayed_work_handle_t	timewait_timeout_work;
 };
 
 struct xio_cm_channel {

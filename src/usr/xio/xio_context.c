@@ -226,7 +226,8 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	/*pin the process to cpu */
 	xio_pin_to_cpu(cpu);
 	/* pin to the numa node of the cpu */
-	xio_pin_to_node(cpu);
+	if (0)
+		xio_pin_to_node(cpu);
 
 
 	/* allocate new context */
@@ -497,6 +498,15 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 {
 	return xio_ev_loop_add(ctx->ev_loop,
 			       fd, events, handler, data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_modify_ev_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events)
+{
+	return xio_ev_loop_modify(ctx->ev_loop, fd, events);
 }
 
 /*---------------------------------------------------------------------------*/

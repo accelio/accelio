@@ -97,6 +97,7 @@ struct test_params {
 	struct msg_params	msg_params;
 	uint64_t		nsent;
 	uint64_t		ncomp;
+	uint64_t		ndelivered;
 	int			ask_for_receipt;
 	uint16_t		finite_run;
 	uint16_t		padding;
@@ -122,12 +123,15 @@ static struct xio_test_config  test_config = {
 static void process_message(struct test_params *test_params,
 			    struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&msg->out);
+	int			onents = vmsg_sglist_nents(&msg->out);
+
 	if (test_params->stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < msg->out.data_iovlen; i++)
-			data_len += msg->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		test_params->stat.txlen = msg->out.header.iov_len + data_len;
 
@@ -137,6 +141,8 @@ static void process_message(struct test_params *test_params,
 		data_len = test_params->stat.txlen/1024;
 		test_params->stat.print_counter = (data_len ?
 				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+		if (test_params->stat.print_counter < 1000)
+			test_params->stat.print_counter = 1000;
 		test_params->disconnect_nr =
 			test_params->stat.print_counter * DISCONNECT_FACTOR;
 	}
@@ -150,6 +156,7 @@ static void process_message(struct test_params *test_params,
 		       "TX %.2f MB/s, length: TX: %zd B\n",
 		       pps, txbw,
 		       test_params->stat.txlen);
+
 		test_params->stat.cnt = 0;
 		test_params->stat.start_time = get_cpu_usecs();
 	}
@@ -208,6 +215,7 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 			    int more_in_batch, void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
+	test_params->ndelivered++;
 
 	process_message(test_params, msg);
 
@@ -215,9 +223,11 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	msg_pool_put(test_params->pool, msg);
 
 	if (test_params->finite_run) {
-		if (test_params->ncomp > test_params->disconnect_nr)
+		if ((test_params->ncomp+test_params->ndelivered) >
+		       test_params->disconnect_nr)
 			return 0;
-		if (test_params->ncomp == test_params->disconnect_nr) {
+		if ((test_params->ncomp + test_params->ndelivered) ==
+		     test_params->disconnect_nr) {
 			xio_disconnect(test_params->connection);
 			return 0;
 		}
@@ -233,7 +243,7 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
 	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
@@ -271,7 +281,6 @@ static int on_msg_send_complete(struct xio_session *session,
 				void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
-
 	process_message(test_params, msg);
 
 	test_params->ncomp++;
@@ -295,7 +304,7 @@ static int on_msg_send_complete(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
-	msg->in.data_iovlen	= 0;
+	msg->in.data_iov.nents	= 0;
 	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
@@ -510,13 +519,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	struct xio_msg		*msg;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
+	struct xio_session_params params;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -528,6 +531,7 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	memset(&test_params, 0, sizeof(struct test_params));
+	memset(&params, 0, sizeof(params));
 	test_params.stat.first_time = 1;
 	test_params.ask_for_receipt = ASK_FOR_RECEIPT;
 	test_params.finite_run = test_config.finite_run;
@@ -553,8 +557,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, &test_params);
+
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &test_params;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
@@ -577,7 +586,7 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len	= 0;
-		msg->in.data_iovlen	= 0;
+		vmsg_sglist_set_nents(&msg->in, 0);
 
 		/* assign buffers to the message */
 		msg_write(&test_params.msg_params, msg,

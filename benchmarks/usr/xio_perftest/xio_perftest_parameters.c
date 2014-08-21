@@ -167,6 +167,10 @@ void usage(const char *argv0, int status)
 	printf("\t-r, --transport=<type>");
 	printf("\t\t\t\tSet the transport type to rdma/tcp (default rdma)\n");
 
+	printf("\t-i, --interface=<name>");
+	printf("\t\t\t\tSet the interface name (default %s)\n",
+	       XIO_DEF_INTERFACE);
+
 	printf("\t-w, --portals={\"addr:port,addr:port,...\"}");
 	printf("\tSet address and port of each portal in server\n");
 
@@ -248,6 +252,7 @@ static void init_perf_params(struct perf_parameters *user_param)
 	user_param->portals_arr		= NULL;
 	user_param->portals_arr_len     = 0;
 	user_param->server_addr		= NULL;
+	user_param->intf_name		= NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -255,20 +260,32 @@ static void init_perf_params(struct perf_parameters *user_param)
 /*---------------------------------------------------------------------------*/
 void destroy_perf_params(struct perf_parameters *user_param)
 {
-	if (user_param->transport)
+	if (user_param->transport) {
 		free(user_param->transport);
+		user_param->transport = NULL;
+	}
 
 	if (user_param->portals_arr) {
 		int i;
 		for (i = 0; i < user_param->portals_arr_len; i++)
 			free(user_param->portals_arr[i]);
 		free(user_param->portals_arr);
+		user_param->portals_arr = NULL;
 	}
-	if (user_param->server_addr)
-		free(user_param->server_addr);
+	if (user_param->intf_name) {
+		free(user_param->intf_name);
+		user_param->intf_name = NULL;
+	}
 
-	if (user_param->output_file)
+	if (user_param->server_addr) {
+		free(user_param->server_addr);
+		user_param->server_addr = NULL;
+	}
+
+	if (user_param->output_file) {
 		free(user_param->output_file);
+		user_param->output_file = NULL;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -291,6 +308,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 
 		static struct option const long_options[] = {
 			{ .name = "cpu",	 .has_arg = 1, .val = 'c'},
+			{ .name = "interface",	 .has_arg = 1, .val = 'i'},
 			{ .name = "port",	 .has_arg = 1, .val = 'p'},
 			{ .name = "threads",	 .has_arg = 1, .val = 'n'},
 			{ .name = "transport",	 .has_arg = 1, .val = 'r'},
@@ -303,7 +321,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:n:r:w:t:q:o:vh";
+		static char *short_options = "c:i:p:n:r:w:t:q:o:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -401,6 +419,15 @@ int parse_cmdline(struct perf_parameters *user_param,
 				goto invalid_cmdline;
 
 		break;
+		case 'i':
+			if (optarg && !user_param->intf_name) {
+				user_param->intf_name = strdup(optarg);
+				if (!user_param->intf_name)
+					goto invalid_cmdline;
+			} else
+				goto invalid_cmdline;
+
+		break;
 		case 'v':
 			printf("version: %s\n", XIO_PERF_VERSION);
 			exit(0);
@@ -420,7 +447,6 @@ int parse_cmdline(struct perf_parameters *user_param,
 			user_param->server_addr = strdup(argv[optind]);
 			if (!user_param->server_addr)
 				goto invalid_cmdline;
-
 			user_param->machine_type = CLIENT;
 		}
 	} else if (optind < argc) {
@@ -429,6 +455,9 @@ int parse_cmdline(struct perf_parameters *user_param,
 
 	if (!user_param->transport) {
 		user_param->transport = strdup(XIO_DEF_TRANSPORT);
+	}
+	if (!user_param->intf_name) {
+		user_param->intf_name = strdup(XIO_DEF_INTERFACE);
 	}
 
 	if (portals && !user_param->portals_arr) {
@@ -475,7 +504,10 @@ void print_test_info(const struct perf_parameters *user_param)
 	if (user_param->server_addr)
 		printf(" Server Address		: %s\n",
 		       user_param->server_addr);
-	printf(" Server Port		: %d\n",
+	if (user_param->intf_name)
+		printf(" Local Interface	: %s\n",
+		       user_param->intf_name);
+		printf(" Server Port		: %d\n",
 	       user_param->server_port);
 	printf(" Transport Type		: %s\n",
 	       user_param->transport);

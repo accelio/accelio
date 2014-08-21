@@ -45,7 +45,100 @@
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_usr_transport.h"
+#include "xio_transport_mempool.h"
 #include "xio_common.h"
+
+#ifndef HAVE_INFINIBAND_VERBS_H
+
+static struct xio_mr dummy_mr;
+
+/*---------------------------------------------------------------------------*/
+/* xio_reg_mr								     */
+/*---------------------------------------------------------------------------*/
+struct xio_mr *xio_reg_mr(void *addr, size_t length)
+{
+	if (addr == NULL) {
+		xio_set_error(EINVAL);
+		return NULL;
+	}
+
+	return &dummy_mr;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_dereg_mr								     */
+/*---------------------------------------------------------------------------*/
+int xio_dereg_mr(struct xio_mr **p_tmr)
+{
+	*p_tmr = NULL;
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_alloc								     */
+/*---------------------------------------------------------------------------*/
+struct xio_buf *xio_alloc(size_t length)
+{
+	struct xio_buf		*buf;
+	size_t			real_size;
+	int			alloced = 0;
+
+	buf = ucalloc(1, sizeof(*buf));
+	if (!buf) {
+		xio_set_error(errno);
+		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
+		return NULL;
+	}
+
+	real_size = ALIGN(length, page_size);
+	buf->addr = umemalign(page_size, real_size);
+	if (!buf->addr) {
+		ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
+		goto cleanup;
+	}
+	memset(buf->addr, 0, real_size);
+	alloced = 1;
+
+	buf->mr = xio_reg_mr(&buf->addr, length);
+	if (!buf->mr) {
+		ERROR_LOG("xio_reg_mr failed. addr:%p, length:%d\n",
+			  buf->addr, length, access);
+
+		goto cleanup1;
+	}
+	buf->length = length;
+
+	return buf;
+
+cleanup1:
+	if (alloced)
+		ufree(buf->addr);
+
+cleanup:
+	ufree(buf);
+	return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_free								     */
+/*---------------------------------------------------------------------------*/
+int xio_free(struct xio_buf **buf)
+{
+	struct xio_mr		*tmr = (*buf)->mr;
+	int			retval = 0;
+
+	if ((*buf)->addr)
+		ufree((*buf)->addr);
+
+	retval = xio_dereg_mr(&tmr);
+
+	ufree(*buf);
+	*buf = NULL;
+
+	return retval;
+}
+
+#endif /*HAVE_INFINIBAND_VERBS_H*/
 
 /*---------------------------------------------------------------------------*/
 /* xio_transport_mempool_array_init					     */
@@ -109,7 +202,7 @@ struct xio_mempool *xio_transport_mempool_array_get(
 	if (mempool_array[ctx->nodeid])
 		return mempool_array[ctx->nodeid];
 
-	mempool_array[ctx->nodeid] = xio_mempool_create(
+	mempool_array[ctx->nodeid] = xio_mempool_create_prv(
 			ctx->nodeid,
 			(reg_mr ? XIO_MEMPOOL_FLAG_REG_MR : 0) |
 			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);

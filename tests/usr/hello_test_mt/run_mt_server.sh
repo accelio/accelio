@@ -31,6 +31,6 @@ else
 	trans=$4
 fi
 
-./xio_mt_server -c 6 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip} -t 0
+./xio_mt_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip} -t 0
 
 

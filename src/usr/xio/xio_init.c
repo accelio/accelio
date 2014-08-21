@@ -48,11 +48,15 @@
 int	page_size;
 double	g_mhz;
 
+#ifdef HAVE_INFINIBAND_VERBS_H
 extern struct xio_transport xio_rdma_transport;
+#endif
 extern struct xio_transport xio_tcp_transport;
 
 static struct xio_transport  *transport_tbl[] = {
+#ifdef HAVE_INFINIBAND_VERBS_H
 	&xio_rdma_transport,
+#endif
 	&xio_tcp_transport
 };
 

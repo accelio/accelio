@@ -76,6 +76,7 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
+static struct xio_buf		*xbuf;
 static struct msg_params	msg_params;
 
 
@@ -99,12 +100,13 @@ static void process_request(struct xio_msg *msg)
 		cnt = 0;
 		return;
 	}
-
 	if (++cnt == PRINT_COUNTER) {
+		struct xio_iovec_ex *sglist = vmsg_sglist(&msg->in);
+
 		printf("**** message [%lu] %s - %s\n",
 		       (msg->sn+1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)sglist[0].iov_base);
 		cnt = 0;
 	}
 }
@@ -162,13 +164,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 {
 	struct xio_msg	*rsp;
 
-	if (req->status) {
-		printf("**** request completed with error. [%s]\n",
-		       xio_strerror(req->status));
-		xio_assert(req->status == 0);
-	}
-
-
 	/* process request */
 	process_request(req);
 
@@ -218,31 +213,33 @@ int on_msg_error(struct xio_session *session,
 
 	msg_pool_put(pool, msg);
 
+	switch (error) {
+	case XIO_E_MSG_DISCARDED:
+	case XIO_E_MSG_FLUSHED:
+		break;
+	default:
+		/* need to send response here */
+		xio_assert(0);
+		break;
+	};
+
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	static int first_time = 1;
-	static char *buf;
-	static struct xio_mr *mr;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	msg->in.data_iovlen = 1;
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (xbuf == NULL)
+		xbuf = xio_alloc(XIO_READ_BUF_LEN);
 
-	if (first_time) {
-		msg->in.data_iov[0].iov_base = calloc(XIO_READ_BUF_LEN, 1);
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = xio_reg_mr(
-				msg->in.data_iov[0].iov_base,
-				msg->in.data_iov[0].iov_len);
-		buf = msg->in.data_iov[0].iov_base;
-		mr = msg->in.data_iov[0].mr;
-		first_time = 0;
-	} else {
-		msg->in.data_iov[0].iov_base = buf;
-		msg->in.data_iov[0].iov_len = XIO_READ_BUF_LEN;
-		msg->in.data_iov[0].mr = mr;
-	}
+	sglist[0].iov_base = xbuf->addr;
+	sglist[0].mr =	xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
 }
@@ -409,7 +406,7 @@ int main(int argc, char *argv[])
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
-
+	xbuf = NULL;
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
@@ -446,6 +443,11 @@ int main(int argc, char *argv[])
 	if (pool)
 		msg_pool_free(pool);
 	pool = NULL;
+
+	if (xbuf) {
+		xio_free(&xbuf);
+		xbuf = NULL;
+	}
 
 	xio_context_destroy(ctx);
 

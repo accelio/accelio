@@ -48,7 +48,6 @@
 #define TEST_DISCONNECT		1
 #define DISCONNECT_NR		3000000
 
-
 struct thread_data {
 	int			cid;
 	int			affinity;
@@ -98,7 +97,7 @@ static void *worker_thread(void *data)
 		tdata->affinity);
 	tdata->req.out.header.iov_base = strdup(str);
 	tdata->req.out.header.iov_len =
-		strlen(tdata->req.out.header.iov_base);
+		strlen(tdata->req.out.header.iov_base) + 1;
 
 	/* send first message */
 	xio_send_request(tdata->conn, &tdata->req);
@@ -133,9 +132,6 @@ static void process_response(struct thread_data  *tdata,
 		       (rsp->request->sn + 1), (char *)rsp->in.header.iov_base);
 		tdata->cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -195,7 +191,9 @@ static int on_response(struct xio_session *session,
 	if (tdata->nsent == DISCONNECT_NR)
 		return 0;
 #endif
-
+	tdata->req.in.header.iov_base	  = NULL;
+	tdata->req.in.header.iov_len	  = 0;
+	vmsg_sglist_set_nents(&tdata->req.in, 0);
 
 	/* resend the message */
 	xio_send_request(tdata->conn, &tdata->req);
@@ -222,32 +220,31 @@ int main(int argc, char *argv[])
 	int			i;
 	char			url[256];
 	struct session_data	session_data;
+	struct xio_session_params params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
 		       argv[0]);
 		exit(1);
 	}
+	memset(&session_data, 0, sizeof(session_data));
+	memset(&params, 0, sizeof(params));
 
 	xio_init();
 
-	memset(&session_data, 0, sizeof(session_data));
 	/* create url to connect to */
 	if (argc > 3)
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session_data.session = xio_session_create(XIO_SESSION_CLIENT,
-						&attr, url,
-						0, 0, &session_data);
 
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &session_data;
+	params.uri		= url;
+
+	session_data.session = xio_session_create(&params);
 	if (session_data.session == NULL)
 		goto cleanup;
 

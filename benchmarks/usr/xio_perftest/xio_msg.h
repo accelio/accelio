@@ -83,6 +83,7 @@ void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
 void msg_pool_free(struct msg_pool *pool);
 
 struct perf_buf *xio_buf_alloc(size_t size);
+
 void  xio_buf_free(struct perf_buf *pbuf);
 
 

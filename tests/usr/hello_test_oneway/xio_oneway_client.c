@@ -59,9 +59,10 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_OUTSTANDING_REQS	50
 #define DISCONNECT_FACTOR	3
-
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
+#define XIO_READ_BUF_LEN	ONE_MB
+
 
 struct xio_test_config {
 	char			server_addr[32];
@@ -86,6 +87,7 @@ struct ow_test_stat {
 
 struct ow_test_params {
 	struct msg_pool		*pool;
+	struct xio_buf		*xbuf;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
 	struct ow_test_stat	rx_stat;
@@ -116,13 +118,17 @@ static struct xio_test_config  test_config = {
 static void process_rx_message(struct ow_test_params *ow_params,
 			       struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*isglist = vmsg_sglist(&msg->in);
+	int			inents = vmsg_sglist_nents(&msg->in);
+
+
 	if (ow_params->rx_stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
 		data_len = 0;
-		for (i = 0; i < msg->in.data_iovlen; i++)
-			data_len += msg->in.data_iov[i].iov_len;
+		for (i = 0; i < inents; i++)
+			data_len += isglist[i].iov_len;
 
 		ow_params->rx_stat.xlen = msg->in.header.iov_len + data_len;
 
@@ -132,6 +138,8 @@ static void process_rx_message(struct ow_test_params *ow_params,
 		data_len = ow_params->rx_stat.xlen/1024;
 		ow_params->rx_stat.print_counter = data_len ?
 			PRINT_COUNTER/data_len : PRINT_COUNTER;
+		if (ow_params->rx_stat.print_counter < 1000)
+			ow_params->rx_stat.print_counter = 1000;
 	}
 	if (++ow_params->rx_stat.cnt == ow_params->rx_stat.print_counter) {
 		char		timeb[40];
@@ -149,7 +157,7 @@ static void process_rx_message(struct ow_test_params *ow_params,
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (msg->sn + 1),
 		       (char *)msg->in.header.iov_base,
-		       (char *)msg->in.data_iov[0].iov_base);
+		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		ow_params->rx_stat.cnt = 0;
 		ow_params->rx_stat.start_time = get_cpu_usecs();
 	}
@@ -162,12 +170,15 @@ static void process_rx_message(struct ow_test_params *ow_params,
 static void process_tx_message(struct ow_test_params *ow_params,
 			       struct xio_msg *msg)
 {
+	struct xio_iovec_ex	*osglist = vmsg_sglist(&msg->out);
+	int			onents = vmsg_sglist_nents(&msg->out);
+
 	if (ow_params->tx_stat.first_time) {
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < msg->out.data_iovlen; i++)
-			data_len += msg->out.data_iov[i].iov_len;
+		for (i = 0; i < onents; i++)
+			data_len += osglist[i].iov_len;
 
 		ow_params->tx_stat.xlen = msg->out.header.iov_len + data_len;
 
@@ -177,6 +188,8 @@ static void process_tx_message(struct ow_test_params *ow_params,
 		data_len = ow_params->tx_stat.xlen/1024;
 		ow_params->tx_stat.print_counter = data_len ?
 			PRINT_COUNTER/data_len : PRINT_COUNTER;
+		if (ow_params->tx_stat.print_counter < 1000)
+			ow_params->tx_stat.print_counter = 1000;
 		ow_params->disconnect_nr =
 			ow_params->tx_stat.print_counter * DISCONNECT_FACTOR;
 	}
@@ -196,7 +209,7 @@ static void process_tx_message(struct ow_test_params *ow_params,
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (msg->sn + 1),
 		       (char *)msg->out.header.iov_base,
-		       (char *)msg->out.data_iov[0].iov_base);
+		       (char *)(onents > 0 ? osglist[0].iov_base : NULL));
 		ow_params->tx_stat.cnt = 0;
 		ow_params->tx_stat.start_time = get_cpu_usecs();
 	}
@@ -315,12 +328,6 @@ static int on_server_message(struct xio_session *session,
 	/* process the incoming message */
 	process_rx_message(ow_params, msg);
 
-	if (msg->status) {
-		printf("**** message completed with error. [%s]\n",
-		       xio_strerror(msg->status));
-		xio_assert(msg->status == 0);
-	}
-
 	/* message is no longer needed */
 	xio_release_msg(msg);
 
@@ -343,6 +350,26 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	struct ow_test_params	*ow_params = cb_user_context;
+
+	vmsg_sglist_set_nents(&msg->in, 1);
+	if (ow_params->xbuf == NULL)
+		ow_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+
+	sglist[0].iov_base = ow_params->xbuf->addr;
+	sglist[0].mr = ow_params->xbuf->mr;
+	sglist[0].iov_len = XIO_READ_BUF_LEN;
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -352,7 +379,8 @@ static struct xio_session_ops ses_ops = {
 	.on_msg				=  on_server_message,
 	.on_msg_send_complete		=  NULL,
 	.on_msg_delivered		=  on_message_delivered,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
 
 /*---------------------------------------------------------------------------*/
@@ -512,13 +540,8 @@ int main(int argc, char *argv[])
 	char			url[256];
 	struct xio_msg		*msg;
 	int			i = 0;
+	struct xio_session_params params;
 
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops,
-		NULL,
-		0
-	};
 	/* parse the command line */
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -532,6 +555,7 @@ int main(int argc, char *argv[])
 	xio_init();
 
 	memset(&ow_params, 0, sizeof(ow_params));
+	memset(&params, 0, sizeof(params));
 	ow_params.rx_stat.first_time = 1;
 	ow_params.tx_stat.first_time = 1;
 	ow_params.finite_run = test_config.finite_run;
@@ -560,8 +584,13 @@ int main(int argc, char *argv[])
 		test_config.transport,
 		test_config.server_addr,
 		test_config.server_port);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0,  &ow_params);
+
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= &ow_params;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 	if (session == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
@@ -633,6 +662,12 @@ int main(int argc, char *argv[])
 
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
+
+	if (ow_params.xbuf) {
+		xio_free(&ow_params.xbuf);
+		ow_params.xbuf = NULL;
+	}
+
 cleanup:
 	msg_api_free(&ow_params.msg_params);
 

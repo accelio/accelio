@@ -117,6 +117,18 @@ int xio_ev_loop_add(void *loop,
 		    void *data);
 
 /**
+ * modify event handlers on dispatcher
+ *
+ * @param[in] loop	the dispatcher context
+ * @param[in] fd	the file descriptor
+ * @param[in] events	the event signaled as defined in
+ *			enum xio_ev_loop_events
+ *
+ * @returns	success (0), or a (negative) error value
+ */
+int xio_ev_loop_modify(void *loop_hndl, int fd, int events);
+
+/**
  * delete event handlers from dispatcher
  *
  * @param[in] loop	the dispatcher context

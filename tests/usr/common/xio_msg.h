@@ -58,7 +58,8 @@ struct msg_pool {
 	struct xio_msg				**stack_end;
 
 	/* max number of elements */
-	size_t					max;
+	uint32_t				max;
+	uint32_t				free;
 };
 
 
@@ -109,7 +110,6 @@ void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
 /* msg_pool_free							     */
 /*---------------------------------------------------------------------------*/
 void msg_pool_free(struct msg_pool *pool);
-
 
 
 #endif /* #define MSG_API_H */

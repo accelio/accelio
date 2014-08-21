@@ -93,9 +93,12 @@ static void process_response(struct xio_msg *rsp)
 			(char *)rsp->in.header.iov_base);
 		cnt = 0;
 	}
-	rsp->in.header.iov_base	  = NULL;
-	rsp->in.header.iov_len	  = 0;
-	rsp->in.data_iovlen	  = 0;
+
+	/* Client didn't allocate this memory */
+	rsp->in.header.iov_base = NULL;
+	rsp->in.header.iov_len  = 0;
+	/* Client didn't allocate in data table to reset it */
+	memset(&rsp->in.data_tbl, 0, sizeof(rsp->in.data_tbl));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -200,17 +203,11 @@ static int xio_client_main(void *data)
 	char **argv = (char **)data;
 
 	struct xio_session	*session;
+	struct xio_session_params params;
 	char			url[256];
 	struct xio_context	*ctx;
 	struct session_data	*session_data;
 	int			i = 0;
-
-	/* client session attributes */
-	struct xio_session_attr attr = {
-		&ses_ops, /* callbacks structure */
-		NULL,	  /* no need to pass the server private data */
-		0
-	};
 
 	atomic_add(2, &module_state);
 
@@ -232,8 +229,14 @@ static int xio_client_main(void *data)
 
 	/* create url to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-	session = xio_session_create(XIO_SESSION_CLIENT,
-				     &attr, url, 0, 0, session_data);
+
+	memset(&params, 0, sizeof(params));
+	params.type		= XIO_SESSION_CLIENT;
+	params.ses_ops		= &ses_ops;
+	params.user_context	= session_data;
+	params.uri		= url;
+
+	session = xio_session_create(&params);
 
 	/* connect the session  */
 	session_data->session = session;
@@ -242,18 +245,26 @@ static int xio_client_main(void *data)
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
+		struct xio_vmsg *omsg;
+		void *buf;
+
+		omsg = &session_data->req[i].out;
+
 		memset(&session_data->req[i], 0, sizeof(session_data->req[i]));
+
 		/* header */
-		session_data->req[i].out.header.iov_base =
-			kstrdup("hello world header request", GFP_KERNEL);
-		session_data->req[i].out.header.iov_len =
-			strlen(session_data->req[i].out.header.iov_base);
+		buf = kstrdup("hello world header request", GFP_KERNEL);
+		session_data->req[i].out.header.iov_base = buf;
+		session_data->req[i].out.header.iov_len = strlen(buf) + 1;
 		/* iovec[0]*/
-		session_data->req[i].out.data_iov[0].iov_base =
-			kstrdup("hello world iovec request", GFP_KERNEL);
-		session_data->req[i].out.data_iov[0].iov_len =
-			strlen(session_data->req[i].out.data_iov[0].iov_base);
-		session_data->req[i].out.data_iovlen = 1;
+		omsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+		sg_alloc_table(&omsg->data_tbl, XIO_IOVLEN, GFP_KERNEL);
+
+		/* currently only one entry */
+		buf = kstrdup("hello world iovec request", GFP_KERNEL);
+		sg_init_one(omsg->data_tbl.sgl, buf, strlen(buf) + 1);
+		/* orig_nents is XIO_IOVLEN */
+		omsg->data_tbl.nents = 1;
 	}
 
 	/* send first message */
@@ -273,7 +284,9 @@ static int xio_client_main(void *data)
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(session_data->req[i].out.header.iov_base);
-		kfree(session_data->req[i].out.data_iov[0].iov_base);
+		/* Currently need to release only one entry */
+		kfree(sg_virt(session_data->req[i].out.data_tbl.sgl));
+		sg_free_table(&session_data->req[i].out.data_tbl);
 	}
 
 	/* free the context */

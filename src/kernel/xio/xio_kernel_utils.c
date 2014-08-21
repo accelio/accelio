@@ -39,6 +39,7 @@
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
+#include "xio_sg_table.h"
 
 #include <linux/kernel.h>
 #include <linux/topology.h>
@@ -97,7 +98,6 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 }
 
 #define NI_MAXSERV 32
-#define NI_MAXHOST 1025
 
 /*---------------------------------------------------------------------------*/
 /* xio_uri_to_ss							     */
@@ -105,7 +105,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 {
 	char		*start;
-	char		host[NI_MAXHOST];
+	char		*host = NULL;
 	char		port[NI_MAXSERV];
 	unsigned long	portul;
 	unsigned short	port16;
@@ -126,7 +126,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			return -1;
 
 		len = p1-(start+4);
-		strncpy(host, (start + 4), len);
+		host = kstrndup((char *)(start + 4), len, GFP_KERNEL);
 		host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
@@ -146,22 +146,22 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				p2 = p1;
 			p1--;
 			if (p1 == uri)
-				return  -1;
+				goto cleanup;
 		}
 
 		if (p2 == NULL) { /* no resource */
 			p1 = strrchr(uri, ':');
 			if (p1 == NULL || p1 == start)
-				return -1;
+				goto cleanup;
 			strcpy(port, (p1 + 1));
 		} else {
 			if (*p2 != '/')
-				return -1;
+				goto cleanup;
 			p1 = p2;
 			while (*p1 != ':') {
 				p1--;
 				if (p1 == uri)
-					return  -1;
+					goto cleanup;
 			}
 
 			len = p2 - (p1 + 1);
@@ -172,7 +172,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 		len = p1 - (start + 3);
 
 		/* extract the address */
-		strncpy(host, (start + 3), len);
+		host = kstrndup((char *)(start + 3), len, GFP_KERNEL);
 		host[len] = 0;
 	}
 
@@ -181,16 +181,16 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	if (strict_strtoul(port, 10, &portul)) {
 		ERROR_LOG("Invalid port specification(%s)\n", port);
-		return -1;
+		goto cleanup;
 	}
 	if (portul > 0xFFFF) {
 		ERROR_LOG("Invalid port specification(%s)\n", port);
-		return -1;
+		goto cleanup;
 	}
 	port16 = portul;
 	port_be16 = htons(port16);
 
-	if (host[0] == '*' || host[0] == 0) {
+	if (!host || (host && (host[0] == '*' || host[0] == 0))) {
 		if (ipv6_hint) {
 			struct sockaddr_in6 *s6 = (struct sockaddr_in6 *) ss;
 			/* what about scope and flow */
@@ -207,11 +207,16 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	} else {
 		if (priv_parse_ip_addr(host, len, port_be16, ss) < 0) {
 			ERROR_LOG("unresolved address\n");
-			return -1;
+			goto cleanup;
 		}
 	}
 
+	kfree(host);
 	return 0;
+
+cleanup:
+	kfree(host);
+	return -1;
 }
 
 int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
@@ -231,10 +236,12 @@ unsigned int xio_get_nodeid(unsigned int cpu_id)
 void xio_msg_dump(struct xio_msg *xio_msg)
 {
 	int i;
+	struct  xio_sg_table_ops *sgtbl_ops;
+	void			 *sgtbl;
+	void			 *sge;
 
 	ERROR_LOG("*********************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
-	ERROR_LOG("status:%d\n", xio_msg->status);
 	if (xio_msg->type == XIO_MSG_TYPE_REQ)
 		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
@@ -242,25 +249,36 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 			  xio_msg->request,
 			  ((xio_msg->request) ? xio_msg->request->sn : -1));
 
+	sgtbl		= xio_sg_table_get(&xio_msg->in);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);
+
 	ERROR_LOG("in header: length:%zd, address:%p\n",
 		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
-	ERROR_LOG("in data type:%d iovsz:%zd\n",xio_msg->in.data_type,
-		  xio_msg->in.data_iovsz);
-	ERROR_LOG("in data size:%zd\n", xio_msg->in.data_iovlen);
-	for (i = 0; i < xio_msg->in.data_iovlen; i++)
+	ERROR_LOG("in sgl type:%d iovsz:%d\n",xio_msg->in.sgl_type,
+		  tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("in data size:%d\n",
+		  tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		ERROR_LOG("in data[%d]: length:%zd, address:%p\n", i,
-			  xio_msg->in.pdata_iov[i].iov_len,
-			  xio_msg->in.pdata_iov[i].iov_base);
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge));
+	}
+
+	sgtbl		= xio_sg_table_get(&xio_msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->out.sgl_type);
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
 		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
-	ERROR_LOG("out data type:%d iovsz:%zd\n",xio_msg->out.data_type,
-		  xio_msg->out.data_iovsz);
-	ERROR_LOG("out data size:%zd\n", xio_msg->out.data_iovlen);
-	for (i = 0; i < xio_msg->out.data_iovlen; i++)
+	ERROR_LOG("out sgl type:%d iovsz:%d\n",xio_msg->out.sgl_type,
+		 tbl_max_nents(sgtbl_ops, sgtbl));
+	ERROR_LOG("out data size:%d\n", tbl_nents(sgtbl_ops, sgtbl));
+
+	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		ERROR_LOG("out data[%d]: length:%zd, address:%p\n", i,
-			  xio_msg->out.pdata_iov[i].iov_len,
-			  xio_msg->out.pdata_iov[i].iov_base);
+			  sge_length(sgtbl_ops, sge),
+			  sge_addr(sgtbl_ops, sge));
+	}
 	ERROR_LOG("*********************************************\n");
 }
 
