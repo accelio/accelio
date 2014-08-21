@@ -64,6 +64,7 @@
 #define MAX_OUTSTANDING_REQS	50
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
+#define	CHAIN_MESSAGES		0
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
@@ -92,10 +93,18 @@ struct test_stat {
 	size_t			txlen;
 };
 
+struct chain_list {
+	struct xio_msg		*head;
+	struct xio_msg		*tail;
+	int			sz;
+	int			pad;
+};
+
 struct test_params {
 	struct msg_pool		*pool;
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
+	struct chain_list	chain;
 	struct test_stat	stat;
 	struct msg_params	msg_params;
 	uint64_t		nsent;
@@ -255,6 +264,7 @@ static int on_response(struct xio_session *session,
 {
 	struct test_params	*test_params = cb_user_context;
 	struct xio_iovec_ex	*sglist;
+	static int		chain_messages = CHAIN_MESSAGES;
 	int			j;
 
 	test_params->nrecv++;
@@ -303,18 +313,45 @@ static int on_response(struct xio_session *session,
 		  test_config.out_iov_len, test_config.data_len);
 
 
-	/* try to send it */
-	/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
-	if (xio_send_request(test_params->connection, msg) == -1) {
-		if (xio_errno() != EAGAIN)
-			printf("**** [%p] Error - xio_send_request " \
-					"failed %s\n",
-					session,
-					xio_strerror(xio_errno()));
-		msg_pool_put(test_params->pool, msg);
-		xio_assert(xio_errno() == EAGAIN);
+
+	if (chain_messages) {
+		msg->next = NULL;
+		if (test_params->chain.head  == NULL) {
+			test_params->chain.head = msg;
+			test_params->chain.tail = test_params->chain.head;
+		} else {
+			test_params->chain.tail->next = msg;
+			test_params->chain.tail = test_params->chain.tail->next;
+		}
+		if (++test_params->chain.sz == MAX_OUTSTANDING_REQS) {
+			if (xio_send_request(test_params->connection,
+					     test_params->chain.head) == -1) {
+				if (xio_errno() != EAGAIN)
+					printf("**** [%p] Error - xio_send_request " \
+							"failed %s\n",
+							session,
+							xio_strerror(xio_errno()));
+				msg_pool_put(test_params->pool, msg);
+				xio_assert(xio_errno() == EAGAIN);
+			}
+			test_params->nsent += test_params->chain.sz;
+			test_params->chain.head = NULL;
+			test_params->chain.sz = 0;
+		}
+	} else {
+		/* try to send it */
+		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
+		if (xio_send_request(test_params->connection, msg) == -1) {
+			if (xio_errno() != EAGAIN)
+				printf("**** [%p] Error - xio_send_request " \
+						"failed %s\n",
+						session,
+						xio_strerror(xio_errno()));
+			msg_pool_put(test_params->pool, msg);
+			xio_assert(xio_errno() == EAGAIN);
+		}
+		test_params->nsent++;
 	}
-	test_params->nsent++;
 
 	return 0;
 }
@@ -525,21 +562,137 @@ static void print_test_config(
 	printf(" Finite run		: %x\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
+
+/*---------------------------------------------------------------------------*/
+/* send_one_by_one							     */
+/*---------------------------------------------------------------------------*/
+int send_one_by_one(struct test_params *test_params)
+{
+	struct xio_iovec_ex	*sglist;
+	struct xio_msg		*msg;
+	int			i;
+	int			j;
+
+	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
+		/* create transaction */
+		msg = msg_pool_get(test_params->pool);
+		if (msg == NULL)
+			break;
+
+		/* get pointers to internal buffers */
+		msg->in.header.iov_base = NULL;
+		msg->in.header.iov_len = 0;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
+
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			sglist[j].iov_base = NULL;
+			sglist[j].iov_len  = ONE_MB;
+			sglist[j].mr = NULL;
+		}
+
+		/* assign buffers to the message */
+		msg_write(&test_params->msg_params, msg,
+			  test_config.hdr_len,
+			  test_config.out_iov_len, test_config.data_len);
+
+		/* try to send it */
+		if (xio_send_request(test_params->connection, msg) == -1) {
+			printf("**** sent %d messages\n", i);
+			if (xio_errno() != EAGAIN)
+				printf("**** connection:%p - " \
+					"Error - xio_send_request " \
+					"failed. %s\n",
+					test_params->connection,
+					xio_strerror(xio_errno()));
+			msg_pool_put(test_params->pool, msg);
+			return -1;
+		}
+		test_params->nsent++;
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* send_chained								     */
+/*---------------------------------------------------------------------------*/
+int send_chained(struct test_params *test_params)
+{
+	struct xio_iovec_ex	*sglist;
+	struct xio_msg		*msg, *head = NULL, *tail;
+	int			i;
+	int			j;
+	int			nsent = 0;
+
+	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
+		/* create transaction */
+		msg = msg_pool_get(test_params->pool);
+		if (msg == NULL)
+			break;
+
+		/* get pointers to internal buffers */
+		msg->in.header.iov_base = NULL;
+		msg->in.header.iov_len = 0;
+
+		sglist = vmsg_sglist(&msg->in);
+		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
+
+		for (j = 0; j < test_config.in_iov_len; j++) {
+			sglist[j].iov_base = NULL;
+			sglist[j].iov_len  = ONE_MB;
+			sglist[j].mr = NULL;
+		}
+
+		/* assign buffers to the message */
+		msg_write(&test_params->msg_params, msg,
+			  test_config.hdr_len,
+			  test_config.out_iov_len, test_config.data_len);
+
+		msg->next = NULL;
+
+		/* append the message */
+		if (head == NULL) {
+			head = msg;
+			tail = head;
+		} else {
+			tail->next = msg;
+			tail = tail->next;
+		}
+
+		nsent++;
+	}
+
+	/* try to send it */
+	if (xio_send_request(test_params->connection, head) == -1) {
+		printf("**** sent %d messages\n", i);
+		if (xio_errno() != EAGAIN)
+			printf("**** connection:%p - " \
+					"Error - xio_send_request " \
+					"failed. %s\n",
+					test_params->connection,
+					xio_strerror(xio_errno()));
+		msg_pool_put(test_params->pool, msg);
+		return -1;
+	}
+
+	test_params->nsent += nsent;
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* main									     */
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	struct test_params	test_params;
-	struct xio_iovec_ex	*sglist;
-	int			error;
-	int			retval;
-	char			url[256];
-	struct xio_msg		*msg;
-	int			i = 0;
-	int			j = 0;
-	struct xio_session_params params;
+	char				url[256];
+	struct xio_session		*session;
+	struct test_params		test_params;
+	struct xio_session_params	params;
+	int				error;
+	int				retval;
+	static int			chain_messages = CHAIN_MESSAGES;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -606,43 +759,13 @@ int main(int argc, char *argv[])
 					     NULL, &test_params);
 
 	printf("**** starting ...\n");
-	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
-		/* create transaction */
-		msg = msg_pool_get(test_params.pool);
-		if (msg == NULL)
-			break;
 
-		/* get pointers to internal buffers */
-		msg->in.header.iov_base = NULL;
-		msg->in.header.iov_len = 0;
+	if (chain_messages)
+		retval = send_chained(&test_params);
+	else
+		retval = send_one_by_one(&test_params);
 
-		sglist = vmsg_sglist(&msg->in);
-		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
-
-		for (j = 0; j < test_config.in_iov_len; j++) {
-			sglist[j].iov_base = NULL;
-			sglist[j].iov_len  = ONE_MB;
-			sglist[j].mr = NULL;
-		}
-
-		/* assign buffers to the message */
-		msg_write(&test_params.msg_params, msg,
-			  test_config.hdr_len,
-			  test_config.out_iov_len, test_config.data_len);
-
-		/* try to send it */
-		if (xio_send_request(test_params.connection, msg) == -1) {
-			printf("**** sent %d messages\n", i);
-			if (xio_errno() != EAGAIN)
-				printf("**** [%p] Error - xio_send_request " \
-				       "failed. %s\n",
-					session,
-					xio_strerror(xio_errno()));
-			msg_pool_put(test_params.pool, msg);
-			xio_assert(xio_errno() == EAGAIN);
-		}
-		test_params.nsent++;
-	}
+	xio_assert(retval == 0);
 
 	/* the default xio supplied main loop */
 	retval = xio_context_run_loop(test_params.ctx, XIO_INFINITE);
@@ -655,6 +778,7 @@ int main(int argc, char *argv[])
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
+
 
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
