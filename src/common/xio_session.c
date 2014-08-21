@@ -730,7 +730,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_task		*sender_task = task->sender_task;
 	struct xio_statistics	*stats = &connection->ctx->stats;
 
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
+	if ((connection->state != XIO_CONNECTION_STATE_ONLINE) &&
+	    (connection->state != XIO_CONNECTION_STATE_FIN_WAIT_1)) {
 		DEBUG_LOG("responses received while connection is offline\n");
 		/* for various reasons, responses can arrive while connection
 		 * is already offline
