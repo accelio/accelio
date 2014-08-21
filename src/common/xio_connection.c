@@ -362,6 +362,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->connection	= connection;
 	task->omsg		= msg;
 	task->omsg_flags	= msg->flags;
+	task->omsg->next	= NULL;
 
 	/* mark as a control message */
 	task->is_control = !IS_APPLICATION_MSG(msg);
