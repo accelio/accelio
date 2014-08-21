@@ -50,10 +50,11 @@
 #define NSECS_IN_USEC		1000
 
 #define xio_assert(cond)	do {					\
-	if (!(cond))							\
+	if (!(cond)) {							\
 		fprintf(stderr, "%s:%d assertion failed - ("#cond")\n",	\
 			__func__, __LINE__);				\
-	exit(-1);							\
+		exit(-1);						\
+	}								\
 } while (0)
 
 /**
