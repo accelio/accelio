@@ -400,7 +400,7 @@ struct xio_rdma_transport {
 	uint16_t			max_exp_sn; /* upper edge of
 						       receiver's window + 1 */
 
-	uint16_t			pad1;
+	uint16_t			timewait; /* flag */
 
 	/* control path params */
 	int				sq_depth;     /* max snd allowed  */

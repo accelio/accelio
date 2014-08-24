@@ -1942,6 +1942,9 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 {
 	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
 
+	if (rdma_hndl->timewait)
+		return;
+
 	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
 		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 					 &rdma_hndl->timewait_timeout_work);
@@ -1960,6 +1963,7 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 					      NULL);
 		rdma_hndl->state = XIO_STATE_DESTROYED;
 	}
+	rdma_hndl->timewait++;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1968,7 +1972,6 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 static inline void xio_timewait_exit_timeout(void *data)
 {
 	WARN_LOG("\"timewait exit\" timeout. rdma_hndl:%p\n", data);
-
 	on_cm_timewait_exit(NULL, data);
 }
 
@@ -1992,6 +1995,8 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 			DEBUG_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
 	}
+
+	rdma_hndl->timewait = 0;
 
 	/* trigger the timer */
 	retval = xio_ctx_add_delayed_work(
