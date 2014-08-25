@@ -939,17 +939,6 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 int xio_unbind(struct xio_server *server);
 
 /**
- * xio_get_connection - return connection handle on server.
- *
- * @session: The xio session handle.
- * @ctx: the xio context handle.
- *
- * RETURNS: xio session context, or NULL upon error.
- */
-struct xio_connection *xio_get_connection(struct xio_session  *session,
-					  struct xio_context  *ctx);
-
-/**
  * accept new session or "light redirect" it to anther thread
  *
  * @param[in] session		The xio session handle

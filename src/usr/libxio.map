@@ -39,7 +39,6 @@ XIO_1.0 {
 		xio_accept;		
 		xio_redirect;
 		xio_reject;
-		xio_get_connection;
 		xio_bind;		
 		xio_unbind;
 		xio_poll_completions;
