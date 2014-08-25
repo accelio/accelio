@@ -1260,6 +1260,10 @@ static void xio_fin_req_timeout(void *data)
 {
 	struct xio_connection *connection = data;
 
+	if (connection->fin_req_timeout)
+		return;
+
+	connection->fin_req_timeout++;
 	ERROR_LOG("connection close timeout. session:%p, connection:%p\n",
 		  connection->session, connection);
 
@@ -1310,6 +1314,7 @@ static int xio_send_fin_req(struct xio_connection *connection)
 		  connection->session, connection);
 
 	/* trigger the timer */
+	connection->fin_req_timeout = 0;
 	retval = xio_ctx_add_delayed_work(
 				connection->ctx,
 				XIO_CONNECTION_TIMEOUT, connection,
