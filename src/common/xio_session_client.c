@@ -73,14 +73,15 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 
 	/* fill the message */
 	msg = buf;
-	msg->out.header.iov_base = msg + 1;
+	buf = msg + sizeof(*msg);
+	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
-	msg->out.sgl_type = XIO_SGL_TYPE_IOV;
-	msg->out.data_iov.nents = 1;
-	msg->out.data_iov.max_nents = XIO_IOVLEN;
-	msg->in.sgl_type = XIO_SGL_TYPE_IOV;
+	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
+	msg->out.data_iov.nents = 0;
+	msg->out.data_iov.max_nents = 0;
+	msg->in.sgl_type = XIO_SGL_TYPE_IOV_PTR;
 	msg->in.data_iov.nents = 0;
-	msg->in.data_iov.max_nents = XIO_IOVLEN;
+	msg->in.data_iov.max_nents = 0;
 
 	ptr = msg->out.header.iov_base;
 	len = 0;
