@@ -73,15 +73,17 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 
 	/* fill the message */
 	msg = buf;
-	buf = msg + sizeof(*msg);
+	buf = buf + sizeof(*msg);
 	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
 	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->out.data_iov.nents = 0;
-	msg->out.data_iov.max_nents = 0;
+	msg->out.pdata_iov.nents = 0;
+	msg->out.pdata_iov.max_nents = 0;
 	msg->in.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->in.data_iov.nents = 0;
-	msg->in.data_iov.max_nents = 0;
+	msg->in.pdata_iov.nents = 0;
+	msg->in.pdata_iov.max_nents = 0;
+
+	msg->type = XIO_SESSION_SETUP_REQ;
 
 	ptr = msg->out.header.iov_base;
 	len = 0;
@@ -115,7 +117,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	if (msg->out.header.iov_len > SETUP_BUFFER_LEN)  {
 		ERROR_LOG("primary task pool is empty\n");
 		xio_set_error(XIO_E_MSG_SIZE);
-		kfree(buf);
+		kfree(msg);
 		return NULL;
 	}
 
@@ -735,7 +737,6 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			return -1;
 		}
 
-		msg->type = XIO_SESSION_SETUP_REQ;
 		retval = xio_connection_send(session->lead_connection,
 					     msg);
 		if (retval && retval != -EAGAIN) {
@@ -758,8 +759,6 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			return -1;
 		}
 		session->state = XIO_SESSION_STATE_CONNECT;
-
-		msg->type      = XIO_SESSION_SETUP_REQ;
 
 		retval = xio_connection_send(session->redir_connection,
 					     msg);
