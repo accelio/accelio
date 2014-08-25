@@ -413,11 +413,11 @@ int xio_connection_flush_msgs(struct xio_connection *connection)
 						 pmsg, pdata);
 		if ((pmsg->type == XIO_MSG_TYPE_REQ) ||
 		    (pmsg->type == XIO_ONE_WAY_REQ))
-			connection->queued_msgs--;
+			connection->tx_queued_msgs--;
 
-		if (connection->queued_msgs < 0)
-			ERROR_LOG("queued_msgs:%d\n",
-				  connection->queued_msgs);
+		if (connection->tx_queued_msgs < 0)
+			ERROR_LOG("tx_queued_msgs:%d\n",
+				  connection->tx_queued_msgs);
 	}
 
 	if (!xio_msg_list_empty(&connection->rsps_msgq))
@@ -812,10 +812,10 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
-		if (connection->queued_msgs == g_options.queue_depth) {
+		if (connection->tx_queued_msgs == g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			ERROR_LOG("send queue overflow %d\n",
-				  connection->queued_msgs);
+				  connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
 		}
@@ -847,7 +847,7 @@ int xio_send_request(struct xio_connection *connection,
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
-		connection->queued_msgs++;
+		connection->tx_queued_msgs++;
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -1035,10 +1035,10 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
-		if (connection->queued_msgs == g_options.queue_depth) {
+		if (connection->tx_queued_msgs == g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			ERROR_LOG("send queue overflow %d\n",
-				  connection->queued_msgs);
+				  connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
 		}
@@ -1063,7 +1063,7 @@ int xio_send_msg(struct xio_connection *connection,
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_ONE_WAY_REQ;
 
-		connection->queued_msgs++;
+		connection->tx_queued_msgs++;
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -1183,7 +1183,7 @@ int xio_release_response(struct xio_msg *msg)
 			return -1;
 		}
 		connection = task->connection;
-		connection->queued_msgs--;
+		connection->tx_queued_msgs--;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 

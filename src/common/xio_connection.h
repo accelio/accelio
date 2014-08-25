@@ -82,7 +82,7 @@ struct xio_connection {
 	uint16_t			is_flushed;
 	uint16_t			pad[3];
 	uint32_t			close_reason;
-	uint32_t			queued_msgs;
+	int32_t				tx_queued_msgs;
 	struct kref			kref;
 	int32_t				send_req_toggle;
 

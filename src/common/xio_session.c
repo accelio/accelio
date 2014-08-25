@@ -783,7 +783,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
-		connection->queued_msgs--;
+		connection->tx_queued_msgs--;
 		if (connection->ses_ops.on_msg_delivered)
 			connection->ses_ops.on_msg_delivered(
 				    connection->session,
@@ -915,7 +915,7 @@ static int xio_on_ow_req_send_comp(
 			     get_cycles() - omsg->timestamp);
 
 		xio_connection_remove_in_flight(connection, task->omsg);
-		connection->queued_msgs--;
+		connection->tx_queued_msgs--;
 
 		/* send completion notification to
 		 * release request
@@ -936,7 +936,7 @@ static int xio_on_ow_req_send_comp(
 
 			xio_connection_remove_in_flight(connection, task->omsg);
 			task->omsg->flags = task->omsg_flags;
-			connection->queued_msgs--;
+			connection->tx_queued_msgs--;
 
 			if (connection->ses_ops.on_msg_delivered)
 				connection->ses_ops.on_msg_delivered(
