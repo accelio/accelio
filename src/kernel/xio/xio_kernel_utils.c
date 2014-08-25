@@ -254,7 +254,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 
 	ERROR_LOG("in header: length:%zd, address:%p\n",
 		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
-	ERROR_LOG("in sgl type:%d iovsz:%d\n",xio_msg->in.sgl_type,
+	ERROR_LOG("in sgl type:%d max_nents:%d\n",xio_msg->in.sgl_type,
 		  tbl_max_nents(sgtbl_ops, sgtbl));
 	ERROR_LOG("in data size:%d\n",
 		  tbl_nents(sgtbl_ops, sgtbl));
@@ -270,7 +270,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
 		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
-	ERROR_LOG("out sgl type:%d iovsz:%d\n",xio_msg->out.sgl_type,
+	ERROR_LOG("out sgl type:%d max_nents:%d\n",xio_msg->out.sgl_type,
 		 tbl_max_nents(sgtbl_ops, sgtbl));
 	ERROR_LOG("out data size:%d\n", tbl_nents(sgtbl_ops, sgtbl));
 
