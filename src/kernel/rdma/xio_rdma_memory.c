@@ -127,7 +127,7 @@ void xio_unmap_rx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Assume scatterlist is terminated properly */
 
-	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->mapped, DMA_FROM_DEVICE);
+	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_FROM_DEVICE);
 
 	xd->mapped = 0;
 }
@@ -147,7 +147,7 @@ void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Inline were not mapped */
 	if (!(xd->send_wr.send_flags & IB_SEND_INLINE))
-		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->mapped, DMA_TO_DEVICE);
+		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_TO_DEVICE);
 
 	/* Disconnect header from data if any*/
 	sg_mark_end(xd->sgt.sgl);
@@ -255,7 +255,7 @@ void xio_unmap_rxmad_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Assume scatterlist is terminated properly */
 
-	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->mapped, DMA_FROM_DEVICE);
+	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_FROM_DEVICE);
 
 	/* xio_prep_rdma_op calls sg_mark_end need to undo  */
 	if (xd->last_sg) {
@@ -280,7 +280,7 @@ void xio_unmap_txmad_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Assume scatterlist is terminated properly */
 
-	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->mapped, DMA_TO_DEVICE);
+	ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_TO_DEVICE);
 
 	/* xio_prep_rdma_op calls sg_mark_end need to undo  */
 	if (xd->last_sg) {
@@ -400,7 +400,7 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 		return 0;
 	}
 
-	ib_dma_unmap_sg(ib_odev, sgt->sgl, xd->mapped, direction);
+	ib_dma_unmap_sg(ib_odev, sgt->sgl, sgt->nents, direction);
 	nents = ib_dma_map_sg(ib_ndev, sgt->sgl, sgt->nents, direction);
 	if (!nents) {
 		if (xd->last_sg) {
@@ -450,7 +450,7 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* Assume scatterlist is terminated properly */
 
-	ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->mapped, direction);
+	ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 
 	memset(&desc->sgt, 0, sizeof(desc->sgt));
 	desc->mapped = 0;
@@ -472,7 +472,7 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* Assume scatterlist is terminated properly */
 
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -482,7 +482,7 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_hndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->mapped, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
@@ -512,11 +512,11 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 	dev->fastreg.unreg_rdma_mem(rdma_ohndl, desc, direction);
 
 	/* Assume scatterlist is terminated properly */
-	ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->mapped, direction);
+	ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 
 	dev = rdma_nhndl->dev;
 	ib_dev = dev->ib_dev;
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -525,7 +525,7 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_nhndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->mapped, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
