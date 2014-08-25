@@ -911,6 +911,7 @@ int xio_send_response(struct xio_msg *msg)
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_DISCARDED);
 			pmsg = pmsg->next;
+			connection->rx_queued_msgs--;
 			continue;
 		}
 
@@ -943,6 +944,7 @@ int xio_send_response(struct xio_msg *msg)
 		task->state = XIO_TASK_STATE_READ;
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
+		connection->rx_queued_msgs--;
 
 		xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg, pdata);
 
@@ -1219,7 +1221,7 @@ int xio_release_msg(struct xio_msg *msg)
 		connection = task->connection;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
-
+		connection->rx_queued_msgs--;
 		pmsg = pmsg->next;
 
 		/* the rx task is returned back to pool */

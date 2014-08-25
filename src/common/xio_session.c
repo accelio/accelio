@@ -676,6 +676,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	task->connection = connection;
 
 	xio_connection_queue_io_task(connection, task);
+	connection->rx_queued_msgs++;
 
 	task->state = XIO_TASK_STATE_DELIVERED;
 
