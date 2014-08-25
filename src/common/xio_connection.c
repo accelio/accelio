@@ -251,9 +251,9 @@ struct xio_connection *xio_connection_init(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_discard_receipt_req					     */
+/* xio_connection_set_ow_send_comp_params				     */
 /*---------------------------------------------------------------------------*/
-static void xio_connection_discard_receipt_req(struct xio_msg *msg)
+static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 {
 	struct xio_vmsg		*vmsg;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -263,8 +263,8 @@ static void xio_connection_discard_receipt_req(struct xio_msg *msg)
 	 * discard the read receipt for better performance
 	 */
 
-	if (!((msg->type == XIO_ONE_WAY_REQ) &&
-	      (msg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)))
+	if ((msg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) ||
+	    (msg->type != XIO_ONE_WAY_REQ))
 		return;
 
 	vmsg		= &msg->out;
@@ -274,17 +274,19 @@ static void xio_connection_discard_receipt_req(struct xio_msg *msg)
 	/* heuristics to guess in which  cases the lower layer will not
 	 * do "rdma read" but will use send/receive
 	 */
-	if (tbl_nents(sgtbl_ops, sgtbl) > XIO_IOV_THRESHOLD)
+	if (tbl_nents(sgtbl_ops, sgtbl) > XIO_IOV_THRESHOLD) {
+		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;
+	}
 	if ((vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl)) >
-	    XIO_BUF_THRESHOLD)
+	    XIO_BUF_THRESHOLD) {
+		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
+		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;
-
-	msg->flags &= ~XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-	msg->flags &= ~XIO_MSG_FLAG_SMALL_ZERO_COPY; /* no zero copy allowed */
+	}
 	msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_send							     */
@@ -367,9 +369,10 @@ int xio_connection_send(struct xio_connection *connection,
 	/* mark as a control message */
 	task->is_control = !IS_APPLICATION_MSG(msg);
 
-	/* try to discard read receipt if not required */
-	if (msg->type == XIO_ONE_WAY_REQ)
-		xio_connection_discard_receipt_req(msg);
+	/* optimize for send complete */
+	if (msg->type == XIO_ONE_WAY_REQ &&
+	    connection->session->ses_ops.on_ow_msg_send_complete)
+		xio_connection_set_ow_send_comp_params(msg);
 
 	hdr.flags		= msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
@@ -812,7 +815,7 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
-		if (connection->tx_queued_msgs == g_options.queue_depth) {
+		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			ERROR_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
@@ -910,8 +913,9 @@ int xio_send_response(struct xio_msg *msg)
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_DISCARDED);
-			pmsg = pmsg->next;
 			connection->rx_queued_msgs--;
+
+			pmsg = pmsg->next;
 			continue;
 		}
 
@@ -944,6 +948,7 @@ int xio_send_response(struct xio_msg *msg)
 		task->state = XIO_TASK_STATE_READ;
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
+
 		connection->rx_queued_msgs--;
 
 		xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg, pdata);
@@ -1023,7 +1028,6 @@ int xio_send_msg(struct xio_connection *connection,
 	int			nr = -1;
 	int			retval = 0;
 
-
 	if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
 		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		      connection->state != XIO_CONNECTION_STATE_INIT) ||
@@ -1037,7 +1041,7 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
-		if (connection->tx_queued_msgs == g_options.queue_depth) {
+		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			ERROR_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
@@ -1221,7 +1225,9 @@ int xio_release_msg(struct xio_msg *msg)
 		connection = task->connection;
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
+
 		connection->rx_queued_msgs--;
+
 		pmsg = pmsg->next;
 
 		/* the rx task is returned back to pool */

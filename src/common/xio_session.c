@@ -785,12 +785,20 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
 		connection->tx_queued_msgs--;
-		if (connection->ses_ops.on_msg_delivered)
-			connection->ses_ops.on_msg_delivered(
-				    connection->session,
-				    omsg,
-				    task->imsg.more_in_batch,
-				    connection->cb_user_context);
+		if (sender_task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
+			if (connection->ses_ops.on_msg_delivered)
+				connection->ses_ops.on_msg_delivered(
+						connection->session,
+						omsg,
+						task->imsg.more_in_batch,
+						connection->cb_user_context);
+		} else {
+			if (connection->ses_ops.on_ow_msg_send_complete) {
+				connection->ses_ops.on_ow_msg_send_complete(
+					connection->session, omsg,
+					connection->cb_user_context);
+			}
+		}
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
 	} else {
@@ -903,51 +911,35 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
+	struct xio_statistics *stats = &connection->ctx->stats;
+	struct xio_msg *omsg = task->omsg;
+
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
 		goto xmit;
 	}
 
-	/* recycle the task */
-	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
-		struct xio_statistics *stats = &connection->ctx->stats;
-		struct xio_msg *omsg = task->omsg;
-		xio_stat_add(stats, XIO_STAT_DELAY,
-			     get_cycles() - omsg->timestamp);
+	if (!omsg || task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
+	     omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+		return 0;
 
-		xio_connection_remove_in_flight(connection, task->omsg);
-		connection->tx_queued_msgs--;
+	xio_stat_add(stats, XIO_STAT_DELAY,
+			get_cycles() - omsg->timestamp);
 
-		/* send completion notification to
-		 * release request
-		 */
-		if (connection->ses_ops.on_ow_msg_send_complete) {
-			connection->ses_ops.on_ow_msg_send_complete(
-					connection->session, task->omsg,
-					connection->cb_user_context);
-		}
-		xio_tasks_pool_put(task);
-	} else {
-		if (task->omsg &&
-		    !(task->omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
-			struct xio_statistics *stats = &connection->ctx->stats;
-			struct xio_msg *omsg = task->omsg;
-			xio_stat_add(stats, XIO_STAT_DELAY,
-				     get_cycles() - omsg->timestamp);
+	xio_connection_remove_in_flight(connection, task->omsg);
+	task->omsg->flags = task->omsg_flags;
+	connection->tx_queued_msgs--;
 
-			xio_connection_remove_in_flight(connection, task->omsg);
-			task->omsg->flags = task->omsg_flags;
-			connection->tx_queued_msgs--;
-
-			if (connection->ses_ops.on_msg_delivered)
-				connection->ses_ops.on_msg_delivered(
-						connection->session,
-						task->omsg,
-						0,
-						connection->cb_user_context);
-			xio_tasks_pool_put(task);
-		}
+	/* send completion notification to
+	 * release request
+	 */
+	if (connection->ses_ops.on_ow_msg_send_complete) {
+		connection->ses_ops.on_ow_msg_send_complete(
+				connection->session, task->omsg,
+				connection->cb_user_context);
 	}
+	xio_tasks_pool_put(task);
+
 xmit:
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
