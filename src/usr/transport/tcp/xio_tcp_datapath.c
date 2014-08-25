@@ -335,9 +335,6 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->sn = 0;
 
-	/* now we can calculate  primary pool size */
-	xio_tcp_calc_pool_size(tcp_hndl);
-
 	tcp_hndl->state = XIO_STATE_CONNECTED;
 
 	/* fill notification event */

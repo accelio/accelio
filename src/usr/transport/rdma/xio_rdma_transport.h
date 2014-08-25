@@ -323,7 +323,7 @@ struct xio_rdma_tasks_slab {
 	struct ibv_mr			*data_mr;
 	struct xio_buf			*io_buf;
 	int				buf_size;
-	int				pad;
+	int				alloc_nr;
 };
 
 struct __attribute__((__packed__)) xio_rkey_tbl_pack {
@@ -404,15 +404,13 @@ struct xio_rdma_transport {
 
 	/* control path params */
 	int				sq_depth;     /* max snd allowed  */
-	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
 
 	uint32_t			peer_max_in_iovsz;
 	uint32_t			peer_max_out_iovsz;
-
+	int32_t				pad;
 	/* connection's flow control */
-	size_t				alloc_sz;
 	size_t				membuf_sz;
 
 	struct xio_transport		*transport;
@@ -482,8 +480,6 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			void *ulp_msg, size_t ulp_msg_sz);
 
 /* xio_rdma_management.c */
-void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
-
 struct xio_task *xio_rdma_primary_task_alloc(
 				struct xio_rdma_transport *rdma_hndl);
 

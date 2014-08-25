@@ -1722,24 +1722,8 @@ static void xio_tcp_task_init(struct xio_task *task,
 }
 
 /* task pools management */
-
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_calc_pool_size						     */
-/*---------------------------------------------------------------------------*/
-void xio_tcp_calc_pool_size(struct xio_tcp_transport *tcp_hndl)
-{
-	tcp_hndl->num_tasks = NUM_TASKS;
-
-	tcp_hndl->alloc_sz  = tcp_hndl->num_tasks*tcp_hndl->membuf_sz;
-
-	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
-		  tcp_hndl->alloc_sz,
-		  tcp_hndl->num_tasks,
-		  tcp_hndl->membuf_sz);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_tcp_initial_pool_slab_pre_create				     */
+/* xio_tcp_initial_pool_slab_pre_create					     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_initial_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
@@ -1928,15 +1912,16 @@ static int xio_tcp_primary_pool_slab_pre_create(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
+	size_t	alloc_sz = alloc_nr*tcp_hndl->membuf_sz;
 
 	tcp_slab->buf_size = tcp_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		tcp_slab->io_buf = xio_alloc(tcp_hndl->alloc_sz);
+		tcp_slab->io_buf = xio_alloc(alloc_sz);
 		if (!tcp_slab->io_buf) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc tcp pool sz:%zu failed\n",
-				  tcp_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 		tcp_slab->data_pool = tcp_slab->io_buf->addr;
@@ -1944,11 +1929,11 @@ static int xio_tcp_primary_pool_slab_pre_create(
 		/* maybe allocation of with unuma_alloc can provide better
 		 * performance?
 		 */
-		tcp_slab->data_pool = umalloc_huge_pages(tcp_hndl->alloc_sz);
+		tcp_slab->data_pool = umalloc_huge_pages(alloc_sz);
 		if (!tcp_slab->data_pool) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("malloc tcp pool sz:%zu failed\n",
-				  tcp_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 	}
@@ -2122,14 +2107,12 @@ static void xio_tcp_primary_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport_hndl;
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 				    tcp_options.max_in_iovsz) + 1;
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = tcp_hndl->num_tasks;
+	*max_nr = g_options.queue_depth * 20;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +

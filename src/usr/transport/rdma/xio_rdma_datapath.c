@@ -3620,8 +3620,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->exp_sn = 0;
 	rdma_hndl->max_exp_sn = 0;
 
-	/* now we can calculate  primary pool size */
-	xio_rdma_calc_pool_size(rdma_hndl);
+	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
 
 	rdma_hndl->state = XIO_STATE_CONNECTED;
 

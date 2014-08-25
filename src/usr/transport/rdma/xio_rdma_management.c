@@ -1095,29 +1095,6 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_calc_pool_size						     */
-/*---------------------------------------------------------------------------*/
-void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
-{
-	/* four queues are involved:
-	 * tx_ready_queue, recv_queue, sent_queue, io_submit_queue,
-	 * also note that client holds the sent and recv tasks
-	 * simultaneously */
-
-	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
-				  rdma_hndl->actual_rq_depth);
-
-	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
-
-	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
-
-	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
-		  rdma_hndl->alloc_sz,
-		  rdma_hndl->num_tasks,
-		  rdma_hndl->membuf_sz);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_slab_pre_create				     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_initial_pool_slab_pre_create(
@@ -1454,15 +1431,17 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
+	size_t alloc_sz = alloc_nr*rdma_hndl->membuf_sz;
 
+	rdma_slab->alloc_nr = alloc_nr;
 	rdma_slab->buf_size = rdma_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		rdma_slab->io_buf = xio_alloc(rdma_hndl->alloc_sz);
+		rdma_slab->io_buf = xio_alloc(alloc_sz);
 		if (!rdma_slab->io_buf) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc rdma pool sz:%zu failed\n",
-				  rdma_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 		rdma_slab->data_pool = rdma_slab->io_buf->addr;
@@ -1479,18 +1458,18 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		/* maybe allocation of with unuma_alloc can provide better
 		 * performance?
 		 */
-		rdma_slab->data_pool = umalloc_huge_pages(rdma_hndl->alloc_sz);
+		rdma_slab->data_pool = umalloc_huge_pages(alloc_sz);
 		if (!rdma_slab->data_pool) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("malloc rdma pool sz:%zu failed\n",
-				  rdma_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 
 		/* One pool of registered memory per PD */
 		rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
 				rdma_slab->data_pool,
-				rdma_hndl->alloc_sz,
+				alloc_sz,
 				IBV_ACCESS_LOCAL_WRITE);
 		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
@@ -1529,10 +1508,11 @@ static int xio_rdma_primary_pool_slab_post_create(
 		return 0;
 
 	if (!rdma_slab->io_buf) {
+		size_t alloc_sz = rdma_slab->buf_size * rdma_slab->alloc_nr;
 		ibv_dereg_mr(rdma_slab->data_mr);
 		rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
 						rdma_slab->data_pool,
-						rdma_hndl->alloc_sz,
+						alloc_sz,
 						IBV_ACCESS_LOCAL_WRITE);
 		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
@@ -1700,7 +1680,7 @@ static void xio_rdma_primary_pool_get_params(
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = rdma_hndl->num_tasks;
+	*max_nr = g_options.queue_depth*20;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
