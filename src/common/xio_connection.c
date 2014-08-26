@@ -1836,6 +1836,13 @@ int xio_connection_destroy(struct xio_connection *connection)
 	} else {
 		DEBUG_LOG("connection:%p, state:%s\n", connection,
 			  xio_connection_state_str(connection->state));
+		/* if there is any delayed timeout -  stop it.
+		 * users may call this function at any stage
+		 **/
+		if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
+			xio_ctx_del_delayed_work(connection->ctx,
+						 &connection->fin_timeout_work);
+
 		retval = xio_connection_post_destroy(connection);
 	}
 
