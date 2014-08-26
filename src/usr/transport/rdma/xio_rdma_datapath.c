@@ -428,6 +428,8 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 			return -1;
 		}
 		rdma_task = task->dd_data;
+		/* initialize the rxd */
+		rdma_task->rxd.recv_wr.num_sge = 1;
 		if (first_task == NULL)
 			first_task = task;
 		else
@@ -1763,6 +1765,10 @@ static int xio_rdma_prep_req_out_data(
 		xio_set_error(XIO_E_MSG_SIZE);
 		return -1;
 	}
+
+	/* initialize the txd */
+	rdma_task->txd.send_wr.num_sge = 1;
+
 	/* the data is outgoing via SEND */
 	if (nents < rdma_hndl->max_sge &&
 	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
