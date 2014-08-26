@@ -227,6 +227,14 @@ static inline struct xio_task *xio_nexus_task_lookup(void *nexus, int id)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_initial_free_tasks						     */
+/*---------------------------------------------------------------------------*/
+inline int xio_nexus_initial_free_tasks(struct xio_nexus *nexus)
+{
+	return xio_tasks_pool_free_tasks(nexus->initial_tasks_pool);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_primary_free_tasks						     */
 /*---------------------------------------------------------------------------*/
 inline int xio_nexus_primary_free_tasks(struct xio_nexus *nexus)
@@ -941,10 +949,12 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_initial_pool_free(struct xio_nexus *nexus)
 {
-	if (!nexus->primary_tasks_pool)
+	if (!nexus->initial_tasks_pool)
 		return -1;
 
 	xio_tasks_pool_destroy(nexus->initial_tasks_pool);
+
+	nexus->initial_tasks_pool = NULL;
 
 	return  0;
 }
@@ -1085,6 +1095,9 @@ static int xio_nexus_primary_pool_destroy(struct xio_nexus *nexus)
 		return -1;
 
 	xio_tasks_pool_destroy(nexus->primary_tasks_pool);
+
+	nexus->primary_tasks_pool = NULL;
+
 	return  0;
 }
 
@@ -1637,6 +1650,7 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	}
 	xio_nexus_flush_tx_queue(nexus);
 
+	xio_nexus_initial_free_tasks(nexus);
 	xio_nexus_initial_pool_free(nexus);
 
 	xio_nexus_primary_free_tasks(nexus);

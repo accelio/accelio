@@ -1058,7 +1058,35 @@ static int xio_rdma_initial_pool_post_create(
 int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 			  struct xio_task *task)
 {
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)trans_hndl;
+	struct xio_device *dev;
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	dev = rdma_hndl->dev;
+
+	/* Unmap before releasing */
+
+	if (rdma_task->rxd.mapped)
+		xio_unmap_rx_work_req(dev, &rdma_task->rxd);
+
+	if (rdma_task->txd.mapped)
+		xio_unmap_tx_work_req(dev, &rdma_task->txd);
+
+	if (rdma_task->rdmad.mapped) {
+		if (rdma_task->ib_op == XIO_IB_RDMA_WRITE)
+			xio_unmap_txmad_work_req(dev, &rdma_task->rdmad);
+		else
+			xio_unmap_rxmad_work_req(dev, &rdma_task->rdmad);
+	}
+
+	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+			       DMA_FROM_DEVICE);
+
+	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+			       DMA_TO_DEVICE);
 
 	/* recycle RDMA  buffers back to pool */
 
