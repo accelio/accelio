@@ -65,46 +65,6 @@
 #define IS_PAGE_ALIGNED(ptr)	(((PAGE_SIZE-1) & (uintptr_t)(ptr)) == 0)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-/**
- * sg_unmark_end - Undo setting the end of the scatterlist
- * @sg:          SG entryScatterlist
- *
- * Description:
- *   Removes the termination marker from the given entry of the scatterlist.
- *
-**/
-static inline void sg_unmark_end(struct scatterlist *sg)
-{
-#ifdef CONFIG_DEBUG_SG
-	BUG_ON(sg->sg_magic != SG_MAGIC);
-#endif
-	sg->page_link &= ~0x02;
-}
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-/**
- * llist_reverse_order - reverse order of a llist chain
- * @head:       first item of the list to be reversed
- *
- * Reverse the order of a chain of llist entries and return the
- * new first entry.
- */
-static struct llist_node *llist_reverse_order(struct llist_node *head)
-{
-	struct llist_node *new_head = NULL;
-
-	while (head) {
-		struct llist_node *tmp = head;
-		head = head->next;
-		tmp->next = new_head;
-		new_head = tmp;
-	}
-
-	return new_head;
-}
-#endif
 
 struct fast_reg_descriptor {
 	struct llist_node		llist_entry;
