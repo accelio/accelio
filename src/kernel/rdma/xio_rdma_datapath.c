@@ -433,6 +433,7 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 			ERROR_LOG("primary tasks pool is empty\n");
 			return -1;
 		}
+		task->omsg = NULL;
 		rdma_task = task->dd_data;
 		/* initialize the rxd */
 		rdma_task->rxd.recv_wr.num_sge = 1;
