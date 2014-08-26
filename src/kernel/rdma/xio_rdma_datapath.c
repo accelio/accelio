@@ -434,6 +434,8 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 			return -1;
 		}
 		rdma_task = task->dd_data;
+		/* initialize the rxd */
+		rdma_task->rxd.recv_wr.num_sge = 1;
 
 		/* map the receive address for dma
 		 * Note other sge fields don't change
@@ -2077,6 +2079,9 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 			  xio_hdr_len);
 		return -1;
 	}
+	/* initialize the txd */
+	rdma_task->txd.send_wr.num_sge = 1;
+
 	/* the data is outgoing via SEND */
 	if (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge &&
 	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
@@ -2420,6 +2425,9 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
+	/* initialize the txd */
+	rdma_task->txd.send_wr.num_sge = 1;
+
 
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.

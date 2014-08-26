@@ -2174,6 +2174,9 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
+	/* initialize the txd */
+	rdma_task->txd.send_wr.num_sge = 1;
+
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
 	 */
