@@ -73,6 +73,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	task->imsg.sn = hdr.serial_num;
 	task->connection = connection;
+	task->session = session;
 	connection->session->setup_req = msg;
 
 	/* read the header */

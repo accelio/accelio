@@ -679,6 +679,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	msg->flags	= hdr.flags;
 	msg->next	= NULL;
 	task->connection = connection;
+	task->session	= connection->session;
 
 	xio_connection_queue_io_task(connection, task);
 	connection->rx_queued_msgs++;
@@ -761,6 +762,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 
 	task->connection = connection;
+	task->session = connection->session;
 
 	/* remove only if not response with "read receipt" */
 	if (!((hdr.flags &
