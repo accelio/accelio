@@ -1924,6 +1924,7 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 
 	if (rdma_hndl->timewait)
 		return;
+	rdma_hndl->timewait++;
 
 	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
 		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
@@ -1943,7 +1944,6 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 					      NULL);
 		rdma_hndl->state = XIO_STATE_DESTROYED;
 	}
-	rdma_hndl->timewait++;
 }
 
 /*---------------------------------------------------------------------------*/
