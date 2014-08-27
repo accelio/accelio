@@ -1008,6 +1008,47 @@ int xio_reject(struct xio_session *session,
 int xio_send_response(struct xio_msg *rsp);
 
 /**
+ * set xio's configuration tuning option
+ *
+ * @param[in] xio_obj	Pointer to xio object or NULL
+ * @param[in] level	The level at which the option is
+ *			defined (@ref xio_optlevel)
+ * @param[in] optname	The option for which the value is to be set.
+ *			The optname parameter must be a socket option
+ *			defined within the specified level, or behavior
+ *			is undefined (@ref xio_optname)
+ * @param[in] optval	A pointer to the buffer in which the value
+ *			for the requested option is specified
+ * @param[in] optlen	The size, in bytes, of the buffer pointed to by
+ *			the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_set_opt(void *xio_obj, int level, int optname,
+		const void *optval, int optlen);
+
+/**
+ * set xio's configuration tuning option
+ *
+ * @param[in] xio_obj	  Pointer to xio object or NULL
+ * @param[in] level	  The level at which the option is
+ *			  defined (@ref xio_optlevel)
+ * @param[in] optname	  The option for which the value is to be set.
+ *			  The optname parameter must be a socket option
+ *			  defined within the specified level, or behavior
+ *			  is undefined (@ref xio_optname)
+ * @param[in,out] optval  A pointer to the buffer in which the value
+ *			  for the requested option is specified
+ * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
+ *			  the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_get_opt(void *xio_obj, int level, int optname,
+		void *optval, int *optlen);
+
+
+/**
  * attempts to read at least min_nr events and up to nr events
  * from the completion queue assiociated with connection conn
  *

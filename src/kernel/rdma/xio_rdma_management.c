@@ -67,6 +67,13 @@ int xio_rdma_cq_timeout;
 module_param_named(cq_timeout, xio_rdma_cq_timeout, int, 0644);
 MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:disabled)");
 
+/* TODO: move to an include file like xio_usr_transport.h in user space */
+#define VALIDATE_SZ(sz)	do {			\
+		if (optlen != (sz)) {		\
+			xio_set_error(EINVAL);	\
+			return -1;		\
+		}				\
+	} while (0)
 
 /* default option values */
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
@@ -2617,27 +2624,95 @@ exit2:
 	return -1;
 }
 
-
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_set_opt							     */
+/* xio_rdma_set_opt                                                          */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_set_opt(void *xio_obj,
 			    int optname, const void *optval, int optlen)
 {
-	/* TODO: xio_rdma_set_opt */
-	WARN_LOG("%s not yet supported\n", __func__);
+	switch (optname) {
+	case XIO_OPTNAME_ENABLE_MEM_POOL:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.enable_mem_pool = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_ENABLE_DMA_LATENCY:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.enable_dma_latency = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
+		VALIDATE_SZ(sizeof(int));
+
+		/* changing the parameter is not allowed */
+		if (rdma_options.rdma_buf_attr_rdonly) {
+			xio_set_error(EPERM);
+			return -1;
+		}
+		if (*(int *)optval < 0 ||
+		    *(int *)optval > XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		rdma_options.rdma_buf_threshold = *((int *)optval) +
+					XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		rdma_options.rdma_buf_threshold =
+			ALIGN(rdma_options.rdma_buf_threshold, 64);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_IN_IOVLEN:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.max_in_iovsz = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_OUT_IOVLEN:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.max_out_iovsz = *((int *)optval);
+		return 0;
+		break;
+	default:
+		break;
+	}
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_get_opt							     */
+/* xio_rdma_get_opt                                                          */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_get_opt(void *xio_obj,
+static int xio_rdma_get_opt(void  *xio_obj,
 			    int optname, void *optval, int *optlen)
 {
-	/* TODO: xio_rdma_get_opt */
-	WARN_LOG("%s not yet supported\n", __func__);
+	switch (optname) {
+	case XIO_OPTNAME_ENABLE_MEM_POOL:
+		*((int *)optval) = rdma_options.enable_mem_pool;
+		*optlen = sizeof(int);
+		return 0;
+		break;
+	case XIO_OPTNAME_ENABLE_DMA_LATENCY:
+		*((int *)optval) = rdma_options.enable_dma_latency;
+		*optlen = sizeof(int);
+		return 0;
+		break;
+	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
+		*((int *)optval) =
+			rdma_options.rdma_buf_threshold -
+				XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		*optlen = sizeof(int);
+		return 0;
+	case XIO_OPTNAME_MAX_IN_IOVLEN:
+		*((int *)optval) = rdma_options.max_in_iovsz;
+		*optlen = sizeof(int);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_OUT_IOVLEN:
+		*((int *)optval) = rdma_options.max_out_iovsz;
+		*optlen = sizeof(int);
+		return 0;
+		break;
+	default:
+		break;
+	}
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }

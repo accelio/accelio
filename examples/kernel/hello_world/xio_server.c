@@ -80,6 +80,7 @@ struct server_data {
 static struct server_data *g_server_data;
 atomic_t module_state;
 
+#define SG_TBL_LEN 64
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
 /*---------------------------------------------------------------------------*/
@@ -325,6 +326,8 @@ static int xio_server_main(void *data)
 
 static int __init xio_hello_init_module(void)
 {
+	int iov_len = SG_TBL_LEN;
+
 	if (!(xio_argv[1] && xio_argv[2])) {
 		pr_err("NO IP or port were given\n");
 		return -EINVAL;
@@ -332,6 +335,14 @@ static int __init xio_hello_init_module(void)
 
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
+
+	/* set accelio max message vector used */
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &iov_len, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &iov_len, sizeof(int));
 
 	xio_main_th = kthread_run(xio_server_main, xio_argv,
 				  "xio-hello-server");
