@@ -300,6 +300,7 @@ static int xio_server_main(void *data)
 		g_server_data = server_data;
 		if (atomic_add_unless(&module_state, 4, 0x83))
 			xio_context_run_loop(ctx);
+		atomic_sub(4, &module_state);
 
 		/* normal exit phase */
 		pr_info("exit signaled\n");
