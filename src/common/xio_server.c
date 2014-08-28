@@ -328,6 +328,8 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
+	XIO_OBSERVER_DESTROY(&server->observer);
+
 	xio_nexus_close(server->listener, NULL);
 	kfree(server->uri);
 	kfree(server);

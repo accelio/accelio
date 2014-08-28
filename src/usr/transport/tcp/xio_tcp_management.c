@@ -264,6 +264,8 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 
 	ufree(tcp_hndl->base.portal_uri);
 
+	XIO_OBSERVABLE_DESTROY(&tcp_hndl->base.observable);
+
 	ufree(tcp_hndl);
 }
 

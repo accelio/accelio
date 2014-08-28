@@ -1736,6 +1736,8 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl)
 
 	ufree(trans_hndl->portal_uri);
 
+	XIO_OBSERVABLE_DESTROY(&rdma_hndl->base.observable);
+
 	ufree(rdma_hndl);
 }
 

@@ -438,6 +438,7 @@ static void xio_session_pre_teardown(struct xio_session *session)
 	kfree(session->hs_private_data);
 	kfree(session->uri);
 	session->state = XIO_SESSION_STATE_CLOSED;
+	XIO_OBSERVER_DESTROY(&session->observer);
 }
 
 /*---------------------------------------------------------------------------*/

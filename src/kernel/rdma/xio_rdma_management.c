@@ -351,6 +351,7 @@ static void xio_cq_release(struct xio_cq *tcq)
 		debugfs_remove_recursive(tcq->tcq_dentry);
 		tcq->tcq_dentry = NULL;
 	}
+	XIO_OBSERVER_DESTROY(&tcq->observer);
 
 	kfree(tcq->wc_array);
 	kfree(tcq);
@@ -1755,6 +1756,8 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 
 	kfree(trans_base->portal_uri);
 	trans_base->portal_uri = NULL;
+
+	XIO_OBSERVABLE_DESTROY(&rdma_hndl->base.observable);
 
 	kfree(rdma_hndl);
 }

@@ -1668,6 +1668,12 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	kfree(nexus->out_if_addr);
 	nexus->out_if_addr = NULL;
 
+	XIO_OBSERVER_DESTROY(&nexus->trans_observer);
+
+	XIO_OBSERVABLE_DESTROY(&nexus->observable);
+
+	XIO_OBSERVER_DESTROY(&nexus->ctx_observer);
+
 	kfree(nexus);
 
 	return 0;

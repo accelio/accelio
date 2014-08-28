@@ -63,6 +63,9 @@ struct xio_observer *xio_observer_create(void *impl, notify_fn_t notify)
 /*---------------------------------------------------------------------------*/
 void xio_observer_destroy(struct xio_observer *observer)
 {
+	observer->impl		= NULL;
+	observer->notify	= NULL;
+
 	kfree(observer);
 }
 
@@ -91,6 +94,10 @@ struct xio_observable *xio_observable_create(void *impl)
 /*---------------------------------------------------------------------------*/
 void xio_observable_destroy(struct xio_observable *observable)
 {
+	INIT_LIST_HEAD(&observable->observers_list);
+
+	observable->impl = NULL;
+
 	kfree(observable);
 }
 
@@ -184,7 +191,14 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 				    struct xio_observer *observer,
 				    int event, void *event_data)
 {
-	observer->notify(observer->impl, observable->impl, event, event_data);
+	if (likely(observable->impl && observer->impl))
+		observer->notify(observer->impl, observable->impl,
+				 event, event_data);
+	else
+		DEBUG_LOG("spurious notification" \
+			  "observable:%p, observer:%p\n",
+			  observable, observer);
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -195,7 +209,7 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
-	if (observable->observer_node) {
+	if (likely(observable->observer_node)) {
 		observable->observer_node->observer->notify(
 				observable->observer_node->observer->impl,
 				observable->impl, event, event_data);
@@ -219,7 +233,7 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
-	if (observable->observer_node) {
+	if (likely(observable->observer_node)) {
 		observable->observer_node->observer->notify(
 				observable->observer_node->observer->impl,
 				observable->impl, event, event_data);

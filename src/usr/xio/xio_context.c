@@ -361,6 +361,8 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_workqueue_destroy(ctx->workqueue);
 
 	xio_ev_loop_destroy(&ctx->ev_loop);
+
+	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 	ufree(ctx);
 }
 
