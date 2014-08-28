@@ -564,6 +564,8 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 		       struct xio_work_req *xd,
 		       enum dma_data_direction direction);
 
+void xio_reset_desc(struct xio_rdma_mem_desc *desc);
+
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 		    struct xio_rdma_mem_desc *desc,
 		    enum dma_data_direction direction);

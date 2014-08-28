@@ -393,6 +393,14 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_reset_desc							     */
+/*---------------------------------------------------------------------------*/
+void xio_reset_desc(struct xio_rdma_mem_desc *desc)
+{
+	memset(&desc->sgt, 0, sizeof(desc->sgt));
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_unmap_desc							     */
 /*---------------------------------------------------------------------------*/
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
@@ -412,7 +420,6 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 
 	ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
 
-	memset(&desc->sgt, 0, sizeof(desc->sgt));
 	desc->mapped = 0;
 }
 

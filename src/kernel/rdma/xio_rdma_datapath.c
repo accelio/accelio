@@ -2691,14 +2691,12 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* if data arrived, set the pointers */
 	switch (rsp_hdr.opcode) {
 	case XIO_IB_SEND:
-		if (rdma_sender_task->write_num_sge > 0) {
-			/* This is a completion of RDMA READ can free
-			 * DMA mapping of send buffer (future FMR/FRWR)
-			 */
-			xio_unmap_desc(rdma_hndl,
-				       &rdma_sender_task->write_sge,
-				       DMA_TO_DEVICE);
-		}
+		/* This is a completion of RDMA READ can free
+		 * DMA mapping of send buffer (future FMR/FRWR)
+		 */
+		xio_unmap_desc(rdma_hndl,
+			       &rdma_sender_task->write_sge,
+			       DMA_TO_DEVICE);
 		if (rsp_hdr.ulp_imm_len) {
 			tbl_set_nents(isgtbl_ops, isgtbl, 1);
 			sg = sge_first(isgtbl_ops, isgtbl);
@@ -2720,6 +2718,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 				if (idata_len > odata_len) {
 					task->status = XIO_E_MSG_SIZE;
+					xio_reset_desc(&rdma_sender_task->write_sge);
 					goto partial_msg;
 				} else {
 					task->status = XIO_E_SUCCESS;
@@ -2743,6 +2742,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			tbl_clone(osgtbl_ops, osgtbl,
 				  isgtbl_ops, isgtbl);
 		}
+		xio_reset_desc(&rdma_sender_task->write_sge);
 		break;
 	case XIO_IB_RDMA_WRITE:
 		/* This is a completion of RDMA WRITE can free
@@ -2755,6 +2755,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
 				  rdma_sender_task->read_num_sge,
 				  rdma_task->rsp_write_num_sge);
+			xio_reset_desc(&rdma_sender_task->read_sge);
 			goto partial_msg;
 		}
 		tbl_set_nents(isgtbl_ops, isgtbl,
@@ -2806,6 +2807,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		} else {
 			ERROR_LOG("empty out message\n");
 		}
+		xio_reset_desc(&rdma_sender_task->read_sge);
 		break;
 	default:
 		ERROR_LOG("%s unexpected op 0x%x\n", __func__, rsp_hdr.opcode);

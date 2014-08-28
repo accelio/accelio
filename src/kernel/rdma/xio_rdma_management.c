@@ -1187,13 +1187,13 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 
 	if (rdma_task->rdmad.sgt.sgl)
 		sg_free_table(&rdma_task->rdmad.sgt);
-
+#if 0
 	if (rdma_task->write_sge.sgt.sgl)
 		sg_free_table(&rdma_task->write_sge.sgt);
 
 	if (rdma_task->read_sge.sgt.sgl)
 		sg_free_table(&rdma_task->read_sge.sgt);
-
+#endif
 	/* Phantom tasks have no buffer */
 	if (rdma_task->buf) {
 		if (rdma_slab->count)
@@ -1636,6 +1636,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
+#if 0
 	if (sg_alloc_table(&rdma_task->read_sge.sgt, max_iovsz, GFP_KERNEL)) {
 		ERROR_LOG("sg_alloc_table(read_sge)\n");
 		goto cleanup0;
@@ -1645,6 +1646,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 		ERROR_LOG("sg_alloc_table(write_sge)\n");
 		goto cleanup1;
 	}
+#endif
 
 	if (sg_alloc_table(&rdma_task->rdmad.sgt, max_sge, GFP_KERNEL)) {
 		ERROR_LOG("sg_weite_table(rdmad)\n");
@@ -1675,10 +1677,12 @@ static int xio_rdma_primary_pool_slab_init_task(
 cleanup3:
 	sg_free_table(&rdma_task->rdmad.sgt);
 cleanup2:
+#if 0
 	sg_free_table(&rdma_task->write_sge.sgt);
 cleanup1:
 	sg_free_table(&rdma_task->read_sge.sgt);
 cleanup0:
+#endif
 	xio_set_error(ENOMEM);
 	return -ENOMEM;
 }
