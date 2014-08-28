@@ -499,7 +499,7 @@ static int xio_rdma_wr_error_handler(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_handle_wc_error                                                       */
+/* xio_handle_task_error						     */
 /*---------------------------------------------------------------------------*/
 static void xio_handle_task_error(struct xio_task *task)
 {
@@ -541,7 +541,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	int				retval;
 
 
-	if (task) {
+	if (task && task->dd_data) {
 		rdma_task = task->dd_data;
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
@@ -2719,7 +2719,7 @@ static int xio_prep_rdma_op(
 			l++;
 			k++;
 			if (l == lsize || k == max_sge - 1) {
-				rdmad->send_wr.num_sge		   = k + 1;
+				rdmad->send_wr.num_sge		   = k;
 				rdmad->send_wr.wr_id		   =
 						uint64_from_ptr(tmp_task);
 				rdmad->send_wr.next		   = NULL;

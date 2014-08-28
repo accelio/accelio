@@ -1424,8 +1424,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 
 				sg_mark_end(sg);
 				rdmad->last_sg = sg;
-				rdmad->sgt.nents = k + 1;
-				rdmad->nents = k + 1;
+				rdmad->sgt.nents = k;
+				rdmad->nents = k;
 
 				/* close the task */
 				list_move_tail(&tmp_task->tasks_list_entry,
