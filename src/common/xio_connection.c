@@ -817,7 +817,7 @@ int xio_send_request(struct xio_connection *connection,
 	while (pmsg) {
 		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
-			ERROR_LOG("send queue overflow %d\n",
+			WARN_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
@@ -1043,7 +1043,7 @@ int xio_send_msg(struct xio_connection *connection,
 	while (pmsg) {
 		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
-			ERROR_LOG("send queue overflow %d\n",
+			WARN_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
