@@ -817,7 +817,7 @@ int xio_send_request(struct xio_connection *connection,
 	while (pmsg) {
 		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
-			WARN_LOG("send queue overflow %d\n",
+			DEBUG_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
@@ -826,14 +826,14 @@ int xio_send_request(struct xio_connection *connection,
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
-			ERROR_LOG("invalid in message\n");
+			DEBUG_LOG("invalid in message\n");
 			retval = -1;
 			goto send;
 		}
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
-			ERROR_LOG("invalid out message\n");
+			DEBUG_LOG("invalid out message\n");
 			retval = -1;
 			goto send;
 		}
