@@ -81,7 +81,8 @@ enum xio_nexus_state {
 	XIO_NEXUS_STATE_REJECTED,
 	XIO_NEXUS_STATE_CLOSED,
 	XIO_NEXUS_STATE_DISCONNECTED,
-	XIO_NEXUS_STATE_RECONNECT
+	XIO_NEXUS_STATE_RECONNECT,
+	XIO_NEXUS_STATE_ERROR
 };
 
 /*---------------------------------------------------------------------------*/

@@ -1368,6 +1368,7 @@ static void xio_nexus_on_transport_error(struct xio_nexus *nexus,
 
 	nexus_event_data.error.reason =  event_data->error.reason;
 
+	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_ERROR);
 	xio_observable_notify_all_observers(&nexus->observable,
 					    XIO_NEXUS_EVENT_ERROR,
 					    &nexus_event_data);
@@ -1732,13 +1733,14 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 				 struct xio_observer  *observer, uint32_t oid)
 {
 	struct xio_transport		*transport;
-	struct xio_nexus			*nexus;
+	struct xio_nexus		*nexus;
 	char				proto[8];
 
 
 	/* look for opened nexus */
 	nexus = xio_nexus_cache_find(ctx, portal_uri);
-	if (nexus != NULL) {
+	if (nexus != NULL &&
+	    nexus->state != XIO_NEXUS_STATE_ERROR) {
 		if (observer) {
 			xio_observable_reg_observer(&nexus->observable,
 						    observer);
@@ -2038,6 +2040,7 @@ static void xio_nexus_delayed_close(struct kref *kref)
 	switch (nexus->state) {
 	case XIO_NEXUS_STATE_LISTEN:
 		/* the listener nexus, called from xio_unbind */
+	case XIO_NEXUS_STATE_ERROR:
 	case XIO_NEXUS_STATE_DISCONNECTED:
 		xio_nexus_release(nexus);
 		break;
@@ -2298,7 +2301,6 @@ static void xio_nexus_client_reconnect_timeout(void *data)
 	struct xio_nexus *nexus = data;
 	int retval;
 
-	ERROR_LOG("%s\n", __func__);
 	/* Try to reconnect after the waiting period */
 	retval = xio_nexus_reconnect(nexus);
 	if (!retval) {
