@@ -38,6 +38,36 @@
 #ifndef XIO_SERVER_H
 #define XIO_SERVER_H
 
+/*---------------------------------------------------------------------------*/
+/* enum									     */
+/*---------------------------------------------------------------------------*/
+enum xio_server_event {
+	XIO_SERVER_EVENT_CLOSE
+};
+
+struct xio_server {
+	struct xio_nexus		*listener;
+	struct xio_observer		observer;
+	char				*uri;
+	struct xio_context		*ctx;
+	struct xio_session_ops		ops;
+	uint32_t			session_flags;
+	uint32_t			pad;
+	void				*cb_private_data;
+	struct xio_observable		nexus_observable;
+};
+
+/*---------------------------------------------------------------------------*/
+/* xio_server_reg_observer						     */
+/*---------------------------------------------------------------------------*/
+int xio_server_reg_observer(struct xio_server *server,
+			    struct xio_observer *observer);
+
+/*---------------------------------------------------------------------------*/
+/* xio_server_unreg_observer						     */
+/*---------------------------------------------------------------------------*/
+void xio_server_unreg_observer(struct xio_server *server,
+			       struct xio_observer *observer);
 
 #endif /*XIO_SERVER_H */
 

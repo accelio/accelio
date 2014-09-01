@@ -46,21 +46,31 @@
 #include "xio_nexus.h"
 #include "xio_session.h"
 #include "xio_connection.h"
+#include "xio_server.h"
 
-
-struct xio_server {
-	struct xio_nexus		*listener;
-	struct xio_observer		observer;
-	char				*uri;
-	struct xio_context		*ctx;
-	struct xio_session_ops		ops;
-	uint32_t			session_flags;
-	uint32_t			pad;
-	void				*cb_private_data;
-};
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
+
+/*---------------------------------------------------------------------------*/
+/* xio_server_reg_observer						     */
+/*---------------------------------------------------------------------------*/
+int xio_server_reg_observer(struct xio_server *server,
+			     struct xio_observer *observer)
+{
+	xio_observable_reg_observer(&server->nexus_observable, observer);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_server_unreg_observer		                                     */
+/*---------------------------------------------------------------------------*/
+void xio_server_unreg_observer(struct xio_server *server,
+				struct xio_observer *observer)
+{
+	xio_observable_unreg_observer(&server->nexus_observable, observer);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_nexus							     */
@@ -72,9 +82,6 @@ static int xio_on_new_nexus(struct xio_server *server,
 	int		retval;
 
 	/* set the server as observer */
-	xio_nexus_set_server_observer(event_data->new_nexus.child_nexus,
-				      &server->observer);
-
 	retval = xio_nexus_accept(event_data->new_nexus.child_nexus);
 	if (retval != 0) {
 		ERROR_LOG("failed to accept connection\n");
@@ -294,14 +301,14 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 
 	XIO_OBSERVER_INIT(&server->observer, server, xio_on_nexus_event);
 
+	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
+
 	server->listener = xio_nexus_open(ctx, uri, NULL, 0);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
-
-	xio_nexus_set_server_observer(server->listener,
-				      &server->observer);
+	xio_nexus_set_server(server->listener, server);
 
 	retval = xio_nexus_listen(server->listener,
 				  uri, src_port, backlog);
@@ -328,9 +335,18 @@ int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
 
-	XIO_OBSERVER_DESTROY(&server->observer);
+	if (server == NULL)
+		return -1;
+
+	xio_observable_notify_all_observers(&server->nexus_observable,
+					    XIO_SERVER_EVENT_CLOSE, NULL);
+	xio_observable_unreg_all_observers(&server->nexus_observable);
 
 	xio_nexus_close(server->listener, NULL);
+
+	XIO_OBSERVER_DESTROY(&server->observer);
+	XIO_OBSERVABLE_DESTROY(&server->nexus_observable);
+
 	kfree(server->uri);
 	kfree(server);
 

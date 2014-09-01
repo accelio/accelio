@@ -47,6 +47,7 @@
 #include "xio_nexus_cache.h"
 #include "xio_nexus.h"
 #include "xio_session.h"
+#include "xio_server.h"
 
 
 /*---------------------------------------------------------------------------*/
@@ -248,9 +249,9 @@ inline int xio_nexus_primary_free_tasks(struct xio_nexus *nexus)
 static void xio_nexus_notify_server(struct xio_nexus *nexus, int event,
 				    void *event_data)
 {
-	if (nexus->server_observer)
+	if (nexus->server)
 		xio_observable_notify_observer(&nexus->observable,
-					       nexus->server_observer,
+					       &nexus->server->observer,
 					       event, event_data);
 }
 
@@ -746,6 +747,34 @@ static int xio_nexus_on_send_setup_rsp_comp(struct xio_nexus *nexus,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_on_recv_session_setup_req					     */
+/*---------------------------------------------------------------------------*/
+static int xio_nexus_on_recv_session_setup_req(struct xio_nexus *nexus,
+					       struct xio_task *task)
+{
+	union xio_nexus_event_data nexus_event_data;
+
+	task->nexus = nexus;
+	nexus_event_data.msg.task = task;
+	nexus_event_data.msg.op = XIO_WC_OP_RECV;
+
+
+	/* add reference count to opened nexus that new
+	 * session is join in */
+	if (!nexus->is_first_req)
+		xio_nexus_addref(nexus);
+	else
+		nexus->is_first_req = 0;
+
+	/* always route "hello" to server */
+	xio_nexus_notify_server(
+			nexus,
+			XIO_NEXUS_EVENT_NEW_MESSAGE,
+			&nexus_event_data);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_on_recv_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_on_recv_req(struct xio_nexus *nexus,
@@ -756,37 +785,6 @@ static int xio_nexus_on_recv_req(struct xio_nexus *nexus,
 	task->nexus = nexus;
 	nexus_event_data.msg.task = task;
 	nexus_event_data.msg.op = XIO_WC_OP_RECV;
-
-
-	if (!nexus->transport_hndl->is_client) {
-		if (task->tlv_type == XIO_SESSION_SETUP_REQ) {
-			/* add reference count to opened nexus that new
-			 * session is join in */
-			if (!nexus->is_first_req)
-				xio_nexus_addref(nexus);
-			else
-				nexus->is_first_req = 0;
-
-			/* always route "hello" to server */
-			xio_nexus_notify_server(
-					nexus,
-					XIO_NEXUS_EVENT_NEW_MESSAGE,
-					&nexus_event_data);
-			return 0;
-		} else if (task->tlv_type == XIO_CONNECTION_HELLO_REQ) {
-			if (!nexus->is_first_req)
-				xio_nexus_addref(nexus);
-			else
-				nexus->is_first_req = 0;
-
-			/* always route "hello" to server */
-			xio_nexus_notify_server(
-					nexus,
-					XIO_NEXUS_EVENT_NEW_MESSAGE,
-					&nexus_event_data);
-			return 0;
-		}
-	}
 
 	/* route the message to any of observer */
 	xio_observable_notify_any_observer(
@@ -1185,6 +1183,31 @@ static int xio_on_context_event(void *observer, void *sender, int event,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_on_server_close							     */
+/*---------------------------------------------------------------------------*/
+static void xio_on_server_close(struct xio_nexus *nexus,
+				struct xio_server *server)
+{
+	TRACE_LOG("xio_on_server_close. nexus:%p, server:%p\n", nexus, server);
+	nexus->server = NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_server_event							     */
+/*---------------------------------------------------------------------------*/
+static int xio_on_server_event(void *observer, void *sender, int event,
+				void *event_data)
+{
+	TRACE_LOG("xio_on_server_event\n");
+	if (event == XIO_SERVER_EVENT_CLOSE) {
+		TRACE_LOG("server: [close] server:%p\n", sender);
+		xio_on_server_close(observer, sender);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_create							     */
 /*---------------------------------------------------------------------------*/
 struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
@@ -1208,6 +1231,10 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	XIO_OBSERVER_INIT(&nexus->trans_observer, nexus,
 			  xio_nexus_on_transport_event);
 
+	/* start listen to server events */
+	XIO_OBSERVER_INIT(&nexus->srv_observer, nexus,
+			  xio_on_server_event);
+
 	XIO_OBSERVABLE_INIT(&nexus->observable, nexus);
 
 	xio_nexus_init_observers_htbl(nexus);
@@ -1223,12 +1250,18 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 
 	/* add the nexus to temporary list */
 	nexus->transport_hndl		= transport_hndl;
-	nexus->transport			= parent_nexus->transport;
+	nexus->transport		= parent_nexus->transport;
+	nexus->server			= parent_nexus->server;
 	kref_init(&nexus->kref);
 	nexus->state			= XIO_NEXUS_STATE_OPEN;
 	nexus->is_first_req		= 1;
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
+
+	/* add  the new nexus as observer to server */
+	if (nexus->server)
+		xio_server_reg_observer(nexus->server,
+					&nexus->srv_observer);
 
 	/* add  the new nexus as observer to transport */
 	xio_transport_reg_observer(nexus->transport_hndl,
@@ -1411,7 +1444,10 @@ static int xio_nexus_on_new_message(struct xio_nexus *nexus,
 	case XIO_NEXUS_SETUP_REQ:
 		retval = xio_nexus_on_recv_setup_req(nexus, task);
 		break;
-
+	case XIO_CONNECTION_HELLO_REQ:
+	case XIO_SESSION_SETUP_REQ:
+		retval = xio_nexus_on_recv_session_setup_req(nexus, task);
+		break;
 	default:
 		if (IS_REQUEST(task->tlv_type))
 			retval = xio_nexus_on_recv_req(nexus, task);
@@ -1635,6 +1671,10 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 {
 	TRACE_LOG("nexus:%p - close complete\n", nexus);
 
+	if (nexus->server)
+		xio_server_unreg_observer(nexus->server,
+					  &nexus->srv_observer);
+
 	if (nexus->transport_hndl)
 		xio_transport_unreg_observer(nexus->transport_hndl,
 					     &nexus->trans_observer);
@@ -1673,6 +1713,7 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	XIO_OBSERVABLE_DESTROY(&nexus->observable);
 
 	XIO_OBSERVER_DESTROY(&nexus->ctx_observer);
+	XIO_OBSERVER_DESTROY(&nexus->srv_observer);
 
 	kfree(nexus);
 
@@ -1752,6 +1793,10 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 		xio_observable_reg_observer(&nexus->observable, observer);
 		xio_nexus_hash_observer(nexus, observer, oid);
 	}
+
+	/* start listen to server events */
+	XIO_OBSERVER_INIT(&nexus->srv_observer, nexus,
+			  xio_on_server_event);
 
 	/* start listen to context events */
 	XIO_OBSERVER_INIT(&nexus->ctx_observer, nexus,
