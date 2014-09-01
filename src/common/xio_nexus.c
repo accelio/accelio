@@ -805,10 +805,14 @@ static int xio_nexus_on_recv_rsp(struct xio_nexus *nexus,
 	union xio_nexus_event_data nexus_event_data;
 
 	task->nexus = nexus;
+
 	nexus_event_data.msg.task = task;
 	nexus_event_data.msg.op = XIO_WC_OP_RECV;
-
 	if (likely(task->sender_task)) {
+		if (unlikely(task->sender_task->nexus != nexus)) {
+			DEBUG_LOG("spurious event\n");
+			return 0;
+		}
 		/* route the response to the sender session */
 		xio_observable_notify_observer(
 				&nexus->observable,
