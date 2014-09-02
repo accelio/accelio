@@ -42,6 +42,7 @@
 #include "xio_context.h"
 #include "xio_transport.h"
 #include "sys/hashtable.h"
+#include "xio_server.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -250,6 +251,8 @@ static inline void xio_nexus_set_server(struct xio_nexus *nexus,
 					struct xio_server *server)
 {
 	nexus->server = server;
+	if (server)
+		xio_server_reg_observer(server, &nexus->srv_observer);
 }
 
 /*---------------------------------------------------------------------------*/
