@@ -78,10 +78,12 @@ struct xio_observable {
 	struct xio_observer_node *observer_node; /* for one observer */
 };
 #define XIO_OBSERVABLE_INIT(name, obj) \
-	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); }
+	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); \
+	  (name)->observer_node = NULL; }
 
 #define XIO_OBSERVABLE_DESTROY(name) \
-	{ (name)->impl = NULL; INIT_LIST_HEAD(&(name)->observers_list); }
+	{ (name)->impl = NULL; INIT_LIST_HEAD(&(name)->observers_list); \
+	  (name)->observer_node = NULL; }
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_reg_observer						     */
