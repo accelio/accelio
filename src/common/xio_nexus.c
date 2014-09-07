@@ -1200,7 +1200,7 @@ static void xio_on_server_close(struct xio_nexus *nexus,
 /* xio_on_server_event							     */
 /*---------------------------------------------------------------------------*/
 static int xio_on_server_event(void *observer, void *sender, int event,
-				void *event_data)
+			       void *event_data)
 {
 	TRACE_LOG("xio_on_server_event\n");
 	if (event == XIO_SERVER_EVENT_CLOSE) {
@@ -1405,7 +1405,7 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 
 	/* Try to reconnect */
 	if (g_options.reconnect) {
-			if (nexus->transport_hndl->is_client)
+		if (nexus->transport_hndl->is_client)
 			ret = xio_nexus_client_reconnect(nexus);
 		else
 			ret = xio_nexus_server_reconnect(nexus);
@@ -1740,7 +1740,11 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	/* look for opened nexus */
 	nexus = xio_nexus_cache_find(ctx, portal_uri);
 	if (nexus != NULL &&
-	    nexus->state != XIO_NEXUS_STATE_ERROR) {
+	    (nexus->state == XIO_NEXUS_STATE_CONNECTED ||
+	     nexus->state == XIO_NEXUS_STATE_CONNECTING ||
+	     nexus->state == XIO_NEXUS_STATE_OPEN ||
+	     nexus->state == XIO_NEXUS_STATE_LISTEN ||
+	     nexus->state == XIO_NEXUS_STATE_INIT)) {
 		if (observer) {
 			xio_observable_reg_observer(&nexus->observable,
 						    observer);
@@ -2033,6 +2037,7 @@ static void xio_nexus_delayed_close(struct kref *kref)
 					     struct xio_nexus,
 					     kref);
 	int		retval;
+	int		timeout;
 
 	TRACE_LOG("xio_nexus_deleyed close. nexus:%p, state:%d\n",
 		  nexus, nexus->state);
@@ -2045,11 +2050,16 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		xio_nexus_release(nexus);
 		break;
 	default:
+		/* disconnection should not occur at the same time */
+		timeout = (nexus->transport_hndl->is_client) ?
+			   XIO_NEXUS_CLOSE_TIMEOUT :
+			   4*XIO_NEXUS_CLOSE_TIMEOUT;
+
 		retval = xio_ctx_add_delayed_work(
-				nexus->transport_hndl->ctx,
-				XIO_NEXUS_CLOSE_TIMEOUT, nexus,
-				xio_nexus_release_cb,
-				&nexus->close_time_hndl);
+			    nexus->transport_hndl->ctx,
+			    timeout, nexus,
+			    xio_nexus_release_cb,
+			    &nexus->close_time_hndl);
 		if (retval)
 			ERROR_LOG("xio_nexus_delayed_close failed\n");
 		break;
