@@ -2079,8 +2079,10 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	/* the data is outgoing via SEND */
-	if (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge &&
+	/* The data is outgoing via SEND
+	 * One sge is reserved for the header
+	 */
+	if (tbl_nents(sgtbl_ops, sgtbl) < (rdma_hndl->max_sge - 1) &&
 	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
@@ -2428,9 +2430,10 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
+	 * One sge is reserved for the header
 	 */
 	if ((ulp_imm_len == 0) || (!small_zero_copy &&
-	    (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge) &&
+	    (tbl_nents(sgtbl_ops, sgtbl) < (rdma_hndl->max_sge - 1)) &&
 	    ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< rdma_hndl->max_send_buf_sz))) {
 		/*
