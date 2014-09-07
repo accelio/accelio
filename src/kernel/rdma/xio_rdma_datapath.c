@@ -1919,16 +1919,18 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.write_num_sge	= rdma_task->write_num_sge;
 
 	if (rdma_task->read_num_sge > 0) {
-		xio_map_desc(rdma_hndl, &rdma_task->read_sge,
-			     DMA_FROM_DEVICE);
+		if (xio_map_desc(rdma_hndl, &rdma_task->read_sge,
+				 DMA_FROM_DEVICE))
+			goto cleanup0;
 	}
 	if (rdma_task->write_num_sge > 0) {
-		xio_map_desc(rdma_hndl, &rdma_task->write_sge,
-			     DMA_TO_DEVICE);
+		if (xio_map_desc(rdma_hndl, &rdma_task->write_sge,
+				 DMA_TO_DEVICE))
+			goto cleanup1;
 	}
 
 	if (xio_rdma_write_req_header(rdma_hndl, task, &req_hdr) != 0)
-		goto cleanup;
+		goto cleanup2;
 
 	/* write the payload header */
 	if (ulp_hdr_len) {
@@ -1936,7 +1938,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 		    &task->mbuf,
 		    task->omsg->out.header.iov_base,
 		    task->omsg->out.header.iov_len) != 0)
-			goto cleanup;
+			goto cleanup2;
 	}
 
 	/* write the pad between header and data */
@@ -1945,7 +1947,21 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 
 	return 0;
 
-cleanup:
+cleanup2:
+	if (rdma_task->write_num_sge > 0) {
+		xio_unmap_desc(rdma_hndl,
+			       &rdma_task->write_sge,
+			       DMA_TO_DEVICE);
+	}
+
+cleanup1:
+	if (rdma_task->read_num_sge > 0) {
+		xio_unmap_desc(rdma_hndl,
+			       &rdma_task->read_sge,
+			       DMA_FROM_DEVICE);
+	}
+
+cleanup0:
 	xio_set_error(XIO_E_MSG_SIZE);
 	ERROR_LOG("xio_rdma_write_req_header failed\n");
 	return -1;
@@ -2055,7 +2071,6 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	void			*sgtbl;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
-
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
@@ -2079,9 +2094,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	/* The data is outgoing via SEND
-	 * One sge is reserved for the header
-	 */
+	/* the data is outgoing via SEND */
 	if (tbl_nents(sgtbl_ops, sgtbl) < (rdma_hndl->max_sge - 1) &&
 	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
 		/*
@@ -2430,10 +2443,9 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
-	 * One sge is reserved for the header
 	 */
 	if ((ulp_imm_len == 0) || (!small_zero_copy &&
-	    (tbl_nents(sgtbl_ops, sgtbl) < (rdma_hndl->max_sge - 1)) &&
+	    (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge - 1) &&
 	    ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< rdma_hndl->max_send_buf_sz))) {
 		/*
@@ -2649,6 +2661,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 							 rsp_hdr.tid);
 
 	rdma_sender_task = task->sender_task->dd_data;
+	xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
 
 	omsg		= task->sender_task->omsg;
 	imsg		= &task->imsg;
@@ -3482,6 +3495,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	if (rdma_hndl->base.is_client) {
 		struct xio_task *sender_task = NULL;
+		struct xio_rdma_task *rdma_sender_task;
 		if (!list_empty(&rdma_hndl->in_flight_list))
 			sender_task = list_first_entry(
 					&rdma_hndl->in_flight_list,
@@ -3494,6 +3508,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			ERROR_LOG("could not find sender task\n");
 
 		task->sender_task = sender_task;
+		rdma_sender_task = task->sender_task->dd_data;
+		xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
 		xio_rdma_read_setup_msg(rdma_hndl, task, rsp);
 		/* get the initial credits */
 		rdma_hndl->peer_credits += rsp->credits;

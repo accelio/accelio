@@ -103,13 +103,17 @@ void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 	if (!xd->nents)
 		return;
 
+	if (!xd->mapped)
+		return;
+
 	/* Assume scatterlist is terminated properly */
 
 	/* Inline were not mapped */
 	if (!(xd->send_wr.send_flags & IB_SEND_INLINE))
 		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_TO_DEVICE);
 
-	/* Disconnect header from data if any*/
+	/* Disconnect header from data if any */
+	sg_mark_end(&xd->sgt.sgl[1]);
 	sg_mark_end(xd->sgt.sgl);
 	xd->sgt.nents = xd->sgt.orig_nents;
 
@@ -411,6 +415,9 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 	struct ib_device *ib_dev = dev->ib_dev;
 
 	if (!desc->nents)
+		return;
+
+	if (!desc->mapped)
 		return;
 
 	/* fast unregistration routine may do nothing but it is always exists */
@@ -967,6 +974,7 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(vmsg->data_tbl.sgl->sg_magic != SG_MAGIC);
 #endif
+
 	/* Only the header will be sent  */
 	if (vmsg->data_tbl.nents) {
 		/* txd has one more entry we need to chain */
