@@ -756,11 +756,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	msg->sn = hdr.serial_num;
 
 	omsg		= sender_task->omsg;
-	omsg->next	= NULL;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
+	omsg->next	= NULL;
 
 	task->connection = connection;
 	task->session = connection->session;
@@ -927,15 +927,15 @@ static int xio_on_ow_req_send_comp(
 		goto xmit;
 	}
 
-	if (!omsg || task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
-	     omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+	if (!omsg || omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
+	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		return 0;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
 			get_cycles() - omsg->timestamp);
 
-	xio_connection_remove_in_flight(connection, task->omsg);
-	task->omsg->flags = task->omsg_flags;
+	xio_connection_remove_in_flight(connection, omsg);
+	omsg->flags = task->omsg_flags;
 	connection->tx_queued_msgs--;
 
 	/* send completion notification to
@@ -943,7 +943,7 @@ static int xio_on_ow_req_send_comp(
 	 */
 	if (connection->ses_ops.on_ow_msg_send_complete) {
 		connection->ses_ops.on_ow_msg_send_complete(
-				connection->session, task->omsg,
+				connection->session, omsg,
 				connection->cb_user_context);
 	}
 	xio_tasks_pool_put(task);

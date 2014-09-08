@@ -644,63 +644,85 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_connection_xmit_inl						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_connection_xmit_inl(struct xio_connection *connection,
+					  struct xio_msg_list *msgq,
+					  struct xio_msg_list *in_flight_msgq,
+					  int *retry_cnt)
+{
+	int retval = 0;
+
+	struct xio_msg *msg = xio_msg_list_first(msgq);
+	if (msg != NULL) {
+		retval = xio_connection_send(connection, msg);
+		if (retval) {
+			if (retval == -EAGAIN) {
+				(*retry_cnt)++;
+				return 1;
+			} else if (retval == -ENOMSG) {
+				/* message error was notified */
+				DEBUG_LOG("xio_connection_send failed.\n");
+				/* while error drain the messages */
+				*retry_cnt = 0;
+				return 0;
+			} else  {
+				xio_msg_list_remove(msgq, msg, pdata);
+				return -1;
+			}
+		} else {
+			*retry_cnt = 0;
+			xio_msg_list_remove(msgq, msg, pdata);
+			if (IS_APPLICATION_MSG(msg)) {
+				xio_msg_list_insert_tail(
+						in_flight_msgq, msg,
+						pdata);
+			}
+		}
+	} else {
+		(*retry_cnt)++;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_connection_xmit							     */
 /*---------------------------------------------------------------------------*/
 static int xio_connection_xmit(struct xio_connection *connection)
 {
-	struct xio_msg *msg;
 	int    retval = 0;
 	int    retry_cnt = 0;
 
-	struct xio_msg_list *msg_lists[] = {
-		&connection->reqs_msgq,
-		&connection->rsps_msgq
-	};
-	struct xio_msg_list *in_flight_msg_lists[] = {
-		&connection->in_flight_reqs_msgq,
-		&connection->in_flight_rsps_msgq
-	};
-	struct xio_msg_list *msgq, *in_flight_msgq;
+	struct xio_msg_list *msgq1, *in_flight_msgq1;
+	struct xio_msg_list *msgq2, *in_flight_msgq2;
 
+	if (connection->send_req_toggle == 0) {
+		msgq1		= &connection->reqs_msgq;
+		in_flight_msgq1	= &connection->in_flight_reqs_msgq;
+		msgq2		= &connection->rsps_msgq;
+		in_flight_msgq2	= &connection->in_flight_rsps_msgq;
+	} else {
+		msgq1		= &connection->rsps_msgq;
+		in_flight_msgq1	= &connection->in_flight_rsps_msgq;
+		msgq2		= &connection->reqs_msgq;
+		in_flight_msgq2	= &connection->in_flight_reqs_msgq;
+	}
 
 	while (retry_cnt < 2) {
-		msgq		= msg_lists[connection->send_req_toggle];
-		in_flight_msgq	=
-			in_flight_msg_lists[connection->send_req_toggle];
-		connection->send_req_toggle =
-			1 - connection->send_req_toggle;
-		msg = xio_msg_list_first(msgq);
-		if (msg != NULL) {
-			retval = xio_connection_send(connection, msg);
-			if (retval) {
-				if (retval == -EAGAIN) {
-					retval = 0;
-					retry_cnt++;
-					continue;
-				} else if (retval == -ENOMSG) {
-					/* message error was notified */
-					TRACE_LOG(
-					    "xio_connection_send failed.\n");
-					retval = 0;
-					/* while error drain the messages */
-					retry_cnt = 0;
-					continue;
-				} else  {
-					xio_msg_list_remove(msgq, msg, pdata);
-					break;
-				}
-			} else {
-				retry_cnt = 0;
-				xio_msg_list_remove(msgq, msg, pdata);
-				if (IS_APPLICATION_MSG(msg)) {
-					xio_msg_list_insert_tail(
-							in_flight_msgq, msg,
-							pdata);
-				}
-			}
-		} else {
-			retry_cnt++;
+		retval = xio_connection_xmit_inl(connection,
+						 msgq1, in_flight_msgq1,
+						 &retry_cnt);
+		if (retval < 0) {
+			connection->send_req_toggle =
+				1 - connection->send_req_toggle;
+			break;
 		}
+		retval = xio_connection_xmit_inl(connection,
+						 msgq2, in_flight_msgq2,
+						 &retry_cnt);
+		if (retval < 0)
+			break;
 	}
 
 	if (retval != 0) {
@@ -710,6 +732,7 @@ static int xio_connection_xmit(struct xio_connection *connection)
 	}
 
 	return retval ? -1 : 0;
+
 }
 
 /*---------------------------------------------------------------------------*/

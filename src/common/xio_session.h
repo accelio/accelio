@@ -66,18 +66,18 @@ enum xio_session_state {
 /* structures				                                     */
 /*---------------------------------------------------------------------------*/
 struct xio_session {
+	struct xio_transport_msg_validators_cls	*validators_cls;
+	struct xio_session_ops		ses_ops;
+
 	uint64_t			trans_sn; /* transaction sn */
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
 	uint32_t			connections_nr;
 	uint32_t			pad;
-
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
 
-	struct xio_session_ops		ses_ops;
-	struct xio_transport_msg_validators_cls	*validators_cls;
 	struct xio_msg			*setup_req;
 	struct xio_observer		observer;
 
@@ -185,7 +185,7 @@ static inline int xio_session_is_valid_in_req(struct xio_session *session,
 static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 					       struct xio_msg *msg)
 {
-	if (session->validators_cls->is_valid_out_msg)
+//	if (session->validators_cls->is_valid_out_msg)
 		return session->validators_cls->is_valid_out_msg(msg);
 
 	xio_set_error(XIO_E_NOT_SUPPORTED);
