@@ -41,7 +41,6 @@
 #include "libxio.h"
 #include "xio_mbuf.h"
 
-
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,
 	XIO_TASK_STATE_DELIVERED,
@@ -62,28 +61,27 @@ struct xio_tasks_pool;
 struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
+	void			*pool;
 	struct xio_mbuf		mbuf;
-	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_msg		*omsg;		/* pointer from user */
 	struct xio_msg		imsg;		/* message to the user */
+	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_session	*session;
 	struct xio_connection	*connection;
 	struct xio_nexus	*nexus;
 
-	void			*pool;
-
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
 	uint64_t		stag;		/* session unique tag */
-	uint16_t		is_control;
-	uint16_t		tlv_type;
-	uint16_t		omsg_flags;
-	uint16_t		imsg_flags;
-	uint16_t		ltid;		/* local task id	*/
-	uint16_t		rtid;		/* remote task id	*/
-	uint32_t		magic;
-	int32_t			status;
-	int32_t			pad;
+	uint16_t                is_control;
+	uint16_t                tlv_type;
+	uint16_t                omsg_flags;
+	uint16_t                imsg_flags;
+	uint16_t                ltid;           /* local task id        */
+	uint16_t                rtid;           /* remote task id       */
+	uint32_t                magic;
+	int32_t                 status;
+	int32_t                 pad;
 
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */
@@ -124,13 +122,13 @@ struct xio_tasks_pool_hooks {
 };
 
 struct xio_tasks_pool_params {
+	struct xio_tasks_pool_hooks	pool_hooks;
 	int				start_nr;
 	int				max_nr;
 	int				alloc_nr;
 	int				pool_dd_data_sz;
 	int				slab_dd_data_sz;
 	int				task_dd_data_sz;
-	struct xio_tasks_pool_hooks	pool_hooks;
 };
 
 struct xio_tasks_slab {
@@ -145,17 +143,16 @@ struct xio_tasks_slab {
 };
 
 struct xio_tasks_pool {
-	struct list_head		slabs_list;
 	/* LIFO */
-	struct list_head		stack;
 	struct xio_tasks_pool_params	params;
-	uint16_t			curr_free;
-	uint16_t			curr_used;
-	uint16_t			curr_alloced;
-	uint16_t			max_used;
-	uint16_t			curr_idx;
-	uint16_t			node_id; /* numa node id */
-	uint32_t			pad;
+	struct list_head		stack;
+	unsigned int			curr_used;
+	unsigned int			curr_alloced;
+	unsigned int			max_used;
+	unsigned int			curr_idx;
+	unsigned int			node_id; /* numa node id */
+	unsigned int			pad;
+	struct list_head		slabs_list;
 	void				*dd_data;
 };
 
@@ -164,9 +161,11 @@ struct xio_tasks_pool {
 /*---------------------------------------------------------------------------*/
 static void xio_task_reset(struct xio_task *task)
 {
+	/* user responsibility to reset after receive */
+	/*
 	if (task->imsg.user_context)
 		task->imsg.user_context	= 0;
-	/*
+
 	task->imsg.flags		= 0;
 	task->tlv_type			= 0xdead;
 	task->omsg_flags		= 0;
@@ -201,7 +200,6 @@ static inline void xio_task_release(struct kref *kref)
 	if (pool->params.pool_hooks.task_pre_put)
 		pool->params.pool_hooks.task_pre_put(
 				pool->params.pool_hooks.context, task);
-	pool->curr_free++;
 	pool->curr_used--;
 
 	list_move(&task->tasks_list_entry, &pool->stack);
@@ -235,17 +233,16 @@ static inline struct xio_task *xio_tasks_pool_get(struct xio_tasks_pool *q)
 {
 	struct xio_task *t;
 
-	if (list_empty(&q->stack)) {
+	if (unlikely(list_empty(&q->stack))) {
 		if (q->curr_used == q->params.max_nr)
 			return NULL;
 		xio_tasks_pool_alloc_slab(q);
-		if (list_empty(&q->stack))
+		if (unlikely(list_empty(&q->stack)))
 			return NULL;
 	}
 
 	t = list_first_entry(&q->stack, struct xio_task,  tasks_list_entry);
 	list_del_init(&t->tasks_list_entry);
-	q->curr_free--;
 	q->curr_used++;
 	if (q->curr_used > q->max_used)
 		q->max_used = q->curr_used;
@@ -279,9 +276,10 @@ static inline int xio_tasks_pool_free_tasks(
 
 	if (q->curr_used)
 		ERROR_LOG("tasks inventory: %d/%d = missing:%d\n",
-			  q->curr_free, q->curr_alloced, q->curr_used);
+			  q->curr_alloced - q->curr_used, q->curr_alloced,
+			  q->curr_used);
 
-	return q->curr_free;
+	return q->curr_alloced - q->curr_used;
 }
 
 /*---------------------------------------------------------------------------*/

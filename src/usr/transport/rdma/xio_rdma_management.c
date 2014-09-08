@@ -1228,21 +1228,25 @@ static int xio_rdma_task_pre_put(
 	/* recycle RDMA  buffers back to pool */
 
 	/* put buffers back to pool */
-	for (i = 0; i < rdma_task->read_num_sge; i++) {
-		if (rdma_task->read_sge[i].cache) {
-			xio_mempool_free(&rdma_task->read_sge[i]);
-			rdma_task->read_sge[i].cache = NULL;
+	if (rdma_task->read_num_sge) {
+		for (i = 0; i < rdma_task->read_num_sge; i++) {
+			if (rdma_task->read_sge[i].cache) {
+				xio_mempool_free(&rdma_task->read_sge[i]);
+				rdma_task->read_sge[i].cache = NULL;
+			}
 		}
+		rdma_task->read_num_sge = 0;
 	}
-	rdma_task->read_num_sge = 0;
 
-	for (i = 0; i < rdma_task->write_num_sge; i++) {
-		if (rdma_task->write_sge[i].cache) {
-			xio_mempool_free(&rdma_task->write_sge[i]);
-			rdma_task->write_sge[i].cache = NULL;
+	if (rdma_task->write_num_sge) {
+		for (i = 0; i < rdma_task->write_num_sge; i++) {
+			if (rdma_task->write_sge[i].cache) {
+				xio_mempool_free(&rdma_task->write_sge[i]);
+				rdma_task->write_sge[i].cache = NULL;
+			}
 		}
+		rdma_task->write_num_sge	= 0;
 	}
-	rdma_task->write_num_sge	= 0;
 	/*
 	rdma_task->req_write_num_sge	= 0;
 	rdma_task->rsp_write_num_sge	= 0;

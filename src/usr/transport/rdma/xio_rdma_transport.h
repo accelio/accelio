@@ -241,19 +241,19 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	uint16_t			pad0;
-	uint16_t			read_num_sge;
-	uint16_t			write_num_sge;
-	uint16_t			recv_num_sge;
+	uint32_t			read_num_sge;
+	uint32_t			write_num_sge;
+	uint32_t			recv_num_sge;
+	uint32_t			pad0;
 	struct xio_mempool_obj		*read_sge;
 	struct xio_mempool_obj		*write_sge;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
-	uint16_t			req_read_num_sge;
-	uint16_t			req_write_num_sge;
-	uint16_t			req_recv_num_sge;
-	uint16_t			rsp_write_num_sge;
+	uint32_t			req_read_num_sge;
+	uint32_t			req_write_num_sge;
+	uint32_t			req_recv_num_sge;
+	uint32_t			rsp_write_num_sge;
 	struct xio_sge			*req_read_sge;
 	struct xio_sge			*req_write_sge;
 
@@ -265,12 +265,12 @@ struct xio_rdma_task {
 	 */
 	struct xio_sge			*rsp_write_sge;
 
+	unsigned int			phantom_idx;
 	enum xio_ib_op_code		ib_op;
-	uint16_t			more_in_batch;
+	unsigned int			more_in_batch;
 	uint16_t			sn;
-	uint16_t			phantom_idx;
 	uint8_t				rflags;
-	uint8_t				pad[5];
+	uint8_t				pad[1];
 };
 
 struct xio_cq  {
@@ -309,8 +309,8 @@ struct xio_device {
 };
 
 struct xio_mr_elem {
-	struct ibv_mr			*mr;
 	struct xio_device		*dev;
+	struct ibv_mr			*mr;
 	struct list_head		dm_list_entry; /* entry in mr list */
 	struct list_head		xm_list_entry; /* entry in dev list */
 };

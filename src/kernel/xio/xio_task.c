@@ -174,7 +174,6 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		initialized++;
 	}
 	q->curr_alloced += alloc_nr;
-	q->curr_free += alloc_nr;
 
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
 

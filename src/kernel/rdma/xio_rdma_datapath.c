@@ -697,17 +697,22 @@ send_final_nop:
 static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 			       struct xio_task *task)
 {
-	struct xio_task		*task1 = NULL, *task2 = NULL;
+	struct xio_task		*task1, *task2;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	int			must_send = 0;
 	struct xio_work_req	*rxd = &rdma_task->rxd;
+	struct list_head	*task_prev;
 	int			retval;
 
 	/* prefetch next buffer */
-	if (!list_empty(&task->tasks_list_entry)) {
-		task1 = list_first_entry(&task->tasks_list_entry,
-					 struct xio_task, tasks_list_entry);
+	if (likely(task->tasks_list_entry.next != task->tasks_list_entry.prev)) {
+		task1 = list_entry(task->tasks_list_entry.next,
+				   struct xio_task,  tasks_list_entry);
+		task_prev = task->tasks_list_entry.prev;
 		xio_prefetch(task1->mbuf.buf.head);
+	} else {
+		task1 = NULL;
+		task_prev = NULL;
 	}
 
 	rdma_hndl->rqe_avail--;
@@ -771,10 +776,12 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_xmit(rdma_hndl);
 
 	/* prefetch next buffer */
-	if (task1 && !list_empty(&task1->tasks_list_entry)) {
-		task2 = list_first_entry(&task1->tasks_list_entry,
-					 struct xio_task,  tasks_list_entry);
-		xio_prefetch(task2->mbuf.buf.head);
+	if  (task1) {
+		if (task1->tasks_list_entry.next != task_prev) {
+			task2 = list_entry(task1->tasks_list_entry.next,
+				   struct xio_task,  tasks_list_entry);
+			xio_prefetch(task2);
+		}
 	}
 
 	return retval;
@@ -1906,8 +1913,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
 	req_hdr.tid		= task->ltid;
 	req_hdr.opcode		= rdma_task->ib_op;
-	if (task->omsg_flags &&
-	    (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY))
+	if (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY)
 		req_hdr.flags = XIO_HEADER_FLAG_SMALL_ZERO_COPY;
 	else
 		req_hdr.flags = XIO_HEADER_FLAG_NONE;
@@ -2205,9 +2211,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
-	small_zero_copy = (task->omsg_flags &&
-			   (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY));
-
+	small_zero_copy = task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY;
 	if (!(small_zero_copy) &&
 	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_send_buf_sz) {
 		/* user has small response - no rdma operation expected */
