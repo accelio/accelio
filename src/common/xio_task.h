@@ -62,14 +62,12 @@ struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
 	void			*pool;
-	struct xio_mbuf		mbuf;
-	struct xio_msg		*omsg;		/* pointer from user */
-	struct xio_msg		imsg;		/* message to the user */
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_session	*session;
 	struct xio_connection	*connection;
 	struct xio_nexus	*nexus;
 
+	struct xio_mbuf		mbuf;
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
 	uint64_t		stag;		/* session unique tag */
@@ -85,6 +83,8 @@ struct xio_task {
 
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */
+	struct xio_msg		*omsg;		/* pointer from user */
+	struct xio_msg		imsg;		/* message to the user */
 };
 
 struct xio_tasks_pool_hooks {
