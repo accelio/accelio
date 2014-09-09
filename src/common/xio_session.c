@@ -679,8 +679,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	msg->sn		= hdr.serial_num;
 	msg->flags	= hdr.flags;
 	msg->next	= NULL;
-	task->connection = connection;
-	task->session	= connection->session;
 
 	xio_connection_queue_io_task(connection, task);
 	connection->rx_queued_msgs++;
@@ -1093,12 +1091,13 @@ int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_message							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_new_message(struct xio_session *session,
+int xio_on_new_message(struct xio_session *s,
 		       struct xio_nexus *nexus,
 		       union xio_nexus_event_data *event_data)
 {
 	struct xio_task		*task  = event_data->msg.task;
 	struct xio_connection	*connection = NULL;
+	struct xio_session	*session = s;
 	int			retval = -1;
 
 
