@@ -63,6 +63,8 @@
 #define XIO_1M_MAX_NR		(1024*24)
 #define XIO_1M_ALLOC_NR		128
 
+/*#define DEBUG_MEMPOOL_MT*/
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
@@ -225,13 +227,14 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 
 	slot->free_blocks_list = NULL;
 
+#ifdef DEBUG_MEMPOOL_MT
 	if (slot->used_mb_nr)
 		ERROR_LOG("buffers are still in use before free: " \
 			  "pool:%p - slot[%p]: " \
 			  "size:%zd, used:%d, alloced:%d, max_alloc:%d\n",
 			  slot->pool, slot, slot->mb_size, slot->used_mb_nr,
 			  slot->curr_mb_nr, slot->max_mb_nr);
-
+#endif
 
 	if (slot->curr_mb_nr) {
 		list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
@@ -619,9 +622,11 @@ retry:
 	slot->used_mb_nr++;
 #endif
 
-	xio_mempool_dump(p);
-
 cleanup:
+
+#ifdef DEBUG_MEMPOOL_MT
+	xio_mempool_dump(p);
+#endif
 	return ret;
 }
 
