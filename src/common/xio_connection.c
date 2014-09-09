@@ -911,15 +911,15 @@ int xio_send_response(struct xio_msg *msg)
 	int			retval = 0;
 
 	while (pmsg) {
-		task	   = container_of(msg->request, struct xio_task, imsg);
+		task	   = container_of(pmsg->request, struct xio_task, imsg);
 		connection = task->connection;
 		stats	   = &connection->ctx->stats;
-		vmsg	   = &msg->out;
+		vmsg	   = &pmsg->out;
 
-		if (task->imsg.sn != msg->request->sn) {
+		if (task->imsg.sn != pmsg->request->sn) {
 			ERROR_LOG("match not found: request sn:%llu, " \
 				  "response sn:%llu\n",
-				  task->imsg.sn, msg->request->sn);
+				  task->imsg.sn, pmsg->request->sn);
 			xio_set_error(EINVAL);
 			retval = -1;
 			goto send;
