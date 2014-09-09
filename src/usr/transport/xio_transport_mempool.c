@@ -66,14 +66,14 @@
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
-typedef volatile int combind_t;
+typedef volatile int combined_t;
 
 struct xio_mem_block {
 	struct xio_mem_slot		*parent_slot;
 	struct xio_mr			*omr;
 	void				*buf;
 	struct xio_mem_block		*next;
-	combind_t			refcnt_claim;
+	combined_t			refcnt_claim;
 	int				r_c_pad;
 	struct list_head		blocks_list_entry;
 };
@@ -99,7 +99,7 @@ struct xio_mem_slot {
 	int				max_mb_nr;	/* max allowed size */
 	int				alloc_quantum_nr; /* number of items
 							   per allocation */
-	int				pad;
+	int				used_mb_nr;
 };
 
 struct xio_mempool {
@@ -114,7 +114,7 @@ struct xio_mempool {
  * Correction of a Memory Management Method for Lock-Free Data Structures
  * of John D. Valois's Lock-Free Data Structures. Ph.D. Dissertation
  */
-static int decrement_and_test_and_set(combind_t *ptr)
+static int decrement_and_test_and_set(combined_t *ptr)
 {
 	int old, new;
 
@@ -131,7 +131,7 @@ static int decrement_and_test_and_set(combind_t *ptr)
 /*---------------------------------------------------------------------------*/
 /* clear_lowest_bit							     */
 /*---------------------------------------------------------------------------*/
-static void clear_lowest_bit(combind_t *ptr)
+static void clear_lowest_bit(combined_t *ptr)
 {
 	int old, new;
 
@@ -166,6 +166,12 @@ static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
 		return;
 
 	reclaim(slot, p);
+
+#ifdef DEBUG_MEMPOOL_MT
+	__sync_fetch_and_sub(&slot->used_mb_nr, 1);
+#else
+	slot->used_mb_nr--;
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -218,6 +224,15 @@ static int xio_mem_slot_free(struct xio_mem_slot *slot)
 	struct xio_mem_region *r, *tmp_r;
 
 	slot->free_blocks_list = NULL;
+
+	if (slot->used_mb_nr)
+		ERROR_LOG("buffers are still in use before free: " \
+			  "pool:%p - slot[%p]: " \
+			  "size:%zd, used:%d, alloced:%d, max_alloc:%d\n",
+			  slot->pool, slot, slot->mb_size, slot->used_mb_nr,
+			  slot->curr_mb_nr, slot->max_mb_nr);
+
+
 	if (slot->curr_mb_nr) {
 		list_for_each_entry_safe(r, tmp_r, &slot->mem_regions_list,
 					 mem_region_entry) {
@@ -258,7 +273,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	int				nr_blocks;
 	size_t				region_alloc_sz;
 	size_t				data_alloc_sz;
-	int				i;
+	int				i, retval = 0;
 
 	if (slot->curr_mb_nr == 0) {
 		if (slot->init_mb_nr > slot->max_mb_nr)
@@ -290,14 +305,16 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	data_alloc_sz = nr_blocks*slot->mb_size;
 
 	/* allocate the buffers and register them */
-	if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+	if (slot->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
 		region->buf = umalloc_huge_pages(data_alloc_sz);
-	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+	} else if (slot->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
 		region->buf = unuma_alloc(data_alloc_sz, slot->pool->nodeid);
-	else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
-		region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t));
+	} else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC) {
+		/*region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t)); */
+		retval = posix_memalign(&region->buf, 64, data_alloc_sz);
+	}
 
-	if (region->buf == NULL) {
+	if (region->buf == NULL || retval) {
 		ufree(region);
 		return NULL;
 	}
@@ -374,6 +391,28 @@ void xio_mempool_destroy(struct xio_mempool *p)
 
 	ufree(p->slot);
 	ufree(p);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_mempool_dump							     */
+/*---------------------------------------------------------------------------*/
+void xio_mempool_dump(struct xio_mempool *p)
+{
+	int			i;
+	struct xio_mem_slot	*s;
+
+	if (!p)
+		return;
+
+	DEBUG_LOG("------------------------------------------------\n");
+	for (i = 0; i < p->slots_nr; i++) {
+		s = &p->slot[i];
+		DEBUG_LOG("pool:%p - slot[%d]: " \
+			  "size:%zd, used:%d, alloced:%d, max_alloc:%d\n",
+			  p, i, s->mb_size, s->used_mb_nr,
+			  s->curr_mb_nr, s->max_mb_nr);
+	}
+	DEBUG_LOG("------------------------------------------------\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -527,8 +566,9 @@ static inline int size2index(struct xio_mempool *p, size_t sz)
 	return (i == p->slots_nr) ? -1 : i;
 }
 
+
 /*---------------------------------------------------------------------------*/
-/* xio_mempool_alloc						     */
+/* xio_mempool_alloc							     */
 /*---------------------------------------------------------------------------*/
 int xio_mempool_alloc(struct xio_mempool *p, size_t length,
 		      struct xio_mempool_obj *mp_obj)
@@ -572,6 +612,14 @@ retry:
 	mp_obj->mr	= block->omr;
 	mp_obj->cache	= block;
 	mp_obj->length	= length;
+
+#ifdef DEBUG_MEMPOOL_MT
+	__sync_fetch_and_add(&slot->used_mb_nr, 1);
+#else
+	slot->used_mb_nr++;
+#endif
+
+	xio_mempool_dump(p);
 
 cleanup:
 	return ret;
