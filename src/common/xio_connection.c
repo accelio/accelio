@@ -1129,15 +1129,12 @@ int xio_connection_xmit_msgs(struct xio_connection *connection)
 	return -1;
 }
 
+
 /*---------------------------------------------------------------------------*/
 /* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
-static void xio_connection_release(struct kref *kref)
+int xio_connection_close(struct xio_connection *connection)
 {
-	struct xio_connection *connection = container_of(kref,
-							 struct xio_connection,
-							 kref);
-
 	if (xio_is_work_pending(&connection->hello_work))
 		xio_ctx_del_work(connection->ctx,
 				 &connection->hello_work);
@@ -1158,14 +1155,6 @@ static void xio_connection_release(struct kref *kref)
 	list_del(&connection->ctx_list_entry);
 
 	kfree(connection);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_connection_close							     */
-/*---------------------------------------------------------------------------*/
-int xio_connection_close(struct xio_connection *connection)
-{
-	kref_put(&connection->kref, xio_connection_release);
 
 	return 0;
 }
@@ -1312,6 +1301,7 @@ static void xio_fin_req_timeout(void *data)
 		xio_connection_destroy(connection);
 }
 
+
 /*---------------------------------------------------------------------------*/
 /* xio_send_fin_req							     */
 /*---------------------------------------------------------------------------*/
@@ -1347,6 +1337,10 @@ static int xio_send_fin_req(struct xio_connection *connection)
 		ERROR_LOG("xio_ctx_timer_add failed.\n");
 		return retval;
 	}
+
+	/* avoid race for recv and send completion and xio_connection_destroy */
+	kref_get(&connection->kref);
+	kref_get(&connection->kref);
 
 	/* do not xmit until connection is assigned */
 	return xio_connection_xmit(connection);
@@ -1716,7 +1710,7 @@ static inline void xio_session_teardown(void *_session)
 /*---------------------------------------------------------------------------*/
 /* xio_connection_post_destroy						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_post_destroy(struct xio_connection *connection)
+static void xio_connection_post_destroy(struct kref *kref)
 {
 	int			retval;
 	int			reason;
@@ -1726,10 +1720,9 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 	int			state;
 	int			close_reason;
 
-	if (connection == NULL) {
-		xio_set_error(EINVAL);
-		return -1;
-	}
+	struct xio_connection *connection = container_of(kref,
+							 struct xio_connection,
+							 kref);
 	session = connection->session;
 	ctx = connection->ctx;
 	state = session->state;
@@ -1771,10 +1764,10 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 	}
 	if (retval != 0) {
 		ERROR_LOG("failed to close connection");
-		return -1;
+		return;
 	}
 	if (session->disable_teardown)
-		return 0;
+		return;
 
 	if (destroy_session) {
 		switch (state) {
@@ -1783,7 +1776,7 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 				xio_session_destroy(session);
 			else
 				xio_session_notify_rejected(session);
-			return 0;
+			return;
 		case XIO_SESSION_STATE_ACCEPTED:
 			if (session->type == XIO_SESSION_SERVER)
 				reason = XIO_E_SESSION_DISCONECTED;
@@ -1807,8 +1800,14 @@ int xio_connection_post_destroy(struct xio_connection *connection)
 					&session->teardown_work);
 		}
 	}
+}
 
-	return 0;
+/*---------------------------------------------------------------------------*/
+/* xio_connection_putref						     */
+/*---------------------------------------------------------------------------*/
+void xio_connection_putref(struct xio_connection *connection)
+{
+	kref_put(&connection->kref, xio_connection_post_destroy);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1865,9 +1864,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 		if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
 			xio_ctx_del_delayed_work(connection->ctx,
 						 &connection->fin_timeout_work);
-
-		retval = xio_connection_post_destroy(connection);
 	}
+	kref_put(&connection->kref, xio_connection_post_destroy);
 
 	return retval;
 }
@@ -1983,3 +1981,5 @@ int xio_connection_error_event(struct xio_connection *connection,
 
 	return 0;
 }
+
+

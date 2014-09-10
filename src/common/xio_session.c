@@ -463,10 +463,12 @@ int xio_on_fin_req_send_comp(struct xio_connection *connection,
 		  "connection:%p\n",
 		  connection->session, connection);
 
+	xio_connection_putref(connection);
+
 	return 0;
 }
 
-void xio_close_time_wait(void *data)
+static void xio_close_time_wait(void *data)
 {
 	struct xio_connection *connection = data;
 
@@ -492,7 +494,7 @@ void xio_close_time_wait(void *data)
 		xio_connection_destroy(connection);
 }
 
-void xio_handle_last_ack(void *data)
+static void xio_handle_last_ack(void *data)
 {
 	struct xio_connection *connection = data;
 
@@ -513,12 +515,13 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 			struct xio_task *task)
 {
 	struct xio_transition	*transition;
+	int			retval = 0;
 
 	DEBUG_LOG("got fin response. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	if (connection->fin_req_timeout)
-		return 0;
+		goto cleanup;
 
 	connection->fin_req_timeout++;
 
@@ -540,11 +543,12 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
 			  "state:%d\n",
 			  connection->session, connection, connection->state);
-		return -1;
+		retval = -1;
+		goto cleanup;
 	}
 	if (connection->state == XIO_CONNECTION_STATE_LAST_ACK) {
 		xio_handle_last_ack(connection);
-		return 0;
+		goto cleanup;
 	}
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
@@ -563,10 +567,14 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
-			return retval;
+			goto cleanup;
 		}
 	}
-	return 0;
+
+cleanup:
+	xio_connection_putref(connection);
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/

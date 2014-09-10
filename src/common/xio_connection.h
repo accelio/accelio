@@ -211,5 +211,7 @@ char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
 
+void xio_connection_putref(struct xio_connection *connection);
+
 #endif /*XIO_CONNECTION_H */
 
