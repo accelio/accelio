@@ -276,7 +276,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	int				nr_blocks;
 	size_t				region_alloc_sz;
 	size_t				data_alloc_sz;
-	int				i, retval = 0;
+	int				i;
 
 	if (slot->curr_mb_nr == 0) {
 		if (slot->init_mb_nr > slot->max_mb_nr)
@@ -314,10 +314,10 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 		region->buf = unuma_alloc(data_alloc_sz, slot->pool->nodeid);
 	} else if (slot->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC) {
 		/*region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t)); */
-		retval = posix_memalign(&region->buf, 64, data_alloc_sz);
+		region->buf = umemalign(64, data_alloc_sz);
 	}
 
-	if (region->buf == NULL || retval) {
+	if (region->buf == NULL) {
 		ufree(region);
 		return NULL;
 	}
