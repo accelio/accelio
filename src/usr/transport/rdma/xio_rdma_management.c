@@ -2258,7 +2258,7 @@ static struct xio_transport_base *xio_rdma_open(
 
 	rdma_hndl->base.portal_uri	= NULL;
 	rdma_hndl->base.proto		= XIO_PROTO_RDMA;
-	atomic_set(&rdma_hndl->base.refcnt, 1);
+	kref_init(&rdma_hndl->base.kref);
 	rdma_hndl->transport		= transport;
 	rdma_hndl->cm_id		= NULL;
 	rdma_hndl->qp			= NULL;
@@ -2309,53 +2309,67 @@ cleanup:
  * the connection QP may be destroyed, and its number may be recycled.
  */
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_close_cb		                                             */
+/*---------------------------------------------------------------------------*/
+static void xio_rdma_close_cb(struct kref *kref)
+{
+	struct xio_transport_base *transport = container_of(
+					kref, struct xio_transport_base, kref);
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)transport;
+	int	retval;
+
+	/* now it is zero */
+	TRACE_LOG("xio_rmda_close: [close] handle:%p, qp:%p\n",
+			rdma_hndl, rdma_hndl->qp);
+
+	switch (rdma_hndl->state) {
+	case XIO_STATE_LISTEN:
+		rdma_hndl->state = XIO_STATE_CLOSED;
+		xio_rdma_post_close(
+				(struct xio_transport_base *)rdma_hndl);
+		break;
+	case XIO_STATE_CONNECTED:
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+				rdma_hndl);
+		rdma_hndl->state = XIO_STATE_CLOSED;
+		retval = rdma_disconnect(rdma_hndl->cm_id);
+		if (retval)
+			DEBUG_LOG("handle:%p rdma_disconnect failed, " \
+					"%m\n", rdma_hndl);
+		break;
+	case XIO_STATE_DISCONNECTED:
+		rdma_hndl->state = XIO_STATE_CLOSED;
+		break;
+	default:
+		xio_transport_notify_observer(&rdma_hndl->base,
+				XIO_TRANSPORT_CLOSED,
+				NULL);
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+		break;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_close		                                             */
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_close(struct xio_transport_base *transport)
 {
-	struct xio_rdma_transport *rdma_hndl =
-		(struct xio_rdma_transport *)transport;
-	int	retval;
-	int was = __atomic_add_unless(&rdma_hndl->base.refcnt, -1, 0);
+	int was = atomic_read(&transport->kref.refcount);
+
+	/* this is only for debugging - please note that the combination of
+	 * atomic_read and kref_put is not atomic - please remove if this
+	 * error does not pop up. Otherwise contact me and report bug.
+	 */
 
 	/* was already 0 */
 	if (!was) {
-		TRACE_LOG("xio_rmda_close: [was-closed] handle:%p, qp:%p\n",
-			  rdma_hndl, rdma_hndl->qp);
+		ERROR_LOG("xio_rmda_close double close. handle:%p\n",
+			  transport);
 		return;
 	}
 
-	if (was == 1) {
-		/* now it is zero */
-		TRACE_LOG("xio_rmda_close: [close] handle:%p, qp:%p\n",
-			  rdma_hndl, rdma_hndl->qp);
-
-		switch (rdma_hndl->state) {
-		case XIO_STATE_LISTEN:
-			rdma_hndl->state = XIO_STATE_CLOSED;
-			 xio_rdma_post_close(
-				(struct xio_transport_base *)rdma_hndl);
-			 break;
-		case XIO_STATE_CONNECTED:
-			TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
-				  rdma_hndl);
-			 rdma_hndl->state = XIO_STATE_CLOSED;
-			 retval = rdma_disconnect(rdma_hndl->cm_id);
-			 if (retval)
-				DEBUG_LOG("handle:%p rdma_disconnect failed, " \
-					  "%m\n", rdma_hndl);
-			 break;
-		case XIO_STATE_DISCONNECTED:
-			 rdma_hndl->state = XIO_STATE_CLOSED;
-			 break;
-		default:
-			 xio_transport_notify_observer(&rdma_hndl->base,
-						       XIO_TRANSPORT_CLOSED,
-						       NULL);
-			 rdma_hndl->state = XIO_STATE_DESTROYED;
-			 break;
-		}
-	}
+	kref_put(&transport->kref, xio_rdma_close_cb);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2389,7 +2403,7 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 	xio_rdma_close(*new_trans_hndl);
 
 	/* nexus layer will call close which will only decrement */
-	atomic_inc(&old_trans_hndl->refcnt);
+	kref_get(&old_trans_hndl->kref);
 	*new_trans_hndl = old_trans_hndl;
 
 	return 0;

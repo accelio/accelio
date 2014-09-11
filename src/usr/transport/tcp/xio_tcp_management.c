@@ -270,45 +270,62 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_close_cb		                                             */
+/*---------------------------------------------------------------------------*/
+static void xio_rdma_close_cb(struct kref *kref)
+{
+	struct xio_transport_base *transport = container_of(
+					kref, struct xio_transport_base, kref);
+	struct xio_tcp_transport *tcp_hndl =
+		(struct xio_tcp_transport *)transport;
+
+	/* now it is zero */
+	TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
+			tcp_hndl, tcp_hndl->sock.cfd);
+
+	switch (tcp_hndl->state) {
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_CONNECTED:
+		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+		/*fallthrough*/
+	case XIO_STATE_DISCONNECTED:
+		on_sock_disconnected(tcp_hndl, 0);
+		/*fallthrough*/
+	case XIO_STATE_CLOSED:
+		on_sock_close(tcp_hndl);
+		break;
+	default:
+		xio_transport_notify_observer(&tcp_hndl->base,
+				XIO_TRANSPORT_CLOSED,
+				NULL);
+		tcp_hndl->state = XIO_STATE_DESTROYED;
+		break;
+	}
+
+	if (tcp_hndl->state  == XIO_STATE_DESTROYED)
+		xio_tcp_post_close(tcp_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_close		                                             */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_close(struct xio_transport_base *transport)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport;
-	int was = __atomic_add_unless(&tcp_hndl->base.refcnt, -1, 0);
+	int was = atomic_read(&transport->kref.refcount);
+
+	/* this is only for debugging - please note that the combination of
+	 * atomic_read and kref_put is not atomic - please remove if this
+	 * error does not pop up. Otherwise contact me and report bug.
+	 */
 
 	/* was already 0 */
-	if (!was)
+	if (!was) {
+		ERROR_LOG("xio_tcp_close double close. handle:%p\n",
+			  transport);
 		return;
-
-	if (was == 1) {
-		/* now it is zero */
-		TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
-			  tcp_hndl, tcp_hndl->sock.cfd);
-
-		switch (tcp_hndl->state) {
-		case XIO_STATE_LISTEN:
-		case XIO_STATE_CONNECTED:
-			tcp_hndl->state = XIO_STATE_DISCONNECTED;
-			/*fallthrough*/
-		case XIO_STATE_DISCONNECTED:
-			on_sock_disconnected(tcp_hndl, 0);
-			/*fallthrough*/
-		case XIO_STATE_CLOSED:
-			on_sock_close(tcp_hndl);
-			break;
-		default:
-			xio_transport_notify_observer(&tcp_hndl->base,
-						      XIO_TRANSPORT_CLOSED,
-						      NULL);
-			tcp_hndl->state = XIO_STATE_DESTROYED;
-			break;
-		}
-
-		if (tcp_hndl->state  == XIO_STATE_DESTROYED)
-			xio_tcp_post_close(tcp_hndl);
 	}
+
+	kref_put(&transport->kref, xio_rdma_close_cb);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -743,7 +760,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	tcp_hndl->base.portal_uri	= NULL;
 	tcp_hndl->base.proto		= XIO_PROTO_TCP;
-	atomic_set(&tcp_hndl->base.refcnt, 1);
+	kref_init(&tcp_hndl->base.kref);
 	tcp_hndl->transport		= transport;
 	tcp_hndl->base.ctx		= ctx;
 	tcp_hndl->is_listen		= 0;
@@ -2409,7 +2426,7 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	xio_tcp_close(*new_trans_hndl);
 
 	/* conn layer will call close which will only decrement */
-	atomic_inc(&old_trans_hndl->refcnt);
+	kref_get(&old_trans_hndl->kref);
 	*new_trans_hndl = old_trans_hndl;
 
 	return 0;

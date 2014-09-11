@@ -109,7 +109,7 @@ struct xio_transport_base {
 	struct xio_context		*ctx;
 	struct xio_observable		observable;
 	uint32_t			is_client;  /* client or server */
-	atomic_t			refcnt;
+	struct kref			kref;
 	char				*portal_uri;
 	struct sockaddr_storage		peer_addr;
 	struct sockaddr_storage		local_addr;
