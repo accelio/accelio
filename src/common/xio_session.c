@@ -521,7 +521,7 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 		  connection->session, connection);
 
 	if (connection->fin_req_timeout)
-		goto cleanup;
+		return 0;
 
 	connection->fin_req_timeout++;
 
@@ -608,8 +608,7 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 			     struct xio_task *task)
 {
 	struct xio_transition	*transition;
-
-	int			retval;
+	int			retval = 0;
 
 	DEBUG_LOG("fin response send completion received. "  \
 		  "session:%p, connection:%p\n",
@@ -658,11 +657,14 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
-			return retval;
+			goto cleanup;
 		}
 	}
 
-	return 0;
+cleanup:
+	xio_connection_putref(connection);
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/

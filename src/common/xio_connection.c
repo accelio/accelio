@@ -1299,6 +1299,8 @@ static void xio_fin_req_timeout(void *data)
 						       connection);
 	else
 		xio_connection_destroy(connection);
+
+	xio_connection_putref(connection);
 }
 
 
@@ -1369,6 +1371,9 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 
 	TRACE_LOG("send fin response. session:%p, connection:%p\n",
 		  connection->session, connection);
+
+	/* add reference to avoid race */
+	kref_get(&connection->kref);
 
 	/* status is not important - just send */
 	return xio_connection_xmit(connection);
