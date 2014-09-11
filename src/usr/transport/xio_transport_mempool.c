@@ -606,7 +606,7 @@ retry:
 				ret = 0;
 				goto retry;
 			}
-			printf("resizing slot size:%zd\n", slot->mb_size);
+			DEBUG_LOG("resizing slot size:%zd\n", slot->mb_size);
 		}
 		pthread_spin_unlock(&slot->lock);
 	}
