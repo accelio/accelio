@@ -106,15 +106,15 @@ union xio_transport_event_data {
 };
 
 struct xio_transport_base {
-	struct xio_context		*ctx;
 	struct xio_observable		observable;
 	uint32_t			is_client;  /* client or server */
-	struct kref			kref;
+	int				pad;
 	char				*portal_uri;
 	struct sockaddr_storage		peer_addr;
 	struct sockaddr_storage		local_addr;
 	enum   xio_proto		proto;
-	int				pad;
+	struct kref			kref;
+	struct xio_context		*ctx;
 };
 
 struct xio_transport_msg_validators_cls {
