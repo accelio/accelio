@@ -45,7 +45,7 @@
 #include "xio_context.h"
 #include "xio_transport.h"
 #include "xio_sessions_cache.h"
-#include "xio_hash.h"
+#include "xio_idr.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
 #include "xio_connection.h"
@@ -1016,6 +1016,9 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		if (session->state == XIO_SESSION_STATE_ONLINE)
 			xio_connection_send_hello_req(connection);
 	}
+
+	xio_idr_add_uobj(connection);
+
 	mutex_unlock(&session->lock);
 
 	return connection;

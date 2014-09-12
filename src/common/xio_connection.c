@@ -46,6 +46,7 @@
 #include "xio_session.h"
 #include "xio_context.h"
 #include "xio_sg_table.h"
+#include "xio_idr.h"
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_TIMEOUT		60000
@@ -1821,12 +1822,22 @@ void xio_connection_putref(struct xio_connection *connection)
 int xio_connection_destroy(struct xio_connection *connection)
 {
 	int			retval = 0;
+	int			found;
 	struct xio_session	*session;
 
 	if (connection == NULL) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
+	found = xio_idr_lookup_uobj(connection);
+	if (found) {
+		xio_idr_remove_uobj(connection);
+	} else {
+		ERROR_LOG("connection not found:%p\n", connection);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return -1;
+	}
+
 	session = connection->session;
 
 	DEBUG_LOG("xio_connection_destroy. session:%p, connection:%p " \

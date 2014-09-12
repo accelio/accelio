@@ -50,6 +50,7 @@
 #include "xio_connection.h"
 #include "xio_session_priv.h"
 #include "xio_sg_table.h"
+#include "xio_idr.h"
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
@@ -1488,6 +1489,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 			  session);
 		goto cleanup3;
 	}
+	xio_idr_add_uobj(session);
+
 	return session;
 
 cleanup3:
@@ -1508,8 +1511,19 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 int xio_session_destroy(struct xio_session *session)
 {
+	int found;
+
 	if (session == NULL)
 		return 0;
+
+	found = xio_idr_lookup_uobj(session);
+	if (found) {
+		xio_idr_remove_uobj(session);
+	} else {
+		ERROR_LOG("session not found:%p\n", session);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return -1;
+	}
 
 	TRACE_LOG("session destroy:%p\n", session);
 	session->state = XIO_SESSION_STATE_CLOSING;

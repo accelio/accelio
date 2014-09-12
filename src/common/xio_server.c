@@ -47,6 +47,7 @@
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_server.h"
+#include "xio_idr.h"
 
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
@@ -152,6 +153,8 @@ static int xio_on_new_message(struct xio_server *server,
 		}
 		connection = connection1;
 
+		xio_idr_add_uobj(session);
+		xio_idr_add_uobj(connection);
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 
@@ -196,6 +199,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
+		xio_idr_add_uobj(connection);
 	} else {
 		ERROR_LOG("server unexpected message\n");
 		return -1;
@@ -316,6 +320,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;
 	}
+	xio_idr_add_uobj(server);
 
 	return server;
 
@@ -334,9 +339,19 @@ cleanup:
 int xio_unbind(struct xio_server *server)
 {
 	int retval = 0;
+	int found;
 
 	if (server == NULL)
 		return -1;
+
+	found = xio_idr_lookup_uobj(server);
+	if (found) {
+		xio_idr_remove_uobj(server);
+	} else {
+		ERROR_LOG("server not found:%p\n", server);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return -1;
+	}
 
 	xio_observable_notify_all_observers(&server->nexus_observable,
 					    XIO_SERVER_EVENT_CLOSE, NULL);
