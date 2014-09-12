@@ -506,9 +506,9 @@ static void xio_handle_last_ack(void *data)
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
-
-	xio_connection_destroy(connection);
+	/* xio_connection_destroy(connection); */
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_fin_rsp_recv				                             */
 /*---------------------------------------------------------------------------*/
