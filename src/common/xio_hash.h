@@ -182,6 +182,21 @@ static inline void xio_int32_cp(
 	dst->id = src->id;
 }
 
+static inline int xio_int64_cmp(
+		const struct xio_key_int64 *k1,
+		const struct xio_key_int64 *k2)
+{
+	return (k1->id == k2->id);
+}
+
+static inline void xio_int64_cp(
+		struct xio_key_int64 *dst,
+		const struct xio_key_int64 *src)
+{
+	dst->id = src->id;
+}
+
+
 static inline int xio_ptr_cmp(
 		const struct xio_key_ptr *k1,
 		const struct xio_key_ptr *k2)
