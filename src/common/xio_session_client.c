@@ -605,6 +605,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			session->lead_connection->disable_notify = 1;
 			session->lead_connection->state	=
 					XIO_CONNECTION_STATE_ONLINE;
+
+			/* temporary account it as user object */
+			xio_idr_add_uobj(session->lead_connection);
 			xio_disconnect(session->lead_connection);
 
 			/* temporary disable teardown - on cached nexuss close
