@@ -48,10 +48,6 @@
 #include "xio_common.h"
 #include "get_clock.h"
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
-
 #define MAX_DELETED_EVENTS	1024
 
 extern double                    g_mhz;
