@@ -20,14 +20,15 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_nexus_cache.c	\
 	../../common/xio_options.c 	\
 	../../common/xio_session.c 	\
-	../../common/xio_sessions_server.c	\
-	../../common/xio_sessions_client.c	\
+	../../common/xio_session_server.c	\
+	../../common/xio_session_client.c	\
 	../../common/xio_transport.c \
 	../../common/xio_connection.c \
 	../../common/xio_error.c \
 	../../common/xio_server.c \
 	../../common/xio_sessions_cache.c \
 	../../common/xio_observer.c \
+	../../common/xio_idr.c \
 	../../common/xio_utils.c \
 
 xiomoduledir = @kmoduledir@/extra/net/xio
@@ -100,6 +101,7 @@ xio-objs := \
 	../../common/xio_server.o \
 	../../common/xio_sessions_cache.o \
 	../../common/xio_observer.o \
+	../../common/xio_idr.o \
 	../../common/xio_utils.o
 
 

@@ -76,6 +76,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_session.h			\
 			../common/xio_session_priv.h		\
 			../common/xio_sessions_cache.h		\
+			../common/xio_idr.h			\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
 			../common/xio_sg_table.h		\
@@ -107,7 +108,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_workqueue.c		\
 			./xio/xio_sg_iov.c		\
 			./xio/xio_sg_iovptr.c		\
-			./xio/xio_sg_table.c	\
+			./xio/xio_sg_table.c		\
 			$(libxio_rdma_sources)		\
 			./transport/tcp/xio_tcp_management.c	\
 			./transport/tcp/xio_tcp_datapath.c	\
@@ -124,10 +125,10 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_observer.c	\
 			../common/xio_nexus.c		\
 			../common/xio_nexus_cache.c	\
+			../common/xio_idr.c		\
 			../common/xio_transport.c	\
 			../common/xio_connection.c	
-	
-				
+						
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 

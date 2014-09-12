@@ -35,103 +35,108 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include "xio_os.h"
-#include "libxio.h"
 #include "xio_common.h"
-#include "xio_tls.h"
-#include "xio_sessions_cache.h"
-#include "xio_nexus_cache.h"
-#include "xio_observer.h"
-#include "xio_transport.h"
-#include "xio_idr.h"
+#include "xio_hash.h"
+#include <sys/hashtable.h>
 
-int	page_size;
-double	g_mhz;
-
-#ifdef HAVE_INFINIBAND_VERBS_H
-extern struct xio_transport xio_rdma_transport;
-#endif
-extern struct xio_transport xio_tcp_transport;
-
-static struct xio_transport  *transport_tbl[] = {
-#ifdef HAVE_INFINIBAND_VERBS_H
-	&xio_rdma_transport,
-#endif
-	&xio_tcp_transport
+struct idr_entry {
+	void					*key;
+	HT_ENTRY(idr_entry, xio_key_int64)	idr_ht_entry;
 };
 
-#define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
-
-static volatile int32_t	ini_refcnt = 0;
-static DEFINE_MUTEX(ini_mutex);
+static HT_HEAD(, idr_entry, HASHTABLE_PRIME_MEDIUM) idr_cache;
+static spinlock_t idr_lock;
 
 /*---------------------------------------------------------------------------*/
-/* xio_dtor								     */
+/* xio_idr_remove_uobj							     */
 /*---------------------------------------------------------------------------*/
-static void xio_dtor()
+int xio_idr_remove_uobj(void *uobj)
 {
-	size_t i;
+	struct idr_entry	*idr = NULL;
+	struct xio_key_int64	key;
 
-	for (i = 0; i < transport_tbl_sz; i++) {
-		if (transport_tbl[i]->release)
-			transport_tbl[i]->release(transport_tbl[i]);
-
-		if (transport_tbl[i]->dtor)
-			transport_tbl[i]->dtor();
-
-		xio_unreg_transport(transport_tbl[i]);
+	spin_lock(&idr_lock);
+	key.id = uint64_from_ptr(uobj);
+	HT_LOOKUP(&idr_cache, &key, idr, idr_ht_entry);
+	if (idr == NULL) {
+		spin_unlock(&idr_lock);
+		return -1;
 	}
-	xio_idr_destroy();
-	xio_thread_data_destruct();
+
+	HT_REMOVE(&idr_cache, idr, xio_idr_entry, idr_ht_entry);
+	spin_unlock(&idr_lock);
+
+	kfree(idr);
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_dtor								     */
+/* xio_idr_lookup_uobj							     */
 /*---------------------------------------------------------------------------*/
-static void xio_ctor()
+int xio_idr_lookup_uobj(void *uobj)
 {
-	size_t i;
+	struct idr_entry	*idr = NULL;
+	struct xio_key_int64	key;
 
-	page_size = sysconf(_SC_PAGESIZE);
-	if (page_size < 0)
-		page_size = 4096;
-	g_mhz = get_cpu_mhz(0);
-	xio_thread_data_construct();
-	xio_idr_create();
-	sessions_cache_construct();
-	nexus_cache_construct();
+	spin_lock(&idr_lock);
+	key.id = uint64_from_ptr(uobj);
+	HT_LOOKUP(&idr_cache, &key, idr, idr_ht_entry);
+	spin_unlock(&idr_lock);
 
-	for (i = 0; i < transport_tbl_sz; i++) {
-		xio_reg_transport(transport_tbl[i]);
-
-		if (transport_tbl[i]->ctor)
-			transport_tbl[i]->ctor();
-	}
+	return (idr != NULL);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
+/* xio_sessions_cache_add			                             */
 /*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_init(void)
+int xio_idr_add_uobj(void *uobj)
 {
-	mutex_lock(&ini_mutex);
-	if (++ini_refcnt == 1)
-		xio_ctor();
-	mutex_unlock(&ini_mutex);
+	struct idr_entry	*idr1 = NULL, *idr;
+	struct xio_key_int64	key;
+	int			retval = -1;
+
+	idr = kcalloc(1, sizeof(*idr), GFP_KERNEL);
+	if (idr == NULL)
+		return -1;
+
+	spin_lock(&idr_lock);
+	key.id = uint64_from_ptr(uobj);
+	HT_LOOKUP(&idr_cache, &key, idr1, idr_ht_entry);
+	if (idr1 != NULL)
+		goto exit;
+
+	idr->key = uobj;
+	HT_INSERT(&idr_cache, &key, idr, idr_ht_entry);
+	retval = 0;
+exit:
+	spin_unlock(&idr_lock);
+	if (retval)
+		kfree(idr);
+
+	return retval;
 }
 
-__attribute__((destructor))  void xio_shutdown(void)
+/*---------------------------------------------------------------------------*/
+/* xio_idr_create							     */
+/*---------------------------------------------------------------------------*/
+void xio_idr_create(void)
 {
-	mutex_lock(&ini_mutex);
-	if (ini_refcnt <= 0) {
-		ERROR_LOG("reference count < 0\n");
-		abort();
-		mutex_unlock(&ini_mutex);
-		return;
+	HT_INIT(&idr_cache, xio_int64_hash, xio_int64_cmp, xio_int64_cp);
+	spin_lock_init(&idr_lock);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_idr_destroy							     */
+/*---------------------------------------------------------------------------*/
+void xio_idr_destroy(void)
+{
+	struct idr_entry *idr = NULL;
+
+	HT_FOREACH_SAFE(idr, &idr_cache, idr_ht_entry) {
+		HT_REMOVE(&idr_cache, idr, idr_entry, idr_ht_entry);
+		ERROR_LOG("user object leaked: %p\n", idr->key);
+		kfree(idr);
 	}
-	if (--ini_refcnt == 0)
-		xio_dtor();
-	mutex_unlock(&ini_mutex);
 }
 

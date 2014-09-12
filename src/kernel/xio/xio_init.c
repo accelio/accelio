@@ -44,6 +44,7 @@
 #include "xio_common.h"
 #include "xio_sessions_cache.h"
 #include "xio_nexus_cache.h"
+#include "xio_idr.h"
 #include "xio_nexus.h"
 #include "xio_task.h"
 #include "xio_context.h"
@@ -76,12 +77,14 @@ static int __init xio_init_module(void)
 
 	sessions_cache_construct();
 	nexus_cache_construct();
+	xio_idr_create();
 
 	return 0;
 }
 
 static void __exit xio_cleanup_module(void)
 {
+	xio_idr_destroy();
 	if (xio_root) {
 		debugfs_remove_recursive(xio_root);
 		xio_root = NULL;
