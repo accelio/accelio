@@ -1418,6 +1418,11 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 		  xio_connection_state_str(XIO_CONNECTION_STATE_FIN_WAIT_1));
 
 	connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
+
+	/* avoid race for recv and send completion and xio_connection_destroy */
+	kref_get(&connection->kref);
+	kref_get(&connection->kref);
+
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
 	if (retval == -EAGAIN)
