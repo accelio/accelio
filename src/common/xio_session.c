@@ -973,14 +973,21 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 {
 	struct xio_connection *connection;
 
+	DEBUG_LOG("xio_session_on_nexus_disconnected. session:%p, nexus:%p\n",
+		  session, nexus);
+
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == nexus) {
 		connection = session->lead_connection;
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		if (session->state == XIO_SESSION_STATE_CONNECT)
+			xio_connection_disconnected(connection);
 	} else if (session->redir_connection &&
 		   session->redir_connection->nexus == nexus) {
 		connection = session->redir_connection;
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		if (session->state == XIO_SESSION_STATE_CONNECT)
+			xio_connection_disconnected(connection);
 	} else {
 		spin_lock(&session->connections_list_lock);
 		connection = xio_session_find_connection(session, nexus);
@@ -1505,7 +1512,6 @@ cleanup:
 	return NULL;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_destroy							     */
 /*---------------------------------------------------------------------------*/
@@ -1515,6 +1521,13 @@ int xio_session_destroy(struct xio_session *session)
 
 	if (session == NULL)
 		return 0;
+
+	if (!list_empty(&session->connections_list)) {
+		xio_set_error(EBUSY);
+		ERROR_LOG("xio_session_destroy failed: " \
+			  "connections are still open\n");
+		return -1;
+	}
 
 	found = xio_idr_lookup_uobj(session);
 	if (found) {
@@ -1527,16 +1540,9 @@ int xio_session_destroy(struct xio_session *session)
 
 	TRACE_LOG("session destroy:%p\n", session);
 	session->state = XIO_SESSION_STATE_CLOSING;
-	if (list_empty(&session->connections_list)) {
-		xio_session_pre_teardown(session);
-		if (!session->in_notify)
-			xio_session_post_teardown(session);
-	} else {
-		xio_set_error(EBUSY);
-		ERROR_LOG("xio_session_close failed: " \
-			  "connections are still open\n");
-		return -1;
-	}
+	xio_session_pre_teardown(session);
+	if (!session->in_notify)
+		xio_session_post_teardown(session);
 
 	return 0;
 }
