@@ -752,9 +752,9 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		DEBUG_LOG("responses received while connection is offline\n");
 		/* for various reasons, responses can arrive while connection
 		 * is already offline
-		 * just remove the message and release the response
+		 * release the response, and let it be flushed via "flush"
+		 * mechanism
 		 */
-		xio_connection_remove_in_flight(connection, sender_task->omsg);
 		xio_release_response_task(task);
 		goto xmit;
 	}
