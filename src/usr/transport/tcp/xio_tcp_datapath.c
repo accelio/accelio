@@ -798,12 +798,12 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 	if (tcp_hndl->state >= XIO_STATE_DISCONNECTED)
 		return;
 
+	tcp_hndl->state = XIO_STATE_DISCONNECTED;
+
 	xio_ctx_init_event(&tcp_hndl->disconnect_event,
 			   xio_tcp_disconnect_handler,
 			   tcp_hndl);
 	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
-
-	tcp_hndl->state = XIO_STATE_DISCONNECTED;
 }
 
 /*---------------------------------------------------------------------------*/

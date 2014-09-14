@@ -272,7 +272,7 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_close_cb		                                             */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_close_cb(struct kref *kref)
+static void xio_tcp_close_cb(struct kref *kref)
 {
 	struct xio_transport_base *transport = container_of(
 					kref, struct xio_transport_base, kref);
@@ -325,7 +325,7 @@ static void xio_tcp_close(struct xio_transport_base *transport)
 		return;
 	}
 
-	kref_put(&transport->kref, xio_rdma_close_cb);
+	kref_put(&transport->kref, xio_tcp_close_cb);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -485,7 +485,8 @@ void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
 		++count;
 	} while (retval > 0 && count <  RX_POLL_NR_MAX);
 
-	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len) {
+	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len &&
+	    tcp_hndl->state == XIO_STATE_CONNECTED) {
 		xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
 				   xio_tcp_consume_ctl_rx, tcp_hndl);
 		xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
