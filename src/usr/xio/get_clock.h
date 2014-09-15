@@ -42,11 +42,11 @@ typedef unsigned long long cycles_t;
 static inline cycles_t get_cycles()
 {
 	union {
-		unsigned long long val;
+		cycles_t val;
 		struct {
 			unsigned int low;
 			unsigned int high;
-		} __attribute__(packed);
+		} __attribute__((packed));
 	} value;
 
 	asm volatile ("rdtsc" : "=a" (value.low), "=d" (value.high));
