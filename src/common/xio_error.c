@@ -117,7 +117,9 @@ static const char *xio_gen_status_str(enum xio_status ev)
 	case XIO_E_REM_USER_BUF_OVERFLOW:
 		return "Remote user buffers overflow";
 	case XIO_E_TX_QUEUE_OVERFLOW:
-		return "send queue overflow";
+		return "Send queue overflow";
+	case XIO_E_USER_OBJ_NOT_FOUND:
+		return "User object not found";
 	default:
 		return "Unknown error";
 	};

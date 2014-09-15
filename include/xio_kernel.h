@@ -172,7 +172,8 @@ enum xio_status {
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
 	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
+	XIO_E_USER_OBJ_NOT_FOUND	= (XIO_BASE_STATUS + 36),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 37)
 };
 
 enum xio_msg_flags {
@@ -939,17 +940,6 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 int xio_unbind(struct xio_server *server);
 
 /**
- * xio_get_connection - return connection handle on server.
- *
- * @session: The xio session handle.
- * @ctx: the xio context handle.
- *
- * RETURNS: xio session context, or NULL upon error.
- */
-struct xio_connection *xio_get_connection(struct xio_session  *session,
-					  struct xio_context  *ctx);
-
-/**
  * accept new session or "light redirect" it to anther thread
  *
  * @param[in] session		The xio session handle
@@ -1017,6 +1007,47 @@ int xio_reject(struct xio_session *session,
  * RETURNS: success (0), or a (negative) error value.
  */
 int xio_send_response(struct xio_msg *rsp);
+
+/**
+ * set xio's configuration tuning option
+ *
+ * @param[in] xio_obj	Pointer to xio object or NULL
+ * @param[in] level	The level at which the option is
+ *			defined (@ref xio_optlevel)
+ * @param[in] optname	The option for which the value is to be set.
+ *			The optname parameter must be a socket option
+ *			defined within the specified level, or behavior
+ *			is undefined (@ref xio_optname)
+ * @param[in] optval	A pointer to the buffer in which the value
+ *			for the requested option is specified
+ * @param[in] optlen	The size, in bytes, of the buffer pointed to by
+ *			the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_set_opt(void *xio_obj, int level, int optname,
+		const void *optval, int optlen);
+
+/**
+ * set xio's configuration tuning option
+ *
+ * @param[in] xio_obj	  Pointer to xio object or NULL
+ * @param[in] level	  The level at which the option is
+ *			  defined (@ref xio_optlevel)
+ * @param[in] optname	  The option for which the value is to be set.
+ *			  The optname parameter must be a socket option
+ *			  defined within the specified level, or behavior
+ *			  is undefined (@ref xio_optname)
+ * @param[in,out] optval  A pointer to the buffer in which the value
+ *			  for the requested option is specified
+ * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
+ *			  the optval parameter
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_get_opt(void *xio_obj, int level, int optname,
+		void *optval, int *optlen);
+
 
 /**
  * attempts to read at least min_nr events and up to nr events

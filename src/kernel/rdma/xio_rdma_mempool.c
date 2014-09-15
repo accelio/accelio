@@ -96,12 +96,13 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 
 	real_ones = ARRAY_SIZE(sizes) - 1;
 	ch = p->pool;
-	for (i =  0; i < real_ones; i++) {
+	for (i = 0; i < real_ones; i++) {
 		if (!ch->kcache)
 			break;
 		INFO_LOG("kcache(%s) freed\n", ch->name);
 		kmem_cache_destroy(ch->kcache);
 		ch->kcache = NULL;
+		ch++;
 	}
 
 	kfree(p);

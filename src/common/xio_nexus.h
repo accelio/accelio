@@ -42,6 +42,7 @@
 #include "xio_context.h"
 #include "xio_transport.h"
 #include "sys/hashtable.h"
+#include "xio_server.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -81,7 +82,8 @@ enum xio_nexus_state {
 	XIO_NEXUS_STATE_REJECTED,
 	XIO_NEXUS_STATE_CLOSED,
 	XIO_NEXUS_STATE_DISCONNECTED,
-	XIO_NEXUS_STATE_RECONNECT
+	XIO_NEXUS_STATE_RECONNECT,
+	XIO_NEXUS_STATE_ERROR
 };
 
 /*---------------------------------------------------------------------------*/
@@ -131,9 +133,9 @@ struct xio_nexus {
 
 	struct xio_tasks_pool		*initial_tasks_pool;
 	struct xio_tasks_pool_ops	*initial_pool_ops;
-	struct xio_observer		*server_observer;
 	struct xio_observer		trans_observer;
 	struct xio_observer		ctx_observer;
+	struct xio_observer		srv_observer;
 	struct xio_observable		observable;
 	struct kref			kref;
 
@@ -147,6 +149,7 @@ struct xio_nexus {
 
 	struct list_head		observers_htbl;
 	struct list_head		tx_queue;
+	struct xio_server		*server;
 
 	/* Client side for reconnect */
 	int				server_cid;
@@ -241,13 +244,16 @@ struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus);
 int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_add_server_observer					     */
+/* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_nexus_set_server_observer(struct xio_nexus *nexus,
-						 struct xio_observer *observer)
+static inline void xio_nexus_set_server(struct xio_nexus *nexus,
+					struct xio_server *server)
 {
-	nexus->server_observer = observer;
+	nexus->server = server;
+	if (server)
+		xio_server_reg_observer(server, &nexus->srv_observer);
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_reg_observer						     */
 /*---------------------------------------------------------------------------*/
@@ -321,14 +327,6 @@ static inline void xio_nexus_addref(struct xio_nexus *nexus)
 	} else {
 		kref_get(&nexus->kref);
 	}
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_nexus_get_server							     */
-/*---------------------------------------------------------------------------*/
-static inline struct xio_server *xio_nexus_get_server(struct xio_nexus *nexus)
-{
-	return nexus->server_observer->impl;
 }
 
 /*---------------------------------------------------------------------------*/

@@ -620,7 +620,7 @@ int send_one_by_one(struct test_params *test_params)
 int send_chained(struct test_params *test_params)
 {
 	struct xio_iovec_ex	*sglist;
-	struct xio_msg		*msg, *head = NULL, *tail;
+	struct xio_msg		*msg, *head = NULL, *tail = NULL;
 	int			i;
 	int			j;
 	int			nsent = 0;

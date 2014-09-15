@@ -61,7 +61,7 @@
 #define MAX_OUTSTANDING_REQS	50
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
-#define ASK_FOR_RECEIPT		1
+#define ASK_FOR_RECEIPT		0
 
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
@@ -254,8 +254,8 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	/* try to send it */
 	if (test_params->ask_for_receipt)
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-	else if (test_params->nsent%(MAX_OUTSTANDING_REQS-1) == 0)
-		msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+	else
+		msg->flags = 0;
 
 
 	if (xio_send_msg(test_params->connection, msg) == -1) {
@@ -287,7 +287,6 @@ static int on_msg_send_complete(struct xio_session *session,
 
 	/* can be safely freed */
 	msg_pool_put(test_params->pool, msg);
-
 #if  TEST_DISCONNECT
 	if (test_params->ncomp == DISCONNECT_NR) {
 		xio_disconnect(test_params->connection);
@@ -315,8 +314,9 @@ static int on_msg_send_complete(struct xio_session *session,
 	/* try to send it */
 	if (test_params->ask_for_receipt)
 		msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-	else if (test_params->nsent%(MAX_OUTSTANDING_REQS-1) == 0)
-		msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+	else
+		msg->flags = 0;
+
 
 
 	if (xio_send_msg(test_params->connection, msg) == -1) {
@@ -596,8 +596,9 @@ int main(int argc, char *argv[])
 		/* try to send it */
 		if (test_params.ask_for_receipt)
 			msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-		else if (i == MAX_OUTSTANDING_REQS-1)
-			msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+		else
+			msg->flags = 0;
+
 
 		if (xio_send_msg(test_params.connection, msg) == -1) {
 			printf("**** sent %d messages\n", i);

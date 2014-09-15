@@ -255,6 +255,7 @@ void xio_context_destroy(struct xio_context *ctx)
 		debugfs_remove_recursive(ctx->ctx_dentry);
 		ctx->ctx_dentry = NULL;
 	}
+	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 
 	kfree(ctx);
 }

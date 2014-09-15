@@ -50,6 +50,7 @@
 #include "xio_connection.h"
 #include "xio_session_priv.h"
 #include "xio_sg_table.h"
+#include "xio_idr.h"
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
@@ -438,6 +439,7 @@ static void xio_session_pre_teardown(struct xio_session *session)
 	kfree(session->hs_private_data);
 	kfree(session->uri);
 	session->state = XIO_SESSION_STATE_CLOSED;
+	XIO_OBSERVER_DESTROY(&session->observer);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -462,10 +464,12 @@ int xio_on_fin_req_send_comp(struct xio_connection *connection,
 		  "connection:%p\n",
 		  connection->session, connection);
 
+	xio_connection_putref(connection);
+
 	return 0;
 }
 
-void xio_close_time_wait(void *data)
+static void xio_close_time_wait(void *data)
 {
 	struct xio_connection *connection = data;
 
@@ -491,7 +495,7 @@ void xio_close_time_wait(void *data)
 		xio_connection_destroy(connection);
 }
 
-void xio_handle_last_ack(void *data)
+static void xio_handle_last_ack(void *data)
 {
 	struct xio_connection *connection = data;
 
@@ -502,9 +506,9 @@ void xio_handle_last_ack(void *data)
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
-
-	xio_connection_destroy(connection);
+	/* xio_connection_destroy(connection); */
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_fin_rsp_recv				                             */
 /*---------------------------------------------------------------------------*/
@@ -512,9 +516,15 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 			struct xio_task *task)
 {
 	struct xio_transition	*transition;
+	int			retval = 0;
 
 	DEBUG_LOG("got fin response. session:%p, connection:%p\n",
 		  connection->session, connection);
+
+	if (connection->fin_req_timeout)
+		return 0;
+
+	connection->fin_req_timeout++;
 
 	/* cancel the timer */
 	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
@@ -534,11 +544,12 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
 			  "state:%d\n",
 			  connection->session, connection, connection->state);
-		return -1;
+		retval = -1;
+		goto cleanup;
 	}
 	if (connection->state == XIO_CONNECTION_STATE_LAST_ACK) {
 		xio_handle_last_ack(connection);
-		return 0;
+		goto cleanup;
 	}
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
@@ -557,10 +568,14 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
-			return retval;
+			goto cleanup;
 		}
 	}
-	return 0;
+
+cleanup:
+	xio_connection_putref(connection);
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -594,8 +609,7 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 			     struct xio_task *task)
 {
 	struct xio_transition	*transition;
-
-	int			retval;
+	int			retval = 0;
 
 	DEBUG_LOG("fin response send completion received. "  \
 		  "session:%p, connection:%p\n",
@@ -644,11 +658,14 @@ int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
 				&connection->fin_delayed_work);
 		if (retval != 0) {
 			ERROR_LOG("xio_ctx_timer_add failed.\n");
-			return retval;
+			goto cleanup;
 		}
 	}
 
-	return 0;
+cleanup:
+	xio_connection_putref(connection);
+
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -673,9 +690,9 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	msg->sn		= hdr.serial_num;
 	msg->flags	= hdr.flags;
 	msg->next	= NULL;
-	task->connection = connection;
 
 	xio_connection_queue_io_task(connection, task);
+	connection->rx_queued_msgs++;
 
 	task->state = XIO_TASK_STATE_DELIVERED;
 
@@ -730,13 +747,14 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_task		*sender_task = task->sender_task;
 	struct xio_statistics	*stats = &connection->ctx->stats;
 
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE) {
+	if ((connection->state != XIO_CONNECTION_STATE_ONLINE) &&
+	    (connection->state != XIO_CONNECTION_STATE_FIN_WAIT_1)) {
 		DEBUG_LOG("responses received while connection is offline\n");
 		/* for various reasons, responses can arrive while connection
 		 * is already offline
-		 * just remove the message and release the response
+		 * release the response, and let it be flushed via "flush"
+		 * mechanism
 		 */
-		xio_connection_remove_in_flight(connection, sender_task->omsg);
 		xio_release_response_task(task);
 		goto xmit;
 	}
@@ -747,13 +765,14 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	msg->sn = hdr.serial_num;
 
 	omsg		= sender_task->omsg;
-	omsg->next	= NULL;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
+	omsg->next	= NULL;
 
 	task->connection = connection;
+	task->session = connection->session;
 
 	/* remove only if not response with "read receipt" */
 	if (!((hdr.flags &
@@ -782,13 +801,21 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
-		connection->queued_msgs--;
-		if (connection->ses_ops.on_msg_delivered)
-			connection->ses_ops.on_msg_delivered(
-				    connection->session,
-				    omsg,
-				    task->imsg.more_in_batch,
-				    connection->cb_user_context);
+		connection->tx_queued_msgs--;
+		if (sender_task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
+			if (connection->ses_ops.on_msg_delivered)
+				connection->ses_ops.on_msg_delivered(
+						connection->session,
+						omsg,
+						task->imsg.more_in_batch,
+						connection->cb_user_context);
+		} else {
+			if (connection->ses_ops.on_ow_msg_send_complete) {
+				connection->ses_ops.on_ow_msg_send_complete(
+					connection->session, omsg,
+					connection->cb_user_context);
+			}
+		}
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
 	} else {
@@ -901,51 +928,35 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
+	struct xio_statistics *stats = &connection->ctx->stats;
+	struct xio_msg *omsg = task->omsg;
+
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
 		goto xmit;
 	}
 
-	/* recycle the task */
-	if (!(task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
-		struct xio_statistics *stats = &connection->ctx->stats;
-		struct xio_msg *omsg = task->omsg;
-		xio_stat_add(stats, XIO_STAT_DELAY,
-			     get_cycles() - omsg->timestamp);
+	if (!omsg || omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
+	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+		return 0;
 
-		xio_connection_remove_in_flight(connection, task->omsg);
-		connection->queued_msgs--;
+	xio_stat_add(stats, XIO_STAT_DELAY,
+			get_cycles() - omsg->timestamp);
 
-		/* send completion notification to
-		 * release request
-		 */
-		if (connection->ses_ops.on_ow_msg_send_complete) {
-			connection->ses_ops.on_ow_msg_send_complete(
-					connection->session, task->omsg,
-					connection->cb_user_context);
-		}
-		xio_tasks_pool_put(task);
-	} else {
-		if (task->omsg &&
-		    !(task->omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)) {
-			struct xio_statistics *stats = &connection->ctx->stats;
-			struct xio_msg *omsg = task->omsg;
-			xio_stat_add(stats, XIO_STAT_DELAY,
-				     get_cycles() - omsg->timestamp);
+	xio_connection_remove_in_flight(connection, omsg);
+	omsg->flags = task->omsg_flags;
+	connection->tx_queued_msgs--;
 
-			xio_connection_remove_in_flight(connection, task->omsg);
-			task->omsg->flags = task->omsg_flags;
-			connection->queued_msgs--;
-
-			if (connection->ses_ops.on_msg_delivered)
-				connection->ses_ops.on_msg_delivered(
-						connection->session,
-						task->omsg,
-						0,
-						connection->cb_user_context);
-			xio_tasks_pool_put(task);
-		}
+	/* send completion notification to
+	 * release request
+	 */
+	if (connection->ses_ops.on_ow_msg_send_complete) {
+		connection->ses_ops.on_ow_msg_send_complete(
+				connection->session, omsg,
+				connection->cb_user_context);
 	}
+	xio_tasks_pool_put(task);
+
 xmit:
 	/* now try to send */
 	xio_connection_xmit_msgs(connection);
@@ -962,14 +973,21 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 {
 	struct xio_connection *connection;
 
+	DEBUG_LOG("xio_session_on_nexus_disconnected. session:%p, nexus:%p\n",
+		  session, nexus);
+
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == nexus) {
 		connection = session->lead_connection;
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		if (session->state == XIO_SESSION_STATE_CONNECT)
+			xio_connection_disconnected(connection);
 	} else if (session->redir_connection &&
 		   session->redir_connection->nexus == nexus) {
 		connection = session->redir_connection;
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		if (session->state == XIO_SESSION_STATE_CONNECT)
+			xio_connection_disconnected(connection);
 	} else {
 		spin_lock(&session->connections_list_lock);
 		connection = xio_session_find_connection(session, nexus);
@@ -1091,12 +1109,13 @@ int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 /* xio_on_new_message							     */
 /*---------------------------------------------------------------------------*/
-int xio_on_new_message(struct xio_session *session,
+int xio_on_new_message(struct xio_session *s,
 		       struct xio_nexus *nexus,
 		       union xio_nexus_event_data *event_data)
 {
 	struct xio_task		*task  = event_data->msg.task;
 	struct xio_connection	*connection = NULL;
+	struct xio_session	*session = s;
 	int			retval = -1;
 
 
@@ -1477,6 +1496,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 			  session);
 		goto cleanup3;
 	}
+	xio_idr_add_uobj(session);
+
 	return session;
 
 cleanup3:
@@ -1491,27 +1512,37 @@ cleanup:
 	return NULL;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_destroy							     */
 /*---------------------------------------------------------------------------*/
 int xio_session_destroy(struct xio_session *session)
 {
+	int found;
+
 	if (session == NULL)
 		return 0;
 
-	TRACE_LOG("session destroy:%p\n", session);
-	session->state = XIO_SESSION_STATE_CLOSING;
-	if (list_empty(&session->connections_list)) {
-		xio_session_pre_teardown(session);
-		if (!session->in_notify)
-			xio_session_post_teardown(session);
-	} else {
+	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
-		ERROR_LOG("xio_session_close failed: " \
+		ERROR_LOG("xio_session_destroy failed: " \
 			  "connections are still open\n");
 		return -1;
 	}
+
+	found = xio_idr_lookup_uobj(session);
+	if (found) {
+		xio_idr_remove_uobj(session);
+	} else {
+		ERROR_LOG("session not found:%p\n", session);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return -1;
+	}
+
+	TRACE_LOG("session destroy:%p\n", session);
+	session->state = XIO_SESSION_STATE_CLOSING;
+	xio_session_pre_teardown(session);
+	if (!session->in_notify)
+		xio_session_post_teardown(session);
 
 	return 0;
 }

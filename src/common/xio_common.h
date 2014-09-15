@@ -58,6 +58,10 @@ extern struct xio_options g_options;
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
 
+#ifndef  ARRAY_SIZE
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* debuging facilities							     */
 /*---------------------------------------------------------------------------*/
@@ -79,14 +83,14 @@ void xio_set_error(int errnum);
 /**
  *  TLV types
  */
-#define XIO_NOP			1
+#define XIO_NOP				1
 
-#define XIO_CREDIT		(1 << 6)
-#define XIO_NEXUS_SETUP		(1 << 7)
-#define XIO_SESSION_SETUP	(1 << 8)
-#define XIO_CONNECTION_HELLO	(1 << 9)
-#define XIO_FIN			(1 << 10)
-#define XIO_CANCEL		(1 << 11)
+#define XIO_CREDIT			(1 << 6)	/*  0x40  */
+#define XIO_NEXUS_SETUP			(1 << 7)	/*  0x80  */
+#define XIO_SESSION_SETUP		(1 << 8)	/*  0x100 */
+#define XIO_CONNECTION_HELLO		(1 << 9)	/*  0x200 */
+#define XIO_FIN				(1 << 10)	/*  0x400 */
+#define XIO_CANCEL			(1 << 11)	/*  0x800 */
 
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ

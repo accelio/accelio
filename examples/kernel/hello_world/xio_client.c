@@ -80,6 +80,7 @@ struct session_data {
 static struct session_data *g_session_data;
 atomic_t module_state;
 
+#define SG_TBL_LEN 64
 /*---------------------------------------------------------------------------*/
 /* process_response							     */
 /*---------------------------------------------------------------------------*/
@@ -258,7 +259,7 @@ static int xio_client_main(void *data)
 		session_data->req[i].out.header.iov_len = strlen(buf) + 1;
 		/* iovec[0]*/
 		omsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
-		sg_alloc_table(&omsg->data_tbl, XIO_IOVLEN, GFP_KERNEL);
+		sg_alloc_table(&omsg->data_tbl, SG_TBL_LEN, GFP_KERNEL);
 
 		/* currently only one entry */
 		buf = kstrdup("hello world iovec request", GFP_KERNEL);
@@ -277,6 +278,7 @@ static int xio_client_main(void *data)
 	/* the default xio supplied main loop */
 	if (atomic_add_unless(&module_state, 4, 0x83))
 		xio_context_run_loop(ctx);
+	atomic_sub(4, &module_state);
 
 	/* normal exit phase */
 	pr_info("exit signaled\n");
@@ -303,6 +305,8 @@ static int xio_client_main(void *data)
 
 static int __init xio_hello_init_module(void)
 {
+	int iov_len = SG_TBL_LEN;
+
 	if (!(xio_argv[1] && xio_argv[2])) {
 		pr_err("NO IP or port were given\n");
 		return -EINVAL;
@@ -310,6 +314,14 @@ static int __init xio_hello_init_module(void)
 
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
+
+	/* set accelio max message vector used */
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &iov_len, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &iov_len, sizeof(int));
 
 	xio_main_th = kthread_run(xio_client_main, xio_argv,
 				  "xio-hello-client");

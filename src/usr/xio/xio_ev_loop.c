@@ -48,10 +48,6 @@
 #include "xio_common.h"
 #include "get_clock.h"
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
-
 #define MAX_DELETED_EVENTS	1024
 
 extern double                    g_mhz;
@@ -483,32 +479,32 @@ inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_destroy(void **loop_hndl)
 {
-	struct xio_ev_loop **loop = (struct xio_ev_loop **)loop_hndl;
+	struct xio_ev_loop *loop = *(struct xio_ev_loop **)loop_hndl;
 	struct xio_ev_data	*tev, *tmp_tev;
 
-	if (*loop == NULL)
+	if (loop == NULL)
 		return;
 
-	list_for_each_entry_safe(tev, tmp_tev, &(*loop)->poll_events_list,
+	list_for_each_entry_safe(tev, tmp_tev, &loop->poll_events_list,
 				 events_list_entry) {
-		xio_ev_loop_del((*loop), tev->fd);
+		xio_ev_loop_del(loop, tev->fd);
 	}
 
-	list_for_each_entry_safe(tev, tmp_tev, &(*loop)->events_list,
+	list_for_each_entry_safe(tev, tmp_tev, &loop->events_list,
 				 events_list_entry) {
-		xio_ev_loop_remove_event((*loop), tev);
+		xio_ev_loop_remove_event(loop, tev);
 	}
 
-	xio_ev_loop_del((*loop), (*loop)->wakeup_event);
+	xio_ev_loop_del(loop, loop->wakeup_event);
 
-	close((*loop)->efd);
-	(*loop)->efd = -1;
+	close(loop->efd);
+	loop->efd = -1;
 
-	close((*loop)->wakeup_event);
-	(*loop)->wakeup_event = -1;
+	close(loop->wakeup_event);
+	loop->wakeup_event = -1;
 
-	ufree((*loop));
-	*loop = NULL;
+	ufree(loop);
+	loop = NULL;
 }
 
 /*---------------------------------------------------------------------------*/

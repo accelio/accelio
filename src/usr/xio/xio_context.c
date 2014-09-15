@@ -42,9 +42,7 @@
 #include "xio_context.h"
 #include "get_clock.h"
 #include "xio_ev_loop.h"
-
-
-
+#include "xio_idr.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_add_observer						     */
@@ -261,7 +259,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	if (geteuid() != 0) {
 		DEBUG_LOG("statistics monitoring disabled. " \
 			  "not priviliged user\n");
-		return ctx;
+		goto exit;
 	}
 
 	fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
@@ -327,6 +325,8 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 	ctx->netlink_sock = (void *)(unsigned long) fd;
 
+exit:
+	xio_idr_add_uobj(ctx);
 	return ctx;
 
 cleanup2:
@@ -342,6 +342,20 @@ cleanup1:
 void xio_context_destroy(struct xio_context *ctx)
 {
 	int i;
+	int found;
+
+	if (ctx == NULL)
+		return;
+
+
+	found = xio_idr_lookup_uobj(ctx);
+	if (found) {
+		xio_idr_remove_uobj(ctx);
+	} else {
+		ERROR_LOG("context not found:%p\n", ctx);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return ;
+	}
 
 	xio_observable_notify_all_observers(&ctx->observable,
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
@@ -361,6 +375,8 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_workqueue_destroy(ctx->workqueue);
 
 	xio_ev_loop_destroy(&ctx->ev_loop);
+
+	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 	ufree(ctx);
 }
 

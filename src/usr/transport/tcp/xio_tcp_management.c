@@ -264,7 +264,46 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 
 	ufree(tcp_hndl->base.portal_uri);
 
+	XIO_OBSERVABLE_DESTROY(&tcp_hndl->base.observable);
+
 	ufree(tcp_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_close_cb		                                             */
+/*---------------------------------------------------------------------------*/
+static void xio_tcp_close_cb(struct kref *kref)
+{
+	struct xio_transport_base *transport = container_of(
+					kref, struct xio_transport_base, kref);
+	struct xio_tcp_transport *tcp_hndl =
+		(struct xio_tcp_transport *)transport;
+
+	/* now it is zero */
+	TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
+			tcp_hndl, tcp_hndl->sock.cfd);
+
+	switch (tcp_hndl->state) {
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_CONNECTED:
+		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+		/*fallthrough*/
+	case XIO_STATE_DISCONNECTED:
+		on_sock_disconnected(tcp_hndl, 0);
+		/*fallthrough*/
+	case XIO_STATE_CLOSED:
+		on_sock_close(tcp_hndl);
+		break;
+	default:
+		xio_transport_notify_observer(&tcp_hndl->base,
+				XIO_TRANSPORT_CLOSED,
+				NULL);
+		tcp_hndl->state = XIO_STATE_DESTROYED;
+		break;
+	}
+
+	if (tcp_hndl->state  == XIO_STATE_DESTROYED)
+		xio_tcp_post_close(tcp_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -272,41 +311,21 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl)
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_close(struct xio_transport_base *transport)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport;
-	int was = __atomic_add_unless(&tcp_hndl->base.refcnt, -1, 0);
+	int was = atomic_read(&transport->kref.refcount);
+
+	/* this is only for debugging - please note that the combination of
+	 * atomic_read and kref_put is not atomic - please remove if this
+	 * error does not pop up. Otherwise contact me and report bug.
+	 */
 
 	/* was already 0 */
-	if (!was)
+	if (!was) {
+		ERROR_LOG("xio_tcp_close double close. handle:%p\n",
+			  transport);
 		return;
-
-	if (was == 1) {
-		/* now it is zero */
-		TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
-			  tcp_hndl, tcp_hndl->sock.cfd);
-
-		switch (tcp_hndl->state) {
-		case XIO_STATE_LISTEN:
-		case XIO_STATE_CONNECTED:
-			tcp_hndl->state = XIO_STATE_DISCONNECTED;
-			/*fallthrough*/
-		case XIO_STATE_DISCONNECTED:
-			on_sock_disconnected(tcp_hndl, 0);
-			/*fallthrough*/
-		case XIO_STATE_CLOSED:
-			on_sock_close(tcp_hndl);
-			break;
-		default:
-			xio_transport_notify_observer(&tcp_hndl->base,
-						      XIO_TRANSPORT_CLOSED,
-						      NULL);
-			tcp_hndl->state = XIO_STATE_DESTROYED;
-			break;
-		}
-
-		if (tcp_hndl->state  == XIO_STATE_DESTROYED)
-			xio_tcp_post_close(tcp_hndl);
 	}
+
+	kref_put(&transport->kref, xio_tcp_close_cb);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -466,7 +485,8 @@ void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
 		++count;
 	} while (retval > 0 && count <  RX_POLL_NR_MAX);
 
-	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len) {
+	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len &&
+	    tcp_hndl->state == XIO_STATE_CONNECTED) {
 		xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
 				   xio_tcp_consume_ctl_rx, tcp_hndl);
 		xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
@@ -741,7 +761,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	tcp_hndl->base.portal_uri	= NULL;
 	tcp_hndl->base.proto		= XIO_PROTO_TCP;
-	atomic_set(&tcp_hndl->base.refcnt, 1);
+	kref_init(&tcp_hndl->base.kref);
 	tcp_hndl->transport		= transport;
 	tcp_hndl->base.ctx		= ctx;
 	tcp_hndl->is_listen		= 0;
@@ -1722,24 +1742,8 @@ static void xio_tcp_task_init(struct xio_task *task,
 }
 
 /* task pools management */
-
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_calc_pool_size						     */
-/*---------------------------------------------------------------------------*/
-void xio_tcp_calc_pool_size(struct xio_tcp_transport *tcp_hndl)
-{
-	tcp_hndl->num_tasks = NUM_TASKS;
-
-	tcp_hndl->alloc_sz  = tcp_hndl->num_tasks*tcp_hndl->membuf_sz;
-
-	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
-		  tcp_hndl->alloc_sz,
-		  tcp_hndl->num_tasks,
-		  tcp_hndl->membuf_sz);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_tcp_initial_pool_slab_pre_create				     */
+/* xio_tcp_initial_pool_slab_pre_create					     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_initial_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
@@ -1928,15 +1932,16 @@ static int xio_tcp_primary_pool_slab_pre_create(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
+	size_t	alloc_sz = alloc_nr*tcp_hndl->membuf_sz;
 
 	tcp_slab->buf_size = tcp_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		tcp_slab->io_buf = xio_alloc(tcp_hndl->alloc_sz);
+		tcp_slab->io_buf = xio_alloc(alloc_sz);
 		if (!tcp_slab->io_buf) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc tcp pool sz:%zu failed\n",
-				  tcp_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 		tcp_slab->data_pool = tcp_slab->io_buf->addr;
@@ -1944,11 +1949,11 @@ static int xio_tcp_primary_pool_slab_pre_create(
 		/* maybe allocation of with unuma_alloc can provide better
 		 * performance?
 		 */
-		tcp_slab->data_pool = umalloc_huge_pages(tcp_hndl->alloc_sz);
+		tcp_slab->data_pool = umalloc_huge_pages(alloc_sz);
 		if (!tcp_slab->data_pool) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("malloc tcp pool sz:%zu failed\n",
-				  tcp_hndl->alloc_sz);
+				  alloc_sz);
 			return -1;
 		}
 	}
@@ -2122,14 +2127,12 @@ static void xio_tcp_primary_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport_hndl;
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 				    tcp_options.max_in_iovsz) + 1;
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = tcp_hndl->num_tasks;
+	*max_nr = g_options.queue_depth * 20;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
@@ -2424,7 +2427,7 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	xio_tcp_close(*new_trans_hndl);
 
 	/* conn layer will call close which will only decrement */
-	atomic_inc(&old_trans_hndl->refcnt);
+	kref_get(&old_trans_hndl->kref);
 	*new_trans_hndl = old_trans_hndl;
 
 	return 0;

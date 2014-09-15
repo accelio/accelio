@@ -127,16 +127,15 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	for (i = 0; i < alloc_nr; i++) {
 		s->array[i]		= data;
-		s->array[i]->ltid	= s->start_idx + i;
-		s->array[i]->magic	= XIO_TASK_MAGIC;
-		s->array[i]->pool	= (void *)q;
-		s->array[i]->dd_data	= ((char *)data) +
-						sizeof(struct xio_task);
+		task = s->array[i];
+		task->ltid	= s->start_idx + i;
+		task->magic	= XIO_TASK_MAGIC;
+		task->pool	= (void *)q;
+		task->dd_data	= ((char *)data) + sizeof(struct xio_task);
 
 		data = ((char *)data) + sizeof(struct xio_task) +
 					q->params.task_dd_data_sz;
 
-		task = s->array[i];
 		msg = &task->imsg;
 
 		vmsg = &msg->in;
@@ -158,7 +157,6 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 			goto cleanup;
 		}
 
-
 		if (q->params.pool_hooks.slab_init_task) {
 			retval = q->params.pool_hooks.slab_init_task(
 				q->params.pool_hooks.context,
@@ -172,11 +170,10 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 				goto cleanup;
 			}
 		}
-		list_add_tail(&s->array[i]->tasks_list_entry, &q->stack);
+		list_add_tail(&task->tasks_list_entry, &q->stack);
 		initialized++;
 	}
 	q->curr_alloced += alloc_nr;
-	q->curr_free += alloc_nr;
 
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
 
@@ -192,6 +189,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	return retval;
 
 cleanup:
+	list_del_init(&s->slabs_list_entry);
+
 	for (i = 0; i < initialized; i++) {
 		task = s->array[i];
 		msg = &task->imsg;
@@ -242,7 +241,6 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	if (q->params.pool_hooks.pool_post_create)
 		q->params.pool_hooks.pool_post_create(
 				q->params.pool_hooks.context, q, q->dd_data);
-
 
 	return q;
 }

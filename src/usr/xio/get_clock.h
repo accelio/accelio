@@ -36,16 +36,21 @@
 #define GET_CLOCK_H
 
 #if defined(__x86_64__) || defined(__i386__)
+
 /* Note: only x86 CPUs which have rdtsc instruction are supported. */
 typedef unsigned long long cycles_t;
 static inline cycles_t get_cycles()
 {
-	unsigned low, high;
-	unsigned long long val;
-	asm volatile ("rdtsc" : "=a" (low), "=d" (high));
-	val = high;
-	val = (val << 32) | low;
-	return val;
+	union {
+		cycles_t val;
+		struct {
+			unsigned int low;
+			unsigned int high;
+		} __attribute__((packed));
+	} value;
+
+	asm volatile ("rdtsc" : "=a" (value.low), "=d" (value.high));
+	return value.val;
 }
 #elif defined(__PPC__) || defined(__PPC64__)
 /* Note: only PPC CPUs which have mftb instruction are supported. */

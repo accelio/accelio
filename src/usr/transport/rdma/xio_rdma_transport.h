@@ -241,19 +241,19 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	uint16_t			pad0;
-	uint16_t			read_num_sge;
-	uint16_t			write_num_sge;
-	uint16_t			recv_num_sge;
+	uint32_t			read_num_sge;
+	uint32_t			write_num_sge;
+	uint32_t			recv_num_sge;
+	uint32_t			pad0;
 	struct xio_mempool_obj		*read_sge;
 	struct xio_mempool_obj		*write_sge;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
-	uint16_t			req_read_num_sge;
-	uint16_t			req_write_num_sge;
-	uint16_t			req_recv_num_sge;
-	uint16_t			rsp_write_num_sge;
+	uint32_t			req_read_num_sge;
+	uint32_t			req_write_num_sge;
+	uint32_t			req_recv_num_sge;
+	uint32_t			rsp_write_num_sge;
 	struct xio_sge			*req_read_sge;
 	struct xio_sge			*req_write_sge;
 
@@ -265,12 +265,12 @@ struct xio_rdma_task {
 	 */
 	struct xio_sge			*rsp_write_sge;
 
+	unsigned int			phantom_idx;
 	enum xio_ib_op_code		ib_op;
-	uint16_t			more_in_batch;
+	unsigned int			more_in_batch;
 	uint16_t			sn;
-	uint16_t			phantom_idx;
 	uint8_t				rflags;
-	uint8_t				pad[5];
+	uint8_t				pad[1];
 };
 
 struct xio_cq  {
@@ -309,8 +309,8 @@ struct xio_device {
 };
 
 struct xio_mr_elem {
-	struct ibv_mr			*mr;
 	struct xio_device		*dev;
+	struct ibv_mr			*mr;
 	struct list_head		dm_list_entry; /* entry in mr list */
 	struct list_head		xm_list_entry; /* entry in dev list */
 };
@@ -323,7 +323,7 @@ struct xio_rdma_tasks_slab {
 	struct ibv_mr			*data_mr;
 	struct xio_buf			*io_buf;
 	int				buf_size;
-	int				pad;
+	int				alloc_nr;
 };
 
 struct __attribute__((__packed__)) xio_rkey_tbl_pack {
@@ -400,19 +400,17 @@ struct xio_rdma_transport {
 	uint16_t			max_exp_sn; /* upper edge of
 						       receiver's window + 1 */
 
-	uint16_t			pad1;
+	uint16_t			timewait; /* flag */
 
 	/* control path params */
 	int				sq_depth;     /* max snd allowed  */
-	int				num_tasks;
 	uint16_t			client_initiator_depth;
 	uint16_t			client_responder_resources;
 
 	uint32_t			peer_max_in_iovsz;
 	uint32_t			peer_max_out_iovsz;
-
+	int32_t				pad;
 	/* connection's flow control */
-	size_t				alloc_sz;
 	size_t				membuf_sz;
 
 	struct xio_transport		*transport;
@@ -482,8 +480,6 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			void *ulp_msg, size_t ulp_msg_sz);
 
 /* xio_rdma_management.c */
-void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
-
 struct xio_task *xio_rdma_primary_task_alloc(
 				struct xio_rdma_transport *rdma_hndl);
 

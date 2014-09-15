@@ -45,7 +45,7 @@
 #include "xio_context.h"
 #include "xio_transport.h"
 #include "xio_sessions_cache.h"
-#include "xio_hash.h"
+#include "xio_idr.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
 #include "xio_connection.h"
@@ -73,14 +73,17 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 
 	/* fill the message */
 	msg = buf;
-	msg->out.header.iov_base = msg + 1;
+	buf = buf + sizeof(*msg);
+	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
-	msg->out.sgl_type = XIO_SGL_TYPE_IOV;
-	msg->out.data_iov.nents = 1;
-	msg->out.data_iov.max_nents = XIO_IOVLEN;
-	msg->in.sgl_type = XIO_SGL_TYPE_IOV;
-	msg->in.data_iov.nents = 0;
-	msg->in.data_iov.max_nents = XIO_IOVLEN;
+	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
+	msg->out.pdata_iov.nents = 0;
+	msg->out.pdata_iov.max_nents = 0;
+	msg->in.sgl_type = XIO_SGL_TYPE_IOV_PTR;
+	msg->in.pdata_iov.nents = 0;
+	msg->in.pdata_iov.max_nents = 0;
+
+	msg->type = XIO_SESSION_SETUP_REQ;
 
 	ptr = msg->out.header.iov_base;
 	len = 0;
@@ -114,7 +117,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	if (msg->out.header.iov_len > SETUP_BUFFER_LEN)  {
 		ERROR_LOG("primary task pool is empty\n");
 		xio_set_error(XIO_E_MSG_SIZE);
-		kfree(buf);
+		kfree(msg);
 		return NULL;
 	}
 
@@ -602,6 +605,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			session->lead_connection->disable_notify = 1;
 			session->lead_connection->state	=
 					XIO_CONNECTION_STATE_ONLINE;
+
+			/* temporary account it as user object */
+			xio_idr_add_uobj(session->lead_connection);
 			xio_disconnect(session->lead_connection);
 
 			/* temporary disable teardown - on cached nexuss close
@@ -734,7 +740,6 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			return -1;
 		}
 
-		msg->type = XIO_SESSION_SETUP_REQ;
 		retval = xio_connection_send(session->lead_connection,
 					     msg);
 		if (retval && retval != -EAGAIN) {
@@ -757,8 +762,6 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			return -1;
 		}
 		session->state = XIO_SESSION_STATE_CONNECT;
-
-		msg->type      = XIO_SESSION_SETUP_REQ;
 
 		retval = xio_connection_send(session->redir_connection,
 					     msg);
@@ -1016,6 +1019,9 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		if (session->state == XIO_SESSION_STATE_ONLINE)
 			xio_connection_send_hello_req(connection);
 	}
+
+	xio_idr_add_uobj(connection);
+
 	mutex_unlock(&session->lock);
 
 	return connection;

@@ -225,7 +225,8 @@ enum xio_status {
 	XIO_E_USER_BUF_OVERFLOW		= (XIO_BASE_STATUS + 33),
 	XIO_E_REM_USER_BUF_OVERFLOW	= (XIO_BASE_STATUS + 34),
 	XIO_E_TX_QUEUE_OVERFLOW		= (XIO_BASE_STATUS + 35),
-	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 36)
+	XIO_E_USER_OBJ_NOT_FOUND	= (XIO_BASE_STATUS + 36),
+	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 37)
 };
 
 /**
@@ -1318,18 +1319,6 @@ struct xio_server *xio_bind(struct xio_context *ctx,
  * @returns success (0), or a (negative) error value
  */
 int xio_unbind(struct xio_server *server);
-
-/**
- * return connection handle on server
- *
- * @param[in]	session		The xio session handle
- * @param[in]	ctx		The xio context handle
- *
- * @returns	connection handle
- */
-struct xio_connection *xio_get_connection(
-		struct xio_session  *session,
-		struct xio_context  *ctx);
 
 /**
  * accept new session or "light redirect" it to anther thread

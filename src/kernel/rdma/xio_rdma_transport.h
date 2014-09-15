@@ -247,18 +247,18 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	u16				pad0;
-	u16				read_num_sge;
-	u16				write_num_sge;
-	u16				recv_num_sge;
+	u32				read_num_sge;
+	u32				write_num_sge;
+	u32				recv_num_sge;
+	u32				pad0;
 	struct xio_rdma_mem_desc	read_sge;
 	struct xio_rdma_mem_desc	write_sge;
 
 	/* What this side got from the peer for RDMA R/W */
-	u16				req_read_num_sge;
-	u16				req_write_num_sge;
-	u16				req_recv_num_sge;
-	u16				rsp_write_num_sge;
+	u32				req_read_num_sge;
+	u32				req_write_num_sge;
+	u32				req_recv_num_sge;
+	u32				rsp_write_num_sge;
 	struct xio_sge			*req_read_sge;
 	struct xio_sge			*req_write_sge;
 	/* What this side got from the peer for SEND
@@ -269,11 +269,11 @@ struct xio_rdma_task {
 	 */
 	struct xio_sge			*rsp_write_sge;
 
+	unsigned int			phantom_idx;
 	enum xio_ib_op_code		ib_op;
-	u16				more_in_batch;
+	unsigned int			more_in_batch;
 	u16				sn;
-	u16				phantom_idx;
-	u16				pad[3];
+	u16				pad[1];
 
 };
 
@@ -563,6 +563,8 @@ int xio_map_txmad_work_req(struct xio_device *dev, struct xio_work_req *xd);
 int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 		       struct xio_work_req *xd,
 		       enum dma_data_direction direction);
+
+void xio_reset_desc(struct xio_rdma_mem_desc *desc);
 
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 		    struct xio_rdma_mem_desc *desc,

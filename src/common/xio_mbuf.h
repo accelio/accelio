@@ -47,18 +47,18 @@ struct xio_mbuf {
 	struct {
 		void		*head;
 		void		*tail;
+		uint32_t	buflen;
+		uint32_t	datalen;
+	} buf;
+
+	struct {
+		void		*head;
+		void		*tail;
 		uint64_t	len;
 		uint32_t	type;
 		uint32_t	pad;
 		void		*val;
 	} tlv;
-
-	struct {
-		void		*head;
-		void		*tail;
-		uint32_t	buflen;
-		uint32_t	datalen;
-	} buf;
 
 	void			*marker;
 };

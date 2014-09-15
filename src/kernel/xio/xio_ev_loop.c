@@ -49,28 +49,6 @@
 #include "xio_context.h"
 #include "xio_ev_loop.h"
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
-/**
- * llist_reverse_order - reverse order of a llist chain
- * @head:       first item of the list to be reversed
- *
- * Reverse the order of a chain of llist entries and return the
- * new first entry.
- */
-static struct llist_node *llist_reverse_order(struct llist_node *head)
-{
-	struct llist_node *new_head = NULL;
-
-	while (head) {
-		struct llist_node *tmp = head;
-		head = head->next;
-		tmp->next = new_head;
-		new_head = tmp;
-	}
-
-	return new_head;
-}
-#endif
 
 static void xio_append_ordered(struct llist_node *first,
 			       struct llist_node *last,

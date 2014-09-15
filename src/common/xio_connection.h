@@ -80,9 +80,10 @@ struct xio_connection {
 	uint16_t			disable_notify;
 	uint16_t			in_close;
 	uint16_t			is_flushed;
-	uint16_t			pad[3];
+	uint16_t			fin_req_timeout;
 	uint32_t			close_reason;
-	uint32_t			queued_msgs;
+	int32_t				tx_queued_msgs;
+	int32_t				rx_queued_msgs;
 	struct kref			kref;
 	int32_t				send_req_toggle;
 
@@ -209,6 +210,8 @@ int xio_connection_release_hello(struct xio_connection *connection,
 char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
+
+void xio_connection_putref(struct xio_connection *connection);
 
 #endif /*XIO_CONNECTION_H */
 

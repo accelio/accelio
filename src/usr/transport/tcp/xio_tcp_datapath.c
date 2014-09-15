@@ -335,9 +335,6 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->sn = 0;
 
-	/* now we can calculate  primary pool size */
-	xio_tcp_calc_pool_size(tcp_hndl);
-
 	tcp_hndl->state = XIO_STATE_CONNECTED;
 
 	/* fill notification event */
@@ -801,12 +798,12 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 	if (tcp_hndl->state >= XIO_STATE_DISCONNECTED)
 		return;
 
+	tcp_hndl->state = XIO_STATE_DISCONNECTED;
+
 	xio_ctx_init_event(&tcp_hndl->disconnect_event,
 			   xio_tcp_disconnect_handler,
 			   tcp_hndl);
 	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
-
-	tcp_hndl->state = XIO_STATE_DISCONNECTED;
 }
 
 /*---------------------------------------------------------------------------*/

@@ -44,6 +44,7 @@
 #include "xio_common.h"
 #include "xio_sessions_cache.h"
 #include "xio_nexus_cache.h"
+#include "xio_idr.h"
 #include "xio_nexus.h"
 #include "xio_task.h"
 #include "xio_context.h"
@@ -76,12 +77,14 @@ static int __init xio_init_module(void)
 
 	sessions_cache_construct();
 	nexus_cache_construct();
+	xio_idr_create();
 
 	return 0;
 }
 
 static void __exit xio_cleanup_module(void)
 {
+	xio_idr_destroy();
 	if (xio_root) {
 		debugfs_remove_recursive(xio_root);
 		xio_root = NULL;
@@ -147,7 +150,6 @@ EXPORT_SYMBOL(xio_unbind);
 EXPORT_SYMBOL(xio_connect);
 EXPORT_SYMBOL(xio_disconnect);
 
-EXPORT_SYMBOL(xio_get_connection);
 EXPORT_SYMBOL(xio_connection_destroy);
 EXPORT_SYMBOL(xio_modify_connection);
 EXPORT_SYMBOL(xio_query_connection);
@@ -168,3 +170,6 @@ EXPORT_SYMBOL(xio_tasks_pool_destroy);
 EXPORT_SYMBOL(xio_tasks_pool_alloc_slab);
 
 EXPORT_SYMBOL(xio_msg_dump);
+
+EXPORT_SYMBOL(xio_set_opt);
+EXPORT_SYMBOL(xio_get_opt);

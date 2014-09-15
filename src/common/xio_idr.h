@@ -35,39 +35,23 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_SERVER_H
-#define XIO_SERVER_H
+#ifndef XIO_IDR_H
+#define XIO_IDR_H
+
 
 /*---------------------------------------------------------------------------*/
-/* enum									     */
+/* user object cache							     */
 /*---------------------------------------------------------------------------*/
-enum xio_server_event {
-	XIO_SERVER_EVENT_CLOSE
-};
+void xio_idr_create(void);
 
-struct xio_server {
-	struct xio_nexus		*listener;
-	struct xio_observer		observer;
-	char				*uri;
-	struct xio_context		*ctx;
-	struct xio_session_ops		ops;
-	uint32_t			session_flags;
-	struct kref			kref;
-	void				*cb_private_data;
-	struct xio_observable		nexus_observable;
-};
+int xio_idr_add_uobj(void *uobj);
 
-/*---------------------------------------------------------------------------*/
-/* xio_server_reg_observer						     */
-/*---------------------------------------------------------------------------*/
-int xio_server_reg_observer(struct xio_server *server,
-			    struct xio_observer *observer);
+int xio_idr_remove_uobj(void *uobj);
 
-/*---------------------------------------------------------------------------*/
-/* xio_server_unreg_observer						     */
-/*---------------------------------------------------------------------------*/
-void xio_server_unreg_observer(struct xio_server *server,
-			       struct xio_observer *observer);
+int xio_idr_lookup_uobj(void *uobj);
 
-#endif /*XIO_SERVER_H */
+void xio_idr_destroy(void);
+
+
+#endif /*XIO_IDR_H */
 

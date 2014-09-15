@@ -78,6 +78,47 @@ static inline int __atomic_add_unless(atomic_t *v, int a, int u)
 }
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+/**
+ * sg_unmark_end - Undo setting the end of the scatterlist
+ * @sg:          SG entryScatterlist
+ *
+ * Description:
+ *   Removes the termination marker from the given entry of the scatterlist.
+ *
+**/
+static inline void sg_unmark_end(struct scatterlist *sg)
+{
+#ifdef CONFIG_DEBUG_SG
+	BUG_ON(sg->sg_magic != SG_MAGIC);
+#endif
+	sg->page_link &= ~0x02;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+/**
+ * llist_reverse_order - reverse order of a llist chain
+ * @head:       first item of the list to be reversed
+ *
+ * Reverse the order of a chain of llist entries and return the
+ * new first entry.
+ */
+static inline struct llist_node *llist_reverse_order(struct llist_node *head)
+{
+	struct llist_node *new_head = NULL;
+
+	while (head) {
+		struct llist_node *tmp = head;
+		head = head->next;
+		tmp->next = new_head;
+		new_head = tmp;
+	}
+
+	return new_head;
+}
+#endif
+
 static inline char *strerror(int errnum)
 {
 	static char buf[64];

@@ -210,30 +210,22 @@ void msg_write(struct msg_params *msg_params,
 	       size_t hdrlen,
 	       size_t data_iovlen, size_t datalen)
 {
-	struct xio_vmsg  *pmsg = &msg->out;
-	int i = 0;
+	struct xio_vmsg		*pmsg = &msg->out;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(pmsg);
+	int			nents;
+	int			i;
 
 	/* don't do the memcpy */
 	pmsg->header.iov_len		= hdrlen;
 	pmsg->header.iov_base		= msg_params->g_hdr;
-	pmsg->data_iov.nents		= datalen ? data_iovlen : 0;
+	nents				= datalen ? data_iovlen : 0;
 
-	if (pmsg->data_iov.nents > XIO_IOVLEN) {
-		for (i = 0; i < pmsg->data_iov.nents; i++) {
-			pmsg->pdata_iov.sglist[i].iov_base	=
-				msg_params->g_data;
-			pmsg->pdata_iov.sglist[i].iov_len	= datalen;
-			pmsg->pdata_iov.sglist[i].mr		=
-				msg_params->g_data_mr;
-		}
-	} else {
-		for (i = 0; i < pmsg->data_iov.nents; i++) {
-			pmsg->data_iov.sglist[i].iov_base	=
-				msg_params->g_data;
-			pmsg->data_iov.sglist[i].iov_len	= datalen;
-			pmsg->data_iov.sglist[i].mr		=
-				msg_params->g_data_mr;
-		}
+	vmsg_sglist_set_nents(pmsg, nents);
+
+	for (i = 0; i < nents; i++) {
+		sglist[i].iov_base	= msg_params->g_data;
+		sglist[i].iov_len	= datalen;
+		sglist[i].mr		= msg_params->g_data_mr;
 	}
 }
 
@@ -287,7 +279,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 
 		if (in_iovsz) {
 			msg->in.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
-			msg->in.data_iov.max_nents	= in_iovsz;
+			msg->in.pdata_iov.max_nents	= in_iovsz;
 			msg->in.pdata_iov.sglist	= (void *)buf;
 			buf = buf + in_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
@@ -296,7 +288,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 
 		if (out_iovsz) {
 			msg->out.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
-			msg->out.data_iov.max_nents	 = out_iovsz;
+			msg->out.pdata_iov.max_nents	 = out_iovsz;
 			msg->out.pdata_iov.sglist	= (void *)buf;
 			buf = buf + out_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
