@@ -44,9 +44,9 @@ static inline cycles_t get_cycles()
 	union {
 		unsigned long long val;
 		struct {
-			unsigned long low;
-			unsigned long high;
-		};
+			unsigned int low;
+			unsigned int high;
+		} __attribute__(packed);
 	} value;
 
 	asm volatile ("rdtsc" : "=a" (value.low), "=d" (value.high));
