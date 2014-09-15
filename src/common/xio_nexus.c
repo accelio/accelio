@@ -1167,8 +1167,9 @@ static void xio_on_context_close(struct xio_nexus *nexus,
 	/* at that stage the nexus->transport_hndl no longer exist */
 	nexus->transport_hndl = NULL;
 
-	/* close the nexus */
-	xio_nexus_destroy(nexus);
+	/* close the nexus - listener should be close by unbind */
+	if(!nexus->is_listener)
+		xio_nexus_destroy(nexus);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1674,7 +1675,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_destroy(struct xio_nexus *nexus)
 {
-	TRACE_LOG("nexus:%p - close complete\n", nexus);
+	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,

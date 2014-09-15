@@ -52,7 +52,7 @@ struct xio_server {
 	struct xio_context		*ctx;
 	struct xio_session_ops		ops;
 	uint32_t			session_flags;
-	uint32_t			pad;
+	struct kref			kref;
 	void				*cb_private_data;
 	struct xio_observable		nexus_observable;
 };

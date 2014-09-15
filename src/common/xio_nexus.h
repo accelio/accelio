@@ -149,7 +149,6 @@ struct xio_nexus {
 
 	struct list_head		observers_htbl;
 	struct list_head		tx_queue;
-	struct list_head		server_list_entry;
 	struct xio_server		*server;
 
 	/* Client side for reconnect */

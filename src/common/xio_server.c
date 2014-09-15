@@ -52,6 +52,7 @@
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
+static void xio_server_destroy(struct kref *kref);
 
 /*---------------------------------------------------------------------------*/
 /* xio_server_reg_observer						     */
@@ -59,6 +60,7 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 int xio_server_reg_observer(struct xio_server *server,
 			     struct xio_observer *observer)
 {
+	kref_get(&server->kref);
 	xio_observable_reg_observer(&server->nexus_observable, observer);
 
 	return 0;
@@ -71,6 +73,7 @@ void xio_server_unreg_observer(struct xio_server *server,
 				struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&server->nexus_observable, observer);
+	kref_put(&server->kref, xio_server_destroy);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -294,6 +297,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
+	kref_init(&server->kref);
 
 	/* fill server data*/
 	server->ctx = ctx;
@@ -334,6 +338,27 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_server_destroy							     */
+/*---------------------------------------------------------------------------*/
+static void xio_server_destroy(struct kref *kref)
+{
+	struct xio_server *server = container_of(kref,
+						 struct xio_server,kref);
+
+	xio_observable_notify_all_observers(&server->nexus_observable,
+					    XIO_SERVER_EVENT_CLOSE, NULL);
+	xio_observable_unreg_all_observers(&server->nexus_observable);
+
+	xio_nexus_close(server->listener, NULL);
+
+	XIO_OBSERVER_DESTROY(&server->observer);
+	XIO_OBSERVABLE_DESTROY(&server->nexus_observable);
+
+	kfree(server->uri);
+	kfree(server);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_unbind								     */
 /*---------------------------------------------------------------------------*/
 int xio_unbind(struct xio_server *server)
@@ -352,18 +377,7 @@ int xio_unbind(struct xio_server *server)
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
 		return -1;
 	}
-
-	xio_observable_notify_all_observers(&server->nexus_observable,
-					    XIO_SERVER_EVENT_CLOSE, NULL);
-	xio_observable_unreg_all_observers(&server->nexus_observable);
-
-	xio_nexus_close(server->listener, NULL);
-
-	XIO_OBSERVER_DESTROY(&server->observer);
-	XIO_OBSERVABLE_DESTROY(&server->nexus_observable);
-
-	kfree(server->uri);
-	kfree(server);
+	kref_put(&server->kref, xio_server_destroy);
 
 	return retval;
 }
