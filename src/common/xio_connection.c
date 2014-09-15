@@ -1286,6 +1286,12 @@ static void xio_fin_req_timeout(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
+	/* connetion got disconnection during LAST ACK state - ignore req timeout */
+	if (connection->state == XIO_CONNECTION_STATE_LAST_ACK) {
+		connection->state = XIO_CONNECTION_STATE_CLOSED;
+		goto exit;
+	}
+
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
 
@@ -1300,7 +1306,7 @@ static void xio_fin_req_timeout(void *data)
 						       connection);
 	else
 		xio_connection_destroy(connection);
-
+exit:
 	xio_connection_putref(connection);
 }
 

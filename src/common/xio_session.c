@@ -993,7 +993,11 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 		connection = xio_session_find_connection(session, nexus);
 		spin_unlock(&session->connections_list_lock);
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
-		xio_connection_disconnected(connection);
+
+		/* disconnection arrive during active closing phase */
+		if ((connection->state != XIO_CONNECTION_STATE_LAST_ACK) &&
+		    (connection->state != XIO_CONNECTION_STATE_CLOSED))
+			xio_connection_disconnected(connection);
 	}
 
 	return 0;
