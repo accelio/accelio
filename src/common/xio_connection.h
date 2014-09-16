@@ -213,5 +213,20 @@ int xio_connection_restart(struct xio_connection *connection);
 
 void xio_connection_putref(struct xio_connection *connection);
 
+//int xio_send_fin_req(struct xio_connection *connection);
+
+int xio_on_fin_req_send_comp(struct xio_connection *connection,
+			     struct xio_task *task);
+
+int xio_on_fin_ack_send_comp(struct xio_connection *connection,
+			     struct xio_task *task);
+
+int xio_on_fin_req_recv(struct xio_connection *connection,
+			struct xio_task *task);
+
+int xio_on_fin_ack_recv(struct xio_connection *connection,
+			struct xio_task *task);
+
+
 #endif /*XIO_CONNECTION_H */
 
