@@ -182,7 +182,6 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	int		num_cores = num_online_cpus();
 	u32		alloc_sz;
 	int		cpu;
-	int ret;
 
 	/* If two session were created with the same context and
 	 * the address resolved on the same device than the same
@@ -264,6 +263,8 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		goto cleanup3;
 	}
 
+/* due to ib_modify_cq API change, need to add backporting */
+#if 0
 	if (xio_rdma_cq_completions && xio_rdma_cq_timeout) {
 		if (xio_rdma_cq_completions > 0xffff ||
 			xio_rdma_cq_timeout > 0xffff) {
@@ -277,6 +278,8 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 			}
 		}
 	}
+#endif
+
 	/* we don't expect missed events (if supported) so it is an error */
 	if (ib_req_notify_cq(tcq->cq,
 			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
