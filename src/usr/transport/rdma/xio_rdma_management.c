@@ -83,7 +83,9 @@ static LIST_HEAD(cm_list);
 
 static struct xio_dev_tdata		dev_tdata;
 
-static  int				cdl_fd = -1;
+static int				cdl_fd = -1;
+
+static int				rdma_num_devices = 0;
 
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
@@ -646,6 +648,32 @@ static void xio_device_release(struct xio_device *dev, int delete_fd)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_device_list_check						     */
+/*---------------------------------------------------------------------------*/
+static void xio_device_list_check()
+{
+	struct ibv_context **ctx_list;
+	int num_devices = 0;
+
+	rdma_num_devices = 0;
+
+	ctx_list = rdma_get_devices(&num_devices);
+	if (!ctx_list) {
+		return;
+	}
+
+	if (!*ctx_list || num_devices == 0) {
+		goto exit;
+	}
+
+	rdma_num_devices = num_devices;
+exit:
+	rdma_free_devices(ctx_list);
+
+	return;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_device_list_init							     */
 /*---------------------------------------------------------------------------*/
 static int xio_device_list_init()
@@ -656,6 +684,8 @@ static int xio_device_list_init()
 	int retval = 0;
 
 	INIT_LIST_HEAD(&dev_list);
+
+	rdma_num_devices = 0;
 
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!ctx_list) {
@@ -670,6 +700,9 @@ static int xio_device_list_init()
 		retval = -1;
 		goto exit;
 	}
+
+	rdma_num_devices = num_devices;
+
 	for (i = 0; i < num_devices; ++i) {
 		dev = xio_device_init(ctx_list[i]);
 		if (!dev) {
@@ -2777,6 +2810,11 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
+	case XIO_OPTNAME_RDMA_NUM_DEVICES:
+		*((int *)optval) = rdma_num_devices;
+		*optlen = sizeof(int);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -3045,6 +3083,8 @@ void xio_rdma_transport_constructor(void)
 			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
 				  retval, strerror(retval));
 	}
+
+	xio_device_list_check();
 
 	spin_lock_init(&dev_list_lock);
 }

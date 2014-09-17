@@ -166,7 +166,8 @@ enum xio_optname {
 					  /**< threshold		      */
 
 	/* XIO_OPTLEVEL_RDMA */
-	XIO_OPTNAME_RDMA_PLACE_HOLDER = 300,   /**< place holder for rdma opt */
+	XIO_OPTNAME_RDMA_NUM_DEVICES = 300,    /**< number of RDMA capable    */
+					       /**< devices on the machine    */
 
 	/* XIO_OPTLEVEL_TCP */
 	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400, /**< check tcp mr validity     */
