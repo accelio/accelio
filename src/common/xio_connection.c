@@ -1454,7 +1454,7 @@ static void xio_pre_disconnect(void *_connection)
 	xio_send_fin_req(connection);
 
 	if (!connection->disable_notify) {
-		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		connection->close_reason = XIO_E_SESSION_CLOSED;
 		xio_session_notify_connection_closed(connection->session,
 						     connection);
 	}
@@ -2023,6 +2023,8 @@ static void xio_close_time_wait(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
+	connection->close_reason = XIO_E_SESSION_CLOSED;
+
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
 
@@ -2050,6 +2052,8 @@ static void xio_handle_last_ack(void *data)
 		  connection,
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
+
+	connection->close_reason = XIO_E_SESSION_DISCONECTED;
 
 	/* flush all messages from in flight message
 	 * queue to in queue */
@@ -2194,6 +2198,7 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 	if (connection->state == XIO_CONNECTION_STATE_CLOSE_WAIT) {
 		xio_send_fin_req(connection);
 
+		connection->close_reason = XIO_E_SESSION_DISCONECTED;
 		if (!connection->disable_notify)
 			xio_session_notify_connection_closed(
 					connection->session,
