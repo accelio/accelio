@@ -211,10 +211,6 @@ char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
 
-void xio_connection_putref(struct xio_connection *connection);
-
-//int xio_send_fin_req(struct xio_connection *connection);
-
 int xio_on_fin_req_send_comp(struct xio_connection *connection,
 			     struct xio_task *task);
 

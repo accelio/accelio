@@ -782,9 +782,11 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 		connection->close_reason = XIO_E_SESSION_DISCONECTED;
 
 		/* disconnection arrive during active closing phase */
-		if ((connection->state != XIO_CONNECTION_STATE_LAST_ACK) &&
-		    (connection->state != XIO_CONNECTION_STATE_CLOSED))
+		if (connection->state != XIO_CONNECTION_STATE_CLOSED) {
+			kref_init(&connection->kref);
 			xio_connection_disconnected(connection);
+		}
+
 	}
 
 	return 0;

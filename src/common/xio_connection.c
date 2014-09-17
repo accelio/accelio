@@ -114,6 +114,7 @@ static struct xio_transition xio_transition_table[][2] = {
 		  },
 };
 
+static void xio_connection_post_destroy(struct kref *kref);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_next_transit					     */
@@ -1304,7 +1305,7 @@ static void xio_fin_req_timeout(void *data)
 	else
 		xio_connection_destroy(connection);
 exit:
-	xio_connection_putref(connection);
+	kref_put(&connection->kref, xio_connection_post_destroy);
 }
 
 
@@ -1806,7 +1807,9 @@ static void xio_connection_post_destroy(struct kref *kref)
 		}
 		/* last chance to teardown */
 		spin_lock(&session->connections_list_lock);
-		destroy_session = (session->connections_nr == 0);
+		destroy_session = ((session->connections_nr == 0) &&
+				   (session->lead_connection == NULL) &&
+				   (session->redir_connection == NULL));
 		spin_unlock(&session->connections_list_lock);
 		if (destroy_session) {
 			session->teardown_reason = reason;
@@ -1817,14 +1820,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 					&session->teardown_work);
 		}
 	}
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_connection_putref						     */
-/*---------------------------------------------------------------------------*/
-void xio_connection_putref(struct xio_connection *connection)
-{
-	kref_put(&connection->kref, xio_connection_post_destroy);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2008,7 +2003,7 @@ int xio_on_fin_req_send_comp(struct xio_connection *connection,
 		  "connection:%p\n",
 		  connection->session, connection);
 
-	xio_connection_putref(connection);
+	kref_put(&connection->kref, xio_connection_post_destroy);
 
 	return 0;
 }
@@ -2040,7 +2035,7 @@ static void xio_close_time_wait(void *data)
 	else
 		xio_connection_destroy(connection);
 
-	xio_connection_putref(connection);
+	kref_put(&connection->kref, xio_connection_post_destroy);
 }
 
 static void xio_handle_last_ack(void *data)
@@ -2139,7 +2134,7 @@ int xio_on_fin_ack_recv(struct xio_connection *connection,
 	}
 
 cleanup:
-	xio_connection_putref(connection);
+	kref_put(&connection->kref, xio_connection_post_destroy);
 
 	return retval;
 }
@@ -2226,7 +2221,7 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 	}
 
 cleanup:
-	xio_connection_putref(connection);
+	kref_put(&connection->kref, xio_connection_post_destroy);
 
 	return retval;
 }
