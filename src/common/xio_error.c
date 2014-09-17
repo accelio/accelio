@@ -76,6 +76,8 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Session rejected";
 	case XIO_E_SESSION_REDIRECTED:
 		return "Session redirected";
+	case XIO_E_SESSION_CLOSED:
+		return "Session closed";
 	case XIO_E_BIND_FAILED:
 		return  "Bind failed";
 	case XIO_E_TIMEOUT:
