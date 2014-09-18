@@ -766,20 +766,20 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == nexus) {
 		connection = session->lead_connection;
-		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		connection->close_reason = XIO_E_SESSION_DISCONNECTED;
 		if (session->state == XIO_SESSION_STATE_CONNECT)
 			xio_connection_disconnected(connection);
 	} else if (session->redir_connection &&
 		   session->redir_connection->nexus == nexus) {
 		connection = session->redir_connection;
-		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		connection->close_reason = XIO_E_SESSION_DISCONNECTED;
 		if (session->state == XIO_SESSION_STATE_CONNECT)
 			xio_connection_disconnected(connection);
 	} else {
 		spin_lock(&session->connections_list_lock);
 		connection = xio_session_find_connection(session, nexus);
 		spin_unlock(&session->connections_list_lock);
-		connection->close_reason = XIO_E_SESSION_DISCONECTED;
+		connection->close_reason = XIO_E_SESSION_DISCONNECTED;
 
 		/* disconnection arrive during active closing phase */
 		if (connection->state != XIO_CONNECTION_STATE_CLOSED) {
