@@ -182,7 +182,6 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	int		num_cores = num_online_cpus();
 	u32		alloc_sz;
 	int		cpu;
-	int ret;
 
 	/* If two session were created with the same context and
 	 * the address resolved on the same device than the same
@@ -264,6 +263,8 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 		goto cleanup3;
 	}
 
+/* due to ib_modify_cq API change, need to add backporting */
+#if 0
 	if (xio_rdma_cq_completions && xio_rdma_cq_timeout) {
 		if (xio_rdma_cq_completions > 0xffff ||
 			xio_rdma_cq_timeout > 0xffff) {
@@ -277,6 +278,8 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 			}
 		}
 	}
+#endif
+
 	/* we don't expect missed events (if supported) so it is an error */
 	if (ib_req_notify_cq(tcq->cq,
 			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
@@ -1732,6 +1735,12 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_base;
 
+
+	if (rdma_hndl->handler_nesting) {
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+		return;
+	}
+
 	TRACE_LOG("rdma transport: [post_close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
@@ -1746,7 +1755,7 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	/* Don't call rdma_destroy_id from event handler. see comment in
 	 * xio_handle_cm_event
 	 */
-	if (rdma_hndl->cm_id && rdma_hndl->handler_nesting == 0) {
+	if (rdma_hndl->cm_id) {
 		TRACE_LOG("call rdma_destroy_id\n");
 		rdma_destroy_id(rdma_hndl->cm_id);
 		rdma_hndl->cm_id = NULL;
@@ -2490,7 +2499,7 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 		retval = PTR_ERR(rdma_hndl->cm_id);
 		xio_set_error(retval);
 		ERROR_LOG("rdma_create id failed. (err=%d)\n", retval);
-		goto exit2;
+		goto exit1;
 	}
 
 	/* TODO: support out_if_addr */
@@ -2527,6 +2536,7 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 exit2:
 	TRACE_LOG("call rdma_destroy_id\n");
 	rdma_destroy_id(rdma_hndl->cm_id);
+exit1:
 	rdma_hndl->cm_id = NULL;
 
 	return -1;
@@ -2615,7 +2625,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		retval = PTR_ERR(rdma_hndl->cm_id);
 		xio_set_error(retval);
 		DEBUG_LOG("rdma_create id failed. (err=%d)\n", retval);
-		goto exit2;
+		goto exit1;
 	}
 
 	retval = rdma_bind_addr(rdma_hndl->cm_id, &sa.sa);
@@ -2644,6 +2654,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 
 exit2:
 	rdma_destroy_id(rdma_hndl->cm_id);
+exit1:
 	rdma_hndl->cm_id = NULL;
 
 	return -1;

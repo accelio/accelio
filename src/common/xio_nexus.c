@@ -2038,7 +2038,6 @@ static void xio_nexus_delayed_close(struct kref *kref)
 					     struct xio_nexus,
 					     kref);
 	int		retval;
-	int		timeout;
 
 	TRACE_LOG("xio_nexus_deleyed close. nexus:%p, state:%d\n",
 		  nexus, nexus->state);
@@ -2051,18 +2050,16 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		xio_nexus_release(nexus);
 		break;
 	default:
-		/* disconnection should not occur at the same time */
-		timeout = (nexus->transport_hndl->is_client) ?
-			   XIO_NEXUS_CLOSE_TIMEOUT :
-			   4*XIO_NEXUS_CLOSE_TIMEOUT;
-
-		retval = xio_ctx_add_delayed_work(
-			    nexus->transport_hndl->ctx,
-			    timeout, nexus,
-			    xio_nexus_release_cb,
-			    &nexus->close_time_hndl);
-		if (retval)
-			ERROR_LOG("xio_nexus_delayed_close failed\n");
+		/* only client shall cause disconnection */
+		if (nexus->transport_hndl->is_client) {
+			retval = xio_ctx_add_delayed_work(
+					nexus->transport_hndl->ctx,
+					XIO_NEXUS_CLOSE_TIMEOUT, nexus,
+					xio_nexus_release_cb,
+					&nexus->close_time_hndl);
+			if (retval)
+				ERROR_LOG("xio_nexus_delayed_close failed\n");
+		}
 		break;
 	}
 }

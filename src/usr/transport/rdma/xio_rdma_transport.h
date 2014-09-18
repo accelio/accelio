@@ -409,7 +409,7 @@ struct xio_rdma_transport {
 
 	uint32_t			peer_max_in_iovsz;
 	uint32_t			peer_max_out_iovsz;
-	int32_t				pad;
+	int32_t				handler_nesting;
 	/* connection's flow control */
 	size_t				membuf_sz;
 

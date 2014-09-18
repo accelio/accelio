@@ -83,7 +83,9 @@ static LIST_HEAD(cm_list);
 
 static struct xio_dev_tdata		dev_tdata;
 
-static  int				cdl_fd = -1;
+static int				cdl_fd = -1;
+
+static int				rdma_num_devices = 0;
 
 /* rdma options */
 struct xio_rdma_options			rdma_options = {
@@ -646,6 +648,32 @@ static void xio_device_release(struct xio_device *dev, int delete_fd)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_device_list_check						     */
+/*---------------------------------------------------------------------------*/
+static void xio_device_list_check()
+{
+	struct ibv_context **ctx_list;
+	int num_devices = 0;
+
+	rdma_num_devices = 0;
+
+	ctx_list = rdma_get_devices(&num_devices);
+	if (!ctx_list) {
+		return;
+	}
+
+	if (!*ctx_list || num_devices == 0) {
+		goto exit;
+	}
+
+	rdma_num_devices = num_devices;
+exit:
+	rdma_free_devices(ctx_list);
+
+	return;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_device_list_init							     */
 /*---------------------------------------------------------------------------*/
 static int xio_device_list_init()
@@ -656,6 +684,8 @@ static int xio_device_list_init()
 	int retval = 0;
 
 	INIT_LIST_HEAD(&dev_list);
+
+	rdma_num_devices = 0;
 
 	ctx_list = rdma_get_devices(&num_devices);
 	if (!ctx_list) {
@@ -670,6 +700,9 @@ static int xio_device_list_init()
 		retval = -1;
 		goto exit;
 	}
+
+	rdma_num_devices = num_devices;
+
 	for (i = 0; i < num_devices; ++i) {
 		dev = xio_device_init(ctx_list[i]);
 		if (!dev) {
@@ -1713,6 +1746,11 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl)
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_hndl;
 
+	if (rdma_hndl->handler_nesting) {
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+		return;
+	}
+
 	TRACE_LOG("rdma transport: [post close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
@@ -2059,6 +2097,7 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 	TRACE_LOG("cm event %s, hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
+	rdma_hndl->handler_nesting++;
 	switch (ev->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
 		on_cm_addr_resolved(ev, rdma_hndl);
@@ -2104,6 +2143,7 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 		on_cm_error(ev, rdma_hndl);
 		break;
 	};
+	rdma_hndl->handler_nesting--;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2143,7 +2183,6 @@ static void xio_connection_ev_handler(int fd, int events, void *user_context)
 			rdma_ack_cm_event(rdma_hndl->ev_to_ack);
 			rdma_hndl->ev_to_ack = NULL;
 		}
-
 		if (rdma_hndl->state == XIO_STATE_DESTROYED) {
 			xio_rdma_post_close(
 					(struct xio_transport_base *)rdma_hndl);
@@ -2554,7 +2593,7 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 	if (retval) {
 		xio_set_error(errno);
 		ERROR_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
-		goto exit2;
+		goto exit1;
 	}
 
 	if (out_if_addr) {
@@ -2589,6 +2628,7 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 exit2:
 	TRACE_LOG("call rdma_destroy_id\n");
 	rdma_destroy_id(rdma_hndl->cm_id);
+exit1:
 	rdma_hndl->cm_id = NULL;
 
 	return -1;
@@ -2656,7 +2696,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	if (retval) {
 		xio_set_error(errno);
 		DEBUG_LOG("rdma_create id failed. (errno=%d %m)\n", errno);
-		goto exit2;
+		goto exit1;
 	}
 
 	retval = rdma_bind_addr(rdma_hndl->cm_id, &sa.sa);
@@ -2686,6 +2726,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 exit2:
 	TRACE_LOG("call rdma_destroy_id\n");
 	rdma_destroy_id(rdma_hndl->cm_id);
+exit1:
 	rdma_hndl->cm_id = NULL;
 
 	return -1;
@@ -2774,6 +2815,11 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		break;
 	case XIO_OPTNAME_MAX_OUT_IOVLEN:
 		*((int *)optval) = rdma_options.max_out_iovsz;
+		*optlen = sizeof(int);
+		return 0;
+		break;
+	case XIO_OPTNAME_RDMA_NUM_DEVICES:
+		*((int *)optval) = rdma_num_devices;
 		*optlen = sizeof(int);
 		return 0;
 		break;
@@ -3045,6 +3091,8 @@ void xio_rdma_transport_constructor(void)
 			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
 				  retval, strerror(retval));
 	}
+
+	xio_device_list_check();
 
 	spin_lock_init(&dev_list_lock);
 }

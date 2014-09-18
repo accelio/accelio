@@ -316,14 +316,14 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
-	xio_nexus_set_server(server->listener, server);
-
+	
 	retval = xio_nexus_listen(server->listener,
 				  uri, src_port, backlog);
 	if (retval != 0) {
 		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;
 	}
+	xio_nexus_set_server(server->listener, server);
 	xio_idr_add_uobj(server);
 
 	return server;

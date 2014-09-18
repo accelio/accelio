@@ -578,8 +578,22 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 			  wc->byte_len, wc->imm_data, wc->qp_num, wc->src_qp);
 	}
 
-	if (task)
+	if (task && rdma_task) {
 		xio_handle_task_error(task);
+	} else {
+		ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, rdma_task:%p, "  \
+				"task:%p, wr_id:0x%lx, " \
+				"err:%s, vendor_err:0x%x\n",
+				rdma_hndl->base.is_client ? "client" : "server",
+				rdma_hndl->state,
+				rdma_hndl, rdma_task, task,
+				wc->wr_id,
+				ibv_wc_status_str(wc->status),
+				wc->vendor_err);
+		if (task->omsg)
+			xio_msg_dump(task->omsg);
+	}
+
 
 	/* temporary  */
 	if (wc->status != IBV_WC_WR_FLUSH_ERR) {

@@ -100,7 +100,7 @@ struct test_params {
 	uint64_t		ndelivered;
 	int			ask_for_receipt;
 	uint16_t		finite_run;
-	uint16_t		padding;
+	uint16_t		closed;
 	uint64_t		disconnect_nr;
 };
 
@@ -176,6 +176,10 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
+	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
+		test_params->closed = 1;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("nsent:%lu, ncomp:%lu, " \
 		       "delta:%lu\n",
@@ -232,6 +236,9 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 			return 0;
 		}
 	}
+	if (test_params->closed)
+		return 0;
+
 
 	/* peek message from the pool */
 	msg = msg_pool_get(test_params->pool);
@@ -287,12 +294,21 @@ static int on_msg_send_complete(struct xio_session *session,
 
 	/* can be safely freed */
 	msg_pool_put(test_params->pool, msg);
-#if  TEST_DISCONNECT
-	if (test_params->ncomp == DISCONNECT_NR) {
-		xio_disconnect(test_params->connection);
-		return 0;
+
+	if (test_params->finite_run) {
+		if ((test_params->ncomp+test_params->ndelivered) >
+		       test_params->disconnect_nr)
+			return 0;
+		if ((test_params->ncomp + test_params->ndelivered) ==
+		     test_params->disconnect_nr) {
+			xio_disconnect(test_params->connection);
+			return 0;
+		}
 	}
-#endif
+
+	if (test_params->closed)
+		return 0;
+
 	/* peek message from the pool */
 	msg = msg_pool_get(test_params->pool);
 	if (msg == NULL) {

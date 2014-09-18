@@ -78,7 +78,7 @@ struct xio_connection {
 	uint16_t			conn_idx;
 	uint16_t			state;
 	uint16_t			disable_notify;
-	uint16_t			in_close;
+	uint16_t			disconnecting;
 	uint16_t			is_flushed;
 	uint16_t			fin_req_timeout;
 	uint32_t			close_reason;
@@ -211,7 +211,18 @@ char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
 
-void xio_connection_putref(struct xio_connection *connection);
+int xio_on_fin_req_send_comp(struct xio_connection *connection,
+			     struct xio_task *task);
+
+int xio_on_fin_ack_send_comp(struct xio_connection *connection,
+			     struct xio_task *task);
+
+int xio_on_fin_req_recv(struct xio_connection *connection,
+			struct xio_task *task);
+
+int xio_on_fin_ack_recv(struct xio_connection *connection,
+			struct xio_task *task);
+
 
 #endif /*XIO_CONNECTION_H */
 
