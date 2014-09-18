@@ -824,7 +824,8 @@ int xio_send_request(struct xio_connection *connection,
 		return -1;
 	}
 
-	if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
+	if (unlikely(connection->disconnecting ||
+		     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
 		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		      connection->state != XIO_CONNECTION_STATE_INIT))) {
 		xio_set_error(ESHUTDOWN);
@@ -925,10 +926,10 @@ int xio_send_response(struct xio_msg *msg)
 			retval = -1;
 			goto send;
 		}
-		if (unlikely(
-		     (connection->state != XIO_CONNECTION_STATE_ONLINE  &&
-		     connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-		     connection->state != XIO_CONNECTION_STATE_INIT))) {
+		if (unlikely(connection->disconnecting ||
+			     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
+			      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+			      connection->state != XIO_CONNECTION_STATE_INIT))) {
 			/* we discard the response as connection is not active
 			 * anymore
 			 */
@@ -1051,12 +1052,14 @@ int xio_send_msg(struct xio_connection *connection,
 	int			nr = -1;
 	int			retval = 0;
 
-	if (unlikely((connection->state != XIO_CONNECTION_STATE_ONLINE &&
+	if (unlikely(connection->disconnecting ||
+		     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
 		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		      connection->state != XIO_CONNECTION_STATE_INIT))) {
-			xio_set_error(ESHUTDOWN);
-			return -1;
+		xio_set_error(ESHUTDOWN);
+		return -1;
 	}
+
 	if (msg->next) {
 		xio_msg_list_init(&reqs_msgq);
 		nr = 0;
@@ -1476,10 +1479,10 @@ int xio_disconnect(struct xio_connection *connection)
 		return -1;
 	}
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
-	    connection->in_close) {
+	    connection->disconnecting) {
 		return 0;
 	}
-	connection->in_close = 1;
+	connection->disconnecting = 1;
 	retval = xio_ctx_add_work(
 			connection->ctx,
 			connection,

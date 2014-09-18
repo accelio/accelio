@@ -78,7 +78,7 @@ struct xio_connection {
 	uint16_t			conn_idx;
 	uint16_t			state;
 	uint16_t			disable_notify;
-	uint16_t			in_close;
+	uint16_t			disconnecting;
 	uint16_t			is_flushed;
 	uint16_t			fin_req_timeout;
 	uint32_t			close_reason;
