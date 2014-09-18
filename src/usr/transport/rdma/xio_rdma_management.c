@@ -1746,6 +1746,11 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl)
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_hndl;
 
+	if (rdma_hndl->handler_nesting) {
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+		return;
+	}
+
 	TRACE_LOG("rdma transport: [post close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
@@ -2092,6 +2097,7 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 	TRACE_LOG("cm event %s, hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
+	rdma_hndl->handler_nesting++;
 	switch (ev->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
 		on_cm_addr_resolved(ev, rdma_hndl);
@@ -2137,6 +2143,7 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 		on_cm_error(ev, rdma_hndl);
 		break;
 	};
+	rdma_hndl->handler_nesting--;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2176,7 +2183,6 @@ static void xio_connection_ev_handler(int fd, int events, void *user_context)
 			rdma_ack_cm_event(rdma_hndl->ev_to_ack);
 			rdma_hndl->ev_to_ack = NULL;
 		}
-
 		if (rdma_hndl->state == XIO_STATE_DESTROYED) {
 			xio_rdma_post_close(
 					(struct xio_transport_base *)rdma_hndl);

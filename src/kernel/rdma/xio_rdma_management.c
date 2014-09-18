@@ -1735,6 +1735,12 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_base;
 
+
+	if (rdma_hndl->handler_nesting) {
+		rdma_hndl->state = XIO_STATE_DESTROYED;
+		return;
+	}
+
 	TRACE_LOG("rdma transport: [post_close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
@@ -1749,7 +1755,7 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	/* Don't call rdma_destroy_id from event handler. see comment in
 	 * xio_handle_cm_event
 	 */
-	if (rdma_hndl->cm_id && rdma_hndl->handler_nesting == 0) {
+	if (rdma_hndl->cm_id) {
 		TRACE_LOG("call rdma_destroy_id\n");
 		rdma_destroy_id(rdma_hndl->cm_id);
 		rdma_hndl->cm_id = NULL;
