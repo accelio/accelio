@@ -1644,7 +1644,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 		DEBUG_LOG("nexus: [notification] - transport closed. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_closed(nexus, ev_data);
-		return;
+		return 0;
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("nexus: [notification] - transport refused. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
