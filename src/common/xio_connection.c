@@ -942,6 +942,14 @@ int xio_send_response(struct xio_msg *msg)
 			pmsg = pmsg->next;
 			continue;
 		}
+		if (task->state != XIO_TASK_STATE_DELIVERED) {
+			ERROR_LOG("duplicate response send. request sn:%llu\n",
+				  task->imsg.sn);
+				xio_session_notify_msg_error(connection, pmsg,
+						     XIO_E_MSG_INVALID);
+			pmsg = pmsg->next;
+			continue;
+		}
 
 		/* Server latency */
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
