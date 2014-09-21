@@ -763,9 +763,6 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 	DEBUG_LOG("xio_session_on_nexus_disconnected. session:%p, nexus:%p\n",
 		  session, nexus);
 
-	/* no more notifications */
-	xio_nexus_unreg_observer(nexus, &session->observer);
-
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == nexus) {
 		connection = session->lead_connection;
