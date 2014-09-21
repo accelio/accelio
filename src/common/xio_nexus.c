@@ -1194,7 +1194,11 @@ static void xio_on_server_close(struct xio_nexus *nexus,
 				struct xio_server *server)
 {
 	TRACE_LOG("xio_on_server_close. nexus:%p, server:%p\n", nexus, server);
-	nexus->server = NULL;
+	if (nexus->server) {
+		xio_server_unreg_observer(nexus->server,
+					  &nexus->srv_observer);
+		nexus->server = NULL;
+	}
 }
 
 /*---------------------------------------------------------------------------*/

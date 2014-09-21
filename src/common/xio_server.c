@@ -316,7 +316,6 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
-	
 	retval = xio_nexus_listen(server->listener,
 				  uri, src_port, backlog);
 	if (retval != 0) {
@@ -345,8 +344,7 @@ static void xio_server_destroy(struct kref *kref)
 	struct xio_server *server = container_of(kref,
 						 struct xio_server,kref);
 
-	xio_observable_notify_all_observers(&server->nexus_observable,
-					    XIO_SERVER_EVENT_CLOSE, NULL);
+	DEBUG_LOG("xio_server_destroy - server:%p\n", server);
 	xio_observable_unreg_all_observers(&server->nexus_observable);
 
 	xio_nexus_close(server->listener, NULL);
@@ -377,6 +375,10 @@ int xio_unbind(struct xio_server *server)
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
 		return -1;
 	}
+	/* notify all observers that the server wishes to exit */
+	xio_observable_notify_all_observers(&server->nexus_observable,
+					    XIO_SERVER_EVENT_CLOSE, NULL);
+
 	kref_put(&server->kref, xio_server_destroy);
 
 	return retval;
