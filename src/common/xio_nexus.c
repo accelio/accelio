@@ -1428,6 +1428,7 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 	nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 	TRACE_LOG("nexus state changed to disconnected nexus:%p\n", nexus);
 
+	xio_nexus_flush_tx_queue(nexus);
 	if (!xio_observable_is_empty(&nexus->observable)) {
 		xio_observable_notify_all_observers(
 				&nexus->observable,
@@ -1643,7 +1644,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 		DEBUG_LOG("nexus: [notification] - transport closed. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_closed(nexus, ev_data);
-		break;
+		return;
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("nexus: [notification] - transport refused. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
@@ -1652,6 +1653,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 		} else {
 			nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 			TRACE_LOG("nexus state changed to disconnected\n");
+			xio_nexus_flush_tx_queue(nexus);
 			xio_observable_notify_all_observers(
 					&nexus->observable,
 					XIO_NEXUS_EVENT_REFUSED,
@@ -2280,6 +2282,7 @@ static void xio_nexus_server_reconnect_timeout(void *data)
 	/* No reconnect within timeout */
 	nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 	TRACE_LOG("nexus state changed to disconnected\n");
+	xio_nexus_flush_tx_queue(nexus);
 	xio_observable_notify_all_observers(&nexus->observable,
 					    XIO_NEXUS_EVENT_DISCONNECTED,
 					    NULL);
@@ -2332,6 +2335,7 @@ static void xio_nexus_client_reconnect_timeout(void *data)
 		/* retries number exceeded */
 		nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 		TRACE_LOG("nexus state changed to disconnected\n");
+		xio_nexus_flush_tx_queue(nexus);
 		xio_observable_notify_all_observers(
 				&nexus->observable,
 				XIO_NEXUS_EVENT_DISCONNECTED,
@@ -2362,6 +2366,7 @@ static void xio_nexus_client_reconnect_failed(void *data)
 		/* retries number exceeded */
 		nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 		TRACE_LOG("nexus state changed to disconnected\n");
+		xio_nexus_flush_tx_queue(nexus);
 		xio_observable_notify_all_observers(
 				&nexus->observable,
 				XIO_NEXUS_EVENT_DISCONNECTED,
