@@ -104,6 +104,8 @@ static struct xio_transport_base *xio_rdma_open(
 		struct xio_transport	*transport,
 		struct xio_context	*ctx,
 		struct xio_observer	*observer);
+
+static int xio_rdma_reject(struct xio_transport_base *transport);
 static void xio_rdma_close(struct xio_transport_base *transport);
 static struct rdma_event_channel *xio_cm_channel_get(struct xio_context *ctx);
 static void xio_rdma_post_close(struct xio_transport_base *trans_hndl);
@@ -1870,6 +1872,12 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	retval = xio_cm_find_init_device(ev);
 	if (retval != 0) {
 		ERROR_LOG("failed find/init device\n");
+		retval = rdma_reject(ev->id, NULL, 0);
+		if (retval) {
+			xio_set_error(errno);
+			ERROR_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
+		}
+
 		goto notify_err1;
 	}
 
@@ -1879,6 +1887,12 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 		NULL);
 	if (child_hndl == NULL) {
 		ERROR_LOG("failed to open rdma transport\n");
+		retval = rdma_reject(ev->id, NULL, 0);
+		if (retval) {
+			xio_set_error(errno);
+			ERROR_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
+		}
+
 		goto notify_err1;
 	}
 
@@ -1903,6 +1917,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	retval = xio_setup_qp(child_hndl);
 	if (retval != 0) {
 		ERROR_LOG("failed to setup qp\n");
+		xio_rdma_reject((struct xio_transport_base *)child_hndl);
 		goto notify_err2;
 	}
 
@@ -2566,7 +2581,7 @@ static int xio_rdma_reject(struct xio_transport_base *transport)
 		DEBUG_LOG("rdma_reject failed. (errno=%d %m)\n", errno);
 		return -1;
 	}
-	TRACE_LOG("rdma transport: [reject] handle:%p\n", rdma_hndl);
+	DEBUG_LOG("rdma transport: [reject] handle:%p\n", rdma_hndl);
 
 	return 0;
 }
