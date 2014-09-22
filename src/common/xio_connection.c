@@ -942,6 +942,14 @@ int xio_send_response(struct xio_msg *msg)
 			pmsg = pmsg->next;
 			continue;
 		}
+		if (task->state != XIO_TASK_STATE_DELIVERED) {
+			ERROR_LOG("duplicate response send. request sn:%llu\n",
+				  task->imsg.sn);
+				xio_session_notify_msg_error(connection, pmsg,
+						     XIO_E_MSG_INVALID);
+			pmsg = pmsg->next;
+			continue;
+		}
 
 		/* Server latency */
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
@@ -1908,9 +1916,10 @@ int xio_connection_disconnected(struct xio_connection *connection)
 		xio_ctx_del_work(connection->ctx,
 				 &connection->fin_work);
 
-	xio_session_notify_connection_disconnected(
-			connection->session, connection,
-			connection->close_reason);
+	if (!connection->disable_notify)
+		xio_session_notify_connection_disconnected(
+				connection->session, connection,
+				connection->close_reason);
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
@@ -1941,8 +1950,9 @@ int xio_connection_disconnected(struct xio_connection *connection)
 		}
 	}
 
-	xio_session_notify_connection_teardown(connection->session,
-					       connection);
+	if (!connection->disable_notify)
+		xio_session_notify_connection_teardown(connection->session,
+						       connection);
 
 	return 0;
 }

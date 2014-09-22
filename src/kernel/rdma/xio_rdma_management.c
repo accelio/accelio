@@ -109,6 +109,7 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 						struct xio_observer *observer);
 
 static void xio_rdma_close(struct xio_transport_base *transport);
+static int xio_rdma_reject(struct xio_transport_base *transport);
 static void xio_rdma_post_close(struct xio_transport_base *transport);
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl);
 
@@ -1881,10 +1882,15 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 	/* Find the device on which the connection was established */
 	xio_devs = ib_get_client_data(cm_id->device, &xio_client);
 	if (!(xio_devs && xio_devs[cm_id->port_num])) {
-		ERROR_LOG("device(%s) port(%d) not registerd\n",
+		ERROR_LOG("device(%s) port(%d) not registered\n",
 			  cm_id->device->name,
 			  cm_id->port_num);
 		xio_set_error(ENODEV);
+		retval = rdma_reject(cm_id, NULL, 0);
+		if (retval) {
+			xio_set_error(retval);
+			ERROR_LOG("rdma_reject failed. (err=%d %m)\n", retval);
+		}
 		goto notify_err1;
 	}
 
@@ -1894,6 +1900,11 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 		NULL);
 	if (child_hndl == NULL) {
 		ERROR_LOG("failed to open rdma transport\n");
+		retval = rdma_reject(cm_id, NULL, 0);
+		if (retval) {
+			xio_set_error(retval);
+			ERROR_LOG("rdma_reject failed. (err=%d %m)\n",retval);
+		}
 		goto notify_err1;
 	}
 
@@ -1925,6 +1936,7 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 	retval = xio_setup_qp(child_hndl);
 	if (retval != 0) {
 		ERROR_LOG("failed to setup qp\n");
+		xio_rdma_reject((struct xio_transport_base *)child_hndl);
 		goto notify_err2;
 	}
 

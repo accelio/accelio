@@ -335,7 +335,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
 	struct xio_ev_loop	*loop = loop_hndl;
-	int			nevent = 0, i, j, found;
+	int			nevent = 0, i, j, found = 0;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
 	int			work_remains;
