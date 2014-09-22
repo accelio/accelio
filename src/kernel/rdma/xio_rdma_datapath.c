@@ -603,8 +603,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			  wc->qp, wc->qp ? wc->qp->qp_num : 0xdeadbeaf,
 			  wc->src_qp);
 	}
-
-	if (task)
+	if (task && rdma_task)
 		xio_handle_task_error(task);
 
 	/* temporary  */
