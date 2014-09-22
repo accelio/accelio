@@ -109,9 +109,6 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 		return 0;
 	}
 
-
-	tbl_set_nents(dtbl_ops, dtbl, snents);
-
 	while (1) {
 		if (slen < dlen) {
 			memcpy(daddr, saddr, slen);
