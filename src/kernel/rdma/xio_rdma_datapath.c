@@ -75,13 +75,15 @@ static void xio_prep_rdma_rd_send_req(
 		struct xio_rdma_transport *rdma_hndl,
 		int signaled);
 static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
-			    struct xio_task *task);
+				struct xio_task *task);
 static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
-			    struct xio_task *task);
+				struct xio_task *task);
 static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
-			    struct xio_task *task);
-static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
-			    struct xio_task *task);
+				 struct xio_task *task);
+static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
+				     struct xio_task *task);
+static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
+				     struct xio_task *task);
 static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 				struct xio_task *task);
 static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl);
@@ -825,6 +827,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		if (IS_REQUEST(ptask->tlv_type)) {
 			rdma_hndl->max_sn++;
 			rdma_hndl->reqs_in_flight_nr--;
+			xio_rdma_on_req_send_comp(rdma_hndl, ptask);
 			xio_tasks_pool_put(ptask);
 		} else if (IS_RESPONSE(ptask->tlv_type)) {
 			rdmad = &rdma_task->rdmad;
@@ -836,7 +839,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 				xio_unmap_rxmad_work_req(rdma_hndl->dev, rdmad);
 			rdma_hndl->max_sn++;
 			rdma_hndl->rsps_in_flight_nr--;
-			xio_rdma_on_send_rsp_comp(rdma_hndl, ptask);
+			xio_rdma_on_rsp_send_comp(rdma_hndl, ptask);
 		} else if (IS_NOP(ptask->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_tasks_pool_put(ptask);
@@ -2601,9 +2604,9 @@ cleanup:
 
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_on_send_rsp_comp						     */
+/* xio_rdma_on_rsp_send_comp						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
+static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task)
 {
 	union xio_transport_event_data event_data;
@@ -2614,6 +2617,27 @@ static int xio_rdma_on_send_rsp_comp(struct xio_rdma_transport *rdma_hndl,
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_SEND_COMPLETION,
 				      &event_data);
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_on_req_send_comp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
+				     struct xio_task *task)
+{
+	union xio_transport_event_data event_data;
+
+	if (IS_CANCEL(task->tlv_type))
+		return 0;
+
+	event_data.msg.op	= XIO_WC_OP_SEND;
+	event_data.msg.task	= task;
+
+	xio_transport_notify_observer(&rdma_hndl->base,
+				      XIO_TRANSPORT_SEND_COMPLETION,
+				      &event_data);
+
 	return 0;
 }
 
