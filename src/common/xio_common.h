@@ -44,7 +44,9 @@
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
-extern struct xio_options g_options;
+extern struct xio_options	g_options;
+extern double			g_mhz;
+
 
 /*---------------------------------------------------------------------------*/
 /* defines								     */
@@ -58,7 +60,7 @@ extern struct xio_options g_options;
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
 
-#ifndef  ARRAY_SIZE
+#ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 

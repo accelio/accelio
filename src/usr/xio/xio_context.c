@@ -149,7 +149,6 @@ static void xio_stats_handler(int fd, int events, void *data)
 	ret = sendmsg(fd, &msg, 0);
 	if (ret <= 0)
 		return;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -186,16 +185,16 @@ static int xio_pin_to_cpu(int cpu)
 /*---------------------------------------------------------------------------*/
 static int xio_pin_to_node(int cpu)
 {
-  int node = numa_node_of_cpu(cpu);
-  /* pin to node */
-  int ret = numa_run_on_node(node);
-  if (ret)
+	int node = numa_node_of_cpu(cpu);
+	/* pin to node */
+	int ret = numa_run_on_node(node);
+	if (ret)
+		return -1;
+
+	/* is numa_run_on_node() guaranteed to take effect immediately? */
+	sched_yield();
+
 	return -1;
-
-  /* is numa_run_on_node() guaranteed to take effect immediately? */
-  sched_yield();
-
-  return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -258,7 +257,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	/* only root can bind netlink socket */
 	if (geteuid() != 0) {
 		DEBUG_LOG("statistics monitoring disabled. " \
-			  "not priviliged user\n");
+			  "not privileged user\n");
 		goto exit;
 	}
 
@@ -275,7 +274,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	/* Listen to both UC and MC
 	 * By default the monitoring program send MC request but if
 	 * a thread starts after the monitor program than it will miss
-	 * the request for the format. When the monitoring progarm receives
+	 * the request for the format. When the monitoring program receives
 	 * statistics from a thread that it doesn't have its format it will
 	 * send a UC request directly to it
 	 *
@@ -354,7 +353,7 @@ void xio_context_destroy(struct xio_context *ctx)
 	} else {
 		ERROR_LOG("context not found:%p\n", ctx);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
-		return ;
+		return;
 	}
 
 	xio_observable_notify_all_observers(&ctx->observable,

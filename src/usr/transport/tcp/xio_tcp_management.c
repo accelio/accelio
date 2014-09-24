@@ -281,7 +281,7 @@ static void xio_tcp_close_cb(struct kref *kref)
 
 	/* now it is zero */
 	TRACE_LOG("xio_tcp_close: [close] handle:%p, fd:%d\n",
-			tcp_hndl, tcp_hndl->sock.cfd);
+		  tcp_hndl, tcp_hndl->sock.cfd);
 
 	switch (tcp_hndl->state) {
 	case XIO_STATE_LISTEN:
@@ -295,7 +295,8 @@ static void xio_tcp_close_cb(struct kref *kref)
 		on_sock_close(tcp_hndl);
 		break;
 	default:
-		xio_transport_notify_observer(&tcp_hndl->base,
+		xio_transport_notify_observer(
+				&tcp_hndl->base,
 				XIO_TRANSPORT_CLOSED,
 				NULL);
 		tcp_hndl->state = XIO_STATE_DESTROYED;

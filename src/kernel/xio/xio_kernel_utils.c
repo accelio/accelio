@@ -46,7 +46,8 @@
 #include <linux/inet.h>
 
 #ifndef IN6ADDR_ANY_INIT
-#define IN6ADDR_ANY_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
+#define IN6ADDR_ANY_INIT \
+	{ { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } }
 #endif
 
 /*---------------------------------------------------------------------------*/
@@ -72,7 +73,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 
 	if (strnchr(str, len, '.')) {
 		/* Try IPv4 */
-		struct sockaddr_in *s4 = (struct sockaddr_in *) ss;
+		struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
 		if (in4_pton(str, len, (void *)&s4->sin_addr, -1, &end) > 0) {
 			if (!*end) {
 				/* reached the '\0' */
@@ -83,7 +84,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 		}
 	} else if (strnchr(str, len, ':')) {
 		/* Try IPv6 */
-		struct sockaddr_in6 *s6 = (struct sockaddr_in6 *) ss;
+		struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
 		if (in6_pton(str, -1, (void *)&s6->sin6_addr, -1, &end) > 0) {
 			if (!*end) {
 				/* reached the '\0' */
@@ -177,9 +178,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	}
 
 	/* debug */
-	printk("host:%s port:%s\n", host, port);
+	DEBUG_LOG("host:%s port:%s\n", host, port);
 
-	if (strict_strtoul(port, 10, &portul)) {
+	if (kstrtoul(port, 10, &portul)) {
 		ERROR_LOG("Invalid port specification(%s)\n", port);
 		goto cleanup;
 	}
@@ -192,14 +193,15 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	if (!host || (host && (host[0] == '*' || host[0] == 0))) {
 		if (ipv6_hint) {
-			struct sockaddr_in6 *s6 = (struct sockaddr_in6 *) ss;
+			struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
 			/* what about scope and flow */
 			s6->sin6_family = AF_INET6;
 			/* s6->sin6_addr	= IN6ADDR_ANY_INIT; */
-			memset((void*) &s6->sin6_addr, 0, sizeof(s6->sin6_addr));
+			memset((void *)&s6->sin6_addr,
+			       0, sizeof(s6->sin6_addr));
 			s6->sin6_port	= port_be16;
 		} else {
-			struct sockaddr_in *s4 = (struct sockaddr_in *) ss;
+			struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
 			s4->sin_family		= AF_INET;
 			s4->sin_addr.s_addr	= INADDR_ANY;
 			s4->sin_port		= port_be16;
@@ -253,8 +255,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);
 
 	ERROR_LOG("in header: length:%zd, address:%p\n",
-		   xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
-	ERROR_LOG("in sgl type:%d max_nents:%d\n",xio_msg->in.sgl_type,
+		  xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
+	ERROR_LOG("in sgl type:%d max_nents:%d\n", xio_msg->in.sgl_type,
 		  tbl_max_nents(sgtbl_ops, sgtbl));
 	ERROR_LOG("in data size:%d\n",
 		  tbl_nents(sgtbl_ops, sgtbl));
@@ -269,9 +271,11 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->out.sgl_type);
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
-		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
-	ERROR_LOG("out sgl type:%d max_nents:%d\n",xio_msg->out.sgl_type,
-		 tbl_max_nents(sgtbl_ops, sgtbl));
+		  xio_msg->out.header.iov_len,
+		  xio_msg->out.header.iov_base);
+	ERROR_LOG("out sgl type:%d max_nents:%d\n",
+		  xio_msg->out.sgl_type,
+		  tbl_max_nents(sgtbl_ops, sgtbl));
 	ERROR_LOG("out data size:%d\n", tbl_nents(sgtbl_ops, sgtbl));
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {

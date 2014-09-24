@@ -1215,7 +1215,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 		} else {
 			if (tcp_hndl->tcp_mempool == NULL) {
 				xio_set_error(XIO_E_NO_BUFS);
-				ERROR_LOG("message /read/write failed - "
+				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
 				goto cleanup;
 			}
@@ -1243,7 +1243,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 		tcp_task->recv_num_sge = 0;
 	}
 	if (tcp_task->read_num_sge > tcp_hndl->peer_max_out_iovsz) {
-		ERROR_LOG("request in iovlen %d is bigger "
+		ERROR_LOG("request in iovlen %d is bigger " \
 			  "than peer max out iovlen %d\n",
 			  tcp_task->read_num_sge,
 			  tcp_hndl->peer_max_out_iovsz);
@@ -3535,7 +3535,7 @@ int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
 		/* 0 might be a valid sn for another task */
 		if ((cancel_hdr.result ==  XIO_E_MSG_CANCELED) ||
 		    (cancel_hdr.result ==  XIO_E_MSG_CANCEL_FAILED)) {
-			ERROR_LOG("task cannot be null if result is "
+			ERROR_LOG("task cannot be null if result is " \
 				  "MSG_CANCELED or MSG_CANCEL_FAILED\n");
 			return -1;
 		}

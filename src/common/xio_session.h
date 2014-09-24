@@ -172,11 +172,7 @@ int xio_session_reconnect(
 static inline int xio_session_is_valid_in_req(struct xio_session *session,
 					      struct xio_msg *msg)
 {
-	if (session->validators_cls->is_valid_in_req)
-		return session->validators_cls->is_valid_in_req(msg);
-
-	xio_set_error(XIO_E_NOT_SUPPORTED);
-	return -1;
+	return session->validators_cls->is_valid_in_req(msg);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -185,11 +181,7 @@ static inline int xio_session_is_valid_in_req(struct xio_session *session,
 static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 					       struct xio_msg *msg)
 {
-//	if (session->validators_cls->is_valid_out_msg)
-		return session->validators_cls->is_valid_out_msg(msg);
-
-	xio_set_error(XIO_E_NOT_SUPPORTED);
-	return -1;
+	return session->validators_cls->is_valid_out_msg(msg);
 }
 
 int xio_session_notify_cancel(struct xio_connection *connection,

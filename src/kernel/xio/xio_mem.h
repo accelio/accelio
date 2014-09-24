@@ -55,7 +55,8 @@ static inline void xio_disable_huge_pages(int disable)
 	disable_huge_pages = disable;
 }
 
-static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator) {
+static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator)
+{
 	if (allocator_assigned)
 		return -1;
 	memcpy(mem_allocator, allocator, sizeof(*allocator));

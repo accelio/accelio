@@ -63,13 +63,13 @@ static struct xio_transport  *transport_tbl[] = {
 
 #define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
 
-static volatile int32_t	ini_refcnt = 0;
+static volatile int32_t	ini_refcnt; /*= 0 */
 static DEFINE_MUTEX(ini_mutex);
 
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
 /*---------------------------------------------------------------------------*/
-static void xio_dtor()
+static void xio_dtor(void)
 {
 	size_t i;
 
@@ -89,7 +89,7 @@ static void xio_dtor()
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
 /*---------------------------------------------------------------------------*/
-static void xio_ctor()
+static void xio_ctor(void)
 {
 	size_t i;
 

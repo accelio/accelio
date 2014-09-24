@@ -87,7 +87,7 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 	struct xio_ev_loop *loop;
 	char queue_name[64];
 
-	loop = kzalloc(sizeof(struct xio_ev_loop), GFP_KERNEL);
+	loop = kzalloc(sizeof(*loop), GFP_KERNEL);
 	if (loop == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmalloc failed. %m\n");
@@ -186,9 +186,8 @@ void xio_ev_loop_destroy(void *loop_hndl)
 
 	switch (loop->flags) {
 	case XIO_LOOP_GIVEN_THREAD:
-		if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states)) {
+		if (!test_and_set_bit(XIO_EV_LOOP_WAKE, &loop->states))
 			wake_up_interruptible(&loop->wait);
-		}
 		if (test_bit(XIO_EV_LOOP_ACTIVE, &loop->states)) {
 			TRACE_LOG("loop: wait_for_completion");
 			wait_for_completion(&loop->complete);
@@ -420,7 +419,7 @@ stopped:
 /*---------------------------------------------------------------------------*/
 static void priv_ev_loop_run_tasklet(unsigned long data)
 {
-	struct xio_ev_loop *loop = (struct xio_ev_loop *) data;
+	struct xio_ev_loop *loop = (struct xio_ev_loop *)data;
 	struct xio_ev_data	*tev;
 	struct llist_node	*last, *first;
 	struct llist_node	*node;
@@ -471,7 +470,7 @@ int priv_ev_loop_run(void *loop_hndl)
 	case XIO_LOOP_GIVEN_THREAD:
 		if (loop->ctx->worker != (uint64_t) get_current()) {
 			ERROR_LOG("worker kthread(%p) is not current(%p).\n",
-				  (void *) loop->ctx->worker, get_current());
+				  (void *)loop->ctx->worker, get_current());
 			goto cleanup0;
 		}
 		/* no need to disable preemption */

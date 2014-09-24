@@ -214,7 +214,7 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 		}
 
 		/* scan for deleted work the may be inside the pipe */
-		for(i = 0; i < work_queue->deleted_works_nr; i++) {
+		for (i = 0; i < work_queue->deleted_works_nr; i++) {
 			if (work_queue->deleted_works[i] == exp) {
 				found = 1;
 				break;
@@ -333,9 +333,9 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 /* xio_workqueue_add_delayed_work					     */
 /*---------------------------------------------------------------------------*/
 int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
-			    int msec_duration, void *data,
-			    void (*function)(void *data),
-			    xio_delayed_work_handle_t *dwork)
+				   int msec_duration, void *data,
+				   void (*function)(void *data),
+				   xio_delayed_work_handle_t *dwork)
 {
 	int			retval = 0;
 	enum timers_list_rc	rc;
@@ -447,8 +447,8 @@ int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 		work->flags &= ~XIO_WORK_PENDING;
 		if (work_queue->deleted_works_nr < MAX_DELETED_WORKS) {
 			work_queue->deleted_works[
-				work_queue->deleted_works_nr
-						 ] = uint64_from_ptr(work);
+				work_queue->deleted_works_nr] =
+							uint64_from_ptr(work);
 			work_queue->deleted_works_nr++;
 		} else {
 			ERROR_LOG("failed to delete work\n");

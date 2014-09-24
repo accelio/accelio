@@ -215,7 +215,7 @@ void xio_validate_ulimit_memlock(void)
 		return;
 	}
 	if (mlock_limit.rlim_cur != RLIM_INFINITY) {
-		WARN_LOG("Verify that Max Locked Memory (ulimit -l) "
+		WARN_LOG("Verify that Max Locked Memory (ulimit -l) " \
 			 "setting is on unlimited (current is %ld)\n",
 			 mlock_limit.rlim_cur);
 	}

@@ -58,7 +58,7 @@ static void xio_server_destroy(struct kref *kref);
 /* xio_server_reg_observer						     */
 /*---------------------------------------------------------------------------*/
 int xio_server_reg_observer(struct xio_server *server,
-			     struct xio_observer *observer)
+			    struct xio_observer *observer)
 {
 	kref_get(&server->kref);
 	xio_observable_reg_observer(&server->nexus_observable, observer);
@@ -70,7 +70,7 @@ int xio_server_reg_observer(struct xio_server *server,
 /* xio_server_unreg_observer		                                     */
 /*---------------------------------------------------------------------------*/
 void xio_server_unreg_observer(struct xio_server *server,
-				struct xio_observer *observer)
+			       struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&server->nexus_observable, observer);
 	kref_put(&server->kref, xio_server_destroy);
@@ -342,7 +342,7 @@ cleanup:
 static void xio_server_destroy(struct kref *kref)
 {
 	struct xio_server *server = container_of(kref,
-						 struct xio_server,kref);
+						 struct xio_server, kref);
 
 	DEBUG_LOG("xio_server_destroy - server:%p\n", server);
 	xio_observable_unreg_all_observers(&server->nexus_observable);

@@ -78,8 +78,8 @@ void *malloc_huge_pages(size_t size)
 	real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
 
 	ptr = mmap(NULL, real_size, PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS |
-			MAP_POPULATE | MAP_HUGETLB, -1, 0);
+		   MAP_PRIVATE | MAP_ANONYMOUS |
+		   MAP_POPULATE | MAP_HUGETLB, -1, 0);
 	if (ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
 		long page_size = sysconf(_SC_PAGESIZE);
@@ -88,7 +88,8 @@ void *malloc_huge_pages(size_t size)
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
 			return NULL;
 		}
-		WARN_LOG("huge pages allocation failed, allocating regular pages\n");
+		WARN_LOG("huge pages allocation failed, allocating " \
+			 "regular pages\n");
 
 		DEBUG_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
 			  real_size, errno);

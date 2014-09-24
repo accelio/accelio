@@ -346,16 +346,17 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		mr = sge_mr(sgtbl_ops, sge);
 		if (mr)
-		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p " \
-			  "- [addr:%p, len:%d]\n", i,
-			  sge_length(sgtbl_ops, sge),
-			  sge_addr(sgtbl_ops, sge),
-			  mr, mr->addr, mr->length);
+			ERROR_LOG("in data[%d]: length:%zd, " \
+				  "address:%p, mr:%p " \
+				  "- [addr:%p, len:%d]\n", i,
+				  sge_length(sgtbl_ops, sge),
+				  sge_addr(sgtbl_ops, sge),
+				  mr, mr->addr, mr->length);
 		else
-		ERROR_LOG("in data[%d]: length:%zd, address:%p, mr:%p\n",
-			  i,
-			  sge_length(sgtbl_ops, sge),
-			  sge_addr(sgtbl_ops, sge), mr);
+			ERROR_LOG("in data[%d]: length:%zd, " \
+				  "address:%p, mr:%p\n", i,
+				  sge_length(sgtbl_ops, sge),
+				  sge_addr(sgtbl_ops, sge), mr);
 	}
 
 	sgtbl		= xio_sg_table_get(&xio_msg->out);
@@ -370,17 +371,18 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		mr = sge_mr(sgtbl_ops, sge);
 		if (mr)
-			ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p " \
+			ERROR_LOG("out data[%d]: length:%zd, " \
+				  "address:%p, mr:%p " \
 				  "- [addr:%p, len:%d]\n", i,
 				  sge_length(sgtbl_ops, sge),
 				  sge_addr(sgtbl_ops, sge),
 				  mr, mr->addr, mr->length);
 		else
-			ERROR_LOG("out data[%d]: length:%zd, address:%p, mr:%p\n",
+			ERROR_LOG("out data[%d]: length:%zd, " \
+				  "address:%p, mr:%p\n",
 				  i,
 				  sge_length(sgtbl_ops, sge),
 				  sge_addr(sgtbl_ops, sge), mr);
-
 	}
 	ERROR_LOG("*******************************************************\n");
 }

@@ -734,7 +734,6 @@ static int xio_connection_xmit(struct xio_connection *connection)
 	}
 
 	return retval ? -1 : 0;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -926,10 +925,11 @@ int xio_send_response(struct xio_msg *msg)
 			retval = -1;
 			goto send;
 		}
-		if (unlikely(connection->disconnecting ||
-			     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
-			      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
-			      connection->state != XIO_CONNECTION_STATE_INIT))) {
+		if (unlikely(
+		      connection->disconnecting ||
+		      (connection->state != XIO_CONNECTION_STATE_ONLINE &&
+		       connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
+		       connection->state != XIO_CONNECTION_STATE_INIT))) {
 			/* we discard the response as connection is not active
 			 * anymore
 			 */
@@ -945,7 +945,7 @@ int xio_send_response(struct xio_msg *msg)
 		if (task->state != XIO_TASK_STATE_DELIVERED) {
 			ERROR_LOG("duplicate response send. request sn:%llu\n",
 				  task->imsg.sn);
-				xio_session_notify_msg_error(connection, pmsg,
+			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_INVALID);
 			pmsg = pmsg->next;
 			continue;
@@ -1077,7 +1077,7 @@ int xio_send_msg(struct xio_connection *connection,
 		if (connection->tx_queued_msgs >= g_options.queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			WARN_LOG("send queue overflow %d\n",
-				  connection->tx_queued_msgs);
+				 connection->tx_queued_msgs);
 			retval = -1;
 			goto send;
 		}
@@ -1295,7 +1295,8 @@ static void xio_fin_req_timeout(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
-	/* connetion got disconnection during LAST ACK state - ignore req timeout */
+	/* connection got disconnection during LAST ACK state - \
+	 * ignore request timeout */
 	if (connection->state == XIO_CONNECTION_STATE_LAST_ACK) {
 		connection->state = XIO_CONNECTION_STATE_CLOSED;
 		goto exit;
@@ -1864,9 +1865,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 		 xio_connection_state_str(connection->state));
 
 	switch (connection->state) {
-//	case XIO_CONNECTION_STATE_LAST_ACK:
 	case XIO_CONNECTION_STATE_INIT:
-//	case XIO_CONNECTION_STATE_CLOSE_WAIT:
 	case XIO_CONNECTION_STATE_CLOSED:
 	case XIO_CONNECTION_STATE_DISCONNECTED:
 	case XIO_CONNECTION_STATE_ERROR:
@@ -1885,7 +1884,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 	 **/
 	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
 		xio_ctx_del_delayed_work(connection->ctx,
-				&connection->fin_timeout_work);
+					 &connection->fin_timeout_work);
 
 	kref_put(&connection->kref, xio_connection_post_destroy);
 
@@ -2213,11 +2212,11 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 					connection);
 
 		DEBUG_LOG("connection %p state change: current_state:%s, " \
-					"next_state:%s\n",
-					connection,
-					xio_connection_state_str(connection->state),
-					xio_connection_state_str(
-						XIO_CONNECTION_STATE_LAST_ACK));
+			  "next_state:%s\n",
+			  connection,
+			  xio_connection_state_str(connection->state),
+			  xio_connection_state_str(
+				  XIO_CONNECTION_STATE_LAST_ACK));
 		connection->state = XIO_CONNECTION_STATE_LAST_ACK;
 	}
 

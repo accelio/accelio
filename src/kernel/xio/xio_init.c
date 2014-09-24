@@ -51,7 +51,7 @@
 #include "xio_sg_table.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
-MODULE_DESCRIPTION("XIO generic part "
+MODULE_DESCRIPTION("XIO generic part "	\
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -85,10 +85,7 @@ static int __init xio_init_module(void)
 static void __exit xio_cleanup_module(void)
 {
 	xio_idr_destroy();
-	if (xio_root) {
-		debugfs_remove_recursive(xio_root);
-		xio_root = NULL;
-	}
+	debugfs_remove_recursive(xio_root);
 }
 
 struct dentry *xio_debugfs_root(void)

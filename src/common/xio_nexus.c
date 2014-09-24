@@ -1168,7 +1168,7 @@ static void xio_on_context_close(struct xio_nexus *nexus,
 	nexus->transport_hndl = NULL;
 
 	/* close the nexus - listener should be close by unbind */
-	if(!nexus->is_listener)
+	if (!nexus->is_listener)
 		xio_nexus_destroy(nexus);
 }
 

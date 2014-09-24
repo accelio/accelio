@@ -368,7 +368,7 @@ struct xio_rdma_transport {
 							     peer sends */
 	uint16_t			peer_credits;
 
-	uint16_t			last_send_was_signaled;
+	uint16_t			pad;
 
 	/* fast path params */
 	int				rdma_in_flight;

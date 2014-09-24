@@ -126,6 +126,5 @@ static inline char *strerror(int errnum)
 	return buf;
 };
 
-#define PRIu64 "llu"
 
 #endif /* XIO_OS_H */

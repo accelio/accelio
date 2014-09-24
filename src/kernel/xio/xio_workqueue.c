@@ -55,7 +55,7 @@
 struct xio_workqueue {
 	struct xio_context	*ctx;
 	struct workqueue_struct	*workqueue;
-	spinlock_t 		lock;
+	spinlock_t		lock;		/* workqueue lock */
 };
 
 /*---------------------------------------------------------------------------*/

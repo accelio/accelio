@@ -50,8 +50,6 @@
 
 #define MAX_DELETED_EVENTS	1024
 
-extern double                    g_mhz;
-
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */
 /*---------------------------------------------------------------------------*/
@@ -372,7 +370,7 @@ retry:
 					for (j = 0; j < loop->deleted_events_nr;
 							j++) {
 						if (loop->deleted_events[j] ==
-								tev) {
+						    tev) {
 							found = 1;
 							break;
 						}
@@ -391,7 +389,7 @@ retry:
 				 * */
 
 				/* check wakeup is armed to prevent false
-				 * wakeups
+				 * wake ups
 				 * */
 				if (loop->wakeup_armed == 1) {
 					loop->wakeup_armed = 0;

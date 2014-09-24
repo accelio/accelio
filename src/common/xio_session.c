@@ -589,7 +589,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
 		connection->tx_queued_msgs--;
-		if (sender_task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
+		if (sender_task->omsg_flags &
+		    XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
 			if (connection->ses_ops.on_msg_delivered)
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
@@ -728,7 +729,7 @@ static int xio_on_ow_req_send_comp(
 		return 0;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
-			get_cycles() - omsg->timestamp);
+		     get_cycles() - omsg->timestamp);
 
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
@@ -784,7 +785,6 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 			kref_init(&connection->kref);
 			xio_connection_disconnected(connection);
 		}
-
 	}
 
 	return 0;

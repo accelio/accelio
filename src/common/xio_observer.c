@@ -199,7 +199,6 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 		DEBUG_LOG("spurious notification" \
 			  "observable:%p, observer:%p\n",
 			  observable, observer);
-
 }
 
 /*---------------------------------------------------------------------------*/

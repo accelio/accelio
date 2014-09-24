@@ -95,7 +95,8 @@ struct xio_context *xio_context_create(unsigned int flags,
 	if ((flags == XIO_LOOP_USER_LOOP) &&
 	    (!(loop_ops && loop_ops->add_event && loop_ops->ev_loop))) {
 		xio_set_error(EINVAL);
-		ERROR_LOG("loop_ops and ev_loop and ev_loop_add_event are mandatory with loop_ops\n");
+		ERROR_LOG("loop_ops and ev_loop and ev_loop_add_event are " \
+			  "mandatory with loop_ops\n");
 		goto cleanup0;
 	}
 
@@ -108,7 +109,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		goto cleanup0;
 
 	/* allocate new context */
-	ctx = kzalloc(sizeof(struct xio_context), GFP_KERNEL);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (ctx == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kzalloc failed\n");
@@ -240,8 +241,7 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	for (i = 0; i < XIO_STAT_LAST; i++)
-		if (ctx->stats.name[i])
-			kfree(ctx->stats.name[i]);
+		kfree(ctx->stats.name[i]);
 
 	xio_workqueue_destroy(ctx->workqueue);
 
@@ -251,10 +251,9 @@ void xio_context_destroy(struct xio_context *ctx)
 
 	ctx->ev_loop = NULL;
 
-	if (ctx->ctx_dentry) {
-		debugfs_remove_recursive(ctx->ctx_dentry);
-		ctx->ctx_dentry = NULL;
-	}
+	debugfs_remove_recursive(ctx->ctx_dentry);
+	ctx->ctx_dentry = NULL;
+
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 
 	kfree(ctx);
@@ -276,7 +275,7 @@ int xio_ctx_add_delayed_work(struct xio_context *ctx,
 	if (retval) {
 		xio_set_error(retval);
 		ERROR_LOG("xio_workqueue_add_delayed_work failed. err=%d\n",
-			   retval);
+			  retval);
 	}
 
 	return retval;
