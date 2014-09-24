@@ -3084,14 +3084,18 @@ static void xio_rdma_set_pools_cls(
 		rdma_hndl->primary_pool_cls = *primary_pool_cls;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_transport_constructor					     */
 /*---------------------------------------------------------------------------*/
 void xio_rdma_transport_constructor(void)
 {
 	int			retval;
-	/* struct xio_transport	*transport = &xio_rdma_transport; */
+
+	/* Mellanox OFED's User Manual */
+	setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
+	setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
+	setenv("MLX_CQ_ALLOC_TYPE", "PREFER_CONTIG", 0);
+
 
 	/* Mellanox OFED's User Manual */
 	/*
