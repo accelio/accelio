@@ -99,7 +99,7 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 	for (i = 0; i < real_ones; i++) {
 		if (!ch->kcache)
 			break;
-		INFO_LOG("kcache(%s) freed\n", ch->name);
+		DEBUG_LOG("kcache(%s) freed\n", ch->name);
 		kmem_cache_destroy(ch->kcache);
 		ch->kcache = NULL;
 		ch++;
@@ -119,7 +119,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p) {
-		INFO_LOG("%s kzalloc failed\n", __func__);
+		DEBUG_LOG("%s kzalloc failed\n", __func__);
 		goto cleanup0;
 	}
 
@@ -140,11 +140,11 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 			ERROR_LOG("kcache(%s) creation failed\n", ch->name);
 			goto cleanup;
 		}
-		INFO_LOG("kcache(%s) created(%p)\n", ch->name, ch->kcache);
+		DEBUG_LOG("kcache(%s) created(%p)\n", ch->name, ch->kcache);
 		ch++;
 	}
 
-	INFO_LOG("mempool created(%p)\n", p);
+	DEBUG_LOG("mempool created(%p)\n", p);
 	return p;
 
 cleanup:

@@ -650,7 +650,7 @@ void xio_free_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 	struct llist_node *node;
 	int i = 0;
 
-	INFO_LOG("freeing rdma_hndl %p FRWR pool\n", rdma_hndl);
+	DEBUG_LOG("freeing rdma_hndl %p FRWR pool\n", rdma_hndl);
 
 	node = llist_del_all(&frwr->pool);
 	while (node) {
@@ -889,14 +889,14 @@ int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops)
 		ops->free_rdma_reg_res = xio_free_dummy_pool;
 		ops->reg_rdma_mem = xio_reg_rdma_mem_dummy;
 		ops->unreg_rdma_mem = xio_unreg_mem_dummy;
-		INFO_LOG("Fast registration not supported\n");
+		WARN_LOG("Fast registration not supported\n");
 		return 0;
 	case XIO_FAST_MEM_FRWR:
 		ops->alloc_rdma_reg_res = xio_create_frwr_pool;
 		ops->free_rdma_reg_res = xio_free_frwr_pool;
 		ops->reg_rdma_mem = xio_reg_rdma_mem_frwr;
 		ops->unreg_rdma_mem = xio_unreg_mem_frwr;
-		INFO_LOG("FRWR supported, using FRWR for registration\n");
+		DEBUG_LOG("FRWR supported, using FRWR for registration\n");
 		return 0;
 	case XIO_FAST_MEM_FMR:
 		ERROR_LOG("FMRs not yet implemented\n");

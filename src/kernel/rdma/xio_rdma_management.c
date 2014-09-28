@@ -963,7 +963,7 @@ static int xio_rdma_initial_pool_slab_pre_create(
 		ERROR_LOG("kcache(initial_pool) creation failed\n");
 		return -1;
 	}
-	INFO_LOG("kcache(%s) created(%p)\n",
+	DEBUG_LOG("kcache(%s) created(%p)\n",
 		 rdma_slab->name, rdma_slab->data_pool);
 	rdma_slab->count = 0;
 
@@ -1132,7 +1132,7 @@ static int xio_rdma_initial_pool_slab_destroy(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	INFO_LOG("kcache(%s) freed\n", rdma_slab->name);
+	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
 
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
@@ -1423,7 +1423,7 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		ERROR_LOG("kcache(primary_pool) creation failed\n");
 		return -1;
 	}
-	INFO_LOG("kcache(%s) created(%p)\n",
+	DEBUG_LOG("kcache(%s) created(%p)\n",
 		 rdma_slab->name, rdma_slab->data_pool);
 
 	DEBUG_LOG("pool buf:%p\n", rdma_slab->data_pool);
@@ -1472,7 +1472,7 @@ static int xio_rdma_primary_pool_slab_destroy(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	INFO_LOG("kcache(%s) freed\n", rdma_slab->name);
+	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
 
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
