@@ -40,6 +40,7 @@
 #define XIO_SG_TABLE_OPS
 
 #include "libxio.h"
+#include "xio_os.h"
 
 struct  xio_sg_table_ops {
 	void		(*sge_set_buf)(void *sge, const void *buf,
@@ -111,12 +112,9 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	     (__i)++, (sg) = sge_next((ops), (sgtbl), (sg)))
 
 
-static inline void *xio_sg_table_get(struct xio_vmsg *vmsg)
-{
-	return (void *)&((vmsg)->data_iov);
-}
+#define xio_sg_table_get(vmsg)	\
+	((void *)&((vmsg)->data_iov))
 
 void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type);
-
 
 #endif

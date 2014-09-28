@@ -61,6 +61,7 @@ int xio_context_reg_observer(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_context_reg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_unreg_observer		                                     */
@@ -70,6 +71,7 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 {
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
+EXPORT_SYMBOL(xio_context_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_create							     */
@@ -190,6 +192,7 @@ cleanup0:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_context_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_modify_context							     */
@@ -209,6 +212,7 @@ int xio_modify_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_context							     */
@@ -228,6 +232,7 @@ int xio_query_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
@@ -258,6 +263,7 @@ void xio_context_destroy(struct xio_context *ctx)
 
 	kfree(ctx);
 }
+EXPORT_SYMBOL(xio_context_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_delayed_work						     */
@@ -313,18 +319,21 @@ int xio_context_run_loop(struct xio_context *ctx)
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	return ev_loop->run(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_run_loop);
 
 void xio_context_stop_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	ev_loop->stop(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_stop_loop);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	return ev_loop->add_event(ev_loop->loop_object, data);
 }
+EXPORT_SYMBOL(xio_context_add_event);
 
 int xio_context_is_loop_stopping(struct xio_context *ctx)
 {

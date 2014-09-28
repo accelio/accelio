@@ -1302,6 +1302,7 @@ cleanup:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_session_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_destroy							     */
@@ -1337,6 +1338,7 @@ int xio_session_destroy(struct xio_session *session)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_session_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_assign_ops						     */
@@ -1376,6 +1378,7 @@ const char *xio_session_event_str(enum xio_session_event event)
 	};
 	return "unknown session event";
 }
+EXPORT_SYMBOL(xio_session_event_str);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_session							     */
@@ -1400,6 +1403,7 @@ int xio_query_session(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_session);
 
 /*---------------------------------------------------------------------------*/
 /* xio_modify_session							     */
@@ -1419,6 +1423,7 @@ int xio_modify_session(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_session);
 
 /*---------------------------------------------------------------------------*/
 /* xio_get_connection							     */

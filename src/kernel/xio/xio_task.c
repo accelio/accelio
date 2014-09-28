@@ -202,6 +202,7 @@ cleanup:
 
 	return -1;
 }
+EXPORT_SYMBOL(xio_tasks_pool_alloc_slab);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_create						     */
@@ -244,6 +245,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 	return q;
 }
+EXPORT_SYMBOL(xio_tasks_pool_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_destroy						     */
@@ -291,6 +293,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 
 	kfree(q);
 }
+EXPORT_SYMBOL(xio_tasks_pool_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_remap							     */

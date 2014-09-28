@@ -59,11 +59,13 @@ static int _xio_errno;
 /* debuging facilities							     */
 /*---------------------------------------------------------------------------*/
 void xio_set_error(int errnum) { _xio_errno = errnum; }
+EXPORT_SYMBOL(xio_set_error);
 
 /*---------------------------------------------------------------------------*/
 /* xio_errno								     */
 /*---------------------------------------------------------------------------*/
 int xio_errno(void) { return _xio_errno; }
+EXPORT_SYMBOL(xio_errno);
 
 
 static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
@@ -220,12 +222,15 @@ cleanup:
 	kfree(host);
 	return -1;
 }
+EXPORT_SYMBOL(xio_uri_to_ss);
 
 int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 {
 	ERROR_LOG("unsupported\n");
 	return -1;
 }
+EXPORT_SYMBOL(xio_host_port_to_ss);
+
 /*
  * xio_get_nodeid(cpuid) - This will return the node to which selected cpu
  * belongs
@@ -285,4 +290,5 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	}
 	ERROR_LOG("*********************************************\n");
 }
+EXPORT_SYMBOL(xio_msg_dump);
 

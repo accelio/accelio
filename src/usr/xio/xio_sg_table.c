@@ -54,6 +54,7 @@ void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type)
 
 	return vec[sgl_type];
 }
+EXPORT_SYMBOL(xio_sg_table_ops_get);
 
 /*---------------------------------------------------------------------------*/
 /* tbl_clone								     */
@@ -82,6 +83,7 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 
 	return 0;
 }
+EXPORT_SYMBOL(tbl_clone);
 
 /*---------------------------------------------------------------------------*/
 /* tbl_copy								     */
@@ -165,5 +167,4 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 
 	return 0;
 }
-
-
+EXPORT_SYMBOL(tbl_copy);

@@ -150,6 +150,7 @@ cleanup:
 
 	return ss_len;
 }
+EXPORT_SYMBOL(xio_host_port_to_ss);
 
 /*---------------------------------------------------------------------------*/
 /* xio_uri_to_ss							     */
@@ -266,6 +267,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	return ss_len;
 }
+EXPORT_SYMBOL(xio_uri_to_ss);
 
 /*
  * xio_get_nodeid(cpuid) - This will return the node to which selected cpu
@@ -386,6 +388,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	}
 	ERROR_LOG("*******************************************************\n");
 }
+EXPORT_SYMBOL(xio_msg_dump);
 
 /*
 #define CACHE_LINE_FILE	\

@@ -161,6 +161,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 	list_add(&observer_node->observers_list_node,
 		 &observable->observers_list);
 }
+EXPORT_SYMBOL(xio_observable_reg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_unreg_observer					     */
@@ -184,6 +185,7 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 		}
 	}
 }
+EXPORT_SYMBOL(xio_observable_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_observer					     */
@@ -200,6 +202,7 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 			  "observable:%p, observer:%p\n",
 			  observable, observer);
 }
+EXPORT_SYMBOL(xio_observable_notify_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_all_observers					     */
@@ -217,6 +220,7 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 				observable->impl, event, event_data);
 	}
 }
+EXPORT_SYMBOL(xio_observable_notify_all_observers);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_any_observer					     */
@@ -243,6 +247,7 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 		break;
 	}
 }
+EXPORT_SYMBOL(xio_observable_notify_any_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_unreg_all_observers					     */
@@ -259,4 +264,5 @@ void xio_observable_unreg_all_observers(struct xio_observable *observable)
 	}
 	observable->observer_node = NULL;
 }
+EXPORT_SYMBOL(xio_observable_unreg_all_observers);
 

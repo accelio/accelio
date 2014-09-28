@@ -420,6 +420,7 @@ int xio_accept(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_accept);
 
 /*---------------------------------------------------------------------------*/
 /* xio_redirect								     */
@@ -469,6 +470,7 @@ int xio_redirect(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_redirect);
 
 /*---------------------------------------------------------------------------*/
 /* xio_reject								     */
@@ -510,6 +512,7 @@ int xio_reject(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_reject);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_rsp_send_comp			                             */

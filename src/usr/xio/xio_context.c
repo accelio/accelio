@@ -45,7 +45,7 @@
 #include "xio_idr.h"
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_add_observer						     */
+/* xio_context_reg_observer						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_reg_observer(struct xio_context *ctx,
 			     struct xio_observer *observer)
@@ -54,15 +54,17 @@ int xio_context_reg_observer(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_context_reg_observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_remove_observer		                                     */
+/* xio_context_unreg_observer		                                     */
 /*---------------------------------------------------------------------------*/
 void xio_context_unreg_observer(struct xio_context *ctx,
 				struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
+EXPORT_SYMBOL(xio_context_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_stats_handler							     */
@@ -334,6 +336,7 @@ cleanup1:
 	ufree(ctx);
 	return NULL;
 }
+EXPORT_SYMBOL(xio_context_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
@@ -378,6 +381,7 @@ void xio_context_destroy(struct xio_context *ctx)
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 	ufree(ctx);
 }
+EXPORT_SYMBOL(xio_context_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_delayed_work						     */
@@ -482,6 +486,7 @@ int xio_modify_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_context							     */
@@ -501,6 +506,7 @@ int xio_query_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_get_poll_params						     */
@@ -522,6 +528,7 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 	return xio_ev_loop_add(ctx->ev_loop,
 			       fd, events, handler, data);
 }
+EXPORT_SYMBOL(xio_context_add_ev_handler);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_modify_ev_handler					     */
@@ -551,6 +558,7 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms)
 	else
 		return	xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
 }
+EXPORT_SYMBOL(xio_context_run_loop);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_stop_loop						     */
@@ -559,6 +567,7 @@ inline void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread)
 {
 	xio_ev_loop_stop(ctx->ev_loop, is_self_thread);
 }
+EXPORT_SYMBOL(xio_context_stop_loop);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_is_loop_stopping						     */

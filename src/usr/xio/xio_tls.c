@@ -65,10 +65,12 @@ void xio_thread_data_construct(void)
 /* debugging facilities							     */
 /*---------------------------------------------------------------------------*/
 void xio_set_error(int errnum) { _xio_errno = errnum; }
+EXPORT_SYMBOL(xio_set_error);
 
 
 /*---------------------------------------------------------------------------*/
 /* xio_errno								     */
 /*---------------------------------------------------------------------------*/
 int xio_errno(void) { return _xio_errno; }
+EXPORT_SYMBOL(xio_errno);
 

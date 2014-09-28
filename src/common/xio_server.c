@@ -335,6 +335,7 @@ cleanup:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_bind);
 
 /*---------------------------------------------------------------------------*/
 /* xio_server_destroy							     */
@@ -383,5 +384,6 @@ int xio_unbind(struct xio_server *server)
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_unbind);
 
 

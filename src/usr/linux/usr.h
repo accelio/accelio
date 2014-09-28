@@ -38,5 +38,8 @@
 #ifndef XIO_USR_H
 #define XIO_USR_H
 
+#ifndef EXPORT_SYMBOL
+#define EXPORT_SYMBOL(sym)
+#endif
 
 #endif

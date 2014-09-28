@@ -895,6 +895,7 @@ send:
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_send_request);
 
 /*---------------------------------------------------------------------------*/
 /* xio_send_response							     */
@@ -997,6 +998,7 @@ send:
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_send_response);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_send_read_receipt					     */
@@ -1219,6 +1221,7 @@ int xio_release_response(struct xio_msg *msg)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_release_response);
 
 /*---------------------------------------------------------------------------*/
 /* xio_release_msg							     */
@@ -1255,6 +1258,7 @@ int xio_release_msg(struct xio_msg *msg)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_release_msg);
 
 /*---------------------------------------------------------------------------*/
 /* xio_poll_completions							     */
@@ -1498,6 +1502,7 @@ int xio_disconnect(struct xio_connection *connection)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_disconnect);
 
 /*---------------------------------------------------------------------------*/
 /* xio_cancel_request							     */
@@ -1615,6 +1620,7 @@ int xio_modify_connection(struct xio_connection *connection,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_connection);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_connection							     */
@@ -1649,6 +1655,7 @@ int xio_query_connection(struct xio_connection *connection,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_connection);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_send_hello_req					     */
@@ -1883,6 +1890,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_connection_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_disconnected						     */

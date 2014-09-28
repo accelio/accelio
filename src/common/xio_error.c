@@ -140,5 +140,6 @@ const char *xio_strerror(int errnum)
 
 	return "Unknown error";
 }
+EXPORT_SYMBOL(xio_strerror);
 
 

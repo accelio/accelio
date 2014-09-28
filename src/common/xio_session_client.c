@@ -1031,4 +1031,5 @@ cleanup:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_connect);
 

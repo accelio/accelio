@@ -172,6 +172,7 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
+EXPORT_SYMBOL(xio_set_opt);
 
 /*---------------------------------------------------------------------------*/
 /* xio_general_get_opt                                                       */
@@ -301,4 +302,5 @@ int xio_get_opt(void *xio_obj, int level,  int optname,
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
+EXPORT_SYMBOL(xio_get_opt);
 

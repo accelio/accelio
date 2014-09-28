@@ -146,6 +146,7 @@ size_t xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer)
 
 	return sizeof(struct xio_tlv) + len;
 }
+EXPORT_SYMBOL(xio_write_tlv);
 
 /*---------------------------------------------------------------------------*/
 /* xio_read_tlv								     */
@@ -165,6 +166,7 @@ size_t xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
 
 	return sizeof(struct xio_tlv) + *len;
 }
+EXPORT_SYMBOL(xio_read_tlv);
 
 #ifndef SETIOV
 #define SETIOV(_iov, _addr, _len)	((_iov)->iov_base = \
@@ -197,6 +199,7 @@ size_t memclonev(struct xio_iovec *dst, int dsize,
 
 	return sz;
 }
+EXPORT_SYMBOL(memclonev);
 
 /*---------------------------------------------------------------------------*/
 /* memclonev_ex								     */
