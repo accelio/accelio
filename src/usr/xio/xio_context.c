@@ -389,6 +389,10 @@ int xio_ctx_add_delayed_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if delayed work is pending */
+	if (xio_is_delayed_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_add_delayed_work(ctx->workqueue,
 						msec_duration, data,
 						timer_fn, work);
@@ -407,6 +411,10 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
+
+	/* test if delayed work is pending */
+	if (!xio_is_delayed_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
 	if (retval) {
