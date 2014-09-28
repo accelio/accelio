@@ -2112,9 +2112,7 @@ static int xio_tcp_task_pre_put(
 			 task->mbuf.buf.head,
 			 task->mbuf.buf.buflen);
 
-	if (xio_is_work_pending(&tcp_task->comp_work))
-		xio_ctx_del_work(tcp_task->tcp_hndl->base.ctx,
-				 &tcp_task->comp_work);
+	xio_ctx_del_work(tcp_task->tcp_hndl->base.ctx, &tcp_task->comp_work);
 
 	return 0;
 }

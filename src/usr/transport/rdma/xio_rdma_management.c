@@ -1753,9 +1753,8 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl)
 	TRACE_LOG("rdma transport: [post close] handle:%p, qp:%p\n",
 		  rdma_hndl, rdma_hndl->qp);
 
-	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
-		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
-					 &rdma_hndl->timewait_timeout_work);
+	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+				 &rdma_hndl->timewait_timeout_work);
 
 	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
 
@@ -1981,9 +1980,8 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 		return;
 	rdma_hndl->timewait++;
 
-	if (xio_is_delayed_work_pending(&rdma_hndl->timewait_timeout_work))
-		xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
-					 &rdma_hndl->timewait_timeout_work);
+	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+				 &rdma_hndl->timewait_timeout_work);
 
 	xio_rdma_flush_all_tasks(rdma_hndl);
 

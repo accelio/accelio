@@ -97,10 +97,8 @@ static void xio_nexus_client_reconnect_failed(void *data);
 
 static void xio_nexus_cancel_dwork(struct xio_nexus *nexus)
 {
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-		xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-					 &nexus->close_time_hndl);
-	}
+	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+				 &nexus->close_time_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1136,10 +1134,8 @@ static void xio_nexus_release(void *data)
 	TRACE_LOG("physical nexus close. nexus:%p rdma_hndl:%p\n",
 		  nexus, nexus->transport_hndl);
 
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-		xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-					 &nexus->close_time_hndl);
-	}
+	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+				 &nexus->close_time_hndl);
 
 	xio_nexus_release_cb(data);
 }
@@ -1155,10 +1151,7 @@ static void xio_on_context_close(struct xio_nexus *nexus,
 	/* remove the nexus from table */
 	xio_nexus_cache_remove(nexus->cid);
 
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-		xio_ctx_del_delayed_work(ctx,
-					 &nexus->close_time_hndl);
-	}
+	xio_ctx_del_delayed_work(ctx, &nexus->close_time_hndl);
 
 	/* shut down the context and its dependent without waiting */
 	if (nexus->transport->context_shutdown)
@@ -1404,9 +1397,8 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 	int ret;
 
 	/* cancel old timers */
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl))
-		xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-					 &nexus->close_time_hndl);
+	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+				 &nexus->close_time_hndl);
 
 	/* Try to reconnect */
 	if (g_options.reconnect) {
@@ -1694,12 +1686,11 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	xio_nexus_free_observers_htbl(nexus);
 	xio_observable_unreg_all_observers(&nexus->observable);
 
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-		if (nexus->transport_hndl)
-			xio_ctx_del_delayed_work(
-					nexus->transport_hndl->ctx,
-					&nexus->close_time_hndl);
-	}
+	if (nexus->transport_hndl)
+		xio_ctx_del_delayed_work(
+				nexus->transport_hndl->ctx,
+				&nexus->close_time_hndl);
+
 	xio_nexus_flush_tx_queue(nexus);
 
 	xio_nexus_initial_free_tasks(nexus);

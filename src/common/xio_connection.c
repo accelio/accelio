@@ -1145,21 +1145,15 @@ int xio_connection_xmit_msgs(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 int xio_connection_close(struct xio_connection *connection)
 {
-	if (xio_is_work_pending(&connection->hello_work))
-		xio_ctx_del_work(connection->ctx,
-				 &connection->hello_work);
+	xio_ctx_del_work(connection->ctx, &connection->hello_work);
 
-	if (xio_is_delayed_work_pending(&connection->fin_delayed_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_delayed_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_delayed_work);
 
-	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_timeout_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_timeout_work);
 
-	if (xio_is_work_pending(&connection->fin_work))
-		xio_ctx_del_work(connection->ctx,
-				 &connection->fin_work);
+	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
 	xio_free_ow_msg_pool(connection);
 	list_del(&connection->ctx_list_entry);
@@ -1882,9 +1876,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 	/* if there is any delayed timeout -  stop it.
 	 * users may call this function at any stage
 	 **/
-	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_timeout_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_timeout_work);
 
 	kref_put(&connection->kref, xio_connection_post_destroy);
 
@@ -1899,21 +1892,15 @@ int xio_connection_disconnected(struct xio_connection *connection)
 	int close = 0;
 
 	/* stop all pending timers */
-	if (xio_is_work_pending(&connection->hello_work))
-		xio_ctx_del_work(connection->ctx,
-				 &connection->hello_work);
+	xio_ctx_del_work(connection->ctx, &connection->hello_work);
 
-	if (xio_is_delayed_work_pending(&connection->fin_delayed_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_delayed_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_delayed_work);
 
-	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_timeout_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_timeout_work);
 
-	if (xio_is_work_pending(&connection->fin_work))
-		xio_ctx_del_work(connection->ctx,
-				 &connection->fin_work);
+	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
 	if (!connection->disable_notify)
 		xio_session_notify_connection_disconnected(
@@ -2100,9 +2087,8 @@ int xio_on_fin_ack_recv(struct xio_connection *connection,
 	connection->fin_req_timeout++;
 
 	/* cancel the timer */
-	if (xio_is_delayed_work_pending(&connection->fin_timeout_work))
-		xio_ctx_del_delayed_work(connection->ctx,
-					 &connection->fin_timeout_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_timeout_work);
 
 	xio_connection_release_fin(connection, task->sender_task->omsg);
 
