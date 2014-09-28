@@ -578,6 +578,10 @@ int xio_ctx_add_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_add_work(ctx->workqueue,
 					data, function, work);
 	if (retval) {
@@ -596,6 +600,10 @@ int xio_ctx_del_work(struct xio_context *ctx,
 
 {
 	int retval;
+
+	/* test if work is pending */
+	if (!xio_is_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_del_work(ctx->workqueue, work);
 	if (retval) {
