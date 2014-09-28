@@ -110,7 +110,8 @@ void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Inline were not mapped */
 	if (!(xd->send_wr.send_flags & IB_SEND_INLINE))
-		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_TO_DEVICE);
+		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents,
+				DMA_TO_DEVICE);
 
 	/* Disconnect header from data if any */
 	sg_mark_end(&xd->sgt.sgl[1]);
@@ -136,7 +137,8 @@ int xio_map_rx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Assume scatterlist is terminated properly */
 
-	nents = ib_dma_map_sg(ib_dev, sgt->sgl, sgt->nents, DMA_FROM_DEVICE);
+	nents = ib_dma_map_sg(ib_dev, sgt->sgl, sgt->nents,
+			      DMA_FROM_DEVICE);
 	if (!nents) {
 		xd->mapped = 0;
 		return -1;
@@ -446,7 +448,8 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* Assume scatterlist is terminated properly */
 
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+			      direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -456,7 +459,8 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_hndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+				direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
@@ -482,7 +486,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	dev = rdma_ohndl->dev;
 	ib_dev = dev->ib_dev;
-	/* fast unregistration routine may do nothing but it is always exists */
+	/* fast unregistration routine may do nothing but it is
+	 * always exists */
 	dev->fastreg.unreg_rdma_mem(rdma_ohndl, desc, direction);
 
 	/* Assume scatterlist is terminated properly */
@@ -490,7 +495,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	dev = rdma_nhndl->dev;
 	ib_dev = dev->ib_dev;
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+			      direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -499,7 +505,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_nhndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+				direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
@@ -700,7 +707,8 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 	for (i = 0; i < rdma_hndl->max_tx_ready_tasks_num * 2; i++) {
 		desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 		if (!desc) {
-			ERROR_LOG("Failed to allocate a new fast_reg descriptor\n");
+			ERROR_LOG("Failed to allocate a new fast_reg " \
+				  "descriptor\n");
 			ret = -ENOMEM;
 			goto err;
 		}
@@ -709,14 +717,16 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 							      XIO_MAX_IOV + 1);
 		if (IS_ERR(desc->data_frpl)) {
 			ret = PTR_ERR(desc->data_frpl);
-			ERROR_LOG("Failed to allocate ib_fast_reg_page_list err=%d\n", ret);
+			ERROR_LOG("Failed to allocate ib_fast_reg_page_list " \
+				  "err=%d\n", ret);
 			goto err;
 		}
 
 		desc->data_mr = ib_alloc_fast_reg_mr(dev->pd, XIO_MAX_IOV + 1);
 		if (IS_ERR(desc->data_mr)) {
 			ret = PTR_ERR(desc->data_mr);
-			ERROR_LOG("Failed to allocate ib_fast_reg_mr err=%d\n", ret);
+			ERROR_LOG("Failed to allocate ib_fast_reg_mr err=%d\n",
+				  ret);
 			ib_free_fast_reg_page_list(desc->data_frpl);
 			goto err;
 		}
@@ -776,7 +786,8 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 	memset(&fastreg_wr, 0, sizeof(fastreg_wr));
 	fastreg_wr.opcode = IB_WR_FAST_REG_MR;
 	fastreg_wr.wr_id = XIO_FRWR_LI_WRID;
-	fastreg_wr.wr.fast_reg.iova_start = fdesc->data_frpl->page_list[0] + offset;
+	fastreg_wr.wr.fast_reg.iova_start =
+				fdesc->data_frpl->page_list[0] + offset;
 	fastreg_wr.wr.fast_reg.page_list = fdesc->data_frpl;
 	fastreg_wr.wr.fast_reg.page_list_len = page_list_len;
 	fastreg_wr.wr.fast_reg.page_shift = PAGE_SHIFT;
@@ -803,14 +814,16 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 	return ret;
 }
 
-static struct fast_reg_descriptor *get_fdesc(struct xio_rdma_transport *rdma_hndl)
+static struct fast_reg_descriptor *get_fdesc(
+				struct xio_rdma_transport *rdma_hndl)
 {
 	struct llist_node *node, *nnode;
 	struct fast_reg_descriptor *fdesc;
 
 	node = llist_del_first(&rdma_hndl->fastreg.frwr.pool);
 	if (node)
-		return llist_entry(node, struct fast_reg_descriptor, llist_entry);
+		return llist_entry(node, struct fast_reg_descriptor,
+				   llist_entry);
 
 	node = llist_del_all(&rdma_hndl->fastreg.frwr.pool_ret);
 	if (!node)
@@ -909,7 +922,7 @@ int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops)
 
 /* drivers/block/nvme.c nvme_map_bio */
 #define XIO_VEC_NOT_VIRT_MERGEABLE(vec1, vec2)   ((vec2)->bv_offset || \
-                        (((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
+		(((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
 
 void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
 			     struct xio_rdma_mp_mem *mp)

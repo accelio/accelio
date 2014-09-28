@@ -194,7 +194,7 @@ int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 		return -ENOMEM;
 	}
 
-	mp_mem->cache = (void *) &p->pool[index];
+	mp_mem->cache = (void *)&p->pool[index];
 	mp_mem->length = p->pool[index].block_sz;
 
 	return 0;
@@ -242,7 +242,7 @@ static void xio_rdma_mempool_free_mp(struct xio_rdma_mp_mem *mp_mem)
 		goto cleanup1;
 	}
 
-	kmem_cache_free((struct kmem_cache *) mp_mem->cache, mp_mem->addr);
+	kmem_cache_free((struct kmem_cache *)mp_mem->cache, mp_mem->addr);
 
 	mp_mem->cache = NULL;
 	mp_mem->addr = NULL;

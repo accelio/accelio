@@ -88,9 +88,10 @@ const char *xio_ib_wc_status_str(enum ib_wc_status status)
 	XX(IB_WC_FATAL_ERR);
 	XX(IB_WC_RESP_TIMEOUT_ERR);
 	XX(IB_WC_GENERAL_ERR);
+	break;
 	default: return "IB_WC_STATUS_UNKNOWN";
 	}
-};
+}
 
 /*---------------------------------------------------------------------------*/
 /* ibv_wc_opcode_str							     */
@@ -108,6 +109,7 @@ const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode)
 	/* recv-side); inbound completion */
 	XX(IB_WC_RECV);
 	XX(IB_WC_RECV_RDMA_WITH_IMM);
+	break;
 	default: return "IB_WC_OPCODE_UNKNOWN";
 	}
 }
@@ -131,6 +133,7 @@ const char *xio_rdma_event_str(enum rdma_cm_event_type event)
 	XX(RDMA_CM_EVENT_MULTICAST_ERROR);
 	XX(RDMA_CM_EVENT_ADDR_CHANGE);
 	XX(RDMA_CM_EVENT_TIMEWAIT_EXIT);
+	break;
 	default: return "RDMA_CM_UNKNOWN";
 	}
 }

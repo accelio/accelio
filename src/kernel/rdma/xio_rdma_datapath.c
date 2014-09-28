@@ -101,7 +101,7 @@ void xio_cq_data_callback_cont(struct ib_cq *cq, void *cq_context);
 /* xio_post_recv							     */
 /*---------------------------------------------------------------------------*/
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
-			   struct xio_task *task, int num_recv_bufs)
+		  struct xio_task *task, int num_recv_bufs)
 {
 	struct ib_recv_wr	*bad_wr	= NULL;
 	int			retval, nr_posted;
@@ -159,7 +159,7 @@ static int xio_post_send(struct xio_rdma_transport *rdma_hndl,
 
 		xio_set_error(retval);
 
-		ERROR_LOG("ib_post_send failed. (errno=%d %s)  posted:%d/%d "
+		ERROR_LOG("ib_post_send failed. (errno=%d %s)  posted:%d/%d " \
 			  "sge_sz:%d, sqe_avail:%d\n", retval, strerror(retval),
 			  nr_posted, num_send_reqs, xio_send->send_wr.num_sge,
 			  rdma_hndl->sqe_avail);
@@ -231,7 +231,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 	tx_window = tx_window_sz(rdma_hndl);
 	window = min(rdma_hndl->peer_credits, tx_window);
-	window = min(window, (uint16_t)rdma_hndl->sqe_avail);
+	window = min(window, ((uint16_t)rdma_hndl->sqe_avail));
 
 	TRACE_LOG("XMIT: tx_window:%d, peer_credits:%d, sqe_avail:%d\n",
 		  tx_window,
@@ -310,7 +310,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		rdma_task->sn = rdma_hndl->sn;
 
 		/* set the length of the header */
-		rdma_task->txd.sgt.sgl[0].length = xio_mbuf_data_length(&task->mbuf);
+		rdma_task->txd.sgt.sgl[0].length =
+			xio_mbuf_data_length(&task->mbuf);
 
 		/* Map the send */
 		if (xio_map_tx_work_req(rdma_hndl->dev, &rdma_task->txd)) {
@@ -550,7 +551,7 @@ static void xio_handle_task_error(struct xio_task *task)
 		xio_rdma_wr_error_handler(rdma_hndl, task);
 		break;
 	default:
-		ERROR_LOG("unknown opcode: task:%p, type:0x%x, "
+		ERROR_LOG("unknown opcode: task:%p, type:0x%x, " \
 			  "magic:0x%x, ib_op:0x%x\n",
 			  task, task->tlv_type,
 			  task->magic, rdma_task->ib_op);
@@ -570,13 +571,13 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 
 	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
 		task = ptr_from_int64(wc->wr_id);
-		rdma_task = (struct xio_rdma_task *) task->dd_data;
+		rdma_task = (struct xio_rdma_task *)task->dd_data;
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
 
 	if (wc->status == IB_WC_WR_FLUSH_ERR) {
-		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, "
-			  "wr_id:0x%llx, "
+		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, " \
+			  "wr_id:0x%llx, " \
 			  "err:%s, vendor_err:0x%x\n",
 			   rdma_hndl, rdma_task, task,
 			   wc->wr_id,
@@ -584,11 +585,12 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 			   wc->vendor_err);
 	} else  {
 		if (rdma_hndl)
-			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, "
-				  "rdma_task:%p, task:%p, "
-				  "wr_id:0x%llx, "
+			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, " \
+				  "rdma_task:%p, task:%p, " \
+				  "wr_id:0x%llx, " \
 				  "err:%s, vendor_err:0x%x\n",
-				  rdma_hndl->base.is_client ? "client" : "server",
+				  rdma_hndl->base.is_client ?
+				  "client" : "server",
 				  rdma_hndl->state,
 				  rdma_hndl, rdma_task, task,
 				  wc->wr_id,
@@ -600,7 +602,8 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 				  xio_ib_wc_status_str(wc->status),
 				  wc->vendor_err);
 
-		ERROR_LOG("byte_len=%u, immdata=%u, qp=%p, qp_num=0x%x, src_qp=0x%x\n",
+		ERROR_LOG("byte_len=%u, immdata=%u, qp=%p, " \
+			  "qp_num=0x%x, src_qp=0x%x\n",
 			  wc->byte_len, ntohl(wc->ex.imm_data),
 			  wc->qp, wc->qp ? wc->qp->qp_num : 0xdeadbeaf,
 			  wc->src_qp);
@@ -665,11 +668,6 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 
 	/* Send NOP if messages are not queued */
 
-#if 0
-	if ((rdma_hndl->reqs_in_flight_nr || rdma_hndl->rsps_in_flight_nr) &&
-	    !rdma_hndl->last_send_was_signaled)
-		goto send_final_nop;
-#endif
 	/* Does the peer have already maximum credits? */
 	if (rdma_hndl->sim_peer_credits >= MAX_RECV_WR)
 		return 0;
@@ -677,16 +675,11 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 	/* Does the local have any credits to send? */
 	if (!rdma_hndl->credits)
 		return 0;
-#if 0
-send_final_nop:
-#endif
+
 	TRACE_LOG("peer_credits:%d, credits:%d sim_peer_credits:%d\n",
 		  rdma_hndl->peer_credits, rdma_hndl->credits,
 		  rdma_hndl->sim_peer_credits);
 
-#if 0
-	rdma_hndl->last_send_was_signaled = 0;
-#endif
 	xio_rdma_send_nop(rdma_hndl);
 
 	return 0;
@@ -706,7 +699,8 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	int			retval;
 
 	/* prefetch next buffer */
-	if (likely(task->tasks_list_entry.next != task->tasks_list_entry.prev)) {
+	if (likely(task->tasks_list_entry.next !=
+		   task->tasks_list_entry.prev)) {
 		task1 = list_entry(task->tasks_list_entry.next,
 				   struct xio_task,  tasks_list_entry);
 		task_prev = task->tasks_list_entry.prev;
@@ -780,7 +774,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	if  (task1) {
 		if (task1->tasks_list_entry.next != task_prev) {
 			task2 = list_entry(task1->tasks_list_entry.next,
-				   struct xio_task,  tasks_list_entry);
+					   struct xio_task, tasks_list_entry);
 			xio_prefetch(task2);
 		}
 	}
@@ -844,7 +838,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_tasks_pool_put(ptask);
 		} else {
-			ERROR_LOG("unexpected task %p type:0x%x id:%d "
+			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
 				  "magic:0x%x\n",
 				  ptask, rdma_task->ib_op,
 				  ptask->ltid, ptask->magic);
@@ -1018,7 +1012,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	start_time = jiffies;
 
 	while (1) {
-		nr = min((u32)max_nr, tcq->wc_array_len);
+		nr = min(((u32)max_nr), tcq->wc_array_len);
 		retval = ib_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
 			for (i = retval; i > 0; i--) {
@@ -1157,7 +1151,7 @@ retry:
 /*---------------------------------------------------------------------------*/
 void xio_data_handler(void *user_context)
 {
-	struct xio_cq *tcq = (struct xio_cq *) user_context;
+	struct xio_cq *tcq = (struct xio_cq *)user_context;
 	struct xio_rdma_transport *rdma_hndl;
 
 	xio_cq_event_handler(tcq);
@@ -1174,7 +1168,7 @@ void xio_data_handler(void *user_context)
 /*---------------------------------------------------------------------------*/
 void xio_cq_data_callback_cont(struct ib_cq *cq, void *cq_context)
 {
-	struct xio_cq *tcq = (struct xio_cq *) cq_context;
+	struct xio_cq *tcq = (struct xio_cq *)cq_context;
 
 	tcq->scheds++;
 	/* do it in init time */
@@ -1189,7 +1183,7 @@ void xio_cq_data_callback_cont(struct ib_cq *cq, void *cq_context)
 /*---------------------------------------------------------------------------*/
 void xio_cq_data_callback(struct ib_cq *cq, void *cq_context)
 {
-	struct xio_cq *tcq = (struct xio_cq *) cq_context;
+	struct xio_cq *tcq = (struct xio_cq *)cq_context;
 
 	tcq->events++;
 	/* do it in init time */
@@ -1451,10 +1445,10 @@ static int xio_prep_rdma_op(struct xio_task *task,
 					/* take new task */
 					tmp_task =
 						xio_tasks_pool_get(
-							rdma_hndl->phantom_tasks_pool);
+						rdma_hndl->phantom_tasks_pool);
 					if (!tmp_task) {
 						ERROR_LOG(
-						      "phantom tasks pool is empty\n");
+						"phantom tasks pool is empty\n");
 						goto cleanup;
 					}
 				} else {
@@ -1462,7 +1456,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				}
 
 				tmp_rdma_task =
-					(struct xio_rdma_task *)tmp_task->dd_data;
+				  (struct xio_rdma_task *)tmp_task->dd_data;
 				rdmad = &tmp_rdma_task->rdmad;
 				k = 0;
 				sg = rdmad->sgt.sgl;
@@ -1625,7 +1619,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 		sge.length = sge_length(sgtbl_ops, sg);
 		sge.stag = 0;
 		PACK_LLVAL(&sge, tmp_sge, addr);
-		PACK_LVAL(&sge, tmp_sge,length);
+		PACK_LVAL(&sge, tmp_sge, length);
 		PACK_LVAL(&sge, tmp_sge, stag);
 		tmp_sge++;
 	}
@@ -2104,7 +2098,8 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 	/* the data is outgoing via SEND */
 	if (tbl_nents(sgtbl_ops, sgtbl) < (rdma_hndl->max_sge - 1) &&
-	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) < rdma_hndl->max_send_buf_sz)) {
+	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <
+	      rdma_hndl->max_send_buf_sz)) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;
@@ -2198,7 +2193,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
 	if (nents == 0) {
-		rdma_task->recv_num_sge = 0;;
+		rdma_task->recv_num_sge = 0;
 		rdma_task->read_num_sge = 0;
 		return 0;
 	}
@@ -2231,8 +2226,10 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 		rdma_task->recv_num_sge = 0;
 	}
 	if (rdma_task->read_num_sge > rdma_hndl->peer_max_out_iovsz) {
-		ERROR_LOG("request in iovlen %d is bigger then peer max out iovlen %d\n",
-			   rdma_task->read_num_sge, rdma_hndl->peer_max_out_iovsz);
+		ERROR_LOG("request in iovlen %d is bigger then peer " \
+			  "max out iovlen %d\n",
+			   rdma_task->read_num_sge,
+			   rdma_hndl->peer_max_out_iovsz);
 		goto cleanup;
 	}
 	return 0;
@@ -2301,7 +2298,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 
 	/* xio_rdma_prep_req_out_data sets txd.nents */
 	/* set the length */
-	rdma_task->txd.sgt.sgl[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	rdma_task->txd.sgt.sgl[0].length =
+		xio_mbuf_get_curr_offset(&task->mbuf);
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != rdma_task->txd.sgt.sgl[0].length) {
@@ -2355,7 +2353,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_hndl->kick_rdma_rd) {
 		retval = xio_xmit_rdma_rd(rdma_hndl);
 		if (retval) {
-			retval = xio_errno() ;
+			retval = xio_errno();
 			if (retval != EAGAIN) {
 				ERROR_LOG("xio_xmit_rdma_rd failed. %s\n",
 					  xio_strerror(retval));
@@ -2389,7 +2387,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rsp_hdr	rsp_hdr;
-	struct scatterlist 	*sg;
+	struct scatterlist	*sg;
 	uint64_t		payload;
 	uint64_t		xio_hdr_len;
 	uint64_t		ulp_hdr_len;
@@ -2431,10 +2429,12 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(rsp_hdr);
-	xio_hdr_len += (rdma_task->req_recv_num_sge + rdma_task->req_read_num_sge)*sizeof(struct xio_sge);
+	xio_hdr_len += (rdma_task->req_recv_num_sge +
+			rdma_task->req_read_num_sge)*sizeof(struct xio_sge);
 
 	small_zero_copy = (task->imsg_flags &&
-			   (task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY));
+			   (task->imsg_flags &
+			    XIO_HEADER_FLAG_SMALL_ZERO_COPY));
 
 	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
@@ -2450,9 +2450,10 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
 	 */
-	if ((ulp_imm_len == 0) || (!small_zero_copy &&
-	    (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge - 1) &&
-	    ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
+	if ((ulp_imm_len == 0) ||
+	    (!small_zero_copy &&
+	     (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge - 1) &&
+	      ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< rdma_hndl->max_send_buf_sz))) {
 		/*
 		if (data_alignment && ulp_imm_len) {
@@ -2487,14 +2488,6 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		if (rdma_task->req_read_sge[0].addr &&
 		    rdma_task->req_read_sge[0].length &&
 		    rdma_task->req_read_sge[0].stag) {
-#if 0
-			if (xio_vmsg_to_sgt(&task->omsg->out,
-					    rdma_task->rdmad.sgt)) {
-				xio_set_error(XIO_E_MSG_SIZE);
-				ERROR_LOG("xio_rdma_send_msg failed\n");
-				goto cleanup;
-			}
-#endif
 			/* prepare rdma write */
 			xio_sched_rdma_wr_req(rdma_hndl, task);
 
@@ -2505,7 +2498,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 							  ulp_imm_len,
 							  XIO_E_SUCCESS);
 		} else {
-			DEBUG_LOG("partial completion of request due "
+			DEBUG_LOG("partial completion of request due " \
 				  "to missing, response buffer\n");
 
 			/* the client did not provide buffer for response */
@@ -2523,7 +2516,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		goto cleanup;
 
 	/* set the length of the header */
-	rdma_task->txd.sgt.sgl[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	rdma_task->txd.sgt.sgl[0].length =
+				xio_mbuf_get_curr_offset(&task->mbuf);
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != rdma_task->txd.sgt.sgl[0].length) {
@@ -2546,7 +2540,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			rdma_task->txd.send_wr.send_flags |= IB_SEND_INLINE;
 	}
 
-	if(IS_FIN(task->tlv_type)) {
+	if (IS_FIN(task->tlv_type)) {
 		rdma_task->txd.send_wr.send_flags |= IB_SEND_FENCE;
 		must_send = 1;
 	}
@@ -2761,7 +2755,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 				if (idata_len > odata_len) {
 					task->status = XIO_E_MSG_SIZE;
-					xio_reset_desc(&rdma_sender_task->write_sge);
+					xio_reset_desc(
+						&rdma_sender_task->write_sge);
 					goto partial_msg;
 				} else {
 					task->status = XIO_E_SUCCESS;
@@ -2794,7 +2789,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		xio_unmap_desc(rdma_hndl,
 			       &rdma_sender_task->read_sge,
 			       DMA_FROM_DEVICE);
-		if (rdma_task->rsp_write_num_sge > rdma_sender_task->read_num_sge) {
+		if (rdma_task->rsp_write_num_sge >
+		    rdma_sender_task->read_num_sge) {
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
 				  rdma_sender_task->read_num_sge,
 				  rdma_task->rsp_write_num_sge);
@@ -2809,35 +2805,43 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 		for (i = 0; i < rdma_task->rsp_write_num_sge; i++) {
 			sge_set_addr(isgtbl_ops, sg, sg_virt(sgl));
 			sge_set_length(isgtbl_ops, sg,
-				rdma_task->rsp_write_sge[i].length);
+				       rdma_task->rsp_write_sge[i].length);
 			sg = sge_next(isgtbl_ops, isgtbl, sg);
 			sgl = sg_next(sgl);
 		}
 		if (tbl_nents(osgtbl_ops, osgtbl)) {
 			sg = sge_first(osgtbl_ops, osgtbl);
-			if (sge_addr(osgtbl_ops, sg))  {
+			if (sge_addr(osgtbl_ops, sg)) {
 				void *isg;
+				struct xio_rdma_mp_mem *mp_sge;
+				mp_sge = &rdma_sender_task->read_sge.mp_sge[0];
 				/* user provided buffer */
-				if (!rdma_sender_task->read_sge.mp_sge[0].cache) {
-					/* user buffers were aligned no bounce buffer
-					 * data was copied directly to user buffer
-					 * need to update the buffer length
+				if (!mp_sge->cache) {
+					/* user buffers were aligned no
+					 * bounce buffer data was copied
+					 * directly to user buffer need
+					 * to update the buffer length
 					 */
-					for_each_sge(isgtbl, isgtbl_ops, isg, i) {
-						sge_set_length(osgtbl_ops, sg,
-							       sge_length(isgtbl_ops,
-							       isg));
-						sg = sge_next(osgtbl_ops, osgtbl, sg);
+					for_each_sge(isgtbl,
+						     isgtbl_ops, isg, i) {
+						sge_set_length(
+							osgtbl_ops, sg,
+							sge_length(
+								isgtbl_ops,
+								isg));
+						sg = sge_next(osgtbl_ops,
+							      osgtbl, sg);
 					}
 					tbl_set_nents(osgtbl_ops, osgtbl,
-						      tbl_nents(isgtbl_ops, isgtbl));
+						      tbl_nents(isgtbl_ops,
+								isgtbl));
 				} else {
 					/* Bounce buffer */
 					tbl_copy(osgtbl_ops, osgtbl,
 						 isgtbl_ops, isgtbl);
 					/* put bounce buffer back to pool */
 					xio_rdma_mempool_free(
-							&rdma_sender_task->read_sge);
+						&rdma_sender_task->read_sge);
 					rdma_sender_task->read_num_sge = 0;
 				}
 			} else {
@@ -2846,7 +2850,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 				tbl_clone(osgtbl_ops, osgtbl,
 					  isgtbl_ops, isgtbl);
 			}
-
 		} else {
 			ERROR_LOG("empty out message\n");
 		}
@@ -2943,7 +2946,8 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			task->status = XIO_E_NO_USER_BUFS;
 			return -1;
 		}
-		if (rdma_task->req_write_num_sge != tbl_nents(sgtbl_ops, sgtbl)) {
+		if (rdma_task->req_write_num_sge !=
+		    tbl_nents(sgtbl_ops, sgtbl)) {
 			WARN_LOG("application provided invalid iovec length\n");
 			WARN_LOG("rdma read is ignored\n");
 			task->status = XIO_E_NO_USER_BUFS;
@@ -2953,9 +2957,11 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		/* user can give change the length */
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			rdma_task->read_sge.mp_sge[i].cache = NULL;
-			sge_set_length(sgtbl_ops, sg,
-				       min(sge_length(sgtbl_ops, sg),
-				       (size_t)rdma_task->req_write_sge[i].length));
+			sge_set_length(
+				sgtbl_ops, sg,
+				min(
+				  sge_length(sgtbl_ops, sg),
+				  (size_t)rdma_task->req_write_sge[i].length));
 			llen += sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
@@ -2984,26 +2990,14 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				rdma_task->req_write_sge[i].length;
 
 			sge_set_addr(sgtbl_ops, sg,
-					rdma_task->read_sge.mp_sge[i].addr);
+				     rdma_task->read_sge.mp_sge[i].addr);
 			sge_set_length(sgtbl_ops, sg,
-					rdma_task->read_sge.mp_sge[i].length);
+				       rdma_task->read_sge.mp_sge[i].length);
 			llen += rdma_task->read_sge.mp_sge[i].length;
 		}
 		rdma_task->read_num_sge = rdma_task->req_write_num_sge;
 	}
 
-#if 0
-	if (xio_vmsg_to_sgt(&task->imsg.in, rdma_task->rdmad.sgt)) {
-		ERROR_LOG("xio_vmsg_to_sgt failed\n");
-		task->status = ENOMEM;
-		if (!user_assign_flag)
-			xio_rdma_mempool_free(&rdma_task->read_sge);
-		goto cleanup;
-	}
-	rdma_task->rdmad.nents = rdma_task->req_write_num_sge;
-
-	list_move_tail(&task->tasks_list_entry, &rdma_hndl->rdma_rd_list);
-#else
 	retval = xio_validate_rdma_op(&task->imsg.in,
 				      rdma_task->req_write_sge,
 				      rdma_task->req_write_num_sge,
@@ -3033,8 +3027,6 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		task->status = XIO_E_WRITE_FAILED;
 		return -1;
 	}
-
-#endif
 
 	xio_xmit_rdma_rd(rdma_hndl);
 
@@ -3106,7 +3098,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	if (retval) {
 		ERROR_LOG("failed to invalidate input iovecs\n");
 		ERROR_LOG("rdma write is ignored\n");
-		task->status = XIO_E_MSG_INVALID;;
+		task->status = XIO_E_MSG_INVALID;
 		goto cleanup;
 	}
 
@@ -3135,10 +3127,6 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->tx_ready_tasks_num += tasks_used;
 	return 0;
 cleanup:
-#if 0
-	for (i = 0; i < rdma_task->write_num_sge; i++)
-		xio_rdma_mempool_free(&rdma_task->write_sge[i]);
-#endif
 	rdma_task->write_num_sge = 0;
 	return -1;
 }
@@ -3547,9 +3535,9 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 		/* current implementation is symmetric */
 		rsp->buffer_sz	= min(req.buffer_sz,
-				      (u64)rdma_hndl->max_send_buf_sz);
-		rsp->sq_depth	= min(req.sq_depth, (u16)rdma_hndl->rq_depth);
-		rsp->rq_depth	= min(req.rq_depth, (u16)rdma_hndl->sq_depth);
+				      ((u64)rdma_hndl->max_send_buf_sz));
+		rsp->sq_depth	= min(req.sq_depth, ((u16)rdma_hndl->rq_depth));
+		rsp->rq_depth	= min(req.rq_depth, ((u16)rdma_hndl->sq_depth));
 		rsp->max_in_iovsz	= req.max_in_iovsz;
 		rsp->max_out_iovsz	= req.max_out_iovsz;
 	}
@@ -3785,7 +3773,8 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->read_num_sge		= 0;
 
 	ulp_hdr_len = sizeof(*cancel_hdr) + sizeof(uint16_t) + ulp_msg_sz;
-	rdma_hndl->dummy_msg.out.header.iov_base = kzalloc(ulp_hdr_len, GFP_KERNEL);
+	rdma_hndl->dummy_msg.out.header.iov_base =
+		kzalloc(ulp_hdr_len, GFP_KERNEL);
 	rdma_hndl->dummy_msg.out.header.iov_len = ulp_hdr_len;
 
 	/* write the message */
@@ -4146,8 +4135,8 @@ cleanup:
 /* xio_rdma_cancel_req							     */
 /*---------------------------------------------------------------------------*/
 int xio_rdma_cancel_req(struct xio_transport_base *transport,
-			    struct xio_msg *req, uint64_t stag,
-			    void *ulp_msg, size_t ulp_msg_sz)
+			struct xio_msg *req, uint64_t stag,
+			void *ulp_msg, size_t ulp_msg_sz)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;

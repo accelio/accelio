@@ -35,8 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef  XIO_RDMA_TRANSPORT_H
-#define  XIO_RDMA_TRANSPORT_H
+#ifndef XIO_RDMA_TRANSPORT_H
+#define XIO_RDMA_TRANSPORT_H
 
 #include "xio_transport.h"
 
@@ -230,7 +230,6 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
-	//struct xio_data_buffer sdb;
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */
@@ -409,7 +408,7 @@ struct xio_rdma_transport {
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
 	uint16_t			sim_peer_credits;  /* simulates the peer
-							    * credits managment
+							    * credits management
 							    * to control nop
 							    * sends
 							    */
