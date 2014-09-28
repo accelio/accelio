@@ -373,6 +373,8 @@ int on_msg_error(struct xio_session *session,
 		switch (error) {
 		case XIO_E_MSG_FLUSHED:
 			xio_release_response(msg);
+			msg_pool_put(pool, msg);
+			break;
 		case XIO_E_MSG_DISCARDED:
 			msg_pool_put(pool, msg);
 			break;

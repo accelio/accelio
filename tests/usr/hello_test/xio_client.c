@@ -790,8 +790,8 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.pool)
-		msg_pool_free(test_params.pool);
+	msg_pool_free(test_params.pool);
+
 cleanup:
 	msg_api_free(&test_params.msg_params);
 
