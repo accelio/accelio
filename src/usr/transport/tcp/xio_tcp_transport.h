@@ -38,10 +38,6 @@
 #ifndef XIO_TCP_TRANSPORT_H_
 #define XIO_TCP_TRANSPORT_H_
 
-#include "xio_usr_transport.h"
-#include <sys/socket.h>
-#include "xio_context.h"
-
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/

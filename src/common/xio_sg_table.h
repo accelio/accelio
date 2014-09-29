@@ -39,8 +39,6 @@
 #ifndef XIO_SG_TABLE_OPS
 #define XIO_SG_TABLE_OPS
 
-#include "libxio.h"
-#include "xio_os.h"
 
 struct  xio_sg_table_ops {
 	void		(*sge_set_buf)(void *sge, const void *buf,

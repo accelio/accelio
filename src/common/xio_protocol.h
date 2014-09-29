@@ -38,7 +38,6 @@
 #ifndef XIO_PROTOCOL_H
 #define XIO_PROTOCOL_H
 
-#include "xio_common.h"
 
 union generic_16bit {
 	uint8_t b[2];

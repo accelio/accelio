@@ -38,8 +38,6 @@
 #ifndef XIO_LOG_H
 #define XIO_LOG_H
 
-#include "libxio.h"
-
 
 /*
  * Enable compiler checks for printf-like formatting.

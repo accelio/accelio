@@ -36,6 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "xio_os.h"
+#include "xio_log.h"
 #include "xio_common.h"
 
 #define HUGE_PAGE_SZ			(2*1024*1024)

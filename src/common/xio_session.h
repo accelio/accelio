@@ -38,10 +38,6 @@
 #ifndef XIO_SESSION_H
 #define XIO_SESSION_H
 
-#include "xio_hash.h"
-#include "xio_context.h"
-#include "sys/hashtable.h"
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations			                                     */
 /*---------------------------------------------------------------------------*/

@@ -35,18 +35,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 
-#include <libxio.h>
-#include "xio_ev_loop.h"
+#include "xio_os.h"
+#include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "get_clock.h"
+#include "xio_ev_data.h"
+#include "xio_ev_loop.h"
 
 #define MAX_DELETED_EVENTS	1024
 

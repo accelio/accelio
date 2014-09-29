@@ -35,15 +35,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include "libxio.h"
-#include "xio_common.h"
-#include "xio_protocol.h"
-#include "xio_sg_table.h"
-
 #include <linux/kernel.h>
 #include <linux/topology.h>
 #include <linux/inet.h>
+
+#include "xio_os.h"
+#include "libxio.h"
+#include "xio_log.h"
+#include "xio_common.h"
+#include "xio_protocol.h"
+#include "xio_sg_table.h"
 
 #ifndef IN6ADDR_ANY_INIT
 #define IN6ADDR_ANY_INIT \

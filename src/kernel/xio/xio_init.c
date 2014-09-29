@@ -40,15 +40,9 @@
 
 #include "xio_os.h"
 #include "libxio.h"
-#include "xio_observer.h"
-#include "xio_common.h"
 #include "xio_sessions_cache.h"
 #include "xio_nexus_cache.h"
 #include "xio_idr.h"
-#include "xio_nexus.h"
-#include "xio_task.h"
-#include "xio_context.h"
-#include "xio_sg_table.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO generic part "	\

@@ -35,9 +35,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include "xio_os.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_hash.h"
 #include <sys/hashtable.h>
+#include "xio_idr.h"
 
 struct idr_entry {
 	void					*key;

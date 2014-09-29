@@ -35,20 +35,25 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/hashtable.h>
 #include "xio_os.h"
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
 #include "xio_hash.h"
 #include "xio_observer.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
 #include "xio_context.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_transport.h"
 #include "xio_nexus_cache.h"
-#include "xio_nexus.h"
-#include "xio_session.h"
 #include "xio_server.h"
-
+#include "xio_session.h"
+#include "xio_nexus.h"
 
 /*---------------------------------------------------------------------------*/
 /* private structures							     */
@@ -2417,3 +2422,15 @@ int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task)
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_set_server							     */
+/*---------------------------------------------------------------------------*/
+inline void xio_nexus_set_server(struct xio_nexus *nexus,
+				 struct xio_server *server)
+{
+	nexus->server = server;
+	if (server)
+		xio_server_reg_observer(server, &nexus->srv_observer);
+}
+

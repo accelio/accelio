@@ -38,7 +38,6 @@
 #ifndef XIO_EV_DATA_H
 #define XIO_EV_DATA_H
 
-#include "xio_common.h"
 
 struct xio_ev_data;
 

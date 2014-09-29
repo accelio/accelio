@@ -38,11 +38,6 @@
 #ifndef XIO_NEXUS_H
 #define XIO_NEXUS_H
 
-#include "xio_hash.h"
-#include "xio_context.h"
-#include "xio_transport.h"
-#include "sys/hashtable.h"
-#include "xio_server.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -246,13 +241,8 @@ int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_nexus_set_server(struct xio_nexus *nexus,
-					struct xio_server *server)
-{
-	nexus->server = server;
-	if (server)
-		xio_server_reg_observer(server, &nexus->srv_observer);
-}
+inline void xio_nexus_set_server(struct xio_nexus *nexus,
+				 struct xio_server *server);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_reg_observer						     */

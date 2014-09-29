@@ -37,12 +37,12 @@
  */
 #include "xio_os.h"
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
 #include "xio_sg_table.h"
 #include "xio_observer.h"
 #include "xio_usr_transport.h"
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_host_port_to_ss							     */

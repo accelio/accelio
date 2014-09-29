@@ -38,7 +38,6 @@
 #ifndef XIO_RDMA_TRANSPORT_H
 #define XIO_RDMA_TRANSPORT_H
 
-#include "xio_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */

@@ -38,7 +38,6 @@
 #ifndef XIO_EV_DATA_H
 #define XIO_EV_DATA_H
 
-#include "libxio.h"
 
 typedef struct xio_ev_data xio_ev_data_t;
 

@@ -37,12 +37,16 @@
 
 #include "xio_os.h"
 #include "libxio.h"
-#include "xio_observer.h"
+#include "xio_log.h"
 #include "xio_common.h"
-#include "xio_context.h"
+#include "xio_observer.h"
 #include "get_clock.h"
+#include "xio_ev_data.h"
 #include "xio_ev_loop.h"
 #include "xio_idr.h"
+#include "xio_workqueue.h"
+#include "xio_timers_list.h"
+#include "xio_context.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */

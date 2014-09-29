@@ -36,12 +36,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "xio_os.h"
+#include <sys/hashtable.h>
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_hash.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_workqueue.h"
 #include "xio_session.h"
 #include "xio_sessions_cache.h"
 

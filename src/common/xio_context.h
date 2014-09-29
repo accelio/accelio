@@ -38,8 +38,6 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
-#include "xio_workqueue.h"
-#include "xio_ev_data.h"
 
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t

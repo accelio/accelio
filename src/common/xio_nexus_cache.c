@@ -35,10 +35,21 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/hashtable.h>
+#include "libxio.h"
 #include "xio_os.h"
+#include "xio_log.h"
+#include "xio_common.h"
 #include "xio_hash.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_observer.h"
+#include "xio_workqueue.h"
+#include "xio_ev_data.h"
+#include "xio_context.h"
+#include "xio_transport.h"
+#include "xio_transport.h"
 #include "xio_nexus.h"
 #include "xio_nexus_cache.h"
 

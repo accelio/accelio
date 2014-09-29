@@ -38,8 +38,6 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-#include "xio_common.h"
-#include "xio_ev_data.h"
 
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */

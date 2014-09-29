@@ -41,12 +41,20 @@
 #include <ib_cm.h>
 
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
+#include "xio_transport.h"
+#include "xio_usr_transport.h"
 #include "xio_transport_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
-#include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
+#include "xio_rdma_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_validate_rdma_op							     */

@@ -38,7 +38,6 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-#include "libxio.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines								     */

@@ -38,8 +38,6 @@
 #ifndef XIO_TASK_H
 #define XIO_TASK_H
 
-#include "libxio.h"
-#include "xio_mbuf.h"
 
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,

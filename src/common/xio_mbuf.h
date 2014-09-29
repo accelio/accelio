@@ -38,8 +38,6 @@
 #ifndef XIO_MBUF_H
 #define XIO_MBUF_H
 
-#include "xio_protocol.h"
-#include "xio_log.h"
 
 struct xio_mbuf {
 	void			*curr;

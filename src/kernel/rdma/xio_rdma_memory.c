@@ -48,16 +48,23 @@
 #include <rdma/rdma_cm.h>
 
 #include "libxio.h"
+#include "xio_os.h"
+#include "xio_log.h"
 #include "xio_observer.h"
 #include "xio_common.h"
-#include "xio_context.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_rdma_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
 
 #define XIO_KMALLOC_THRESHOLD 0x20000 /* 128K - kmalloc limit */
 

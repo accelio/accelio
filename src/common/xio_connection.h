@@ -38,9 +38,6 @@
 #ifndef XIO_CONNECTION_H
 #define XIO_CONNECTION_H
 
-#include "xio_msg_list.h"
-
-
 enum xio_connection_state {
 		XIO_CONNECTION_STATE_INIT,
 		XIO_CONNECTION_STATE_ESTABLISHED,

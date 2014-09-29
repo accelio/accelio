@@ -38,9 +38,6 @@
 #ifndef XIO_COMMON_TRANSPORT_H
 #define XIO_COMMON_TRANSPORT_H
 
-#include "xio_transport.h"
-#include "xio_context.h"
-
 
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
