@@ -62,9 +62,9 @@ EXPORT_SYMBOL(xio_sg_table_ops_get);
 int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	      struct xio_sg_table_ops *stbl_ops, void *stbl)
 {
-	void	*dsge;
-	void	*ssge;
-	int	i;
+	void		*dsge;
+	void		*ssge;
+	unsigned int	i;
 
 	if (tbl_max_nents(dtbl_ops, dtbl) < tbl_max_nents(stbl_ops, stbl))
 		return -1;

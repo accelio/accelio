@@ -372,7 +372,7 @@ int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 
 	if (osize)
 		*osize = comm->control_ctx->reply->in.header.iov_len;
-	if (comm->control_ctx->reply->in.header.iov_len > size)
+	if (comm->control_ctx->reply->in.header.iov_len > (size_t)size)
 		goto cleanup;
 
 	if (comm->control_ctx->reply->in.header.iov_len)
@@ -550,7 +550,8 @@ static int numa_node_to_cpusmask(int node, uint64_t *cpusmask, int *nr)
 {
 	struct bitmask *mask;
 	uint64_t	bmask = 0;
-	int		retval = -1, i;
+	int		retval = -1;
+	unsigned int	i;
 
 	mask = numa_allocate_cpumask();
 	retval = numa_node_to_cpus(node, mask);

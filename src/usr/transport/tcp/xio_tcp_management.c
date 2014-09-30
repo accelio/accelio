@@ -1515,7 +1515,7 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 
 	/* resolve the portal_uri */
 	rsa_len = xio_uri_to_ss(portal_uri, &rsa.sa_stor);
-	if (rsa_len == -1) {
+	if (rsa_len == (socklen_t)-1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
 		return -1;
@@ -2085,7 +2085,7 @@ static int xio_tcp_task_pre_put(
 		struct xio_transport_base *trans_hndl,
 		struct xio_task *task)
 {
-	int	i;
+	unsigned int	i;
 	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* recycle TCP  buffers back to pool */
@@ -2335,8 +2335,8 @@ static int xio_tcp_get_opt(void  *xio_obj,
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 {
-	int		i;
-	int		mr_found = 0;
+	unsigned int		i;
+	unsigned int		mr_found = 0;
 	struct xio_vmsg *vmsg = &msg->in;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
@@ -2348,9 +2348,9 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
-	if ((nents > tcp_options.max_in_iovsz) ||
+	if ((nents > (unsigned long)tcp_options.max_in_iovsz) ||
 	    (nents > max_nents) ||
-	    (max_nents > tcp_options.max_in_iovsz)) {
+	    (max_nents > (unsigned long)tcp_options.max_in_iovsz)) {
 		return 0;
 	}
 
@@ -2384,8 +2384,8 @@ static int xio_tcp_is_valid_in_req(struct xio_msg *msg)
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 {
-	int			i;
-	int			mr_found = 0;
+	unsigned int		i;
+	unsigned int		mr_found = 0;
 	struct xio_vmsg		*vmsg = &msg->out;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
@@ -2397,9 +2397,9 @@ static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
-	if ((nents > tcp_options.max_out_iovsz) ||
+	if ((nents > (unsigned long)tcp_options.max_out_iovsz) ||
 	    (nents > max_nents) ||
-	    (max_nents > tcp_options.max_out_iovsz))
+	    (max_nents > (unsigned long)tcp_options.max_out_iovsz))
 		return 0;
 
 	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)

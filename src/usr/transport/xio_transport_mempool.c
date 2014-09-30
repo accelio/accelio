@@ -385,7 +385,7 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 /*---------------------------------------------------------------------------*/
 void xio_mempool_destroy(struct xio_mempool *p)
 {
-	int i;
+	unsigned int i;
 
 	if (!p)
 		return;
@@ -402,7 +402,7 @@ void xio_mempool_destroy(struct xio_mempool *p)
 /*---------------------------------------------------------------------------*/
 void xio_mempool_dump(struct xio_mempool *p)
 {
-	int			i;
+	unsigned int		i;
 	struct xio_mem_slot	*s;
 
 	if (!p)
@@ -561,13 +561,13 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static inline int size2index(struct xio_mempool *p, size_t sz)
 {
-	int i;
+	unsigned int		i;
 
 	for (i = 0; i <= p->slots_nr; i++)
 		if (sz <= p->slot[i].mb_size)
 			break;
 
-	return (i == p->slots_nr) ? -1 : i;
+	return (i == p->slots_nr) ? -1 : (int)i;
 }
 
 
@@ -601,7 +601,7 @@ retry:
 		if (!block) {
 			block = xio_mem_slot_resize(slot, 1);
 			if (block == NULL) {
-				if (++index == p->slots_nr)
+				if (++index == (int)p->slots_nr)
 					index  = -1;
 				pthread_spin_unlock(&slot->lock);
 				ret = 0;
@@ -655,7 +655,7 @@ int xio_mempool_add_allocator(struct xio_mempool *p,
 {
 	struct xio_mem_slot	*new_slot;
 	struct xio_mem_block	*block;
-	int ix, slot_ix, slot_shift = 0;
+	unsigned int ix, slot_ix, slot_shift = 0;
 
 	slot_ix = p->slots_nr;
 	if (p->slots_nr) {

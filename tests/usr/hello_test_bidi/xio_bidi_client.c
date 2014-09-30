@@ -104,7 +104,7 @@ static struct xio_test_config  test_config = {
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt;
+	static unsigned int cnt;
 
 	if (req == NULL) {
 		cnt = 0;

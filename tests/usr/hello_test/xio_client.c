@@ -265,7 +265,7 @@ static int on_response(struct xio_session *session,
 	struct test_params	*test_params = cb_user_context;
 	struct xio_iovec_ex	*sglist;
 	static int		chain_messages = CHAIN_MESSAGES;
-	int			j;
+	size_t			j;
 
 	test_params->nrecv++;
 
@@ -571,7 +571,7 @@ int send_one_by_one(struct test_params *test_params)
 	struct xio_iovec_ex	*sglist;
 	struct xio_msg		*msg;
 	int			i;
-	int			j;
+	size_t			j;
 
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
@@ -622,7 +622,7 @@ int send_chained(struct test_params *test_params)
 	struct xio_iovec_ex	*sglist;
 	struct xio_msg		*msg, *head = NULL, *tail = NULL;
 	int			i;
-	int			j;
+	size_t			j;
 	int			nsent = 0;
 
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {

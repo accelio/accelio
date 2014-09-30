@@ -146,7 +146,7 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 	int i = 0;
 
 	nsubmit = info->iodepth - info->npending; /* max allowed to submit */
-	if (nsubmit > info->nwaiting)
+	if (nsubmit > (int)info->nwaiting)
 		nsubmit = info->nwaiting;
 
 	if (!nsubmit)
@@ -228,7 +228,7 @@ static void raio_aio_complete_one(struct io_event *ep)
 /*---------------------------------------------------------------------------*/
 static void raio_aio_get_events(struct raio_bs_aio_info *info)
 {
-	int		i;
+	unsigned int	i;
 	int		ret;
 	uint32_t	nevents = ARRAY_SIZE(info->io_evts);
 
@@ -280,7 +280,7 @@ retry_read:
 /*---------------------------------------------------------------------------*/
 static int raio_bs_aio_init(struct raio_bs *dev)
 {
-	int			i;
+	unsigned int		i;
 	struct raio_bs_aio_info	*dev_info = dev->dd;
 
 	dev_info->dev  = dev;

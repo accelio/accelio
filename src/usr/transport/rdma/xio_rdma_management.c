@@ -1054,7 +1054,7 @@ static void xio_xd_reinit(struct xio_work_req *xd,
 			  size_t xd_nr,
 			  struct ibv_mr *srmr)
 {
-	int i;
+	unsigned int i;
 
 	if (!srmr)
 		return;
@@ -1262,7 +1262,7 @@ static int xio_rdma_task_pre_put(
 		struct xio_transport_base *trans_hndl,
 		struct xio_task *task)
 {
-	int	i;
+	unsigned int	i;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	/* recycle RDMA  buffers back to pool */
@@ -2495,7 +2495,7 @@ static int xio_rdma_update_task(struct xio_transport_base *trans_hndl,
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_hndl;
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < rdma_task->req_recv_num_sge; i++) {
 		if (xio_new_rkey(rdma_hndl, &rdma_task->req_recv_sge[i].stag))
@@ -2978,8 +2978,8 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sge;
-	uint32_t		nents, max_nents;
-	int			i;
+	int32_t			nents, max_nents;
+	unsigned int		i;
 	int			mr_found = 0;
 
 	sgtbl		= xio_sg_table_get(vmsg);
@@ -3024,8 +3024,8 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	struct xio_sg_table_ops *sgtbl_ops;
 	void			*sgtbl;
 	void			*sge;
-	uint32_t		nents, max_nents;
-	int			i;
+	int32_t			nents, max_nents;
+	unsigned int		i;
 	int			mr_found = 0;
 
 

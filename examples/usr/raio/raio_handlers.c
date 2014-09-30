@@ -552,8 +552,8 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 
 	sglist = vmsg_sglist(&io_u->rsp->out);
 	if (io_u->iocmd.op == RAIO_CMD_PREAD) {
-		if (iocmd->res != iocmd->bcount) {
-			if (iocmd->res < iocmd->bcount) {
+		if (iocmd->res != (int)iocmd->bcount) {
+			if (iocmd->res < (int)iocmd->bcount) {
 				sglist[0].iov_len = iocmd->res;
 			} else {
 				vmsg_sglist_set_nents(&io_u->rsp->out, 0);

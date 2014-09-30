@@ -353,11 +353,12 @@ int run_server_test(struct perf_parameters *user_param)
 {
 	struct server_data	server_data;
 	struct perf_command	command;
-	int			i, len, retval;
-	int			max_cpus;
+	unsigned int		i;
+	int			len, retval;
+	unsigned int		max_cpus;
 	uint64_t		cpusmask;
 	int			cpusnr;
-	int			cpu;
+	unsigned int		cpu;
 
 	xio_init();
 

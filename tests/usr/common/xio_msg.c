@@ -158,7 +158,7 @@ int msg_api_init(struct msg_params *msg_params,
 	const char	*rsp_hdr =  "hello world response header";
 	const char	*rsp_data = "hello world response data";
 	const char	*ptr;
-	int		len;
+	size_t		len;
 	int		pagesize = sysconf(_SC_PAGESIZE);
 
 	if (pagesize < 0)

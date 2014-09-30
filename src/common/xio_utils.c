@@ -107,7 +107,7 @@ char *xio_uri_get_resource_ptr(const char *uri)
 int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 {
 	char *res = xio_uri_get_resource_ptr(uri);
-	int len = (res == NULL) ? strlen(uri) : (res - uri);
+	int len = (res == NULL) ? strlen(uri) : (size_t)(res - uri);
 	if (len < portal_len) {
 		strncpy(portal, uri, len);
 		portal[len] = 0;
@@ -301,7 +301,7 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 	void		*saddr	= src[0].iov_base;
 	size_t		dlen	= dst[0].iov_len;
 	size_t		slen	= src[0].iov_len;
-	size_t		d	= 0,
+	int		d	= 0,
 			s	= 0,
 			dst_len = 0;
 
@@ -384,7 +384,7 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 	void		*saddr	= src[0].iov_base;
 	size_t		dlen	= dst[0].iov_len;
 	size_t		slen	= src[0].iov_len;
-	size_t		d	= 0,
+	int		d	= 0,
 			s	= 0,
 			dst_len = 0;
 

@@ -204,7 +204,7 @@ start:
 
 	vars.test_num++;
 
-	if (!max_iterations || vars.test_num != max_iterations)
+	if (!max_iterations || (int)vars.test_num != max_iterations)
 		goto start;
 
 	return 0;

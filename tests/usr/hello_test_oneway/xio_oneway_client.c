@@ -93,8 +93,8 @@ struct ow_test_params {
 	struct ow_test_stat	rx_stat;
 	struct ow_test_stat	tx_stat;
 	struct msg_params	msg_params;
-	int			nsent;
-	int			ndelivered;
+	unsigned int		nsent;
+	unsigned int		ndelivered;
 	uint16_t		finite_run;
 	uint16_t		padding[3];
 	uint64_t		disconnect_nr;

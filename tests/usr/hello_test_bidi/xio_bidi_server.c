@@ -161,7 +161,7 @@ static void process_response(struct xio_msg *rsp)
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt;
+	static unsigned int cnt;
 
 	if (req == NULL) {
 		cnt = 0;

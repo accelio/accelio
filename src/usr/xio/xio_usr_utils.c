@@ -324,7 +324,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	struct  xio_mr		 *mr;
 	void			 *sgtbl;
 	void			 *sge;
-	int			i;
+	unsigned int		 i;
 
 	ERROR_LOG("********************************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
@@ -333,7 +333,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
 		ERROR_LOG("response:%p, serial number:%lld\n",
 			  xio_msg->request,
-			  ((xio_msg->request) ? xio_msg->request->sn : -1));
+			  ((xio_msg->request) ? xio_msg->request->sn : (uint64_t)-1));
 
 	sgtbl		= xio_sg_table_get(&xio_msg->in);
 	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);

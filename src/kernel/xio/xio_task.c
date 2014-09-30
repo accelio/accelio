@@ -258,7 +258,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 	struct xio_tasks_slab	*pslab, *next_pslab;
 	struct xio_task *task;
 	struct xio_msg *msg;
-	int i;
+	unsigned int i;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {
@@ -304,7 +304,8 @@ EXPORT_SYMBOL(xio_tasks_pool_destroy);
 void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 {
 	struct xio_tasks_slab	*pslab, *next_pslab;
-	int			i, retval;
+	unsigned int		i;
+	int			retval;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {

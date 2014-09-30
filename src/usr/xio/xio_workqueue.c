@@ -82,7 +82,7 @@ struct xio_workqueue {
 static void set_normalized_timespec(struct timespec *ts,
 				    time_t sec, int64_t nsec)
 {
-	while (nsec >= XIO_NS_IN_SEC) {
+	while (nsec >= (int64_t)XIO_NS_IN_SEC) {
 		nsec -= XIO_NS_IN_SEC;
 		++sec;
 	}
@@ -189,10 +189,10 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 static void xio_work_action_handler(int fd, int events, void *user_context)
 {
 	struct xio_workqueue	*work_queue = user_context;
-	int64_t			exp;
+	uint64_t		exp;
 	ssize_t			s;
 	xio_work_handle_t	*work;
-	int			i, found = 0;
+	unsigned int		i, found = 0;
 
 
 	/* drain the pipe data */

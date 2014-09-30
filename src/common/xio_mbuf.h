@@ -139,7 +139,7 @@ static inline void xio_mbuf_init(struct xio_mbuf *mbuf, void *buf,
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_tlv_start(struct xio_mbuf *mbuf)
 {
-	if ((mbuf->buf.tail - mbuf->curr) <= XIO_TLV_LEN) {
+	if (((uint64_t)(mbuf->buf.tail - mbuf->curr)) <= XIO_TLV_LEN) {
 		ERROR_LOG("xio_mbuf_tlv start failed. buf.tail:%p, " \
 			  "len:%zd, curr:%p\n",
 			  mbuf->buf.tail, XIO_TLV_LEN, mbuf->curr);
@@ -360,7 +360,7 @@ static inline int xio_mbuf_write_u64(struct xio_mbuf *mbuf, uint64_t val)
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_read_u64(struct xio_mbuf *mbuf, uint64_t *val)
 {
-	if (mbuf->tlv.tail - mbuf->curr > sizeof(uint64_t)) {
+	if ((uint64_t)(mbuf->tlv.tail - mbuf->curr) > sizeof(uint64_t)) {
 		mbuf->curr += xio_read_uint64(val, 0, mbuf->curr);
 		return 0;
 	}

@@ -95,8 +95,9 @@ static int xio_tcp_sendmsg_work(int fd,
 				struct xio_tcp_work_req *xio_send,
 				int block)
 {
-	int			i, retval = 0, tmp_bytes, sent_bytes = 0;
+	int			retval = 0, tmp_bytes, sent_bytes = 0;
 	int			eagain_count = TX_EAGAIN_RETRY;
+	unsigned int		i;
 
 	while (xio_send->tot_iov_byte_len) {
 		retval = sendmsg(fd, &xio_send->msg, MSG_NOSIGNAL);
@@ -122,7 +123,7 @@ static int xio_tcp_sendmsg_work(int fd,
 			tmp_bytes = 0;
 			for (i = 0; i < xio_send->msg.msg_iovlen; i++) {
 				if (xio_send->msg.msg_iov[i].iov_len +
-						tmp_bytes < retval) {
+						tmp_bytes < (size_t)retval) {
 					tmp_bytes +=
 					xio_send->msg.msg_iov[i].iov_len;
 				} else {
@@ -605,7 +606,7 @@ static int xio_tcp_prep_req_out_data(
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_out_imm_len;
 	size_t			retval;
-	int			i;
+	unsigned int		i;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
@@ -901,8 +902,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	int			retval = 0, retval2 = 0;
 	int			imm_comp = 0;
 	int			batch_nr = TX_BATCH, batch_count = 0, tmp_count;
-	int			i;
-	int			iov_len;
+	unsigned int		i;
+	unsigned int		iov_len;
 	uint64_t		bytes_sent;
 
 	if (tcp_hndl->tx_ready_tasks_num == 0)
@@ -1173,7 +1174,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	size_t				data_len;
 	size_t				xio_hdr_len;
 	struct xio_vmsg			*vmsg = &task->omsg->in;
-	int				i;
+	unsigned int			i;
 	int				retval;
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
@@ -1506,7 +1507,7 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 			     struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
-	int i, llen = 0, rlen = 0;
+	unsigned int i, llen = 0, rlen = 0;
 	int retval;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
@@ -1971,7 +1972,8 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 			 struct xio_tcp_work_req *xio_recv, int block)
 {
-	int			i, retval;
+	unsigned int		i;
+	int			retval;
 	int			recv_bytes = 0, tmp_bytes;
 
 	if (xio_recv->tot_iov_byte_len == 0)
@@ -1991,7 +1993,7 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 			tmp_bytes = 0;
 			for (i = 0; i < xio_recv->msg.msg_iovlen; i++) {
 				if (xio_recv->msg.msg_iov[i].iov_len +
-						tmp_bytes <= retval) {
+						tmp_bytes <= (size_t)retval) {
 					tmp_bytes +=
 					xio_recv->msg.msg_iov[i].iov_len;
 				} else {
@@ -2071,7 +2073,8 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 				 struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
-	int			i, retval;
+	unsigned int		i;
+	int			retval;
 	int			user_assign_flag = 0;
 	size_t			rlen = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -2255,7 +2258,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	struct xio_tcp_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
-	int			i;
+	unsigned int		i;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
@@ -2407,7 +2410,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	void			*ulp_hdr;
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
-	int			i;
+	unsigned int		i;
 	struct xio_sg_table_ops	*isgtbl_ops;
 	void			*isgtbl;
 	void			*sg;
@@ -2533,7 +2536,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 	union xio_transport_event_data event_data;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
-	int			i;
+	unsigned int		i;
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
 	struct xio_sg_table_ops	*isgtbl_ops;
@@ -3057,9 +3060,9 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 	int retval = 0, recvmsg_retval = 0;
 	struct xio_tcp_task *tcp_task, *next_tcp_task;
 	struct xio_task *task, *next_task/*, *task1 = NULL, *task2*/;
-	int i;
+	unsigned int i;
 	int batch_count = 0, tmp_count = 0, ret_count = 0;
-	int iov_len;
+	unsigned int iov_len;
 	uint64_t bytes_recv;
 	struct xio_tcp_work_req *rxd_work, *next_rxd_work;
 
@@ -3118,7 +3121,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 					struct xio_task,  tasks_list_entry);
 		iov_len = tcp_hndl->tmp_work.msg_len -
 				tcp_hndl->tmp_work.msg.msg_iovlen;
-		for (i = 0; i < tmp_count; i++) {
+		for (i = 0; i < (unsigned int)tmp_count; i++) {
 			tcp_task = task->dd_data;
 			rxd_work = xio_tcp_get_data_rxd(task);
 

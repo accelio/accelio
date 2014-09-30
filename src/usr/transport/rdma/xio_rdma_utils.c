@@ -66,13 +66,13 @@ int xio_validate_rdma_op(
 			int max_sge,
 			int *tasks_used)
 {
-	int		l	= 0,
+	unsigned int	l	= 0,
 			r	= 0;
 	uint64_t	laddr	= lsg_list[0].addr;
 	uint64_t	raddr	= rsg_list[0].addr;
 	uint32_t	llen	= lsg_list[0].length;
 	uint32_t	rlen	= rsg_list[0].length;
-	uint32_t	tot_len = 0;
+	int32_t		tot_len = 0;
 	int		k = 0;
 
 	if (lsize < 1 || rsize < 1) {

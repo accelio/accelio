@@ -129,7 +129,7 @@ static void *statistics_thread_cb(void *data)
 	uint64_t		max_rtt = 0;
 	struct session_data	*sess_data = data;
 	cpu_set_t		cpuset;
-	int			i;
+	unsigned int		i;
 
 	/* set affinity to thread */
 
@@ -195,7 +195,7 @@ static void *worker_thread(void *data)
 	struct xio_iovec_ex	*sglist;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
-	int			i;
+	unsigned int		i;
 
 	/* set affinity to thread */
 
@@ -283,7 +283,7 @@ static int on_session_event(struct xio_session *session,
 		void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
-	int		    i;
+	unsigned int	    i;
 
 
 	switch (event_data->event) {
@@ -404,7 +404,7 @@ int run_client_test(struct perf_parameters *user_param)
 	struct perf_comm	*comm;
 	struct thread_data	*tdata;
 	char			url[256];
-	int			i = 0;
+	unsigned int		i = 0;
 	int			cpu;
 	int			max_cpus;
 	int			cpusnr;
