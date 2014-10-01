@@ -1135,6 +1135,7 @@ send:
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_send_msg);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_xmit_msgs						     */
