@@ -68,8 +68,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	struct xio_msg *msg;
 	struct xio_vmsg *vmsg;
 
-	if (q->params.start_nr < 0  || q->params.max_nr < 0 ||
-	    q->params.alloc_nr < 0) {
+	if ((int)q->params.start_nr < 0  || (int)q->params.max_nr < 0 ||
+	    (int)q->params.alloc_nr < 0) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
