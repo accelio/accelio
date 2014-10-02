@@ -81,8 +81,8 @@ struct xio_connection *xio_session_alloc_connection(
 	struct xio_connection		*connection;
 
 	/* allocate and initialize connection */
-	connection = xio_connection_init(session, ctx, connection_idx,
-					 connection_user_context);
+	connection = xio_connection_create(session, ctx, connection_idx,
+					   connection_user_context);
 	if (connection == NULL) {
 		ERROR_LOG("failed to initialize connection. " \
 			  "seesion:%p, ctx:%p, connection_idx:%d\n",

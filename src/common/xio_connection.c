@@ -214,12 +214,12 @@ static int xio_free_ow_msg_pool(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_init							     */
+/* xio_connection_create						     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_connection_init(struct xio_session *session,
-					   struct xio_context *ctx,
-					   int conn_idx,
-					   void *cb_user_context)
+struct xio_connection *xio_connection_create(struct xio_session *session,
+					     struct xio_context *ctx,
+					     int conn_idx,
+					     void *cb_user_context)
 {
 		struct xio_connection *connection;
 
@@ -409,7 +409,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_connection_flush_msgs						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_flush_msgs(struct xio_connection *connection)
+static int xio_connection_flush_msgs(struct xio_connection *connection)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg, *omsg = NULL;
 
@@ -1729,12 +1729,10 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 /*---------------------------------------------------------------------------*/
 /* xio_connection_release_hello						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_release_hello(struct xio_connection *connection,
-				 struct xio_msg *msg)
+static inline void xio_connection_release_hello(
+		struct xio_connection *connection, struct xio_msg *msg)
 {
 	xio_msg_list_insert_head(&connection->one_way_msg_pool, msg, pdata);
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2240,4 +2238,85 @@ cleanup:
 
 	return retval;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_xmit_messages							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_xmit_messages(void *connection)
+{
+	xio_connection_xmit_msgs(connection);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_rsp_recv			                     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
+				     struct xio_task *task)
+{
+	struct xio_session    *session = connection->session;
+
+	if (task) {
+		DEBUG_LOG("got hello response. session:%p, connection:%p\n",
+			  session, connection);
+
+		xio_connection_release_hello(connection, task->sender_task->omsg);
+		/* recycle the task */
+		xio_tasks_pool_put(task->sender_task);
+		task->sender_task = NULL;
+		xio_tasks_pool_put(task);
+	}
+
+	/* set the new connection to ESTABLISHED */
+	xio_connection_set_state(connection,
+				 XIO_CONNECTION_STATE_ESTABLISHED);
+	xio_session_notify_connection_established(session, connection);
+
+	if (connection->state == XIO_CONNECTION_STATE_ESTABLISHED) {
+		/* set the new connection to online */
+		xio_connection_set_state(
+				connection,
+				XIO_CONNECTION_STATE_ONLINE);
+		xio_ctx_add_work(
+				connection->ctx,
+				connection,
+				xio_xmit_messages,
+				&connection->hello_work);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_req_recv			                     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_hello_req_recv(struct xio_connection *connection,
+				     struct xio_task *task)
+{
+	xio_session_notify_new_connection(task->session, connection);
+
+	xio_connection_send_hello_rsp(connection, task);
+
+	connection->session->state = XIO_SESSION_STATE_ONLINE;
+	connection->session->disable_teardown = 0;
+
+	TRACE_LOG("session state is now ONLINE. session:%p\n",
+		  connection->session);
+
+	xio_connection_set_state(connection, XIO_CONNECTION_STATE_ONLINE);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_hello_rsp_send_comp				     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
+					  struct xio_task *task)
+{
+	xio_connection_release_hello(connection, task->omsg);
+	xio_tasks_pool_put(task);
+
+	return 0;
+}
+
 

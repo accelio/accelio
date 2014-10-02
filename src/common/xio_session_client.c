@@ -131,87 +131,6 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	return msg;
 }
 
-static void xio_xmit_messages(void *_connection)
-{
-	struct xio_connection *connection = _connection;
-
-	xio_connection_xmit_msgs(connection);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_rsp_recv			                     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
-				     struct xio_task *task)
-{
-	int is_last = 1;
-	struct xio_connection *tmp_connection;
-	struct xio_session    *session = connection->session;
-
-	TRACE_LOG("got hello response. session:%p, connection:%p\n",
-		  session, connection);
-
-	xio_connection_release_hello(connection, task->sender_task->omsg);
-	/* recycle the task */
-	xio_tasks_pool_put(task->sender_task);
-	task->sender_task = NULL;
-	xio_tasks_pool_put(task);
-
-
-	/* set the new connection to ESTABLISHED */
-	xio_connection_set_state(connection,
-				 XIO_CONNECTION_STATE_ESTABLISHED);
-	xio_session_notify_connection_established(session, connection);
-
-	if (session->state == XIO_SESSION_STATE_ACCEPTED) {
-		/* is this the last to accept */
-		spin_lock(&session->connections_list_lock);
-		list_for_each_entry(tmp_connection,
-				    &session->connections_list,
-				    connections_list_entry) {
-			if (tmp_connection->state !=
-					XIO_CONNECTION_STATE_ESTABLISHED) {
-				is_last = 0;
-				break;
-			}
-		}
-		spin_unlock(&session->connections_list_lock);
-		if (is_last) {
-			session->state = XIO_SESSION_STATE_ONLINE;
-			TRACE_LOG("session state is now ONLINE. session:%p\n",
-				  session);
-			if (session->ses_ops.on_session_established)
-				session->ses_ops.on_session_established(
-						session,
-						&session->new_ses_rsp,
-						session->cb_user_context);
-
-			/* send one message to pass sending to the
-			 * right thread */
-			kfree(session->new_ses_rsp.private_data);
-
-			spin_lock(&session->connections_list_lock);
-			list_for_each_entry(tmp_connection,
-					    &session->connections_list,
-					    connections_list_entry) {
-				/* set the new connection to online */
-				xio_connection_set_state(
-						tmp_connection,
-						XIO_CONNECTION_STATE_ONLINE);
-				xio_ctx_add_work(
-						tmp_connection->ctx,
-						tmp_connection,
-						xio_xmit_messages,
-						&tmp_connection->hello_work);
-			}
-			spin_unlock(&session->connections_list_lock);
-		}
-	}
-
-	return 0;
-}
-
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_accept_connection					     */
 /*---------------------------------------------------------------------------*/
@@ -302,7 +221,7 @@ int xio_session_redirect_connection(struct xio_session *session)
 	session->uri = kstrdup(service, GFP_KERNEL);
 
 	/* prep the lead connection for close */
-	session->lead_connection = xio_connection_init(
+	session->lead_connection = xio_connection_create(
 			session,
 			session->lead_connection->ctx,
 			session->lead_connection->conn_idx,
@@ -545,15 +464,21 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 	switch (action) {
 	case XIO_ACTION_ACCEPT:
+		session->state = XIO_SESSION_STATE_ONLINE;
+		TRACE_LOG("session state is now ONLINE. session:%p\n", session);
+
+		/* notify the upper layer */
+		if (session->ses_ops.on_session_established)
+			session->ses_ops.on_session_established(
+					session, rsp,
+					session->cb_user_context);
+
+		kfree(rsp->private_data);
+		rsp->private_data = NULL;
+
 		if (session->portals_array == NULL)  {
-			xio_connection_set_state(
-					connection,
-					XIO_CONNECTION_STATE_ESTABLISHED);
-			xio_session_notify_connection_established(
-						session, connection);
-
+			xio_on_connection_hello_rsp_recv(connection, NULL);
 			xio_prep_portal(connection);
-
 			/* insert the connection into list */
 			xio_session_assign_nexus(session, connection->nexus);
 			session->lead_connection = NULL;
@@ -561,8 +486,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			session->disable_teardown = 0;
 
 			if (session->connections_nr > 1) {
-				session->state = XIO_SESSION_STATE_ACCEPTED;
-
 				/* open new connections */
 				retval = xio_session_accept_connection(session);
 				if (retval != 0) {
@@ -570,32 +493,14 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 						"failed to accept connection\n");
 					return -1;
 				}
-			} else {
-				session->state = XIO_SESSION_STATE_ONLINE;
-				connection->state = XIO_CONNECTION_STATE_ONLINE;
-				TRACE_LOG(
-				     "session state is now ONLINE. session:%p\n",
-				     session);
-
-				/* notify the upper layer */
-				if (session->ses_ops.on_session_established)
-					session->ses_ops.on_session_established(
-						session, rsp,
-						session->cb_user_context);
-
-				kfree(rsp->private_data);
-				rsp->private_data = NULL;
 			}
-			/* start connection transmission */
-			xio_connection_xmit_msgs(connection);
-
 			return 0;
 		} else { /* reconnect to peer other session */
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
 				  session);
 
 			/* clone temporary connection */
-			tmp_connection = xio_connection_init(
+			tmp_connection = xio_connection_create(
 				session,
 				session->lead_connection->ctx,
 				session->lead_connection->conn_idx,
@@ -783,6 +688,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 						session->cb_user_context);
 		}
 		break;
+	case XIO_SESSION_STATE_ONLINE:
 	case XIO_SESSION_STATE_ACCEPTED:
 		connection = xio_session_find_connection(session, nexus);
 		if (connection == NULL) {
@@ -791,11 +697,16 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			return -1;
 		}
 		session->disable_teardown = 0;
-
-		/* introduce the connection to the session */
-		xio_connection_send_hello_req(connection);
-
+		if (connection->state == XIO_CONNECTION_STATE_INIT) {
+			/* introduce the connection to the session */
+			xio_connection_send_hello_req(connection);
+		} else {
+			xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
+			xio_connection_xmit_msgs(connection);
+		}
 		break;
+#if 0
 	case XIO_SESSION_STATE_ONLINE:
 		connection = xio_session_find_connection(session, nexus);
 		if (connection == NULL)  {
@@ -811,6 +722,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 					 XIO_CONNECTION_STATE_ONLINE);
 		xio_connection_xmit_msgs(connection);
 		break;
+#endif
 	default:
 		break;
 	}

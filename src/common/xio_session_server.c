@@ -176,26 +176,6 @@ cleanup1:
 	return 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_req_recv			                     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_req_recv(struct xio_connection *connection,
-				     struct xio_task *task)
-{
-	xio_session_notify_new_connection(task->session, connection);
-
-	xio_connection_send_hello_rsp(connection, task);
-
-	connection->session->state = XIO_SESSION_STATE_ONLINE;
-	connection->session->disable_teardown = 0;
-
-	TRACE_LOG("session state is now ONLINE. session:%p\n",
-		  connection->session);
-
-	xio_connection_set_state(connection, XIO_CONNECTION_STATE_ONLINE);
-
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
@@ -548,18 +528,6 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 		xio_connection_xmit_msgs(connection);
 		break;
 	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_rsp_send_comp				     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
-					  struct xio_task *task)
-{
-	xio_connection_release_hello(connection, task->omsg);
-	xio_tasks_pool_put(task);
 
 	return 0;
 }

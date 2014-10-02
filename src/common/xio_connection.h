@@ -106,7 +106,7 @@ struct xio_connection {
 
 };
 
-struct xio_connection *xio_connection_init(
+struct xio_connection *xio_connection_create(
 		struct xio_session *session,
 		struct xio_context *ctx, int conn_idx,
 		void *cb_user_context);
@@ -157,14 +157,6 @@ int xio_connection_release_read_receipt(struct xio_connection *connection,
 
 void xio_release_response_task(struct xio_task *task);
 
-
-int xio_connection_fin_addref(struct xio_connection *connection);
-
-int xio_connection_fin_put(struct xio_connection *connection);
-
-int xio_connection_release_fin(struct xio_connection *connection,
-			       struct xio_msg *msg);
-
 int xio_send_fin_ack(struct xio_connection *connection,
 		     struct xio_task *task);
 
@@ -177,12 +169,6 @@ int xio_connection_refused(struct xio_connection *connection);
 
 int xio_connection_error_event(struct xio_connection *connection,
 			       enum xio_status reason);
-
-int xio_connection_flush_msgs(struct xio_connection *connection);
-
-int xio_connection_flush_tasks(struct xio_connection *connection);
-
-int xio_connection_notify_msgs_flush(struct xio_connection *connection);
 
 int xio_connection_remove_in_flight(struct xio_connection *connection,
 				    struct xio_msg *msg);
@@ -201,9 +187,6 @@ int xio_connection_send_hello_req(struct xio_connection *connection);
 int xio_connection_send_hello_rsp(struct xio_connection *connection,
 				  struct xio_task *task);
 
-int xio_connection_release_hello(struct xio_connection *connection,
-				 struct xio_msg *msg);
-
 char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
@@ -219,6 +202,14 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 
 int xio_on_fin_ack_recv(struct xio_connection *connection,
 			struct xio_task *task);
+
+int xio_on_connection_hello_req_recv(struct xio_connection *connection,
+				     struct xio_task *task);
+
+int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
+					  struct xio_task *task);
+int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
+				     struct xio_task *task);
 
 
 #endif /*XIO_CONNECTION_H */
