@@ -228,7 +228,6 @@ static int on_response(struct xio_session *session,
 	sglist[0].mr = NULL;
 
 	msg->sn = 0;
-	msg->more_in_batch = 0;
 
 	do {
 		/* recycle the message and fill new request */

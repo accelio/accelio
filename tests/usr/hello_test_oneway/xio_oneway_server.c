@@ -265,8 +265,6 @@ static int on_message_delivered(struct xio_session *session,
 	/* peek new message from the pool */
 	new_msg	= msg_pool_get(ow_params->pool);
 
-	new_msg->more_in_batch	= 0;
-
 	/* fill response */
 	msg_write(&ow_params->msg_params, new_msg,
 		  test_config.hdr_len,

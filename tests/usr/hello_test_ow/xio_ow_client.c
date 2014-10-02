@@ -251,7 +251,6 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
-	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
@@ -320,7 +319,6 @@ static int on_msg_send_complete(struct xio_session *session,
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
-	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,

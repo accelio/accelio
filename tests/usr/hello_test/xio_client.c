@@ -305,7 +305,6 @@ static int on_response(struct xio_session *session,
 	}
 
 	msg->sn = 0;
-	msg->more_in_batch = 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,

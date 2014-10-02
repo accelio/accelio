@@ -204,7 +204,6 @@ static int on_request(struct xio_session *session,
 	rsp	= msg_pool_get(test_params->pool);
 
 	rsp->request		= req;
-	rsp->more_in_batch	= more_in_batch;
 
 	/* fill response */
 	msg_write(&test_params->msg_params, rsp,

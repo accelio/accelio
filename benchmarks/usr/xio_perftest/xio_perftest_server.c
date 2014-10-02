@@ -100,7 +100,6 @@ static int on_request(struct xio_session *session,
 
 	/* fill response */
 	rsp->request		= req;
-	rsp->more_in_batch	= more_in_batch;
 	rsp->in.header.iov_len	= 0;
 	rsp->out.header.iov_len = 0;
 	vmsg_sglist_set_nents(&rsp->in, 0);
