@@ -2274,7 +2274,6 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	/* save originator identifier */
 	task->rtid		= req_hdr.tid;
 	task->imsg_flags	= req_hdr.flags;
-	task->imsg.more_in_batch = tcp_task->more_in_batch;
 
 	imsg		= &task->imsg;
 	sgtbl		= xio_sg_table_get(&imsg->out);
@@ -2384,8 +2383,6 @@ static int xio_tcp_on_recv_req_data(struct xio_tcp_transport *tcp_hndl,
 		break;
 	};
 
-	task->imsg.more_in_batch = tcp_task->more_in_batch;
-
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
 	event_data.msg.task	= task;
@@ -2423,8 +2420,6 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 	/* read the sn */
 	tcp_task->sn = rsp_hdr.sn;
-
-	task->imsg.more_in_batch = tcp_task->more_in_batch;
 
 	/* find the sender task */
 	task->sender_task =
@@ -2551,8 +2546,6 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 	isgtbl_ops	= xio_sg_table_ops_get(imsg->in.sgl_type);
 	osgtbl		= xio_sg_table_get(&omsg->in);
 	osgtbl_ops	= xio_sg_table_ops_get(omsg->in.sgl_type);
-
-	imsg->more_in_batch = tcp_task->more_in_batch;
 
 	/* handle the headers */
 	if (omsg->in.header.iov_base) {
@@ -3157,7 +3150,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		while (i--) {
 			++ret_count;
 			tcp_task = task->dd_data;
-			tcp_task->more_in_batch = i;
 			switch (task->tlv_type) {
 			case XIO_CANCEL_REQ:
 				xio_tcp_on_recv_cancel_req_data(tcp_hndl, task);
@@ -3310,7 +3302,6 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				exit = 1;
 				break;
 			}
-			/* ORK TODO tcp_task->more_in_batch = 1; ?? */
 			task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
 			/* call recv completion  */
 			switch (task->tlv_type) {

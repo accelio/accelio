@@ -735,7 +735,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	if (rdma_hndl->tx_ready_tasks_num) {
 		rdma_task = task->dd_data;
 		must_send = (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD);
-		must_send |= (rdma_task->more_in_batch == 0);
 	}
 	/* resource are now available and rdma rd  requests are pending kick
 	 * them
@@ -914,7 +913,7 @@ static inline void xio_rdma_wr_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
+static inline void xio_handle_wc(struct ibv_wc *wc)
 {
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -927,7 +926,6 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int has_more)
 
 	switch (wc->opcode) {
 	case IBV_WC_RECV:
-		rdma_task->more_in_batch = has_more;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_SEND:
@@ -957,7 +955,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	int		err = 0;
 	int		stop = 0;
 	int		wclen = max_wc, i, numwc  = 0;
-	int		last_recv = -1;
+//	int		last_recv = -1;
 	int		timeouts_num = 0;
 	int		polled = 0;
 	cycles_t	timeout;
@@ -1002,19 +1000,11 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			break;
 		}
 		timeouts_num = 0;
-		for (i = err; i > 0; i--) {
-			if (tcq->wc_array[i-1].opcode == IBV_WC_RECV) {
-				last_recv = i-1;
-				break;
-			}
-		}
 		for (i = 0; i < err; i++) {
 			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
-				xio_handle_wc(&tcq->wc_array[i],
-					      (i != last_recv));
+				xio_handle_wc(&tcq->wc_array[i]);
 			else
-				xio_handle_wc_error(
-						&tcq->wc_array[i]);
+				xio_handle_wc_error(&tcq->wc_array[i]);
 		}
 		numwc += err;
 		if (numwc == max_wc) {
@@ -1165,7 +1155,6 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	int				i;
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq;
-	int				last_recv = -1;
 	int				nr_comp = 0, recv_counter;
 	int				nr;
 	cycles_t			timeout = -1;
@@ -1185,20 +1174,13 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		nr = min(max_nr, tcq->wc_array_len);
 		retval = ibv_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
-			for (i = retval; i > 0; i--) {
-				if (tcq->wc_array[i-1].opcode == IBV_WC_RECV) {
-					last_recv = i-1;
-					break;
-				}
-			}
 			recv_counter = 0;
 			for (i = 0; i < retval; i++) {
 				if (tcq->wc_array[i].opcode == IBV_WC_RECV)
 					recv_counter++;
 				if (rdma_hndl->tcq->wc_array[i].status ==
 						IBV_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i],
-						      (i != last_recv));
+					xio_handle_wc(&tcq->wc_array[i]);
 				else
 					xio_handle_wc_error(&tcq->wc_array[i]);
 			}
@@ -2420,8 +2402,6 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	/* read the sn */
 	rdma_task->sn = rsp_hdr.sn;
 
-	task->imsg.more_in_batch = rdma_task->more_in_batch;
-
 	/* find the sender task */
 	task->sender_task =
 		xio_rdma_primary_task_lookup(rdma_hndl,
@@ -3281,7 +3261,6 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	/* save originator identifier */
 	task->rtid		= req_hdr.tid;
 	task->imsg_flags	= req_hdr.flags;
-	task->imsg.more_in_batch = rdma_task->more_in_batch;
 
 	imsg		= &task->imsg;
 	sgtbl		= xio_sg_table_get(&imsg->out);

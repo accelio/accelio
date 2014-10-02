@@ -214,9 +214,7 @@ struct xio_tcp_task {
 	uint32_t			req_recv_num_sge;
 
 	uint16_t			sn;
-	uint16_t			more_in_batch;
-
-	uint16_t			pad[2];
+	uint16_t			pad[3];
 
 	struct xio_tcp_work_req		txd;
 	struct xio_tcp_work_req		rxd;

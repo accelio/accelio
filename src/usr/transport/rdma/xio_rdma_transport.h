@@ -265,10 +265,9 @@ struct xio_rdma_task {
 
 	unsigned int			phantom_idx;
 	enum xio_ib_op_code		ib_op;
-	unsigned int			more_in_batch;
 	uint16_t			sn;
 	uint8_t				rflags;
-	uint8_t				pad[1];
+	uint8_t				pad[5];
 };
 
 struct xio_cq  {

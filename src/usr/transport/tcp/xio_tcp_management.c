@@ -2112,7 +2112,6 @@ static int xio_tcp_task_pre_put(
 	tcp_task->req_read_num_sge	= 0;
 	tcp_task->req_recv_num_sge	= 0;
 	tcp_task->sn			= 0;
-	tcp_task->more_in_batch		= 0;
 
 	tcp_task->tcp_op		= XIO_TCP_NULL;
 
