@@ -144,6 +144,14 @@ static void xio_async_ev_handler(int fd, int events, void *user_context)
 		ERROR_LOG("ibv_get_async_event: dev:%s evt: %s\n", dev_name,
 			  ibv_event_type_str(async_event.event_type));
 
+		if (async_event.event_type == IBV_EVENT_COMM_EST) {
+			struct xio_rdma_transport *rdma_hndl;
+
+			rdma_hndl = async_event.element.qp->qp_context;
+			/* force "connection established" event */
+			rdma_notify(rdma_hndl->cm_id, IBV_EVENT_COMM_EST);
+		}
+
 		ibv_ack_async_event(&async_event);
 	}
 
