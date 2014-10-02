@@ -416,8 +416,8 @@ static inline int arch_cache_line_size(void)
 */
 
 
-#define XIO_HZ_FILE  "/usr/local/accelio/hz"
-#define XIO_HZ_DIR  "/usr/local/accelio/"
+#define XIO_HZ_DIR   "/var/tmp/accelio.d"
+#define XIO_HZ_FILE  XIO_HZ_DIR "/hz"
 
 
 /*---------------------------------------------------------------------------*
@@ -449,7 +449,7 @@ try_create:
 
 	mkdir(XIO_HZ_DIR, 0777);
 
-	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_EXCL);
+	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_SYNC, 0644);
 	if (fd < 0)
 		goto exit;
 
