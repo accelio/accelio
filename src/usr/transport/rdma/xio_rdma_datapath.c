@@ -671,7 +671,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 			       struct xio_task *task)
 {
 	struct xio_task		*task1, *task2;
-	struct xio_rdma_task	*rdma_task;
 	int			must_send = 0;
 	int			retval;
 	struct list_head	*task_prev;
@@ -733,7 +732,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* transmit ready packets */
 	if (rdma_hndl->tx_ready_tasks_num) {
-		rdma_task = task->dd_data;
 		must_send = (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD);
 	}
 	/* resource are now available and rdma rd  requests are pending kick
