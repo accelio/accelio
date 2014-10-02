@@ -122,12 +122,13 @@ struct xio_msg {
 						    * request
 						    */
 	};
-	enum xio_msg_type	type;
-	int		        more_in_batch;	/* more messages are expected */
-	int			flags;
-	enum xio_receipt_result	receipt_res;
-	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/* for user usage - not sent */
+
+	enum xio_msg_type	type;
+	enum xio_receipt_result	receipt_res;
+	uint64_t		flags;
+	uint64_t		timestamp;	/**< submission timestamp     */
+
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /* internal use */
 };

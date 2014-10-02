@@ -502,10 +502,13 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
 	req_hdr.tid		= task->ltid;
 	req_hdr.opcode		= tcp_task->tcp_op;
-	if (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY)
-		req_hdr.flags = XIO_HEADER_FLAG_SMALL_ZERO_COPY;
-	else
-		req_hdr.flags = XIO_HEADER_FLAG_NONE;
+	req_hdr.flags		= 0;
+
+	if (test_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &req_hdr.flags);
+	else if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &req_hdr.flags);
+
 	req_hdr.ulp_hdr_len	= ulp_hdr_len;
 	req_hdr.ulp_pad_len	= ulp_pad_len;
 	req_hdr.ulp_imm_len	= ulp_imm_len;
@@ -1371,7 +1374,7 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
-	if (task->omsg->more_in_batch == 0) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
 		must_send = 1;
 	} else {
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
@@ -1709,7 +1712,7 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
-	if (task->omsg->more_in_batch == 0) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
 		must_send = 1;
 	} else {
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)

@@ -129,15 +129,14 @@ struct xio_msg {
 		struct xio_msg		*request;  /**< responder - attached  */
 						   /**< the request           */
 	};
-
-	enum xio_msg_type	type;		/**< message type	      */
-	int		        more_in_batch;	/**< more messages ahead bit  */
-	int			flags;		/**< message flags mask       */
-	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
-						/**< required                 */
-	uint64_t		timestamp;	/**< submission timestamp     */
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
+
+	enum xio_msg_type	type;		/**< message type	      */
+	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
+	uint64_t		flags;		/**< message flags mask       */
+	uint64_t		timestamp;	/**< submission timestamp     */
+
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /**< send list of messages    */
 };

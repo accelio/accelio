@@ -1558,10 +1558,14 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
 	req_hdr.tid		= task->ltid;
 	req_hdr.opcode		= rdma_task->ib_op;
-	if (task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY)
-		req_hdr.flags = XIO_HEADER_FLAG_SMALL_ZERO_COPY;
-	else
-		req_hdr.flags = XIO_HEADER_FLAG_NONE;
+	req_hdr.flags		= 0;
+
+
+	if (test_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &req_hdr.flags);
+	else if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &req_hdr.flags);
+
 	req_hdr.ulp_hdr_len	= ulp_hdr_len;
 	req_hdr.ulp_pad_len	= ulp_pad_len;
 	req_hdr.ulp_imm_len	= ulp_imm_len;
@@ -2073,7 +2077,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
-	if (task->omsg->more_in_batch == 0) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
 		must_send = 1;
 	} else {
 		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
@@ -2277,7 +2281,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	/* transmit only if  available */
-	if (task->omsg->more_in_batch == 0) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
 		must_send = 1;
 	} else {
 		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)

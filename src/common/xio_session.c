@@ -481,8 +481,11 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	xio_session_read_header(task, &hdr);
 
 	msg->sn		= hdr.serial_num;
-	msg->flags	= hdr.flags;
+	msg->flags	= 0;
 	msg->next	= NULL;
+
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->imsg_flags))
+		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &msg->flags);
 
 	xio_connection_queue_io_task(connection, task);
 	connection->rx_queued_msgs++;
@@ -506,10 +509,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		xio_session_notify_msg_error(connection, msg, task->status);
 		task->status = 0;
 	} else {
-		if (connection->ses_ops.on_msg)
+		/*if (connection->ses_ops.on_msg) */
 			connection->ses_ops.on_msg(
 					connection->session, msg,
-					msg->more_in_batch,
+					0,
 					connection->cb_user_context);
 	}
 
@@ -601,7 +604,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						task->imsg.more_in_batch,
+						0,
 						connection->cb_user_context);
 		} else {
 			if (connection->ses_ops.on_ow_msg_send_complete) {
@@ -620,7 +623,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						task->imsg.more_in_batch,
+						0,
 						connection->cb_user_context);
 			}
 			/* standalone receipt */
@@ -655,11 +658,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 					connection, omsg, task->status);
 				task->status = 0;
 			} else {
-				if (connection->ses_ops.on_msg)
+				/*if (connection->ses_ops.on_msg) */
 					connection->ses_ops.on_msg(
 						connection->session,
 						omsg,
-						task->imsg.more_in_batch,
+						0,
 						connection->cb_user_context);
 			}
 		}
@@ -699,7 +702,7 @@ static int xio_on_rsp_send_comp(
 		/* send completion notification only to responder to
 		 * release responses
 		 */
-		if (connection->ses_ops.on_msg_send_complete) {
+		/*if (connection->ses_ops.on_msg_send_complete)*/ {
 			connection->ses_ops.on_msg_send_complete(
 					connection->session, task->omsg,
 					connection->cb_user_context);
