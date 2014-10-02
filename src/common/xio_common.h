@@ -137,6 +137,10 @@ void xio_set_error(int errnum);
 #define UNPACK_LVAL(src, trgt, attr) ((trgt)->attr = ntohl((src)->attr))
 #define UNPACK_LLVAL(src, trgt, attr) ((trgt)->attr = ntohll((src)->attr))
 
+#define test_bits(mask, addr)   (((*addr) & (mask)) != 0)
+#define clr_bits(mask, addr)    ((*addr) &= ~(mask))
+#define set_bits(mask, addr)    ((*addr) |= (mask))
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
@@ -199,7 +203,6 @@ struct xio_msg;
 struct xio_vmsg;
 struct xio_iovec;
 struct xio_iovec_ex;
-
 
 /*---------------------------------------------------------------------------*/
 /* enum									     */
