@@ -67,6 +67,8 @@ static struct xio_transport  *transport_tbl[] = {
 static volatile int32_t	ini_refcnt; /*= 0 */
 static DEFINE_MUTEX(ini_mutex);
 
+extern double xio_get_cpu_mhz(void);
+
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
 /*---------------------------------------------------------------------------*/
@@ -97,7 +99,7 @@ static void xio_ctor(void)
 	page_size = sysconf(_SC_PAGESIZE);
 	if (page_size < 0)
 		page_size = 4096;
-	g_mhz = get_cpu_mhz(0);
+	g_mhz = xio_get_cpu_mhz();
 	xio_thread_data_construct();
 	xio_idr_create();
 	sessions_cache_construct();

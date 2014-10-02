@@ -414,3 +414,50 @@ static inline int arch_cache_line_size(void)
 }
 
 */
+
+
+#define XIO_HZ_FILE  "/usr/local/accelio/hz"
+#define XIO_HZ_DIR  "/usr/local/accelio/"
+
+
+/*---------------------------------------------------------------------------*
+ * xio_get_cpu_mhz							     *
+ *									     *
+ * since this operation may take time cache it on a cookie,		     *
+ * and use the cookie if exist						     *
+ *									     *
+ *---------------------------------------------------------------------------*/
+double xio_get_cpu_mhz(void)
+{
+	char size[32]= { 0 };
+	double hz = 0;
+	int fd, ret;
+
+	fd = open(XIO_HZ_FILE, O_RDONLY);
+	if (fd < 0)
+		goto try_create;
+
+	ret = read(fd, size, sizeof(size));
+
+	close(fd);
+
+	if (ret)
+		return atof(size);
+
+try_create:
+	hz = get_cpu_mhz(0);
+
+	mkdir(XIO_HZ_DIR, 0777);
+
+	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_EXCL);
+	if (fd < 0)
+		goto exit;
+
+	sprintf(size,"%f", hz);
+	ret = write(fd, size, sizeof(size));
+
+	close(fd);
+exit:
+	return hz;
+}
+
