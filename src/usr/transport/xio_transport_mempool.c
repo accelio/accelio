@@ -64,7 +64,7 @@
 #define XIO_1M_MAX_NR		(1024*24)
 #define XIO_1M_ALLOC_NR		128
 
-/*#define DEBUG_MEMPOOL_MT*/
+//#define DEBUG_MEMPOOL_MT
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -77,7 +77,7 @@ struct xio_mem_block {
 	void				*buf;
 	struct xio_mem_block		*next;
 	combined_t			refcnt_claim;
-	int				r_c_pad;
+	volatile int			refcnt;
 	struct list_head		blocks_list_entry;
 };
 
@@ -169,12 +169,6 @@ static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
 		return;
 
 	reclaim(slot, p);
-
-#ifdef DEBUG_MEMPOOL_MT
-	__sync_fetch_and_sub(&slot->used_mb_nr, 1);
-#else
-	slot->used_mb_nr--;
-#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -581,12 +575,19 @@ int xio_mempool_alloc(struct xio_mempool *p, size_t length,
 	struct xio_mem_slot	*slot;
 	struct xio_mem_block	*block;
 	int			ret = 0;
+#ifdef DEBUG_MEMPOOL_MT
+	int			val;
+#endif
 
 	index = size2index(p, length);
 retry:
 	if (index == -1) {
 		errno = EINVAL;
 		ret = -1;
+		mp_obj->addr	= NULL;
+		mp_obj->mr	= NULL;
+		mp_obj->cache	= NULL;
+		mp_obj->length	= 0;
 		goto cleanup;
 	}
 	slot = &p->slot[index];
@@ -619,6 +620,10 @@ retry:
 
 #ifdef DEBUG_MEMPOOL_MT
 	__sync_fetch_and_add(&slot->used_mb_nr, 1);
+	if ((val =__sync_fetch_and_add(&block->refcnt, 1)) != 0) {
+		ERROR_LOG("pool alloc: refcnt:%d\n", val);
+		abort(); /* core dump - double free */
+	}
 #else
 	slot->used_mb_nr++;
 #endif
@@ -636,12 +641,26 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 {
-	struct xio_mem_block *block;
+	struct xio_mem_block	*block;
+#ifdef DEBUG_MEMPOOL_MT
+	int			val;
+#endif
+
 
 	if (!mp_obj || !mp_obj->cache)
 		return;
 
 	block = mp_obj->cache;
+
+#ifdef DEBUG_MEMPOOL_MT
+	if ((val = __sync_fetch_and_sub(&block->refcnt, 1)) != 1) {
+		ERROR_LOG("pool: release refcnt:%d\n", val);
+		abort(); /* core dump - double free */
+	}
+	__sync_fetch_and_sub(&block->parent_slot->used_mb_nr, 1);
+#else
+	block->parent_slot->used_mb_nr--;
+#endif
 
 	release(block->parent_slot, block);
 }
