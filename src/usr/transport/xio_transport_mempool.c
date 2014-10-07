@@ -40,6 +40,7 @@
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_mem.h"
+#include "xio_usr_utils.h"
 
 /* Accelio's default mempool profile (don't expose it) */
 #define XIO_MEM_SLOTS_NR	4
@@ -70,8 +71,6 @@
 /* structures								     */
 /*---------------------------------------------------------------------------*/
 typedef volatile int combined_t;
-
-struct xio_mem_block;
 
 struct xio_mem_block {
 	struct xio_mem_slot		*parent_slot;
@@ -479,7 +478,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
 		int ret;
 		if (nodeid == -1) {
-			int cpu = sched_getcpu();
+			int cpu = xio_get_cpu();
 			nodeid = numa_node_of_cpu(cpu);
 		}
 		/* pin to node */
@@ -527,7 +526,7 @@ struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
 		int ret;
 		if (nodeid == -1) {
-			int cpu = sched_getcpu();
+			int cpu = xio_get_cpu();
 			nodeid = numa_node_of_cpu(cpu);
 		}
 		/* pin to node */

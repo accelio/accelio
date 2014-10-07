@@ -47,6 +47,7 @@
 #include "xio_workqueue.h"
 #include "xio_timers_list.h"
 #include "xio_context.h"
+#include "xio_usr_utils.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -218,7 +219,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	xio_read_logging_level();
 
 	if (cpu_hint == -1) {
-		cpu = sched_getcpu();
+		cpu = xio_get_cpu();
 		if (cpu == -1) {
 			xio_set_error(errno);
 			return NULL;
