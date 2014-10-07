@@ -74,8 +74,6 @@
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mempool		**mempool_array;
-static int				mempool_array_len;
 static spinlock_t			mngmt_lock;
 static pthread_rwlock_t			dev_lock;
 static pthread_rwlock_t			cm_lock;
@@ -2309,10 +2307,7 @@ static struct xio_transport_base *xio_rdma_open(
 
 	if (rdma_options.enable_mem_pool) {
 		rdma_hndl->rdma_mempool =
-			xio_transport_mempool_array_get(ctx,
-							mempool_array,
-							mempool_array_len,
-							1);
+			xio_transport_mempool_get(ctx, 1);
 		if (rdma_hndl->rdma_mempool == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("allocating rdma mempool failed. %m\n");
@@ -2927,8 +2922,6 @@ static void xio_rdma_init(void)
 
 	/* storage for all memory registrations */
 	xio_mr_list_init();
-
-	xio_transport_mempool_array_init(&mempool_array, &mempool_array_len);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2948,8 +2941,6 @@ static void xio_rdma_release(void)
 {
 	if (cdl_fd >= 0)
 		close(cdl_fd);
-
-	xio_transport_mempool_array_release(mempool_array, mempool_array_len);
 
 	/* free all redundant registered memory */
 	xio_mr_list_free();

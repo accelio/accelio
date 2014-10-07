@@ -727,8 +727,8 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		break;
 	}
 
-	if (rdma_hndl->state != XIO_STATE_CONNECTED)
-		return retval;
+//	if (rdma_hndl->state != XIO_STATE_CONNECTED)
+//		return retval;
 
 	/* transmit ready packets */
 	if (rdma_hndl->tx_ready_tasks_num) {

@@ -73,6 +73,7 @@ struct xio_statistics {
 
 struct xio_context {
 	void				*ev_loop;
+	void				*mempool;
 	int				cpuid;
 	int				nodeid;
 	int				polling_timeout;

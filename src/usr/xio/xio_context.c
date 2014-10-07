@@ -380,6 +380,11 @@ void xio_context_destroy(struct xio_context *ctx)
 
 	xio_workqueue_destroy(ctx->workqueue);
 
+	if (ctx->mempool) {
+		xio_mempool_destroy(ctx->mempool);
+		ctx->mempool = NULL;
+	}
+
 	xio_ev_loop_destroy(&ctx->ev_loop);
 
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);

@@ -131,20 +131,8 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 	return retval;
 }
 
-int xio_transport_mempool_array_init(struct xio_mempool
-				     ***mempool_array,
-				     int *mempool_array_len);
-
-void xio_transport_mempool_array_release(struct xio_mempool
-					 **mempool_array,
-					 int mempool_array_len);
-
-struct xio_mempool *xio_transport_mempool_array_get(
+struct xio_mempool *xio_transport_mempool_get(
 		struct xio_context *ctx,
-		struct xio_mempool **mempool_array,
-		int mempool_array_len,
 		int reg_mr);
-
-
 
 #endif  /* XIO_COMMON_TRANSPORT_H */

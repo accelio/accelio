@@ -76,8 +76,6 @@
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mempool		**mempool_array;
-static int				mempool_array_len;
 static spinlock_t			mngmt_lock;
 static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
@@ -760,10 +758,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	if (tcp_options.enable_mem_pool) {
 		tcp_hndl->tcp_mempool =
-			xio_transport_mempool_array_get(ctx,
-							mempool_array,
-							mempool_array_len,
-							0);
+			xio_transport_mempool_get(ctx, 0);
 		if (tcp_hndl->tcp_mempool == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("allocating tcp mempool failed. %m\n");
@@ -1633,8 +1628,6 @@ static void xio_tcp_init(void)
 
 	/* set cpu latency until process is down */
 	xio_set_cpu_latency(&cdl_fd);
-
-	xio_transport_mempool_array_init(&mempool_array, &mempool_array_len);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1655,7 +1648,6 @@ static void xio_tcp_release(void)
 	if (cdl_fd >= 0)
 		close(cdl_fd);
 
-	xio_transport_mempool_array_release(mempool_array, mempool_array_len);
 	/*ORK todo close everything? see xio_cq_release*/
 }
 
