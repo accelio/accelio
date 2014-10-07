@@ -71,6 +71,8 @@
 /*---------------------------------------------------------------------------*/
 typedef volatile int combined_t;
 
+struct xio_mem_block;
+
 struct xio_mem_block {
 	struct xio_mem_slot		*parent_slot;
 	struct xio_mr			*omr;
@@ -109,7 +111,7 @@ struct xio_mempool {
 	uint32_t			slots_nr; /* less sentinel */
 	uint32_t			flags;
 	int				nodeid;
-	int				pad;
+	int				safe_mt;
 	struct xio_mem_slot		*slot;
 };
 
@@ -117,7 +119,7 @@ struct xio_mempool {
  * Correction of a Memory Management Method for Lock-Free Data Structures
  * of John D. Valois's Lock-Free Data Structures. Ph.D. Dissertation
  */
-static int decrement_and_test_and_set(combined_t *ptr)
+static inline int decrement_and_test_and_set(combined_t *ptr)
 {
 	int old, new;
 
@@ -134,7 +136,7 @@ static int decrement_and_test_and_set(combined_t *ptr)
 /*---------------------------------------------------------------------------*/
 /* clear_lowest_bit							     */
 /*---------------------------------------------------------------------------*/
-static void clear_lowest_bit(combined_t *ptr)
+static inline void clear_lowest_bit(combined_t *ptr)
 {
 	int old, new;
 
@@ -147,7 +149,7 @@ static void clear_lowest_bit(combined_t *ptr)
 /*---------------------------------------------------------------------------*/
 /* reclaim								     */
 /*---------------------------------------------------------------------------*/
-static void reclaim(struct xio_mem_slot *slot, struct xio_mem_block *p)
+static inline void reclaim(struct xio_mem_slot *slot, struct xio_mem_block *p)
 {
 	struct xio_mem_block *q;
 
@@ -160,7 +162,8 @@ static void reclaim(struct xio_mem_slot *slot, struct xio_mem_block *p)
 /*---------------------------------------------------------------------------*/
 /* release								     */
 /*---------------------------------------------------------------------------*/
-static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
+static inline void safe_release(struct xio_mem_slot *slot,
+				struct xio_mem_block *p)
 {
 	if (!p)
 		return;
@@ -169,6 +172,22 @@ static void release(struct xio_mem_slot *slot, struct xio_mem_block *p)
 		return;
 
 	reclaim(slot, p);
+}
+
+/*---------------------------------------------------------------------------*/
+/* release								     */
+/*---------------------------------------------------------------------------*/
+static inline void non_safe_release(struct xio_mem_slot *slot,
+				    struct xio_mem_block *p)
+{
+	struct xio_mem_block *q;
+
+	if (!p)
+		return;
+
+	q = slot->free_blocks_list;
+	p->next = q;
+	slot->free_blocks_list = p;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -187,14 +206,14 @@ static struct xio_mem_block *safe_read(struct xio_mem_slot *slot)
 		if (__sync_bool_compare_and_swap(&slot->free_blocks_list, q, q))
 			return q;
 		else
-			release(slot, q);
+			safe_release(slot, q);
 	}
 }
 
 /*---------------------------------------------------------------------------*/
 /* new_block								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mem_block *new_block(struct xio_mem_slot *slot)
+static struct xio_mem_block *safe_new_block(struct xio_mem_slot *slot)
 {
 	struct xio_mem_block *p;
 
@@ -208,9 +227,26 @@ static struct xio_mem_block *new_block(struct xio_mem_slot *slot)
 			clear_lowest_bit(&p->refcnt_claim);
 			return p;
 		} else {
-			release(slot, p);
+			safe_release(slot, p);
 		}
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* new_block								     */
+/*---------------------------------------------------------------------------*/
+static struct xio_mem_block *non_safe_new_block(struct xio_mem_slot *slot)
+{
+	struct xio_mem_block *p;
+
+	if (slot->free_blocks_list == NULL)
+		return NULL;
+
+	p = slot->free_blocks_list;
+        slot->free_blocks_list = p->next;
+	p->next = NULL;
+
+	return p;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -362,10 +398,15 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 	 * qblock points to the last allocate block
 	 */
 
-	do {
+	if (slot->pool->safe_mt) {
+		do {
+			qblock->next = slot->free_blocks_list;
+		} while (!__sync_bool_compare_and_swap(&slot->free_blocks_list,
+					qblock->next, pblock));
+	} else  {
 		qblock->next = slot->free_blocks_list;
-	} while (!__sync_bool_compare_and_swap(&slot->free_blocks_list,
-					       qblock->next, pblock));
+		slot->free_blocks_list = pblock;
+	}
 
 	slot->curr_mb_nr += nr_blocks;
 
@@ -454,6 +495,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 	p->nodeid = nodeid;
 	p->flags = flags;
 	p->slots_nr = 0;
+	p->safe_mt = 1;
 	p->slot = NULL;
 
 	return p;
@@ -499,6 +541,7 @@ struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 
 	p->nodeid = nodeid;
 	p->flags = flags;
+	p->safe_mt = 0;
 	p->slots_nr = XIO_MEM_SLOTS_NR;
 	p->slot = (struct xio_mem_slot *)ucalloc(p->slots_nr+1,
 						 sizeof(struct xio_mem_slot));
@@ -592,25 +635,34 @@ retry:
 	}
 	slot = &p->slot[index];
 
-	block = new_block(slot);
+	if (p->safe_mt)
+		block = safe_new_block(slot);
+	else
+		block = non_safe_new_block(slot);
 	if (!block) {
-		pthread_spin_lock(&slot->lock);
+		if (p->safe_mt) {
+			pthread_spin_lock(&slot->lock);
 		/* we may been blocked on the spinlock while other
 		 * thread resized the pool
 		 */
-		block = new_block(slot);
+			block = safe_new_block(slot);
+		} else
+			block = non_safe_new_block(slot);
 		if (!block) {
 			block = xio_mem_slot_resize(slot, 1);
 			if (block == NULL) {
 				if (++index == (int)p->slots_nr)
 					index  = -1;
-				pthread_spin_unlock(&slot->lock);
+
+				if (p->safe_mt)
+					pthread_spin_unlock(&slot->lock);
 				ret = 0;
 				goto retry;
 			}
 			DEBUG_LOG("resizing slot size:%zd\n", slot->mb_size);
 		}
-		pthread_spin_unlock(&slot->lock);
+		if (p->safe_mt)
+			pthread_spin_unlock(&slot->lock);
 	}
 
 	mp_obj->addr	= block->buf;
@@ -662,7 +714,10 @@ void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 	block->parent_slot->used_mb_nr--;
 #endif
 
-	release(block->parent_slot, block);
+	if (block->parent_slot->pool->safe_mt)
+		safe_release(block->parent_slot, block);
+	else
+		non_safe_release(block->parent_slot, block);
 }
 
 /*---------------------------------------------------------------------------*/
