@@ -92,7 +92,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		buf = umalloc_huge_pages(tot_sz);
 		huge_alloc = 1;
 	} else {
-		buf = ucalloc(tot_sz, 1);
+		buf = umemalign(64, tot_sz);
 	}
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
