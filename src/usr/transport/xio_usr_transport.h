@@ -50,7 +50,9 @@
 					   */
 #define CONN_SETUP_BUF_SIZE		4096
 
-#define NUM_START_PRIMARY_POOL_TASKS	32
+#define NUM_START_PRIMARY_POOL_TASKS	312  /* must be enough to send few +
+					      *	fully post_recv buffers
+					      */
 #define NUM_ALLOC_PRIMARY_POOL_TASKS	512
 
 #define USECS_IN_SEC			1000000
