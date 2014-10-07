@@ -564,7 +564,7 @@ static int xio_find_init_device(struct ibv_context *verbs)
 
 	/* Connection on new device */
 
-	TRACE_LOG("Connecion via new device %s\n",
+	TRACE_LOG("Connection via new device %s\n",
 		  ibv_get_device_name(verbs->device));
 
 	dev = xio_device_init(verbs);
@@ -1162,6 +1162,7 @@ static int xio_rdma_initial_pool_slab_pre_create(
 			  pool_size);
 		return -1;
 	}
+
 	rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
 			rdma_slab->data_pool,
 			pool_size, IBV_ACCESS_LOCAL_WRITE);
@@ -2116,7 +2117,7 @@ static void on_cm_error(struct rdma_cm_event *ev,
 static void xio_handle_cm_event(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
-	TRACE_LOG("cm event %s, hndl:%p\n",
+	DEBUG_LOG("cm event: [%s], hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
 	rdma_hndl->handler_nesting++;
@@ -2146,7 +2147,7 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 
 	case RDMA_CM_EVENT_MULTICAST_JOIN:
 	case RDMA_CM_EVENT_MULTICAST_ERROR:
-		ERROR_LOG("Unreleated event:%d, %s - ignored\n", ev->event,
+		ERROR_LOG("Unrelated event:%d, %s - ignored\n", ev->event,
 			  rdma_event_str(ev->event));
 		break;
 
@@ -2192,9 +2193,6 @@ static void xio_connection_ev_handler(int fd, int events, void *user_context)
 		}
 
 		rdma_hndl = (struct xio_rdma_transport *)ev->id->context;
-
-		DEBUG_LOG("cm_event: [%s] rdma_hndl:%p\n",
-			  rdma_event_str(ev->event), rdma_hndl);
 
 		/* reconnect needs to ack the event before
 		 * destroying the cm id */
