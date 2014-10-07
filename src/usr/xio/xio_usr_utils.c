@@ -44,6 +44,8 @@
 #include "xio_observer.h"
 #include "xio_usr_transport.h"
 
+#include <dlfcn.h>
+
 /*---------------------------------------------------------------------------*/
 /* xio_host_port_to_ss							     */
 /*---------------------------------------------------------------------------*/
@@ -389,6 +391,50 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	ERROR_LOG("*******************************************************\n");
 }
 EXPORT_SYMBOL(xio_msg_dump);
+
+struct getcpu_cache {
+	unsigned long blob[128 / sizeof(long)];
+};
+
+static long (*vgetcpu)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
+
+static int init_vgetcpu(void)
+{
+	void *vdso;
+
+	dlerror();
+	vdso = dlopen("linux-vdso.so.1", RTLD_LAZY);
+	if (vdso == NULL)
+		return -1;
+	vgetcpu = dlsym(vdso, "__vdso_getcpu");
+	dlclose(vdso);
+	return vgetcpu == NULL ? -1 : 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_cpu								     */
+/*---------------------------------------------------------------------------*/
+unsigned xio_get_cpu()
+{
+	static int first = 1;
+	unsigned cpu;
+
+	if (!first && vgetcpu) {
+		vgetcpu(&cpu, NULL, NULL);
+		return cpu;
+	}
+	if (!first)
+		return sched_getcpu();
+
+	first = 0;
+	if (init_vgetcpu() < 0) {
+		vgetcpu = NULL;
+		return sched_getcpu();
+	}
+	vgetcpu(&cpu, NULL, NULL) ;
+	return cpu;
+}
+
 
 /*
 #define CACHE_LINE_FILE	\
