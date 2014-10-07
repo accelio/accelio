@@ -726,9 +726,10 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 				  task->tlv_type);
 		break;
 	}
-
-//	if (rdma_hndl->state != XIO_STATE_CONNECTED)
-//		return retval;
+	/*
+	if (rdma_hndl->state != XIO_STATE_CONNECTED)
+		return retval;
+	*/
 
 	/* transmit ready packets */
 	if (rdma_hndl->tx_ready_tasks_num) {
@@ -2075,7 +2076,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
+	    task->is_control) {
 		must_send = 1;
 	} else {
 		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
@@ -2279,7 +2281,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	/* transmit only if  available */
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags)) {
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
+	    task->is_control) {
 		must_send = 1;
 	} else {
 		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
