@@ -494,7 +494,9 @@ double xio_get_cpu_mhz(void)
 try_create:
 	hz = get_cpu_mhz(0);
 
-	mkdir(XIO_HZ_DIR, 0777);
+	ret = mkdir(XIO_HZ_DIR, 0777);
+	if (ret < 0)
+		goto exit;
 
 	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_SYNC, 0644);
 	if (fd < 0)
