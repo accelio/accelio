@@ -475,9 +475,10 @@ static inline int arch_cache_line_size(void)
  *---------------------------------------------------------------------------*/
 double xio_get_cpu_mhz(void)
 {
-	char size[32]= { 0 };
-	double hz = 0;
-	int fd, ret;
+	char	size[32]= { 0 };
+	double	hz = 0;
+	int	fd;
+	ssize_t ret;
 
 	fd = open(XIO_HZ_FILE, O_RDONLY);
 	if (fd < 0)
@@ -487,7 +488,7 @@ double xio_get_cpu_mhz(void)
 
 	close(fd);
 
-	if (ret)
+	if (ret > 0)
 		return atof(size);
 
 try_create:
@@ -500,7 +501,7 @@ try_create:
 		goto exit;
 
 	sprintf(size,"%f", hz);
-	ret = write(fd, size, sizeof(size));
+	write(fd, size, sizeof(size));
 
 	close(fd);
 exit:
