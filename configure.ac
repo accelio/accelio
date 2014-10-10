@@ -22,15 +22,33 @@ AM_SILENT_RULES([yes])
 # use the C compiler for the following checks
 AC_LANG([C])
 
+##########################################################################
+# rdma compilation support
+##########################################################################
+# usage: ./configure --enable-rdma=no
+#
+AC_MSG_CHECKING([whether to build with rdma])
+AC_ARG_ENABLE([rdma],
+	      [AS_HELP_STRING([--enable-rdma],
+			      [enable rdma transport - default:yes ])],
+			       [enable_rdma=$enableval],
+			       [enable_rdma=yes])
+AC_MSG_RESULT([$enable_rdma])
+
 # Checks for header files.
-AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
-		 [mypj_found_verbs_headers=yes; break;])
+if test "$enable_rdma" = "yes"; then
+	AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
+			 [mypj_found_verbs_headers=yes; break;])
+else
+	mypj_found_verbs_headers=no
+fi
 
 AC_CHECK_HEADERS([numa.h],
 		 [mypj_found_numa_headers=yes; break;])
 
 AC_CHECK_HEADERS([event2/event.h],
 		 [mypj_found_event_headers=yes; break;])
+
 
 AM_CONDITIONAL(HAVE_INFINIBAND_VERBS, test "x$mypj_found_verbs_headers" = "xyes")
 

@@ -132,7 +132,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
-libxio_la_LDFLAGS = -lnuma $(libxio_rdma_ldflags) -lrt -lpthread \
+libxio_la_LDFLAGS = -lnuma $(libxio_rdma_ldflags) -ldl -lrt -lpthread \
 		     $(libxio_version_script)
 
 libxio_la_DEPENDENCIES =  $(top_srcdir)/src/usr/libxio.map
