@@ -96,7 +96,7 @@ static inline void sg_unmark_end(struct scatterlist *sg)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) && !(defined RHEL_MAJOR && RHEL_MAJOR >= 7)
 /**
  * llist_reverse_order - reverse order of a llist chain
  * @head:       first item of the list to be reversed
