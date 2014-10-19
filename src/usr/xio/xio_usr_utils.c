@@ -503,8 +503,11 @@ try_create:
 		goto exit;
 
 	sprintf(size,"%f", hz);
-	write(fd, size, sizeof(size));
+	ret = write(fd, size, sizeof(size));
+	if (ret < 0)
+		goto close_and_exit;
 
+close_and_exit:
 	close(fd);
 exit:
 	return hz;
