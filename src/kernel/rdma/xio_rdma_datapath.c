@@ -723,10 +723,11 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	xio_unmap_rx_work_req(rdma_hndl->dev, rxd);
 
 	/* rearm the receive queue  */
+	/*
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
 	    (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1))
 		xio_rdma_rearm_rq(rdma_hndl);
-
+	*/
 	retval = xio_mbuf_read_first_tlv(&task->mbuf);
 
 	task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
@@ -748,6 +749,9 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_on_recv_cancel_rsp(rdma_hndl, task);
 		break;
 	default:
+		/* rearm the receive queue  */
+		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
+			xio_rdma_rearm_rq(rdma_hndl);
 		if (IS_REQUEST(task->tlv_type))
 			xio_rdma_on_recv_req(rdma_hndl, task);
 		else if (IS_RESPONSE(task->tlv_type))
