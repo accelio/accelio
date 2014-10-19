@@ -708,6 +708,8 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	switch (task->tlv_type) {
 	case XIO_CREDIT_NOP:
 		xio_rdma_on_recv_nop(rdma_hndl, task);
+		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
+			xio_rdma_rearm_rq(rdma_hndl);
 		break;
 	case XIO_NEXUS_SETUP_REQ:
 	case XIO_NEXUS_SETUP_RSP:
@@ -738,9 +740,9 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	*/
 
 	/* transmit ready packets */
-	if (rdma_hndl->tx_ready_tasks_num) {
+	if (rdma_hndl->tx_ready_tasks_num)
 		must_send = (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD);
-	}
+
 	/* resource are now available and rdma rd  requests are pending kick
 	 * them
 	 */
@@ -960,7 +962,6 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	int		err = 0;
 	int		stop = 0;
 	int		wclen = max_wc, i, numwc  = 0;
-//	int		last_recv = -1;
 	int		timeouts_num = 0;
 	int		polled = 0;
 	cycles_t	timeout;
@@ -1743,6 +1744,7 @@ static int xio_rdma_prep_req_out_data(
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
+	int			tx_by_sr;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
@@ -1770,12 +1772,18 @@ static int xio_rdma_prep_req_out_data(
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
+	/* test for using send/receive or rdma_read */
+	tx_by_sr = (nents < (rdma_hndl->max_sge - 1) &&
+		    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
+		      rdma_hndl->max_send_buf_sz) &&
+		     (((int)(ulp_out_hdr_len + ulp_out_imm_len) <=
+			     rdma_options.rdma_buf_threshold) ||
+			    ulp_out_imm_len == 0));
+
 	/* The data is outgoing via SEND
 	 * One sge is reserved for the header
 	 */
-	if (nents < (rdma_hndl->max_sge - 1) &&
-	    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <
-	     rdma_hndl->max_send_buf_sz)) {
+	if (tx_by_sr) {
 		/*
 		if (data_alignment && ulp_out_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_out_hdr_len;

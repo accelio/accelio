@@ -49,14 +49,30 @@
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
 #define XIO_OPTVAL_DEF_QUEUE_DEPTH			512
 
+/* ugly define should be aligned with transport def buffer size
+ * the size is for default header of 768B 8K data buffer and
+ * 256B accelio header total of default buffer 9K
+ */
+#define XIO_OPTVAL_DEF_TRANS_BUF_THRESHOLD		(8*1024+768)
+
 
 /* xio options */
 struct xio_options			g_options = {
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
 	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
-	.queue_depth			= XIO_OPTVAL_DEF_QUEUE_DEPTH
+	.queue_depth			= XIO_OPTVAL_DEF_QUEUE_DEPTH,
+	.trans_buf_threshold		= XIO_OPTVAL_DEF_TRANS_BUF_THRESHOLD
 };
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_options							     */
+/*---------------------------------------------------------------------------*/
+struct xio_options *xio_get_options(void)
+{
+	return &g_options;
+}
+EXPORT_SYMBOL(xio_get_options);
 
 /*---------------------------------------------------------------------------*/
 /* xio_set_opt								     */

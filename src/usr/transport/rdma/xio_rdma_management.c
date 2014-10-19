@@ -68,7 +68,6 @@
 #define XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD		SEND_BUF_SZ
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
-#define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		256
 #define XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD		65536
 
 /*---------------------------------------------------------------------------*/
@@ -117,6 +116,21 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_hndl);
 static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl);
 static int xio_cm_find_init_device(struct rdma_cm_event *ev);
 static void xio_device_release(struct xio_device *dev, int delete_fd);
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_get_max_header_size						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_get_max_header_size(void)
+{
+	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_req_hdr);
+	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rsp_hdr);
+	int iovsz = rdma_options.max_out_iovsz + rdma_options.max_in_iovsz;
+
+	req_hdr += iovsz*sizeof(struct xio_sge);
+	rsp_hdr += rdma_options.max_out_iovsz*sizeof(struct xio_sge);
+
+	return max(req_hdr, rsp_hdr);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_async_ev_handler							     */
@@ -1907,7 +1921,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	}
 
 	child_hndl->cm_id	= ev->id;
-	/* Paernt handle i.e. listener doesn't have a CQ */
+	/* Parent handle i.e. listener doesn't have a CQ */
 	child_hndl->tcq		= NULL;
 	ev->id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
@@ -2291,9 +2305,10 @@ static struct xio_transport_base *xio_rdma_open(
 		struct xio_observer	*observer)
 {
 	struct xio_rdma_transport	*rdma_hndl;
+	int				xio_hdr_size;
 
 
-	/*allocate rdma handl */
+	/*allocate rdma handle */
 	rdma_hndl = ucalloc(1, sizeof(struct xio_rdma_transport));
 	if (!rdma_hndl) {
 		xio_set_error(ENOMEM);
@@ -2312,6 +2327,8 @@ static struct xio_transport_base *xio_rdma_open(
 			goto cleanup;
 		}
 	}
+	xio_hdr_size = xio_rdma_get_max_header_size();
+	xio_hdr_size =	ALIGN(xio_hdr_size, 64);
 
 	rdma_hndl->base.portal_uri	= NULL;
 	rdma_hndl->base.proto		= XIO_PROTO_RDMA;
@@ -2325,7 +2342,11 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
-	rdma_hndl->max_send_buf_sz	= rdma_options.rdma_buf_threshold;
+	rdma_hndl->max_send_buf_sz	= rdma_options.rdma_buf_threshold +
+					  xio_hdr_size;
+	rdma_hndl->max_send_buf_sz	=
+				ALIGN(rdma_hndl->max_send_buf_sz, 64);
+
 	/* from now on don't allow changes */
 	rdma_options.rdma_buf_attr_rdonly = 1;
 
@@ -2782,10 +2803,8 @@ static int xio_rdma_set_opt(void *xio_obj,
 			xio_set_error(EINVAL);
 			return -1;
 		}
-		rdma_options.rdma_buf_threshold = *((int *)optval) +
-					XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
-		rdma_options.rdma_buf_threshold =
-			ALIGN(rdma_options.rdma_buf_threshold, 64);
+		rdma_options.rdma_buf_threshold = *((int *)optval);
+		g_options.trans_buf_threshold = *((int *)optval);
 		return 0;
 		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
@@ -2823,9 +2842,7 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		return 0;
 		break;
 	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		*((int *)optval) =
-			rdma_options.rdma_buf_threshold -
-				XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD;
+		*((int *)optval) = rdma_options.rdma_buf_threshold;
 		*optlen = sizeof(int);
 		return 0;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:

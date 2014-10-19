@@ -101,6 +101,20 @@ struct xio_tcp_options			tcp_options = {
 };
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_get_max_header_size						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_get_max_header_size(void)
+{
+	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_tcp_req_hdr);
+	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_tcp_rsp_hdr);
+	int iovsz = tcp_options.max_out_iovsz + tcp_options.max_in_iovsz;
+
+	req_hdr += iovsz*sizeof(struct xio_sge);
+	rsp_hdr += tcp_options.max_out_iovsz*sizeof(struct xio_sge);
+
+	return max(req_hdr, rsp_hdr);
+}
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_flush_all_tasks(struct xio_tcp_transport *tcp_hndl)
@@ -744,6 +758,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 		int			create_socket)
 {
 	struct xio_tcp_transport	*tcp_hndl;
+	int				xio_hdr_size;
 
 
 	/*allocate tcp handl */
@@ -783,6 +798,10 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	memset(&tcp_hndl->tmp_work, 0, sizeof(struct xio_tcp_work_req));
 	tcp_hndl->tmp_work.msg_iov = tcp_hndl->tmp_iovec;
 
+	xio_hdr_size = xio_tcp_get_max_header_size();
+	xio_hdr_size =	ALIGN(xio_hdr_size, 64);
+
+
 	/* create tcp socket */
 	if (create_socket) {
 		tcp_hndl->sock.ops = tcp_options.tcp_dual_sock ?
@@ -793,7 +812,12 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* from now on don't allow changes */
 	tcp_options.tcp_buf_attr_rdonly = 1;
-	tcp_hndl->max_send_buf_sz	= tcp_options.tcp_buf_threshold;
+	tcp_hndl->max_send_buf_sz	= tcp_options.tcp_buf_threshold +
+					  xio_hdr_size;
+	tcp_hndl->max_send_buf_sz	=
+				ALIGN(tcp_hndl->max_send_buf_sz, 64);
+
+
 	tcp_hndl->membuf_sz		= tcp_hndl->max_send_buf_sz;
 
 	if (observer)
@@ -1668,7 +1692,7 @@ void xio_tcp_transport_destructor(void)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_release		                                     */
+/* xio_tcp_transport_release		                                     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_transport_release(struct xio_transport *transport)
 {
@@ -1798,7 +1822,7 @@ struct xio_task *xio_tcp_primary_task_alloc(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_primary_task_lookup						     */
+/* xio_tcp_primary_task_lookup						     */
 /*---------------------------------------------------------------------------*/
 struct xio_task *xio_tcp_primary_task_lookup(
 					struct xio_tcp_transport *tcp_hndl,
@@ -2152,7 +2176,7 @@ static struct xio_tasks_pool_ops   primary_tasks_pool_ops = {
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_get_pools_ops						     */
+/* xio_tcp_get_pools_ops						     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_get_pools_ops(struct xio_transport_base *trans_hndl,
 				  struct xio_tasks_pool_ops **initial_pool_ops,
@@ -2163,7 +2187,7 @@ static void xio_tcp_get_pools_ops(struct xio_transport_base *trans_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_set_pools_cls						     */
+/* xio_tcp_set_pools_cls						     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_set_pools_cls(struct xio_transport_base *trans_hndl,
 				  struct xio_tasks_pool_cls *initial_pool_cls,
@@ -2208,10 +2232,8 @@ static int xio_tcp_set_opt(void *xio_obj,
 			xio_set_error(EINVAL);
 			return -1;
 		}
-		tcp_options.tcp_buf_threshold = *((int *)optval) +
-					XIO_OPTVAL_MIN_TCP_BUF_THRESHOLD;
-		tcp_options.tcp_buf_threshold =
-			ALIGN(tcp_options.tcp_buf_threshold, 64);
+		tcp_options.tcp_buf_threshold = *((int *)optval);
+		g_options.trans_buf_threshold = *((int *)optval);
 		return 0;
 		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
@@ -2274,9 +2296,7 @@ static int xio_tcp_get_opt(void  *xio_obj,
 		return 0;
 		break;
 	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		*((int *)optval) =
-			tcp_options.tcp_buf_threshold -
-				XIO_OPTVAL_MIN_TCP_BUF_THRESHOLD;
+		*((int *)optval) = tcp_options.tcp_buf_threshold;
 		*optlen = sizeof(int);
 		return 0;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:

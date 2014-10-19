@@ -58,7 +58,6 @@
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_TIMEOUT		300000
-#define XIO_BUF_THRESHOLD		8000
 #define XIO_IOV_THRESHOLD		20
 
 #define		IS_APPLICATION_MSG(msg) \
@@ -268,6 +267,7 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 	struct xio_vmsg		*vmsg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
+	ssize_t			data_len;
 
 	/* messages that are planed to send via "SEND" operation can
 	 * discard the read receipt for better performance
@@ -280,6 +280,7 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 	vmsg		= &msg->out;
 	sgtbl		= xio_sg_table_get(vmsg);
 	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+	data_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	/* heuristics to guess in which  cases the lower layer will not
 	 * do "rdma read" but will use send/receive
@@ -289,8 +290,8 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;
 	}
-	if ((vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl)) >
-	    XIO_BUF_THRESHOLD) {
+	if ((int)(vmsg->header.iov_len + data_len) >
+	     g_options.trans_buf_threshold && data_len > 0) {
 		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;

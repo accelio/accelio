@@ -613,10 +613,10 @@ static int xio_tcp_prep_req_out_data(
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
+	int			tx_by_sr;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
-
 
 	/* calculate headers */
 	ulp_out_hdr_len	= vmsg->header.iov_len;
@@ -635,11 +635,15 @@ static int xio_tcp_prep_req_out_data(
 		xio_set_error(XIO_E_MSG_SIZE);
 		return -1;
 	}
-
+	/* test for using send/receive or rdma_read */
+	tx_by_sr = (((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
+		      tcp_hndl->max_send_buf_sz) &&
+		     (((int)(ulp_out_hdr_len + ulp_out_imm_len) <=
+			     tcp_options.tcp_buf_threshold) ||
+			    ulp_out_imm_len == 0));
 
 	/* the data is outgoing via SEND */
-	if ((ulp_out_hdr_len + ulp_out_imm_len +
-			xio_hdr_len) < tcp_hndl->max_send_buf_sz) {
+	if (tx_by_sr) {
 		tcp_task->tcp_op = XIO_TCP_SEND;
 		/* user has small request - no rdma operation expected */
 		tcp_task->write_num_sge = 0;

@@ -141,6 +141,7 @@ void xio_set_error(int errnum);
 #define clr_bits(mask, addr)    ((*addr) &= ~(mask))
 #define set_bits(mask, addr)    ((*addr) |= (mask))
 
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
@@ -149,6 +150,9 @@ struct xio_options {
 	int			max_out_iovsz;
 	int			reconnect;
 	int			queue_depth;
+	int			pad;
+	/* transport options needed globally */
+	int			trans_buf_threshold;
 };
 
 struct xio_sge {
@@ -261,6 +265,11 @@ size_t		xio_iov_length(const struct xio_iovec *iov,
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 void		xio_msg_dump(struct xio_msg *xio_msg);
+
+/*---------------------------------------------------------------------------*/
+/* xio_options.c							     */
+/*---------------------------------------------------------------------------*/
+struct xio_options *xio_get_options(void);
 
 #endif /*XIO_COMMON_H */
 

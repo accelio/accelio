@@ -42,7 +42,9 @@
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
 #define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			9216
+#define DEF_APP_DATA_BUF_SZ		8192
+#define DEF_APP_HDR_SZ			768
+#define SEND_BUF_SZ			(DEF_APP_HDR_SZ + DEF_APP_DATA_BUF_SZ)
 #define MAX_HDR_SZ			512
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
