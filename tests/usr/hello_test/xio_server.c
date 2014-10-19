@@ -61,8 +61,8 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
-#define PEER_MAX_IN_IOVLEN	256
-#define PEER_MAX_OUT_IOVLEN	256
+#define PEER_MAX_IN_IOVLEN	4
+#define PEER_MAX_OUT_IOVLEN	4
 
 
 struct xio_test_config {
