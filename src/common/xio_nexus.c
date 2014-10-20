@@ -1118,6 +1118,9 @@ static void xio_nexus_release_cb(void *data)
 
 	if (!nexus->is_listener)
 		xio_nexus_cache_remove(nexus->cid);
+	else
+		xio_context_unreg_observer(nexus->transport_hndl->ctx,
+					   &nexus->ctx_observer);
 
 	if (nexus->state != XIO_NEXUS_STATE_DISCONNECTED) {
 		nexus->state = XIO_NEXUS_STATE_CLOSED;
