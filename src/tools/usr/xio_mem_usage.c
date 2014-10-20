@@ -98,8 +98,8 @@ int main(int argc, char **argv)
     printf("\nRDMA Transport:\n");
     PRINT_SIZE(struct xio_rdma_setup_msg);
     PRINT_SIZE(struct xio_rdma_cancel_hdr);
-    PRINT_SIZE(struct xio_req_hdr);
-    PRINT_SIZE(struct xio_rsp_hdr);
+    PRINT_SIZE(struct xio_rdma_req_hdr);
+    PRINT_SIZE(struct xio_rdma_rsp_hdr);
     PRINT_SIZE(struct xio_nop_hdr);
     PRINT_SIZE(struct xio_rdma_task);
     PRINT_SIZE(struct xio_cq);

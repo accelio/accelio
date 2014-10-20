@@ -112,8 +112,8 @@ struct xio_rdma_options			rdma_options = {
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_get_max_header_size(void)
 {
-	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_req_hdr);
-	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rsp_hdr);
+	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rdma_req_hdr);
+	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rdma_rsp_hdr);
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
 			     rdma_options.max_in_iovsz) + 1;
 

@@ -1556,9 +1556,9 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task,
-				     struct xio_req_hdr *req_hdr)
+				     struct xio_rdma_req_hdr *req_hdr)
 {
-	struct xio_req_hdr		*tmp_req_hdr;
+	struct xio_rdma_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	struct xio_sge			sge;
 	size_t				hdr_len;
@@ -1607,7 +1607,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	PACK_LLVAL(req_hdr, tmp_req_hdr, ulp_imm_len);
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
-			   sizeof(struct xio_req_hdr));
+			   sizeof(struct xio_rdma_req_hdr));
 
 	/* IN: requester expect small input written via send */
 	sg = sge_first(sgtbl_ops, sgtbl);
@@ -1666,7 +1666,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 			sg = sg_next(sg);
 		}
 	}
-	hdr_len	= sizeof(struct xio_req_hdr);
+	hdr_len	= sizeof(struct xio_rdma_req_hdr);
 	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
 					   read_num_sge +
 					   write_num_sge);
@@ -1686,9 +1686,9 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_task *task,
-				    struct xio_req_hdr *req_hdr)
+				    struct xio_rdma_req_hdr *req_hdr)
 {
-	struct xio_req_hdr		*tmp_req_hdr;
+	struct xio_rdma_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	size_t				hdr_len;
@@ -1702,10 +1702,10 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr->flags    = tmp_req_hdr->flags;
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, req_hdr_len);
 
-	if (req_hdr->req_hdr_len != sizeof(struct xio_req_hdr)) {
+	if (req_hdr->req_hdr_len != sizeof(struct xio_rdma_req_hdr)) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d  expected:%zud\n",
-		req_hdr->req_hdr_len, sizeof(struct xio_req_hdr));
+		req_hdr->req_hdr_len, sizeof(struct xio_rdma_req_hdr));
 		return -1;
 	}
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
@@ -1722,7 +1722,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_LLVAL(tmp_req_hdr, req_hdr, ulp_imm_len);
 
 	tmp_sge = (void *)((uint8_t *)tmp_req_hdr +
-			   sizeof(struct xio_req_hdr));
+			   sizeof(struct xio_rdma_req_hdr));
 
 	rdma_task->sn = req_hdr->sn;
 
@@ -1753,7 +1753,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	}
 	rdma_task->req_write_num_sge = req_hdr->write_num_sge;
 
-	hdr_len	= sizeof(struct xio_req_hdr);
+	hdr_len	= sizeof(struct xio_rdma_req_hdr);
 	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
 					   req_hdr->read_num_sge +
 					   req_hdr->write_num_sge);
@@ -1768,9 +1768,9 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task,
-				     struct xio_rsp_hdr *rsp_hdr)
+				     struct xio_rdma_rsp_hdr *rsp_hdr)
 {
-	struct xio_rsp_hdr		*tmp_rsp_hdr;
+	struct xio_rdma_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
@@ -1799,7 +1799,7 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 
 	if (rsp_hdr->write_num_sge) {
 		wr_len = (uint32_t *)((uint8_t *)tmp_rsp_hdr +
-			  sizeof(struct xio_rsp_hdr));
+			  sizeof(struct xio_rdma_rsp_hdr));
 
 		/* params for RDMA WRITE */
 		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
@@ -1808,7 +1808,7 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 		}
 	}
 
-	hdr_len	= sizeof(struct xio_rsp_hdr);
+	hdr_len	= sizeof(struct xio_rdma_rsp_hdr);
 	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
@@ -1825,9 +1825,9 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_task *task,
-				    struct xio_rsp_hdr *rsp_hdr)
+				    struct xio_rdma_rsp_hdr *rsp_hdr)
 {
-	struct xio_rsp_hdr		*tmp_rsp_hdr;
+	struct xio_rdma_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
@@ -1842,10 +1842,10 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	rsp_hdr->flags    = tmp_rsp_hdr->flags;
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, rsp_hdr_len);
 
-	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_rsp_hdr)) {
+	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_rdma_rsp_hdr)) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d expected:%zud\n",
-		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_rsp_hdr));
+		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_rdma_rsp_hdr));
 		return -1;
 	}
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
@@ -1862,7 +1862,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 
 	if (rsp_hdr->write_num_sge) {
 		wr_len = (void *)((uint8_t *)tmp_rsp_hdr +
-				sizeof(struct xio_rsp_hdr));
+				sizeof(struct xio_rdma_rsp_hdr));
 
 		/* params for RDMA WRITE */
 		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
@@ -1873,7 +1873,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	}
 
 
-	hdr_len	= sizeof(struct xio_rsp_hdr);
+	hdr_len	= sizeof(struct xio_rdma_rsp_hdr);
 	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
@@ -1892,7 +1892,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 				    uint32_t status)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_req_hdr	req_hdr;
+	struct xio_rdma_req_hdr	req_hdr;
 
 	if (!IS_REQUEST(task->tlv_type)) {
 		ERROR_LOG("unknown message type\n");
@@ -1980,7 +1980,7 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 				    uint32_t status)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rsp_hdr	rsp_hdr;
+	struct xio_rdma_rsp_hdr	rsp_hdr;
 	uint64_t		xio_hdr_len;
 
 	if (!IS_RESPONSE(task->tlv_type)) {
@@ -2082,7 +2082,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	ulp_out_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
-	xio_hdr_len += sizeof(struct xio_req_hdr);
+	xio_hdr_len += sizeof(struct xio_rdma_req_hdr);
 	xio_hdr_len += sizeof(struct xio_sge)*(rdma_task->recv_num_sge +
 					       rdma_task->read_num_sge +
 					       tbl_nents(sgtbl_ops, sgtbl));
@@ -2210,7 +2210,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 
 	/* before working on the out - current place after the session header */
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
-	xio_hdr_len += sizeof(struct xio_rsp_hdr);
+	xio_hdr_len += sizeof(struct xio_rdma_rsp_hdr);
 	xio_hdr_len += sizeof(struct xio_sge)*nents;
 
 	/* requester may insist on RDMA for small buffers to eliminate copy
@@ -2395,7 +2395,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			     struct xio_task *task)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rsp_hdr	rsp_hdr;
+	struct xio_rdma_rsp_hdr	rsp_hdr;
 	struct scatterlist	*sg;
 	uint64_t		payload;
 	uint64_t		xio_hdr_len;
@@ -2652,7 +2652,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 {
 	int			retval = 0, i;
 	union xio_transport_event_data event_data;
-	struct xio_rsp_hdr	rsp_hdr;
+	struct xio_rdma_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
 	void			*ulp_hdr;
@@ -3147,7 +3147,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	int			retval = 0;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	union xio_transport_event_data event_data;
-	struct xio_req_hdr	req_hdr;
+	struct xio_rdma_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
 	int			i;
@@ -4005,7 +4005,7 @@ static int xio_rdma_on_recv_cancel_rsp(struct xio_rdma_transport *rdma_hndl,
 				       struct xio_task *task)
 {
 	int			retval = 0;
-	struct xio_rsp_hdr	rsp_hdr;
+	struct xio_rdma_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
 	void			*buff;
@@ -4073,7 +4073,7 @@ static int xio_rdma_on_recv_cancel_req(struct xio_rdma_transport *rdma_hndl,
 	int			retval = 0;
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_cancel_hdr cancel_hdr;
-	struct xio_req_hdr	req_hdr;
+	struct xio_rdma_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
 	void			*buff;

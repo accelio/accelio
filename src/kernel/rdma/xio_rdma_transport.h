@@ -142,7 +142,7 @@ struct xio_rdma_options {
 
 #define XIO_REQ_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_req_hdr {
+struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
@@ -167,7 +167,7 @@ struct __attribute__((__packed__)) xio_req_hdr {
 
 #define XIO_RSP_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_rsp_hdr {
+struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint8_t			version;	/* response version     */
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
