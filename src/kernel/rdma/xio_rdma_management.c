@@ -2320,6 +2320,9 @@ static void xio_rdma_close_cb(struct kref *kref)
 	switch (rdma_hndl->state) {
 	case XIO_STATE_LISTEN:
 		rdma_hndl->state = XIO_STATE_CLOSED;
+                xio_transport_notify_observer(&rdma_hndl->base,
+                                              XIO_TRANSPORT_CLOSED,
+                                              NULL);
 		xio_rdma_post_close(
 				(struct xio_transport_base *)rdma_hndl);
 		break;
