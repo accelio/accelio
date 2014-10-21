@@ -688,10 +688,6 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		task_prev = NULL;
 	}
 
-	rdma_hndl->rqe_avail--;
-	rdma_hndl->sim_peer_credits--;
-
-
 	/* rearm the receive queue  */
 	/*
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
@@ -703,6 +699,8 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->io_list);
+	rdma_hndl->rqe_avail--;
+	rdma_hndl->sim_peer_credits--;
 
 	/* call recv completion  */
 	switch (task->tlv_type) {
@@ -3276,10 +3274,9 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  rdma_hndl->exp_sn, req_hdr.sn);
 	}
-
 	/* save originator identifier */
-	task->rtid		= req_hdr.tid;
 	task->imsg_flags	= req_hdr.flags;
+	task->rtid		= req_hdr.tid;
 
 	imsg		= &task->imsg;
 	sgtbl		= xio_sg_table_get(&imsg->out);

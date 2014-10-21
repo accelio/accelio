@@ -38,26 +38,26 @@
 #ifndef XIO_MBUF_H
 #define XIO_MBUF_H
 
-
-struct xio_mbuf {
-	void			*curr;
-
-	struct {
+	struct xio_mbuf_buf {
 		void		*head;
 		void		*tail;
 		uint32_t	buflen;
 		uint32_t	datalen;
-	} buf;
+	};
 
-	struct {
+	struct xio_mbuf_tlv {
 		void		*head;
 		void		*tail;
 		uint64_t	len;
 		uint32_t	type;
 		uint32_t	pad;
 		void		*val;
-	} tlv;
+	};
 
+struct xio_mbuf {
+	void			*curr;
+	struct xio_mbuf_buf	buf;
+	struct xio_mbuf_tlv	tlv;
 	void			*marker;
 };
 
@@ -139,17 +139,20 @@ static inline void xio_mbuf_init(struct xio_mbuf *mbuf, void *buf,
 /*---------------------------------------------------------------------------*/
 static inline int xio_mbuf_tlv_start(struct xio_mbuf *mbuf)
 {
-	if (((uint64_t)(mbuf->buf.tail - mbuf->curr)) <= XIO_TLV_LEN) {
+	struct xio_mbuf_buf *buf = &mbuf->buf;
+	struct xio_mbuf_tlv *tlv = &mbuf->tlv;
+
+	if (((uint64_t)(buf->tail - mbuf->curr)) <= XIO_TLV_LEN) {
 		ERROR_LOG("xio_mbuf_tlv start failed. buf.tail:%p, " \
 			  "len:%zd, curr:%p\n",
-			  mbuf->buf.tail, XIO_TLV_LEN, mbuf->curr);
+			  buf->tail, XIO_TLV_LEN, mbuf->curr);
 		return -1;
 	}
 
-	mbuf->tlv.head	= mbuf->curr;
-	mbuf->tlv.tail	= mbuf->buf.tail;
-	mbuf->tlv.val	= mbuf->buf.head + XIO_TLV_LEN;
-	mbuf->curr	= mbuf->tlv.val;
+	tlv->head	= mbuf->curr;
+	tlv->tail	= buf->tail;
+	tlv->val	= buf->head + XIO_TLV_LEN;
+	mbuf->curr	= tlv->val;
 
 	return 0;
 }
@@ -160,20 +163,20 @@ static inline int xio_mbuf_tlv_start(struct xio_mbuf *mbuf)
 static inline int xio_mbuf_read_first_tlv(struct xio_mbuf *mbuf)
 {
 	int len;
+	struct xio_mbuf_tlv *tlv = &mbuf->tlv;
 
-	mbuf->tlv.head	  = mbuf->buf.head;
-	mbuf->curr	  = mbuf->tlv.head;
+	tlv->head = mbuf->buf.head;
 
-	len = xio_read_tlv(&mbuf->tlv.type, &mbuf->tlv.len,
-			   &mbuf->tlv.val, mbuf->tlv.head);
-	if (len == -1 || ((mbuf->tlv.head + len) >  mbuf->buf.tail)) {
+	len = xio_read_tlv(&tlv->type, &tlv->len,
+			   &tlv->val, tlv->head);
+	if (len == -1 || ((tlv->head + len) >  mbuf->buf.tail)) {
 		ERROR_LOG("xio_mbuf_first_read_tlv failed. tlv.head:%p, " \
 			  "len:%d, buf.tail:%p\n",
-			  mbuf->tlv.head, len, mbuf->buf.tail);
+			  tlv->head, len, mbuf->buf.tail);
 		return -1;
 	}
-	mbuf->tlv.tail	= mbuf->tlv.head + len;
-	mbuf->curr	= mbuf->tlv.val;
+	tlv->tail	= tlv->head + len;
+	mbuf->curr	= tlv->val;
 	return 0;
 }
 
