@@ -46,7 +46,8 @@ lib_LTLIBRARIES = libxio.la
 libxio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
-libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  \
+libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  	\
+			 $(top_srcdir)/include/xio_base.h	\
 			 $(top_srcdir)/include/xio_user.h 
 
 
