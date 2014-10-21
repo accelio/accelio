@@ -52,6 +52,7 @@ install-y: all
 	$(mkdir_p) /opt/xio/include
 	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
 	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/libxio.h /opt/xio/include
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_base.h /opt/xio/include
 	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_kernel.h /opt/xio/include
 	$(INSTALL) -m 644 Module.symvers /opt/xio/include
 	-/sbin/depmod -a
