@@ -532,11 +532,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				ERROR_LOG("failed to accept connection\n");
 				return -1;
 			}
-			TRACE_LOG("sending fin request. session:%p, " \
-				  "connection:%p\n",
-				  session->lead_connection->session,
-				  session->lead_connection);
-
 			return 0;
 		}
 		break;

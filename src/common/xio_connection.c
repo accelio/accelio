@@ -1497,6 +1497,8 @@ int xio_disconnect(struct xio_connection *connection)
 	}
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
 	    connection->disconnecting) {
+		/* delay the disconnection to when connection become online */
+	    	connection->disconnecting = 1;
 		return 0;
 	}
 	connection->disconnecting = 1;
@@ -2265,6 +2267,16 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 		xio_tasks_pool_put(task->sender_task);
 		task->sender_task = NULL;
 		xio_tasks_pool_put(task);
+	}
+
+	/* delayed disconnect request should be done now */
+	if (connection->state == XIO_CONNECTION_STATE_INIT && 
+	    connection->disconnecting) {
+	    	connection->disconnecting = 0;
+		xio_connection_set_state(connection,
+				 XIO_CONNECTION_STATE_ONLINE);
+		xio_disconnect(connection);
+		return 0;
 	}
 
 	/* set the new connection to ESTABLISHED */
