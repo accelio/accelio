@@ -181,7 +181,7 @@ static void xio_module_down(void *data)
 
 	connection = session_data->connection;
 	session_data->connection = NULL;
-	xio_connection_destroy(connection);
+	xio_disconnect(connection);
 
 	return;
 
