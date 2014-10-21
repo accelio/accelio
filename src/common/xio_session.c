@@ -702,7 +702,7 @@ static int xio_on_rsp_send_comp(
 		/* send completion notification only to responder to
 		 * release responses
 		 */
-		/*if (connection->ses_ops.on_msg_send_complete)*/ {
+		 if (connection->ses_ops.on_msg_send_complete) {
 			connection->ses_ops.on_msg_send_complete(
 					connection->session, task->omsg,
 					connection->cb_user_context);
