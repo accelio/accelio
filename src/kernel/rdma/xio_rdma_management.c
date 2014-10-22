@@ -364,7 +364,7 @@ static void xio_cq_release(struct xio_cq *tcq)
 	/* clean all redundant connections attached to this cq */
 	list_for_each_entry_safe(rdma_hndl, tmp_rdma_hndl, &tcq->trans_list,
 				 trans_list_entry) {
-		ERROR_LOG("tcq->trans_list not empty\n");
+		TRACE_LOG("tcq->trans_list not empty\n");
 		xio_rdma_flush_all_tasks(rdma_hndl);
 		xio_rdma_post_close((struct xio_transport_base *)rdma_hndl);
 	}
@@ -2027,7 +2027,7 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 		  rdma_hndl, rdma_hndl->state);
 	if (rdma_hndl->state == XIO_STATE_CONNECTED ||
 	    rdma_hndl->state == XIO_STATE_LISTEN) {
-		ERROR_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
