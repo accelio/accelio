@@ -2778,6 +2778,24 @@ exit1:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_enable_fork_support                                              */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_enable_fork_support()
+{
+	int   retval;
+	setenv("RDMAV_FORK_SAFE", "YES", 1);
+	setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
+	retval = ibv_fork_init();
+	if (retval) {
+		ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
+		retval, strerror(retval));
+		xio_set_error(errno);
+		return -1;
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_set_opt                                                          */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_set_opt(void *xio_obj,
@@ -2820,6 +2838,9 @@ static int xio_rdma_set_opt(void *xio_obj,
 		VALIDATE_SZ(sizeof(int));
 		rdma_options.max_out_iovsz = *((int *)optval);
 		return 0;
+		break;
+	case XIO_OPTNAME_ENABLE_FORK_INIT:
+		return xio_rdma_enable_fork_support();
 		break;
 	default:
 		break;
@@ -3112,8 +3133,6 @@ static void xio_rdma_set_pools_cls(
 /*---------------------------------------------------------------------------*/
 void xio_rdma_transport_constructor(void)
 {
-	int			retval;
-
 	/* Mellanox OFED's User Manual */
 	setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
 	setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
@@ -3127,12 +3146,7 @@ void xio_rdma_transport_constructor(void)
 	setenv("MLX_MR_ALLOC_TYPE","ALL", 1);
 	*/
 	if (0) {
-		setenv("RDMAV_FORK_SAFE", "YES", 1);
-		setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
-		retval = ibv_fork_init();
-		if (retval)
-			ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
-				  retval, strerror(retval));
+		xio_rdma_enable_fork_support();
 	}
 
 	xio_device_list_check();
