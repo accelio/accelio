@@ -526,7 +526,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			 * callback may jump immediately and since there are no
 			 * connections. teardown may notified
 			 */
-			session->state = XIO_SESSION_STATE_ACCEPTED;
 			/* open new connections */
 			retval = xio_session_accept_connection(session);
 			if (retval != 0) {
