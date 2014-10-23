@@ -235,6 +235,8 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 		tcp_hndl->state = XIO_STATE_CLOSED;
 
 		xio_ctx_remove_event(tcp_hndl->base.ctx,
+                                     &tcp_hndl->flush_tx_event);
+		xio_ctx_remove_event(tcp_hndl->base.ctx,
 				     &tcp_hndl->ctl_rx_event);
 
 		if (tcp_hndl->sock.ops->del_ev_handlers)
@@ -479,6 +481,25 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_disconnect_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_tcp_disconnect_handler(xio_ctx_event_t *tev,
+				       void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
+	on_sock_disconnected(tcp_hndl, 1);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_flush_tx_handler						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_flush_tx_handler(xio_ctx_event_t *tev, void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
+	xio_tcp_xmit(tcp_hndl);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_single_sock_rx_ctl_handler					     */
 /*---------------------------------------------------------------------------*/
 int xio_tcp_single_sock_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl)
@@ -511,8 +532,6 @@ void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
 
 	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len &&
 	    tcp_hndl->state == XIO_STATE_CONNECTED) {
-		xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
-				   xio_tcp_consume_ctl_rx, tcp_hndl);
 		xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->ctl_rx_event);
 	}
 }
@@ -832,8 +851,16 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	INIT_LIST_HEAD(&tcp_hndl->pending_conns);
 
+	memset(&tcp_hndl->flush_tx_event, 0, sizeof(xio_ctx_event_t));
+	xio_ctx_init_event(&tcp_hndl->flush_tx_event,
+			   xio_tcp_flush_tx_handler, tcp_hndl);
 	memset(&tcp_hndl->ctl_rx_event, 0, sizeof(xio_ctx_event_t));
+	xio_ctx_init_event(&tcp_hndl->ctl_rx_event,
+			   xio_tcp_consume_ctl_rx, tcp_hndl);
 	memset(&tcp_hndl->disconnect_event, 0, sizeof(xio_ctx_event_t));
+	xio_ctx_init_event(&tcp_hndl->disconnect_event,
+			   xio_tcp_disconnect_handler,
+			   tcp_hndl);
 
 	TRACE_LOG("xio_tcp_open: [new] handle:%p\n", tcp_hndl);
 

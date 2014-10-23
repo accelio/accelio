@@ -796,17 +796,6 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_disconnect_handler						     */
-/*---------------------------------------------------------------------------*/
-static void xio_tcp_disconnect_handler(xio_ctx_event_t *tev,
-				       void *xio_tcp_hndl)
-{
-	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
-
-	on_sock_disconnected(tcp_hndl, 1);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_tcp_disconnect_helper						     */
 /*---------------------------------------------------------------------------*/
 void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
@@ -818,9 +807,6 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 
 	tcp_hndl->state = XIO_STATE_DISCONNECTED;
 
-	xio_ctx_init_event(&tcp_hndl->disconnect_event,
-			   xio_tcp_disconnect_handler,
-			   tcp_hndl);
 	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
@@ -867,8 +853,10 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
 			  removed, task->tlv_type);
 
-	if (tcp_hndl->tx_ready_tasks_num)
+	/* No need - using flush_tx work*/
+	/*if (tcp_hndl->tx_ready_tasks_num)
 		xio_tcp_xmit(tcp_hndl);
+	*/
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1167,6 +1155,8 @@ handle_completions:
 		tcp_hndl->tx_comp_cnt = 0;
 	}
 
+	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+
 	return retval < 0 ? retval : 0;
 }
 
@@ -1395,7 +1385,9 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
-	}
+        } else {
+                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+        }
 
 	return retval;
 }
@@ -1736,6 +1728,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
+	} else {
+                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
 	}
 
 	return retval;
@@ -3209,8 +3203,8 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 						tasks_list_entry);
 	}
 
-	/* ORK todo batch? */
-	if (tcp_hndl->tx_ready_tasks_num) {
+	/* No need - using flush_tx work */
+	/*if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != EAGAIN) {
@@ -3220,6 +3214,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return ret_count;
 		}
 	}
+	*/
 
 	return ret_count;
 }
@@ -3366,8 +3361,8 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 	else
 		count = retval;
 
-	/* ORK todo batch? */
-	if (tcp_hndl->tx_ready_tasks_num) {
+	/* No need - using flush_tx work*/
+	/*if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != EAGAIN) {
@@ -3377,6 +3372,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return count;
 		}
 	}
+	*/
 
 	return count;
 }
