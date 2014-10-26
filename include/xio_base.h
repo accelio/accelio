@@ -935,7 +935,8 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
 	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
-	XIO_OPTNAME_QUEUE_DEPTH,	  /**< application max queued msgs    */
+	XIO_OPTNAME_SND_QUEUE_DEPTH,	  /**< maximum tx queued msgs	      */
+	XIO_OPTNAME_RCV_QUEUE_DEPTH,	  /**< maximum rx queued msgs	      */
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */

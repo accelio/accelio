@@ -72,17 +72,23 @@ struct xio_connection {
 	/* server's session may have multiple connections each has
 	 * private data assignd by bind
 	 */
+	uint16_t			sn;
+	uint16_t			ack_sn;
+	uint16_t			exp_sn;
+	uint16_t			credits;
+	uint16_t			peer_credits;
+	uint16_t			credits_ack_watermark;
 	uint16_t			conn_idx;
 	uint16_t			state;
+	uint16_t			fin_req_timeout;
 	uint16_t			disable_notify;
 	uint16_t			disconnecting;
 	uint16_t			is_flushed;
-	uint16_t			fin_req_timeout;
+	uint16_t			send_req_toggle;
+	uint16_t			pad;
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
-	int32_t				rx_queued_msgs;
 	struct kref			kref;
-	int32_t				send_req_toggle;
 
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
@@ -211,6 +217,13 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 				     struct xio_task *task);
 
+int xio_send_credits_ack(struct xio_connection *connection);
+
+int xio_on_credits_ack_send_comp(struct xio_connection *connection,
+				 struct xio_task *task);
+
+int xio_on_credits_ack_recv(struct xio_connection *connection,
+			    struct xio_task *task);
 
 #endif /*XIO_CONNECTION_H */
 

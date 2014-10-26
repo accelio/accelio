@@ -99,6 +99,14 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	len = xio_write_uint32(session->session_id , 0, ptr);
 	ptr  = ptr + len;
 
+	/* tx queue depth */
+	len = xio_write_uint16((uint16_t)session->snd_queue_depth , 0, ptr);
+	ptr  = ptr + len;
+
+	/* rx queue depth */
+	len = xio_write_uint16((uint16_t)session->rcv_queue_depth , 0, ptr);
+	ptr  = ptr + len;
+
 	/* uri length */
 	len = xio_write_uint16((uint16_t)session->uri_len , 0, ptr);
 	ptr  = ptr + len;
@@ -290,6 +298,14 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 	/* read the payload */
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
 	ptr  = ptr + len;
+
+	/* read the peer tx queue depth */
+	len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
+	ptr = ptr + len;
+
+	/* read the peer rx queue depth */
+	len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
+	ptr = ptr + len;
 
 	len = xio_read_uint16(action, 0, ptr);
 	ptr = ptr + len;
@@ -522,10 +538,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			xio_idr_add_uobj(session->lead_connection);
 			xio_disconnect(session->lead_connection);
 
-			/* temporary disable teardown - on cached nexuss close
-			 * callback may jump immediately and since there are no
-			 * connections. teardown may notified
-			 */
 			/* open new connections */
 			retval = xio_session_accept_connection(session);
 			if (retval != 0) {

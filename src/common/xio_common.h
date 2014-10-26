@@ -90,6 +90,7 @@ void xio_set_error(int errnum);
 #define XIO_CONNECTION_HELLO		(1 << 9)	/*  0x200 */
 #define XIO_FIN				(1 << 10)	/*  0x400 */
 #define XIO_CANCEL			(1 << 11)	/*  0x800 */
+#define XIO_ACK				(1 << 12)
 
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
@@ -107,6 +108,7 @@ void xio_set_error(int errnum);
 #define XIO_CANCEL_RSP		(XIO_CANCEL | XIO_RESPONSE)
 #define XIO_CONNECTION_HELLO_REQ (XIO_CONNECTION_HELLO | XIO_REQUEST)
 #define XIO_CONNECTION_HELLO_RSP (XIO_CONNECTION_HELLO | XIO_RESPONSE)
+#define XIO_ACK_REQ		(XIO_ACK | XIO_REQUEST)
 
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
@@ -149,8 +151,8 @@ struct xio_options {
 	int			max_in_iovsz;
 	int			max_out_iovsz;
 	int			reconnect;
-	int			queue_depth;
-	int			pad;
+	int			snd_queue_depth;
+	int			rcv_queue_depth;
 	/* transport options needed globally */
 	int			trans_buf_threshold;
 };
@@ -174,6 +176,10 @@ struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
 	uint32_t		pad;
 	uint64_t		serial_num;
+	uint16_t		sn;		/* serial number	*/
+	uint16_t		ack_sn;		/* ack serial number	*/
+	uint16_t		credits;
+	uint16_t		pad1;
 	uint32_t		flags;
 	uint32_t		receipt_result;
 };

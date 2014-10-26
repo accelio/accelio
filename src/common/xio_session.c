@@ -232,6 +232,9 @@ void xio_session_write_header(struct xio_task *task,
 	PACK_LLVAL(hdr, tmp_hdr, serial_num);
 	PACK_LVAL(hdr, tmp_hdr, flags);
 	PACK_LVAL(hdr, tmp_hdr, receipt_result);
+	PACK_SVAL(hdr, tmp_hdr, sn);
+	PACK_SVAL(hdr, tmp_hdr, ack_sn);
+	PACK_SVAL(hdr, tmp_hdr, credits);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -252,6 +255,9 @@ void xio_session_read_header(struct xio_task *task,
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
 	UNPACK_LVAL(tmp_hdr, hdr, flags);
 	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
+	UNPACK_SVAL(tmp_hdr, hdr, sn);
+	UNPACK_SVAL(tmp_hdr, hdr, ack_sn);
+	UNPACK_SVAL(tmp_hdr, hdr, credits);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -480,6 +486,20 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	/* read session header */
 	xio_session_read_header(task, &hdr);
 
+	if (connection->exp_sn == hdr.sn) {
+		connection->exp_sn++;
+		connection->ack_sn = hdr.sn;
+		connection->peer_credits += hdr.credits;
+	} else {
+		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
+			  connection->exp_sn, hdr.sn);
+	}
+	/*
+	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
+		  __func__,
+		  connection->sn, connection->exp_sn, connection->ack_sn,
+		  connection->credits, connection->peer_credits);
+	*/
 	msg->sn		= hdr.serial_num;
 	msg->flags	= 0;
 	msg->next	= NULL;
@@ -488,7 +508,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &msg->flags);
 
 	xio_connection_queue_io_task(connection, task);
-	connection->rx_queued_msgs++;
 
 	task->state = XIO_TASK_STATE_DELIVERED;
 
@@ -542,6 +561,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_msg		*omsg;
 	struct xio_task		*sender_task = task->sender_task;
 	struct xio_statistics	*stats = &connection->ctx->stats;
+	int			standalone_receipt = 0;
 
 	if ((connection->state != XIO_CONNECTION_STATE_ONLINE) &&
 	    (connection->state != XIO_CONNECTION_STATE_FIN_WAIT_1)) {
@@ -558,6 +578,27 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	/* read session header */
 	xio_session_read_header(task, &hdr);
 
+	/* standalone receipt */
+	if ((hdr.flags &
+	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
+	     XIO_MSG_RSP_FLAG_FIRST) {
+		standalone_receipt = 1;
+	}
+	/* update receive + send window */
+	if (connection->exp_sn == hdr.sn) {
+		connection->exp_sn++;
+		connection->ack_sn = hdr.sn;
+		connection->peer_credits += hdr.credits;
+	} else {
+		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
+				connection->exp_sn, hdr.sn);
+	}
+	/*
+	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
+		  __func__,
+		  connection->sn, connection->exp_sn, connection->ack_sn,
+		  connection->credits, connection->peer_credits);
+	*/
 	msg->sn = hdr.serial_num;
 
 	omsg		= sender_task->omsg;
@@ -571,9 +612,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	task->session = connection->session;
 
 	/* remove only if not response with "read receipt" */
-	if (!((hdr.flags &
-	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-	     XIO_MSG_RSP_FLAG_FIRST)) {
+	if (!standalone_receipt) {
 		xio_connection_remove_in_flight(connection, omsg);
 	} else {
 		if (task->tlv_type == XIO_ONE_WAY_RSP)
@@ -627,9 +666,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 						connection->cb_user_context);
 			}
 			/* standalone receipt */
-			if ((hdr.flags &
-			    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-					XIO_MSG_RSP_FLAG_FIRST) {
+			if (standalone_receipt) {
 				/* after receipt delivered reproduce the
 				 * original "in" side  */
 				memcpy(&omsg->in, &sender_task->in_receipt,
@@ -675,6 +712,7 @@ xmit:
 	return 0;
 }
 
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_rsp_send_comp				                             */
 /*---------------------------------------------------------------------------*/
@@ -716,6 +754,36 @@ xmit:
 	xio_connection_xmit_msgs(connection);
 
 	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_credits_ack_recv						     */
+/*---------------------------------------------------------------------------*/
+int xio_on_credits_ack_recv(struct xio_connection *connection,
+			    struct xio_task *task)
+{
+	struct xio_session_hdr	hdr;
+
+	/* read session header */
+	xio_session_read_header(task, &hdr);
+
+	if (connection->exp_sn == hdr.sn) {
+		connection->exp_sn++;
+		connection->ack_sn = hdr.sn;
+		connection->peer_credits += hdr.credits;
+	} else {
+		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
+			  connection->exp_sn, hdr.sn);
+	}
+	connection->credits++;
+	xio_tasks_pool_put(task);
+	/*
+	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
+	       __func__,
+	       connection->sn, connection->exp_sn, connection->ack_sn,
+	       connection->credits, connection->peer_credits);
+	*/
+	return xio_connection_xmit_msgs(connection);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -955,6 +1023,8 @@ int xio_on_new_message(struct xio_session *s,
 	task->session		= session;
 	task->connection	= connection;
 
+
+
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
 	case XIO_ONE_WAY_REQ:
@@ -963,6 +1033,9 @@ int xio_on_new_message(struct xio_session *s,
 	case XIO_MSG_RSP:
 	case XIO_ONE_WAY_RSP:
 		retval = xio_on_rsp_recv(connection, task);
+		break;
+	case XIO_ACK_REQ:
+		retval = xio_on_credits_ack_recv(connection, task);
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_recv(connection, task);
@@ -1018,6 +1091,9 @@ int xio_on_send_completion(struct xio_session *session,
 		break;
 	case XIO_ONE_WAY_REQ:
 		retval = xio_on_ow_req_send_comp(connection, task);
+		break;
+	case XIO_ACK_REQ:
+		retval = xio_on_credits_ack_send_comp(connection, task);
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_send_comp(connection, task);
@@ -1277,6 +1353,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 
 	session->trans_sn		= params->initial_sn;
 	session->state			= XIO_SESSION_STATE_INIT;
+	session->snd_queue_depth	= g_options.snd_queue_depth;
+	session->rcv_queue_depth	= g_options.rcv_queue_depth;
 
 	memcpy(&session->ses_ops, params->ses_ops,
 	       sizeof(*params->ses_ops));

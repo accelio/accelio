@@ -47,7 +47,8 @@
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
-#define XIO_OPTVAL_DEF_QUEUE_DEPTH			512
+#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH			512
+#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH			512
 
 /* ugly define should be aligned with transport def buffer size
  * the size is for default header of 768B 8K data buffer and
@@ -61,7 +62,8 @@ struct xio_options			g_options = {
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
 	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
-	.queue_depth			= XIO_OPTVAL_DEF_QUEUE_DEPTH,
+	.snd_queue_depth		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH,
+	.rcv_queue_depth		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH,
 	.trans_buf_threshold		= XIO_OPTVAL_DEF_TRANS_BUF_THRESHOLD
 };
 
@@ -176,10 +178,16 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.reconnect = *((int *)optval);
 		return 0;
 		break;
-	case XIO_OPTNAME_QUEUE_DEPTH:
+	case XIO_OPTNAME_SND_QUEUE_DEPTH:
 		if (*((int *)optval) < 1)
 			break;
-		g_options.queue_depth = *((int *)optval);
+		g_options.snd_queue_depth = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH:
+		if (*((int *)optval) < 1)
+			break;
+		g_options.rcv_queue_depth = *((int *)optval);
 		return 0;
 		break;
 	default:
@@ -216,9 +224,13 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.reconnect;
 		 return 0;
-	case XIO_OPTNAME_QUEUE_DEPTH:
+	case XIO_OPTNAME_SND_QUEUE_DEPTH:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.queue_depth;
+		 *((int *)optval) = g_options.snd_queue_depth;
+		 return 0;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.rcv_queue_depth;
 		 return 0;
 	default:
 		break;

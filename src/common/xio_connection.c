@@ -236,6 +236,9 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		connection->session	= session;
 		connection->nexus	= NULL;
 		connection->ctx		= ctx;
+		connection->ack_sn	=~0;
+		connection->credits_ack_watermark = session->rcv_queue_depth/2;
+
 		connection->conn_idx	= conn_idx;
 		connection->cb_user_context = cb_user_context;
 		memcpy(&connection->ses_ops, &session->ses_ops,
@@ -311,6 +314,7 @@ int xio_connection_send(struct xio_connection *connection,
 	struct xio_session_hdr	hdr = {0};
 	int			is_req = 0;
 	int			rc = EFAULT;
+	int			standalone_receipt = 0;
 
 	if (IS_RESPONSE(msg->type) &&
 	    ((msg->flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
@@ -332,6 +336,7 @@ int xio_connection_send(struct xio_connection *connection,
 		hdr.serial_num		= msg->request->sn;
 		hdr.receipt_result	= msg->receipt_res;
 		is_req			= 1;
+		standalone_receipt	= 1;
 	} else {
 		if (IS_REQUEST(msg->type)) {
 			task = xio_nexus_get_primary_task(connection->nexus);
@@ -387,6 +392,22 @@ int xio_connection_send(struct xio_connection *connection,
 
 	hdr.flags		= msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
+	if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
+		/*
+		DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, " \
+			  "peer_credits:%d\n", __func__,
+			connection->sn, connection->exp_sn,
+			connection->ack_sn, connection->credits,
+			connection->peer_credits);
+		*/
+		hdr.sn		= connection->sn++;
+		hdr.ack_sn	= connection->ack_sn;
+		hdr.credits	= connection->credits;
+		connection->credits = 0;
+		if (!standalone_receipt)
+			connection->peer_credits--;
+	}
+
 	xio_session_write_header(task, &hdr);
 
 	/* send it */
@@ -720,7 +741,10 @@ static int xio_connection_xmit(struct xio_connection *connection)
 		in_flight_msgq2	= &connection->in_flight_reqs_msgq;
 	}
 
+
 	while (retry_cnt < 2) {
+		if (connection->peer_credits == 0)
+			break;
 		retval = xio_connection_xmit_inl(connection,
 						 msgq1, in_flight_msgq1,
 						 &retry_cnt);
@@ -848,7 +872,8 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
-		if (connection->tx_queued_msgs >= g_options.queue_depth) {
+		if (connection->tx_queued_msgs >=
+		    connection->session->snd_queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			DEBUG_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
@@ -947,12 +972,12 @@ int xio_send_response(struct xio_msg *msg)
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_DISCARDED);
-			connection->rx_queued_msgs--;
 
 			pmsg = pmsg->next;
 			continue;
 		}
-		if (task->state != XIO_TASK_STATE_DELIVERED) {
+		if (task->state != XIO_TASK_STATE_DELIVERED &&
+		    task->state != XIO_TASK_STATE_READ) {
 			ERROR_LOG("duplicate response send. request sn:%llu\n",
 				  task->imsg.sn);
 			xio_session_notify_msg_error(connection, pmsg,
@@ -991,7 +1016,7 @@ int xio_send_response(struct xio_msg *msg)
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
 
-		connection->rx_queued_msgs--;
+		connection->credits++;
 
 		xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg, pdata);
 
@@ -1085,7 +1110,8 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
-		if (connection->tx_queued_msgs >= g_options.queue_depth) {
+		if (connection->tx_queued_msgs >=
+		    connection->session->snd_queue_depth) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			WARN_LOG("send queue overflow %d\n",
 				 connection->tx_queued_msgs);
@@ -1208,7 +1234,6 @@ int xio_release_response(struct xio_msg *msg)
 	struct xio_connection	*connection = NULL;
 	struct xio_msg		*pmsg = msg;
 
-
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
 		if (task->sender_task == NULL) {
@@ -1221,8 +1246,10 @@ int xio_release_response(struct xio_msg *msg)
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
-
 		xio_release_response_task(task);
+
+		if (++connection->credits >= connection->credits_ack_watermark)
+			xio_send_credits_ack(connection);
 
 		pmsg = pmsg->next;
 	}
@@ -1255,12 +1282,13 @@ int xio_release_msg(struct xio_msg *msg)
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
-		connection->rx_queued_msgs--;
-
-		pmsg = pmsg->next;
-
 		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
+
+		if (++connection->credits >= connection->credits_ack_watermark)
+			xio_send_credits_ack(connection);
+
+		pmsg = pmsg->next;
 	}
 
 	if (connection && xio_is_connection_online(connection))
@@ -1495,6 +1523,9 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("xio_disconnect failed 'Invalid argument'\n");
 		return -1;
 	}
+	DEBUG_LOG("xio_disconnect. session:%p connection:%p\n",
+		  connection->session, connection);
+
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
 	    connection->disconnecting) {
 		/* delay the disconnection to when connection become online */
@@ -2268,9 +2299,11 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 		task->sender_task = NULL;
 		xio_tasks_pool_put(task);
 	}
+	connection->peer_credits = session->peer_rcv_queue_depth;
+	connection->credits = 0;
 
 	/* delayed disconnect request should be done now */
-	if (connection->state == XIO_CONNECTION_STATE_INIT && 
+	if (connection->state == XIO_CONNECTION_STATE_INIT &&
 	    connection->disconnecting) {
 	    	connection->disconnecting = 0;
 		xio_connection_set_state(connection,
@@ -2311,6 +2344,8 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 
 	connection->session->state = XIO_SESSION_STATE_ONLINE;
 	connection->session->disable_teardown = 0;
+	connection->peer_credits = connection->session->peer_rcv_queue_depth;
+	connection->credits = 0;
 
 	TRACE_LOG("session state is now ONLINE. session:%p\n",
 		  connection->session);
@@ -2325,6 +2360,50 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 /*---------------------------------------------------------------------------*/
 int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 					  struct xio_task *task)
+{
+	xio_connection_release_hello(connection, task->omsg);
+	xio_tasks_pool_put(task);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_credits_ack							     */
+/*---------------------------------------------------------------------------*/
+int xio_send_credits_ack(struct xio_connection *connection)
+{
+	struct xio_msg *msg;
+
+	/*
+	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
+		  __func__,
+		  connection->sn, connection->exp_sn, connection->ack_sn,
+		  connection->credits, connection->peer_credits);
+	*/
+	msg = xio_msg_list_first(&connection->one_way_msg_pool);
+	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+
+	msg->type		= XIO_ACK_REQ;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_iov.nents	= 0;
+	msg->out.data_iov.nents	= 0;
+
+	/* insert to the head of the queue */
+	xio_msg_list_insert_tail(&connection->reqs_msgq, msg, pdata);
+
+	DEBUG_LOG("send credits ack. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	/* do not xmit until connection is assigned */
+	return xio_connection_xmit(connection);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_credits_ack_send_comp						     */
+/*---------------------------------------------------------------------------*/
+int xio_on_credits_ack_send_comp(struct xio_connection *connection,
+				 struct xio_task *task)
 {
 	xio_connection_release_hello(connection, task->omsg);
 	xio_tasks_pool_put(task);

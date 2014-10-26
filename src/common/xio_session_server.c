@@ -90,6 +90,13 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
 	ptr  = ptr + len;
 
+	/* queue depth */
+	len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
+	ptr = ptr + len;
+
+	len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
+	ptr = ptr + len;
+
 	/* uri length */
 	len = xio_read_uint16(&req.uri_len, 0, ptr);
 	ptr = ptr + len;
@@ -194,7 +201,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 
 
 	/* calculate length */
-	tot_len = 3*sizeof(uint16_t) + sizeof(uint32_t);
+	tot_len = 5*sizeof(uint16_t) + sizeof(uint32_t);
 	for (i = 0; i < portals_array_len; i++)
 		tot_len += strlen(portals_array[i]) + sizeof(uint16_t);
 	tot_len += user_context_len;
@@ -227,6 +234,14 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 
 	/* session_id */
 	len = xio_write_uint32(session->session_id , 0, ptr);
+	ptr  = ptr + len;
+
+	/* tx queue depth */
+	len = xio_write_uint16(session->snd_queue_depth, 0, ptr);
+	ptr  = ptr + len;
+
+	/* rx queue depth */
+	len = xio_write_uint16(session->rcv_queue_depth, 0, ptr);
 	ptr  = ptr + len;
 
 	/* action */
@@ -379,7 +394,6 @@ int xio_accept(struct xio_session *session,
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
 
-
 	retval = xio_connection_send(task->connection, msg);
 	if (retval && retval != -EAGAIN) {
 		ERROR_LOG("failed to send message. errno:%d\n", -retval);
@@ -397,6 +411,10 @@ int xio_accept(struct xio_session *session,
 		TRACE_LOG("session state is now ACCEPT. session:%p\n",
 			  session);
 	} else {
+		/* initialize credits */
+		task->connection->peer_credits	= session->peer_rcv_queue_depth;
+		task->connection->credits	= 0;
+
 		/* server side state is changed to ONLINE, immediately  */
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state changed to ONLINE. session:%p\n",

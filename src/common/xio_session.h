@@ -69,6 +69,10 @@ struct xio_session {
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
 	uint32_t			connections_nr;
+	uint16_t			snd_queue_depth;
+	uint16_t			rcv_queue_depth;
+	uint16_t			peer_snd_queue_depth;
+	uint16_t			peer_rcv_queue_depth;
 	uint32_t			pad;
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;

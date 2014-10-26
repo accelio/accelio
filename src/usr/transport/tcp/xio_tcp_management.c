@@ -2184,7 +2184,10 @@ static void xio_tcp_primary_pool_get_params(
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = g_options.queue_depth * 20;
+	*max_nr = max((g_options.snd_queue_depth +
+		       g_options.rcv_queue_depth)*40, 1024);
+
+
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
