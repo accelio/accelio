@@ -535,8 +535,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 					XIO_CONNECTION_STATE_ONLINE;
 
 			/* temporary account it as user object */
-			xio_idr_add_uobj(session->lead_connection);
-			xio_disconnect(session->lead_connection);
+			//xio_idr_add_uobj(session->lead_connection);
+			xio_disconnect_initial_connection(session->lead_connection);
 
 			/* open new connections */
 			retval = xio_session_accept_connection(session);
