@@ -116,8 +116,6 @@ struct xio_tcp_options {
 	int			enable_mem_pool;
 	int			enable_dma_latency;
 	int			enable_mr_check;
-	int			tcp_buf_threshold;
-	int			tcp_buf_attr_rdonly;
 	int			max_in_iovsz;
 	int			max_out_iovsz;
 	int			tcp_no_delay;
@@ -301,7 +299,7 @@ struct xio_tcp_transport {
 	enum xio_transport_state	state;
 
 	/* tx parameters */
-	size_t				max_send_buf_sz;
+	size_t				max_inline_buf_sz;
 
 	int				tx_ready_tasks_num;
 

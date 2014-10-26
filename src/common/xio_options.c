@@ -49,13 +49,8 @@
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
 #define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH			512
 #define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH			512
-
-/* ugly define should be aligned with transport def buffer size
- * the size is for default header of 768B 8K data buffer and
- * 256B accelio header total of default buffer 9K
- */
-#define XIO_OPTVAL_DEF_TRANS_BUF_THRESHOLD		(8*1024+768)
-
+#define XIO_OPTVAL_DEF_MAX_INLINE_HEADER		256
+#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8*1024)
 
 /* xio options */
 struct xio_options			g_options = {
@@ -64,7 +59,8 @@ struct xio_options			g_options = {
 	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
 	.snd_queue_depth		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH,
 	.rcv_queue_depth		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH,
-	.trans_buf_threshold		= XIO_OPTVAL_DEF_TRANS_BUF_THRESHOLD
+	.max_inline_hdr			= XIO_OPTVAL_DEF_MAX_INLINE_HEADER,
+	.max_inline_data		= XIO_OPTVAL_DEF_MAX_INLINE_DATA,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -190,6 +186,22 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.rcv_queue_depth = *((int *)optval);
 		return 0;
 		break;
+	case XIO_OPTNAME_MAX_INLINE_HEADER:
+		if (optlen != sizeof(int))
+			break;
+		if (*((int *)optval) < 0)
+			break;
+		g_options.max_inline_hdr = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_INLINE_DATA:
+		if (optlen != sizeof(int))
+			break;
+		if (*((int *)optval) < 0)
+			break;
+		g_options.max_inline_data = *((int *)optval);
+		return 0;
+		break;
 	default:
 		break;
 	}
@@ -231,6 +243,14 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.rcv_queue_depth;
+		 return 0;
+	case XIO_OPTNAME_MAX_INLINE_HEADER:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.max_inline_hdr;
+		 return 0;
+	case XIO_OPTNAME_MAX_INLINE_DATA:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.max_inline_data;
 		 return 0;
 	default:
 		break;

@@ -293,8 +293,7 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;
 	}
-	if ((int)(vmsg->header.iov_len + data_len) >
-	     g_options.trans_buf_threshold && data_len > 0) {
+	if (data_len > (ssize_t)g_options.max_inline_data && data_len > 0) {
 		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
 		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
 		return;

@@ -61,16 +61,12 @@
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
 #define XIO_OPTVAL_DEF_ENABLE_MR_CHECK			0
 #define XIO_OPTVAL_DEF_TCP_ENABLE_DMA_LATENCY		0
-#define XIO_OPTVAL_DEF_TCP_BUF_THRESHOLD		SEND_BUF_SZ
 #define XIO_OPTVAL_DEF_TCP_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_TCP_MAX_OUT_IOVSZ		XIO_IOVLEN
 #define XIO_OPTVAL_DEF_TCP_NO_DELAY			0
 #define XIO_OPTVAL_DEF_TCP_SO_SNDBUF			4194304
 #define XIO_OPTVAL_DEF_TCP_SO_RCVBUF			4194304
 #define XIO_OPTVAL_DEF_TCP_DUAL_SOCK			1
-
-#define XIO_OPTVAL_MIN_TCP_BUF_THRESHOLD		256
-#define XIO_OPTVAL_MAX_TCP_BUF_THRESHOLD		65536
 
 
 /*---------------------------------------------------------------------------*/
@@ -90,8 +86,6 @@ struct xio_tcp_options			tcp_options = {
 	.enable_mem_pool		= XIO_OPTVAL_DEF_ENABLE_MEM_POOL,
 	.enable_dma_latency		= XIO_OPTVAL_DEF_TCP_ENABLE_DMA_LATENCY,
 	.enable_mr_check		= XIO_OPTVAL_DEF_ENABLE_MR_CHECK,
-	.tcp_buf_threshold		= XIO_OPTVAL_DEF_TCP_BUF_THRESHOLD,
-	.tcp_buf_attr_rdonly		= 0,
 	.max_in_iovsz			= XIO_OPTVAL_DEF_TCP_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_TCP_MAX_OUT_IOVSZ,
 	.tcp_no_delay			= XIO_OPTVAL_DEF_TCP_NO_DELAY,
@@ -777,7 +771,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 		int			create_socket)
 {
 	struct xio_tcp_transport	*tcp_hndl;
-	int				xio_hdr_size;
+	int				max_xio_hdr;
 
 
 	/*allocate tcp handl */
@@ -817,8 +811,8 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	memset(&tcp_hndl->tmp_work, 0, sizeof(struct xio_tcp_work_req));
 	tcp_hndl->tmp_work.msg_iov = tcp_hndl->tmp_iovec;
 
-	xio_hdr_size = xio_tcp_get_max_header_size();
-	xio_hdr_size =	ALIGN(xio_hdr_size, 64);
+	max_xio_hdr = xio_tcp_get_max_header_size();
+	max_xio_hdr =	ALIGN(max_xio_hdr, 64);
 
 
 	/* create tcp socket */
@@ -830,14 +824,13 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	}
 
 	/* from now on don't allow changes */
-	tcp_options.tcp_buf_attr_rdonly = 1;
-	tcp_hndl->max_send_buf_sz	= tcp_options.tcp_buf_threshold +
-					  xio_hdr_size;
-	tcp_hndl->max_send_buf_sz	=
-				ALIGN(tcp_hndl->max_send_buf_sz, 64);
+	tcp_hndl->max_inline_buf_sz	= max_xio_hdr +
+					  g_options.max_inline_hdr +
+					  g_options.max_inline_data;
+	tcp_hndl->max_inline_buf_sz	=
+				ALIGN(tcp_hndl->max_inline_buf_sz, 64);
 
-
-	tcp_hndl->membuf_sz		= tcp_hndl->max_send_buf_sz;
+	tcp_hndl->membuf_sz		= tcp_hndl->max_inline_buf_sz;
 
 	if (observer)
 		xio_observable_reg_observer(&tcp_hndl->base.observable,
@@ -2249,23 +2242,6 @@ static int xio_tcp_set_opt(void *xio_obj,
 		tcp_options.enable_dma_latency = *((int *)optval);
 		return 0;
 		break;
-	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		VALIDATE_SZ(sizeof(int));
-
-		/* changing the parameter is not allowed */
-		if (tcp_options.tcp_buf_attr_rdonly) {
-			xio_set_error(EPERM);
-			return -1;
-		}
-		if (*(int *)optval < 0 ||
-		    *(int *)optval > XIO_OPTVAL_MAX_TCP_BUF_THRESHOLD) {
-			xio_set_error(EINVAL);
-			return -1;
-		}
-		tcp_options.tcp_buf_threshold = *((int *)optval);
-		g_options.trans_buf_threshold = *((int *)optval);
-		return 0;
-		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		VALIDATE_SZ(sizeof(int));
 		tcp_options.max_in_iovsz = *((int *)optval);
@@ -2325,10 +2301,6 @@ static int xio_tcp_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
-	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		*((int *)optval) = tcp_options.tcp_buf_threshold;
-		*optlen = sizeof(int);
-		return 0;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		*((int *)optval) = tcp_options.max_in_iovsz;
 		*optlen = sizeof(int);
@@ -2451,6 +2423,9 @@ static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 	    ((vmsg->header.iov_base == NULL)  &&
 	     (vmsg->header.iov_len != 0)))
 			return 0;
+
+	if (vmsg->header.iov_len > (size_t)g_options.max_inline_hdr)
+		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		if (sge_mr(sgtbl_ops, sge))

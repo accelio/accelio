@@ -2088,21 +2088,22 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 					       tbl_nents(sgtbl_ops, sgtbl));
 
 
-	if (rdma_hndl->max_send_buf_sz	< (xio_hdr_len + ulp_out_hdr_len)) {
+	/*
+	if (rdma_hndl->max_inline_buf_sz < (xio_hdr_len + ulp_out_hdr_len)) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
-			  ulp_out_imm_len, rdma_hndl->max_send_buf_sz -
+			  ulp_out_imm_len, rdma_hndl->max_inline_buf_sz -
 			  xio_hdr_len);
 		return -1;
 	}
+	*/
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
 	/* test for using send/receive or rdma_read */
 	tx_by_sr = (tbl_nents(sgtbl_ops, sgtbl)  < (rdma_hndl->max_sge - 1) &&
 		    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
-		      rdma_hndl->max_send_buf_sz) &&
-		     (((int)(ulp_out_hdr_len + ulp_out_imm_len) <=
-			     rdma_options.rdma_buf_threshold) ||
+		      rdma_hndl->max_inline_buf_sz) &&
+		     (((int)(ulp_out_imm_len) <= g_options.max_inline_data) ||
 			    ulp_out_imm_len == 0));
 
 
@@ -2218,7 +2219,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	 */
 	small_zero_copy = task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY;
 	if (!(small_zero_copy) &&
-	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_send_buf_sz) {
+	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
 		if (data_len)
@@ -2445,10 +2446,10 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			   (task->imsg_flags &
 			    XIO_HEADER_FLAG_SMALL_ZERO_COPY));
 
-	if (rdma_hndl->max_send_buf_sz < xio_hdr_len + ulp_hdr_len) {
+	if (rdma_hndl->max_inline_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
 			  ulp_hdr_len,
-			  rdma_hndl->max_send_buf_sz - xio_hdr_len);
+			  rdma_hndl->max_inline_buf_sz - xio_hdr_len);
 		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
@@ -2463,7 +2464,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	    (!small_zero_copy &&
 	     (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge - 1) &&
 	      ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
-				< rdma_hndl->max_send_buf_sz))) {
+				< rdma_hndl->max_inline_buf_sz))) {
 		/*
 		if (data_alignment && ulp_imm_len) {
 			uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
@@ -3405,7 +3406,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_setup_msg  req;
 
-	req.buffer_sz		= rdma_hndl->max_send_buf_sz;
+	req.buffer_sz		= rdma_hndl->max_inline_buf_sz;
 	req.sq_depth		= rdma_hndl->sq_depth;
 	req.rq_depth		= rdma_hndl->rq_depth;
 	req.credits		= 0;
@@ -3541,7 +3542,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 		/* current implementation is symmetric */
 		rsp->buffer_sz	= min(req.buffer_sz,
-				      ((u64)rdma_hndl->max_send_buf_sz));
+				      ((u64)rdma_hndl->max_inline_buf_sz));
 		rsp->sq_depth	= min(req.sq_depth, ((u16)rdma_hndl->rq_depth));
 		rsp->rq_depth	= min(req.rq_depth, ((u16)rdma_hndl->sq_depth));
 		rsp->max_in_iovsz	= req.max_in_iovsz;
@@ -3553,7 +3554,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->actual_rq_depth	= rdma_hndl->rq_depth + EXTRA_RQE;
 	rdma_hndl->sq_depth		= rsp->sq_depth;
 	rdma_hndl->membuf_sz		= rsp->buffer_sz;
-	rdma_hndl->max_send_buf_sz	= rsp->buffer_sz;
+	rdma_hndl->max_inline_buf_sz	= rsp->buffer_sz;
 	rdma_hndl->peer_max_in_iovsz	= rsp->max_in_iovsz;
 	rdma_hndl->peer_max_out_iovsz	= rsp->max_out_iovsz;
 

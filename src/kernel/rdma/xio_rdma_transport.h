@@ -134,8 +134,6 @@ struct xio_rdma_transport;
 struct xio_rdma_options {
 	int	enable_mem_pool;
 	int	enable_dma_latency;
-	int	rdma_buf_threshold;
-	int	rdma_buf_attr_rdonly;
 	int	max_in_iovsz;
 	int	max_out_iovsz;
 };
@@ -422,7 +420,7 @@ struct xio_rdma_transport {
 	enum xio_transport_state	state;
 
 	/* tx parameters */
-	size_t				max_send_buf_sz;
+	size_t				max_inline_buf_sz;
 	int				kick_rdma_rd;
 	int				reqs_in_flight_nr;
 	int				rsps_in_flight_nr;

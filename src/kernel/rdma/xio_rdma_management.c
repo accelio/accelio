@@ -83,11 +83,8 @@ MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:d
 /* default option values */
 #define XIO_OPTVAL_DEF_ENABLE_MEM_POOL			1
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
-#define XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD		SEND_BUF_SZ
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
-#define XIO_OPTVAL_MIN_RDMA_BUF_THRESHOLD		1024
-#define XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD		65536
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -101,8 +98,6 @@ struct xio_options			*g_poptions;
 struct xio_rdma_options			rdma_options = {
 	.enable_mem_pool		= XIO_OPTVAL_DEF_ENABLE_MEM_POOL,
 	.enable_dma_latency		= XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY,
-	.rdma_buf_threshold		= XIO_OPTVAL_DEF_RDMA_BUF_THRESHOLD,
-	.rdma_buf_attr_rdonly		= 0,
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
 };
@@ -2230,7 +2225,7 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 						struct xio_observer *observer)
 {
 	struct xio_rdma_transport *rdma_hndl;
-	int			   xio_hdr_size;
+	int			   max_xio_hdr;
 
 
 	/* allocate rdma handle */
@@ -2247,8 +2242,8 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 		ERROR_LOG("allocating rdma mempool failed.\n");
 		goto cleanup;
 	}
-	xio_hdr_size = xio_rdma_get_max_header_size();
-	xio_hdr_size =	ALIGN(xio_hdr_size, 64);
+	max_xio_hdr = xio_rdma_get_max_header_size();
+	max_xio_hdr =	ALIGN(max_xio_hdr, 64);
 
 
 	rdma_hndl->base.portal_uri	= NULL;
@@ -2261,14 +2256,12 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 	rdma_hndl->rq_depth		= MAX_RECV_WR;
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
-	rdma_hndl->max_send_buf_sz	= rdma_options.rdma_buf_threshold +
-					  xio_hdr_size;
-	rdma_hndl->max_send_buf_sz	=
-				ALIGN(rdma_hndl->max_send_buf_sz, 64);
+	rdma_hndl->max_inline_buf_sz	= g_options.max_inline_hdr +
+					  g_options.max_inline_data +
+					  max_xio_hdr;
+	rdma_hndl->max_inline_buf_sz	=
+				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
 
-
-	/* from now on don't allow changes */
-	rdma_options.rdma_buf_attr_rdonly = 1;
 
 	INIT_LIST_HEAD(&rdma_hndl->trans_list_entry);
 	INIT_LIST_HEAD(&rdma_hndl->in_flight_list);
@@ -2733,23 +2726,6 @@ static int xio_rdma_set_opt(void *xio_obj,
 		rdma_options.enable_dma_latency = *((int *)optval);
 		return 0;
 		break;
-	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		VALIDATE_SZ(sizeof(int));
-
-		/* changing the parameter is not allowed */
-		if (rdma_options.rdma_buf_attr_rdonly) {
-			xio_set_error(EPERM);
-			return -1;
-		}
-		if (*(int *)optval < 0 ||
-		    *(int *)optval > XIO_OPTVAL_MAX_RDMA_BUF_THRESHOLD) {
-			xio_set_error(EINVAL);
-			return -1;
-		}
-		rdma_options.rdma_buf_threshold = *((int *)optval);
-		g_poptions->trans_buf_threshold = *((int *)optval);
-		return 0;
-		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		VALIDATE_SZ(sizeof(int));
 		rdma_options.max_in_iovsz = *((int *)optval);
@@ -2784,10 +2760,6 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*optlen = sizeof(int);
 		return 0;
 		break;
-	case XIO_OPTNAME_TRANS_BUF_THRESHOLD:
-		*((int *)optval) = rdma_options.rdma_buf_threshold;
-		*optlen = sizeof(int);
-		return 0;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		*((int *)optval) = rdma_options.max_in_iovsz;
 		*optlen = sizeof(int);
@@ -2922,6 +2894,9 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	     (vmsg->header.iov_len == 0)) ||
 	    ((vmsg->header.iov_base == NULL)  &&
 	     (vmsg->header.iov_len != 0)))
+		return 0;
+
+	if (vmsg->header.iov_len > (size_t)g_options.max_inline_hdr)
 		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {

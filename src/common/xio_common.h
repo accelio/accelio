@@ -154,7 +154,8 @@ struct xio_options {
 	int			snd_queue_depth;
 	int			rcv_queue_depth;
 	/* transport options needed globally */
-	int			trans_buf_threshold;
+	int			max_inline_hdr;
+	int			max_inline_data;
 };
 
 struct xio_sge {

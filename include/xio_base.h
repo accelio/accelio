@@ -938,11 +938,16 @@ enum xio_optname {
 	XIO_OPTNAME_SND_QUEUE_DEPTH,	  /**< maximum tx queued msgs	      */
 	XIO_OPTNAME_RCV_QUEUE_DEPTH,	  /**< maximum rx queued msgs	      */
 
+	XIO_OPTNAME_MAX_INLINE_HEADER,    /**< set/get maximum inline header  */
+					  /**< size			      */
+
+	XIO_OPTNAME_MAX_INLINE_DATA,    /**< set/get maximum inline data      */
+					  /**< size			      */
+
+
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
 					  /**< transport memory pool	      */
-	XIO_OPTNAME_TRANS_BUF_THRESHOLD,  /**< set/get transport buffer	      */
-					  /**< threshold		      */
 
 	/* XIO_OPTLEVEL_RDMA */
 	XIO_OPTNAME_RDMA_NUM_DEVICES = 300,    /**< number of RDMA capable    */
