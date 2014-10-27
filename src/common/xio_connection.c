@@ -363,7 +363,6 @@ int xio_connection_send(struct xio_connection *connection,
 			hdr.serial_num	= msg->request->sn;
 		}
 	}
-
 	/* reset the task mbuf */
 	xio_mbuf_reset(&task->mbuf);
 
@@ -742,8 +741,15 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 
 	while (retry_cnt < 2) {
-		if (connection->peer_credits == 0)
-			break;
+		if (connection->peer_credits == 0) {
+			struct xio_msg *msg1 = xio_msg_list_first(msgq1);
+			struct xio_msg *msg2 = xio_msg_list_first(msgq2);
+			if ((msg1 && !IS_APPLICATION_MSG(msg1)) ||
+			    (msg2 && !IS_APPLICATION_MSG(msg2)))  {
+				/* control message send anyway */
+			} else
+				break;
+		}
 		retval = xio_connection_xmit_inl(connection,
 						 msgq1, in_flight_msgq1,
 						 &retry_cnt);
