@@ -103,6 +103,8 @@ static void xio_ctor(void)
 	g_mhz = xio_get_cpu_mhz();
 	xio_thread_data_construct();
 	usr_idr = xio_idr_create();
+	if (!usr_idr)
+		ERROR_LOG("usr_idr creation failed");
 	sessions_cache_construct();
 	nexus_cache_construct();
 

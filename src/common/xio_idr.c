@@ -62,6 +62,9 @@ int xio_idr_remove_uobj(struct xio_idr *idr, void *uobj)
 	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
+	if (!idr)
+		return -1;
+
 	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
 	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
@@ -87,6 +90,9 @@ int xio_idr_lookup_uobj(struct xio_idr *idr, void *uobj)
 	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
+	if (!idr)
+		return 0;
+
 	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
 	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
@@ -103,6 +109,9 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	struct xio_idr_entry	*idr1_entry = NULL, *idr_entry;
 	struct xio_key_int64	key;
 	int			retval = -1;
+
+	if (!idr)
+		return -1;
 
 	idr_entry = kcalloc(1, sizeof(*idr_entry), GFP_KERNEL);
 	if (idr_entry == NULL)
@@ -149,6 +158,8 @@ struct xio_idr *xio_idr_create(void)
 void xio_idr_destroy(struct xio_idr *idr)
 {
 	struct xio_idr_entry *idr_entry = NULL;
+	if (!idr)
+		return;
 
 	HT_FOREACH_SAFE(idr_entry, &idr->cache, idr_ht_entry) {
 		HT_REMOVE(&idr->cache, idr_entry, xio_idr_entry, idr_ht_entry);

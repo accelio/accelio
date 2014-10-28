@@ -73,6 +73,10 @@ static int __init xio_init_module(void)
 	sessions_cache_construct();
 	nexus_cache_construct();
 	usr_idr = xio_idr_create();
+	if (!usr_idr) {
+		pr_err("usr_idr creation failed\n");
+		return -ENOMEM;
+	}
 
 	return 0;
 }
