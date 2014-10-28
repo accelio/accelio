@@ -51,7 +51,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 /* The root of XIO debugfs tree */
 static struct dentry *xio_root;
-struct xio_idr *usr_idr;
+struct xio_idr *usr_idr = NULL;
 
 /*---------------------------------------------------------------------------*/
 /* xio_constructor							     */

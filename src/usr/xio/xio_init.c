@@ -49,7 +49,7 @@
 
 int		page_size;
 double		g_mhz;
-struct xio_idr  *usr_idr;
+struct xio_idr  *usr_idr = NULL;
 
 #ifdef HAVE_INFINIBAND_VERBS_H
 extern struct xio_transport xio_rdma_transport;
