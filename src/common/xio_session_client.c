@@ -535,7 +535,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 					XIO_CONNECTION_STATE_ONLINE;
 
 			/* temporary account it as user object */
-			xio_idr_add_uobj(session->lead_connection);
+			xio_idr_add_uobj(usr_idr, session->lead_connection,
+					"xio_connection");
 			xio_disconnect_initial_connection(session->lead_connection);
 
 			/* open new connections */
@@ -945,7 +946,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			xio_connection_send_hello_req(connection);
 	}
 
-	xio_idr_add_uobj(connection);
+	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 
 	mutex_unlock(&session->lock);
 

@@ -47,8 +47,9 @@
 #include "xio_transport.h"
 #include "xio_idr.h"
 
-int	page_size;
-double	g_mhz;
+int		page_size;
+double		g_mhz;
+struct xio_idr  *usr_idr;
 
 #ifdef HAVE_INFINIBAND_VERBS_H
 extern struct xio_transport xio_rdma_transport;
@@ -85,7 +86,7 @@ static void xio_dtor(void)
 
 		xio_unreg_transport(transport_tbl[i]);
 	}
-	xio_idr_destroy();
+	xio_idr_destroy(usr_idr);
 	xio_thread_data_destruct();
 }
 
@@ -101,7 +102,7 @@ static void xio_ctor(void)
 		page_size = 4096;
 	g_mhz = xio_get_cpu_mhz();
 	xio_thread_data_construct();
-	xio_idr_create();
+	usr_idr = xio_idr_create();
 	sessions_cache_construct();
 	nexus_cache_construct();
 

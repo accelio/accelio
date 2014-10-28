@@ -51,6 +51,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 /* The root of XIO debugfs tree */
 static struct dentry *xio_root;
+struct xio_idr *usr_idr;
 
 /*---------------------------------------------------------------------------*/
 /* xio_constructor							     */
@@ -71,14 +72,14 @@ static int __init xio_init_module(void)
 
 	sessions_cache_construct();
 	nexus_cache_construct();
-	xio_idr_create();
+	usr_idr = xio_idr_create();
 
 	return 0;
 }
 
 static void __exit xio_cleanup_module(void)
 {
-	xio_idr_destroy();
+	xio_idr_destroy(usr_idr);
 	debugfs_remove_recursive(xio_root);
 }
 

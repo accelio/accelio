@@ -42,34 +42,39 @@
 #include <sys/hashtable.h>
 #include "xio_idr.h"
 
-struct idr_entry {
+struct xio_idr_entry {
 	void					*key;
-	HT_ENTRY(idr_entry, xio_key_int64)	idr_ht_entry;
+	char					*name;
+	HT_ENTRY(xio_idr_entry, xio_key_int64)	idr_ht_entry;
 };
 
-static HT_HEAD(, idr_entry, HASHTABLE_PRIME_MEDIUM) idr_cache;
-static spinlock_t idr_lock;
+struct xio_idr {
+	HT_HEAD(, xio_idr_entry, HASHTABLE_PRIME_MEDIUM) cache;
+	spinlock_t lock;
+	int	   pad;
+};
 
 /*---------------------------------------------------------------------------*/
 /* xio_idr_remove_uobj							     */
 /*---------------------------------------------------------------------------*/
-int xio_idr_remove_uobj(void *uobj)
+int xio_idr_remove_uobj(struct xio_idr *idr, void *uobj)
 {
-	struct idr_entry	*idr = NULL;
+	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
-	spin_lock(&idr_lock);
+	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
-	HT_LOOKUP(&idr_cache, &key, idr, idr_ht_entry);
+	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
 	if (idr == NULL) {
-		spin_unlock(&idr_lock);
+		spin_unlock(&idr->lock);
 		return -1;
 	}
 
-	HT_REMOVE(&idr_cache, idr, xio_idr_entry, idr_ht_entry);
-	spin_unlock(&idr_lock);
+	HT_REMOVE(&idr->cache, idr_entry, xio_idr_entry, idr_ht_entry);
+	spin_unlock(&idr->lock);
 
-	kfree(idr);
+	kfree(idr_entry->name);
+	kfree(idr_entry);
 
 	return 0;
 }
@@ -77,15 +82,15 @@ int xio_idr_remove_uobj(void *uobj)
 /*---------------------------------------------------------------------------*/
 /* xio_idr_lookup_uobj							     */
 /*---------------------------------------------------------------------------*/
-int xio_idr_lookup_uobj(void *uobj)
+int xio_idr_lookup_uobj(struct xio_idr *idr, void *uobj)
 {
-	struct idr_entry	*idr = NULL;
+	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
-	spin_lock(&idr_lock);
+	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
-	HT_LOOKUP(&idr_cache, &key, idr, idr_ht_entry);
-	spin_unlock(&idr_lock);
+	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
+	spin_unlock(&idr->lock);
 
 	return (idr != NULL);
 }
@@ -93,27 +98,28 @@ int xio_idr_lookup_uobj(void *uobj)
 /*---------------------------------------------------------------------------*/
 /* xio_sessions_cache_add			                             */
 /*---------------------------------------------------------------------------*/
-int xio_idr_add_uobj(void *uobj)
+int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 {
-	struct idr_entry	*idr1 = NULL, *idr;
+	struct xio_idr_entry	*idr1_entry = NULL, *idr_entry;
 	struct xio_key_int64	key;
 	int			retval = -1;
 
-	idr = kcalloc(1, sizeof(*idr), GFP_KERNEL);
-	if (idr == NULL)
+	idr_entry = kcalloc(1, sizeof(*idr_entry), GFP_KERNEL);
+	if (idr_entry == NULL)
 		return -1;
 
-	spin_lock(&idr_lock);
+	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
-	HT_LOOKUP(&idr_cache, &key, idr1, idr_ht_entry);
-	if (idr1 != NULL)
+	HT_LOOKUP(&idr->cache, &key, idr1_entry, idr_ht_entry);
+	if (idr1_entry != NULL)
 		goto exit;
 
-	idr->key = uobj;
-	HT_INSERT(&idr_cache, &key, idr, idr_ht_entry);
+	idr_entry->key = uobj;
+	idr_entry->name = kstrdup(obj_name, GFP_KERNEL);
+	HT_INSERT(&idr->cache, &key, idr_entry, idr_ht_entry);
 	retval = 0;
 exit:
-	spin_unlock(&idr_lock);
+	spin_unlock(&idr->lock);
 	if (retval)
 		kfree(idr);
 
@@ -123,23 +129,33 @@ exit:
 /*---------------------------------------------------------------------------*/
 /* xio_idr_create							     */
 /*---------------------------------------------------------------------------*/
-void xio_idr_create(void)
+struct xio_idr *xio_idr_create(void)
 {
-	HT_INIT(&idr_cache, xio_int64_hash, xio_int64_cmp, xio_int64_cp);
-	spin_lock_init(&idr_lock);
+	struct xio_idr *idr;
+
+	idr = kcalloc(1, sizeof(*idr), GFP_KERNEL);
+	if (idr == NULL)
+		return NULL;
+
+	HT_INIT(&idr->cache, xio_int64_hash, xio_int64_cmp, xio_int64_cp);
+	spin_lock_init(&idr->lock);
+
+	return idr;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_idr_destroy							     */
 /*---------------------------------------------------------------------------*/
-void xio_idr_destroy(void)
+void xio_idr_destroy(struct xio_idr *idr)
 {
-	struct idr_entry *idr = NULL;
+	struct xio_idr_entry *idr_entry = NULL;
 
-	HT_FOREACH_SAFE(idr, &idr_cache, idr_ht_entry) {
-		HT_REMOVE(&idr_cache, idr, idr_entry, idr_ht_entry);
-		ERROR_LOG("user object leaked: %p\n", idr->key);
-		kfree(idr);
+	HT_FOREACH_SAFE(idr_entry, &idr->cache, idr_ht_entry) {
+		HT_REMOVE(&idr->cache, idr_entry, xio_idr_entry, idr_ht_entry);
+		ERROR_LOG("user object leaked: %p, type:struct %s\n", idr_entry->key, idr_entry->name);
+		kfree(idr_entry->name);
+		kfree(idr_entry);
 	}
+	kfree(idr);
 }
 

@@ -180,7 +180,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	ctx->stats.name[XIO_STAT_DELAY]    = kstrdup("DELAY", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_APPDELAY] = kstrdup("APPDELAY", GFP_KERNEL);
 
-	xio_idr_add_uobj(ctx);
+	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
 cleanup3:
@@ -248,9 +248,9 @@ void xio_context_destroy(struct xio_context *ctx)
 	int i;
 	int found;
 
-	found = xio_idr_lookup_uobj(ctx);
+	found = xio_idr_lookup_uobj(usr_idr, ctx);
 	if (found) {
-		xio_idr_remove_uobj(ctx);
+		xio_idr_remove_uobj(usr_idr, ctx);
 	} else {
 		ERROR_LOG("context not found:%p\n", ctx);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);

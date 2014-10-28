@@ -332,7 +332,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->netlink_sock = (void *)(unsigned long) fd;
 
 exit:
-	xio_idr_add_uobj(ctx);
+	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
 cleanup2:
@@ -355,9 +355,9 @@ void xio_context_destroy(struct xio_context *ctx)
 		return;
 
 
-	found = xio_idr_lookup_uobj(ctx);
+	found = xio_idr_lookup_uobj(usr_idr, ctx);
 	if (found) {
-		xio_idr_remove_uobj(ctx);
+		xio_idr_remove_uobj(usr_idr, ctx);
 	} else {
 		ERROR_LOG("context not found:%p\n", ctx);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);

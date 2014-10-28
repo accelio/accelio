@@ -1894,9 +1894,9 @@ int xio_connection_destroy(struct xio_connection *connection)
 		xio_set_error(EINVAL);
 		return -1;
 	}
-	found = xio_idr_lookup_uobj(connection);
+	found = xio_idr_lookup_uobj(usr_idr, connection);
 	if (found) {
-		xio_idr_remove_uobj(connection);
+		xio_idr_remove_uobj(usr_idr, connection);
 	} else {
 		ERROR_LOG("connection not found:%p\n", connection);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);

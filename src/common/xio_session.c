@@ -1374,7 +1374,7 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 			  session);
 		goto cleanup3;
 	}
-	xio_idr_add_uobj(session);
+	xio_idr_add_uobj(usr_idr, session, "xio_session");
 
 	return session;
 
@@ -1408,9 +1408,9 @@ int xio_session_destroy(struct xio_session *session)
 		return -1;
 	}
 
-	found = xio_idr_lookup_uobj(session);
+	found = xio_idr_lookup_uobj(usr_idr, session);
 	if (found) {
-		xio_idr_remove_uobj(session);
+		xio_idr_remove_uobj(usr_idr, session);
 	} else {
 		ERROR_LOG("session not found:%p\n", session);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);

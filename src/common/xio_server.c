@@ -163,8 +163,8 @@ static int xio_on_new_message(struct xio_server *server,
 		}
 		connection = connection1;
 
-		xio_idr_add_uobj(session);
-		xio_idr_add_uobj(connection);
+		xio_idr_add_uobj(usr_idr, session, "xio_session");
+		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 
@@ -209,7 +209,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
-		xio_idr_add_uobj(connection);
+		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 	} else {
 		ERROR_LOG("server unexpected message\n");
 		return -1;
@@ -330,7 +330,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		goto cleanup1;
 	}
 	xio_nexus_set_server(server->listener, server);
-	xio_idr_add_uobj(server);
+	xio_idr_add_uobj(usr_idr, server, "xio_server");
 
 	return server;
 
@@ -375,9 +375,9 @@ int xio_unbind(struct xio_server *server)
 	if (server == NULL)
 		return -1;
 
-	found = xio_idr_lookup_uobj(server);
+	found = xio_idr_lookup_uobj(usr_idr, server);
 	if (found) {
-		xio_idr_remove_uobj(server);
+		xio_idr_remove_uobj(usr_idr, server);
 	} else {
 		ERROR_LOG("server not found:%p\n", server);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
