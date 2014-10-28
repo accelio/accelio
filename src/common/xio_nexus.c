@@ -761,18 +761,12 @@ static int xio_nexus_on_recv_session_setup_req(struct xio_nexus *nexus,
 	nexus_event_data.msg.task = task;
 	nexus_event_data.msg.op = XIO_WC_OP_RECV;
 
-
 	/* add reference count to opened nexus that new
 	 * session is join in */
-	if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-		xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-					 &nexus->close_time_hndl);
-		kref_init(&nexus->kref);
-	} else {
-		if (!nexus->is_first_req)
-			kref_get(&nexus->kref);
-	}
-	nexus->is_first_req = 0;
+	if (!nexus->is_first_req)
+		xio_nexus_addref(nexus);
+	else
+		nexus->is_first_req = 0;
 
 	/* always route "hello" to server */
 	xio_nexus_notify_server(
@@ -2066,6 +2060,9 @@ static void xio_nexus_delayed_close(struct kref *kref)
 					&nexus->close_time_hndl);
 			if (retval)
 				ERROR_LOG("xio_nexus_delayed_close failed\n");
+		} else {
+			/* leave the server nexus alive */
+			kref_init(&nexus->kref);
 		}
 		break;
 	}
