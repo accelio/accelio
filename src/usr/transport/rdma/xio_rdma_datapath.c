@@ -708,6 +708,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_on_recv_nop(rdma_hndl, task);
 		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
 			xio_rdma_rearm_rq(rdma_hndl);
+		must_send = 1;
 		break;
 	case XIO_NEXUS_SETUP_REQ:
 	case XIO_NEXUS_SETUP_RSP:
@@ -738,7 +739,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	*/
 
 	/* transmit ready packets */
-	if (rdma_hndl->tx_ready_tasks_num)
+	if (!must_send && rdma_hndl->tx_ready_tasks_num)
 		must_send = (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD);
 
 	/* resource are now available and rdma rd  requests are pending kick
@@ -3335,7 +3336,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	case XIO_IB_RDMA_READ:
 		/* schedule request for RDMA READ. in case of error
 		 * don't schedule the rdma read operation */
-		TRACE_LOG("scheduling rdma read\n");
+		/*TRACE_LOG("scheduling rdma read\n");*/
 		retval = xio_sched_rdma_rd_req(rdma_hndl, task);
 		if (retval == 0)
 			return 0;
