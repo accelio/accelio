@@ -281,13 +281,14 @@ struct xio_cq  {
 	int32_t				cq_depth;     /* current cq depth  */
 	int32_t				alloc_sz;     /* allocation factor  */
 	int32_t				cqe_avail;    /* free elements  */
-	atomic_t			refcnt;       /* utilization counter */
+	struct kref			kref;       /* utilization counter */
 	int32_t				num_delayed_arm;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */
 	struct list_head		cq_list_entry; /* list of all
 						       cq per device */
+	struct xio_observer		observer;
 };
 
 struct xio_device {
@@ -409,7 +410,7 @@ struct xio_rdma_transport {
 	size_t				membuf_sz;
 
 	struct xio_transport		*transport;
-	struct rdma_event_channel	*cm_channel;
+	struct xio_cm_channel		*cm_channel;
 	struct rdma_cm_id		*cm_id;
 	struct xio_tasks_pool_cls	initial_pool_cls;
 	struct xio_tasks_pool_cls	primary_pool_cls;
@@ -437,8 +438,9 @@ struct xio_rdma_transport {
 struct xio_cm_channel {
 	struct rdma_event_channel	*cm_channel;
 	struct xio_context		*ctx;
-	struct xio_observer		observer;
 	struct list_head		channels_list_entry;
+	struct kref			kref;       /* utilization counter */
+	int				pad;
 };
 
 struct xio_dev_tdata {
