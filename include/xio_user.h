@@ -385,7 +385,11 @@ enum xio_mempool_flag {
 	XIO_MEMPOOL_FLAG_REG_MR			= 0x0001,
 	XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC	= 0x0002,
 	XIO_MEMPOOL_FLAG_NUMA_ALLOC		= 0x0004,
-	XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC	= 0x0008
+	XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC	= 0x0008,
+	/**< do not allocate buffers from larger slabs,
+	 *   if the smallest slab is empty
+	 */
+	XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB	= 0x0016
 };
 
 

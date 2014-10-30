@@ -650,7 +650,8 @@ retry:
 		if (!block) {
 			block = xio_mem_slot_resize(slot, 1);
 			if (block == NULL) {
-				if (++index == (int)p->slots_nr)
+				if (++index == (int)p->slots_nr ||
+				    (p->flags &  XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB))
 					index  = -1;
 
 				if (p->safe_mt)
