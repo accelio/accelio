@@ -845,32 +845,6 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 	xio_rdma_post_close(trans_hndl);
 
 	return 0;
-
-
-	pthread_rwlock_wrlock(&dev_lock);
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		pthread_rwlock_wrlock(&dev->cq_lock);
-		list_for_each_entry_safe(tcq, next, &dev->cq_list,
-					 cq_list_entry) {
-			if (ctx == tcq->ctx)
-				xio_cq_release(tcq);
-		}
-		pthread_rwlock_unlock(&dev->cq_lock);
-	}
-	pthread_rwlock_unlock(&dev_lock);
-
-
-	/* find the channel and release it */
-	pthread_rwlock_wrlock(&cm_lock);
-	list_for_each_entry(channel, &cm_list, channels_list_entry) {
-		if (channel->ctx == ctx) {
-			xio_cm_channel_release(channel);
-			break;
-		}
-	}
-	pthread_rwlock_unlock(&cm_lock);
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2440,7 +2414,8 @@ static struct xio_transport_base *xio_rdma_open(
 	return (struct xio_transport_base *)rdma_hndl;
 
 cleanup:
-	xio_cm_channel_release(rdma_hndl->cm_channel);
+	if (rdma_hndl->cm_channel)
+		xio_cm_channel_release(rdma_hndl->cm_channel);
 
 	ufree(rdma_hndl);
 
