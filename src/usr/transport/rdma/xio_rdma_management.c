@@ -822,9 +822,6 @@ static inline void xio_cm_channel_release(struct xio_cm_channel *channel)
 static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
-	struct xio_device	*dev;
-	struct xio_cq		*tcq, *next;
-	struct xio_cm_channel	*channel = NULL;
 	struct xio_rdma_transport *rdma_hndl;
 	int			retval;
 
