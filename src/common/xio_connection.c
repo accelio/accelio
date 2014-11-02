@@ -412,6 +412,11 @@ int xio_connection_send(struct xio_connection *connection,
 	retval = xio_nexus_send(connection->nexus, task);
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
+		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
+			connection->credits = hdr.credits;
+			if (!standalone_receipt)
+				connection->peer_credits--;
+		}
 		goto cleanup;
 	}
 	return 0;

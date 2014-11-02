@@ -912,6 +912,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 	struct xio_task *task = event_data->msg_error.task;
 
 	xio_connection_remove_msg_from_queue(task->connection, task->omsg);
+	xio_connection_queue_io_task(task->connection, task);
 
 	if (task->session->ses_ops.on_msg_error)
 		task->session->ses_ops.on_msg_error(
@@ -923,7 +924,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 	if (IS_REQUEST(task->tlv_type))
 		xio_tasks_pool_put(task);
 	else
-		xio_connection_queue_io_task(task->connection, task);
+		xio_release_response_task(task);
 
 	return 0;
 }

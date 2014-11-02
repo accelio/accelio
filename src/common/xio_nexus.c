@@ -2111,7 +2111,7 @@ static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus)
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_xmit(struct xio_nexus *nexus)
 {
-	int		retval;
+	int		retval = 0;
 	struct xio_task *task;
 
 	if (!nexus->transport) {
@@ -2139,14 +2139,18 @@ static int xio_nexus_xmit(struct xio_nexus *nexus)
 			nexus_event_data.msg_error.reason = xio_errno();
 			nexus_event_data.msg_error.task	= task;
 
+			xio_set_error(ENOMSG); /* special error for connection */
+                        retval = -ENOMSG;
+
 			xio_observable_notify_any_observer(
 					&nexus->observable,
 					XIO_NEXUS_EVENT_MESSAGE_ERROR,
 					&nexus_event_data);
+			break;
 		}
 	}
 
-	return 0;
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
