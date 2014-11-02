@@ -112,6 +112,7 @@ extern struct xio_rdma_options	rdma_options;
 enum xio_transport_state {
 	XIO_STATE_INIT,
 	XIO_STATE_LISTEN,
+	XIO_STATE_CONNECTING,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
 	XIO_STATE_RECONNECT,

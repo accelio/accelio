@@ -162,6 +162,15 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	rdma_hndl = (struct xio_rdma_transport *)trans_hndl;
 	/* Note xio_rdma_post_close releases rdma_hndl */
+	if ((rdma_hndl->state == XIO_STATE_CONNECTED)||
+	    (rdma_hndl->state == XIO_STATE_CONNECTING)) {
+		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		retval = rdma_disconnect(rdma_hndl->cm_id);
+		if (retval)
+			DEBUG_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+	}
+
 	tcq = rdma_hndl->tcq;
 	xio_rdma_flush_all_tasks(rdma_hndl);
 	xio_rdma_post_close(trans_hndl);
@@ -1938,6 +1947,8 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 
 	child_hndl->dev		= dev;
 	child_hndl->cm_id	= cm_id;
+	child_hndl->state	= XIO_STATE_CONNECTING;
+
 	/* Parent handle i.e. listener doesn't have a CQ */
 	child_hndl->tcq		= NULL;
 
@@ -2021,7 +2032,7 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
 	if (rdma_hndl->state == XIO_STATE_CONNECTED ||
-	    rdma_hndl->state == XIO_STATE_LISTEN) {
+	    rdma_hndl->state == XIO_STATE_CONNECTING) {
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
@@ -2319,6 +2330,7 @@ static void xio_rdma_close_cb(struct kref *kref)
 		xio_rdma_post_close(
 				(struct xio_transport_base *)rdma_hndl);
 		break;
+	case XIO_STATE_CONNECTING:
 	case XIO_STATE_CONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);

@@ -829,7 +829,8 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	rdma_hndl = (struct xio_rdma_transport *)trans_hndl;
 
-	if (rdma_hndl->state == XIO_STATE_CONNECTED) {
+	if ((rdma_hndl->state == XIO_STATE_CONNECTED)||
+	    (rdma_hndl->state == XIO_STATE_CONNECTING)) {
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = rdma_disconnect(rdma_hndl->cm_id);
 		if (retval)
@@ -1954,6 +1955,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 
 		goto notify_err1;
 	}
+	child_hndl->state = XIO_STATE_CONNECTING;
 
 	child_hndl->cm_id	= ev->id;
 	/* Parent handle i.e. listener doesn't have a CQ */
@@ -2079,10 +2081,10 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 {
 	int retval;
 
-	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
+	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
-	if (rdma_hndl->state == XIO_STATE_CONNECTED ||
-	    rdma_hndl->state == XIO_STATE_LISTEN) {
+	if ((rdma_hndl->state == XIO_STATE_CONNECTED) ||
+	    (rdma_hndl->state = XIO_STATE_CONNECTING)) {
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
@@ -2432,7 +2434,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_close_cb		                                             */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_close_cb(struct kref *kref)
+void xio_rdma_close_cb(struct kref *kref)
 {
 	struct xio_transport_base *transport = container_of(
 					kref, struct xio_transport_base, kref);
@@ -2454,6 +2456,7 @@ static void xio_rdma_close_cb(struct kref *kref)
 		xio_rdma_post_close(
 				(struct xio_transport_base *)rdma_hndl);
 		break;
+	case XIO_STATE_CONNECTING:
 	case XIO_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
@@ -2702,6 +2705,7 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 			goto exit2;
 		}
 	}
+	rdma_hndl->state = XIO_STATE_CONNECTING;
 
 	retval = rdma_resolve_addr(rdma_hndl->cm_id, NULL, &sa.sa,
 				   ADDR_RESOLVE_TIMEOUT);
