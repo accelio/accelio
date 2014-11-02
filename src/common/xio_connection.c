@@ -747,8 +747,9 @@ static int xio_connection_xmit(struct xio_connection *connection)
 			if ((msg1 && !IS_APPLICATION_MSG(msg1)) ||
 			    (msg2 && !IS_APPLICATION_MSG(msg2)))  {
 				/* control message send anyway */
-			} else
+			} else {
 				break;
+			}
 		}
 		retval = xio_connection_xmit_inl(connection,
 						 msgq1, in_flight_msgq1,
@@ -1713,7 +1714,7 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	struct xio_msg *msg;
 	int		retval;
 
-	TRACE_LOG("send hello request. session:%p, connection:%p\n",
+	DEBUG_LOG("send hello request. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
@@ -1944,6 +1945,8 @@ EXPORT_SYMBOL(xio_connection_destroy);
 int xio_connection_disconnected(struct xio_connection *connection)
 {
 	int close = 0;
+
+	DEBUG_LOG("connection disconnected: connection:%p\n", connection);
 
 	/* stop all pending timers */
 	xio_ctx_del_work(connection->ctx, &connection->hello_work);
@@ -2294,6 +2297,9 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 {
 	struct xio_session    *session = connection->session;
 
+	DEBUG_LOG("recv hello response. session:%p, connection:%p\n",
+		  session, connection);
+
 	if (task) {
 		DEBUG_LOG("got hello response. session:%p, connection:%p\n",
 			  session, connection);
@@ -2343,19 +2349,28 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 				     struct xio_task *task)
 {
-	xio_session_notify_new_connection(task->session, connection);
+	/* delayed disconnect request should be done now */
+	DEBUG_LOG("recv hello request. session:%p, connection:%p\n",
+		  connection->session, connection);
 
+	/* temporarily set the state to init to delay disconnection */
+	connection->state = XIO_CONNECTION_STATE_INIT;
+	xio_session_notify_new_connection(task->session, connection);
 	xio_connection_send_hello_rsp(connection, task);
 
-	connection->session->state = XIO_SESSION_STATE_ONLINE;
-	connection->session->disable_teardown = 0;
-	connection->peer_credits = connection->session->peer_rcv_queue_depth;
-	connection->credits = 0;
+	if (connection->disconnecting == 0) {
+		connection->session->state = XIO_SESSION_STATE_ONLINE;
+		connection->session->disable_teardown = 0;
+		connection->peer_credits =
+				connection->session->peer_rcv_queue_depth;
+		connection->credits = 0;
 
-	TRACE_LOG("session state is now ONLINE. session:%p\n",
-		  connection->session);
+		TRACE_LOG("session state is now ONLINE. session:%p\n",
+			  connection->session);
 
-	xio_connection_set_state(connection, XIO_CONNECTION_STATE_ONLINE);
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
+	}
 
 	return 0;
 }
@@ -2368,6 +2383,15 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 {
 	xio_connection_release_hello(connection, task->omsg);
 	xio_tasks_pool_put(task);
+
+	if (connection->state == XIO_CONNECTION_STATE_INIT &&
+	    connection->disconnecting) {
+	    	connection->disconnecting = 0;
+		xio_connection_set_state(connection,
+					 XIO_CONNECTION_STATE_ONLINE);
+		xio_disconnect(connection);
+		return 0;
+	}
 
 	return 0;
 }
@@ -2413,7 +2437,7 @@ int xio_on_credits_ack_send_comp(struct xio_connection *connection,
 	xio_connection_release_hello(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	return 0;
+	return xio_connection_xmit(connection);
 }
 
 

@@ -140,12 +140,12 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_accept_connection					     */
+/* xio_session_accept_connections					     */
 /*---------------------------------------------------------------------------*/
-int xio_session_accept_connection(struct xio_session *session)
+int xio_session_accept_connections(struct xio_session *session)
 {
 	struct xio_connection	*connection, *tmp_connection;
-	struct xio_nexus		*nexus;
+	struct xio_nexus	*nexus;
 	int			retval = 0;
 	char			*portal;
 
@@ -180,7 +180,9 @@ int xio_session_accept_connection(struct xio_session *session)
 				retval = -1;
 				break;
 			}
-			DEBUG_LOG("reconnecting to %s\n", portal);
+			DEBUG_LOG("reconnecting to %s. connection:%p, " \
+				  "nexus:%p\n",
+				  portal, connection, nexus);
 			retval = xio_nexus_connect(nexus, portal,
 						   &session->observer, NULL);
 			if (retval != 0) {
@@ -503,7 +505,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			if (session->connections_nr > 1) {
 				/* open new connections */
-				retval = xio_session_accept_connection(session);
+				retval = xio_session_accept_connections(session);
 				if (retval != 0) {
 					ERROR_LOG(
 						"failed to accept connection\n");
@@ -540,7 +542,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			xio_disconnect_initial_connection(session->lead_connection);
 
 			/* open new connections */
-			retval = xio_session_accept_connection(session);
+			retval = xio_session_accept_connections(session);
 			if (retval != 0) {
 				ERROR_LOG("failed to accept connection\n");
 				return -1;
@@ -934,7 +936,6 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 				  nexus, tmp_connection, connection);
 			goto cleanup;
 		}
-		DEBUG_LOG("reconnecting to %s, ctx:%p\n", portal, ctx);
 		retval = xio_nexus_connect(nexus, portal,
 					   &session->observer, out_if);
 		if (retval != 0) {
@@ -949,6 +950,10 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 
 	mutex_unlock(&session->lock);
+
+	DEBUG_LOG("xio_connect: session:%p, connection:%p, " \
+		  "ctx:%p, nexus:%p\n",
+		  session, connection, ctx, connection->nexus);
 
 	return connection;
 

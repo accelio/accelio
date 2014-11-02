@@ -211,7 +211,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	 */
 	session = xio_sessions_cache_lookup(dest_session_id);
 	if (session == NULL)
-		ERROR_LOG("failed to find session\n");
+		ERROR_LOG("failed to find session %d\n", dest_session_id);
 
 	return session;
 }
@@ -544,9 +544,6 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		}
 	}
 
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
 	return 0;
 }
 
@@ -572,7 +569,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		 * mechanism
 		 */
 		xio_release_response_task(task);
-		goto xmit;
+		goto exit;
 	}
 
 	/* read session header */
@@ -705,10 +702,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		}
 	}
 
-xmit:
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
+exit:
 	return 0;
 }
 
@@ -722,7 +716,7 @@ static int xio_on_rsp_send_comp(
 {
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
-		goto xmit;
+		goto exit;
 	}
 
 	/* remove the message from in flight queue */
@@ -749,10 +743,7 @@ static int xio_on_rsp_send_comp(
 		xio_tasks_pool_put(task);
 	}
 
-xmit:
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
+exit:
 	return 0;
 }
 
@@ -783,7 +774,7 @@ int xio_on_credits_ack_recv(struct xio_connection *connection,
 	       connection->sn, connection->exp_sn, connection->ack_sn,
 	       connection->credits, connection->peer_credits);
 	*/
-	return xio_connection_xmit_msgs(connection);
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -798,7 +789,7 @@ static int xio_on_ow_req_send_comp(
 
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
-		goto xmit;
+		goto exit;
 	}
 
 	if (!omsg || omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
@@ -822,10 +813,7 @@ static int xio_on_ow_req_send_comp(
 	}
 	xio_tasks_pool_put(task);
 
-xmit:
-	/* now try to send */
-	xio_connection_xmit_msgs(connection);
-
+exit:
 	return 0;
 }
 
@@ -985,6 +973,7 @@ int xio_on_new_message(struct xio_session *s,
 	struct xio_connection	*connection = NULL;
 	struct xio_session	*session = s;
 	int			retval = -1;
+	int			xmit = 0;
 
 
 	if (task->sender_task) {
@@ -1029,13 +1018,16 @@ int xio_on_new_message(struct xio_session *s,
 	case XIO_MSG_REQ:
 	case XIO_ONE_WAY_REQ:
 		retval = xio_on_req_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_MSG_RSP:
 	case XIO_ONE_WAY_RSP:
 		retval = xio_on_rsp_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_ACK_REQ:
 		retval = xio_on_credits_ack_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_recv(connection, task);
@@ -1051,14 +1043,21 @@ int xio_on_new_message(struct xio_session *s,
 		break;
 	case XIO_CONNECTION_HELLO_REQ:
 		retval = xio_on_connection_hello_req_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_CONNECTION_HELLO_RSP:
 		retval = xio_on_connection_hello_rsp_recv(connection, task);
+		xmit = 1;
 		break;
 	default:
 		retval = -1;
 		break;
 	}
+
+	/* now try to send */
+	if (xmit)
+		xio_connection_xmit_msgs(connection);
+
 
 	if (retval != 0)
 		ERROR_LOG("receiving new message failed. type:0x%x\n",
@@ -1077,6 +1076,7 @@ int xio_on_send_completion(struct xio_session *session,
 	struct xio_task	*task  = event_data->msg.task;
 	struct xio_connection	*connection;
 	int			retval = -1;
+	int			xmit = 0;
 
 	connection = task->connection;
 
@@ -1088,12 +1088,15 @@ int xio_on_send_completion(struct xio_session *session,
 	case XIO_MSG_RSP:
 	case XIO_ONE_WAY_RSP:
 		retval = xio_on_rsp_send_comp(connection, task);
+		xmit = 1;
 		break;
 	case XIO_ONE_WAY_REQ:
 		retval = xio_on_ow_req_send_comp(connection, task);
+		xmit = 1;
 		break;
 	case XIO_ACK_REQ:
 		retval = xio_on_credits_ack_send_comp(connection, task);
+		xmit = 1;
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_send_comp(connection, task);
@@ -1110,10 +1113,16 @@ int xio_on_send_completion(struct xio_session *session,
 	case XIO_CONNECTION_HELLO_RSP:
 		retval = xio_on_connection_hello_rsp_send_comp(connection,
 							       task);
+		xmit = 1;
 		break;
 	default:
 		break;
 	}
+	/* now try to send */
+	if (xmit)
+		xio_connection_xmit_msgs(connection);
+
+
 
 	if (retval != 0)
 		ERROR_LOG("message send completion failed. type:0x%x\n",
