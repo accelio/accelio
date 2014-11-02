@@ -953,7 +953,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 
 	DEBUG_LOG("xio_connect: session:%p, connection:%p, " \
 		  "ctx:%p, nexus:%p\n",
-		  session, connection, ctx, connection->nexus);
+		  session, connection, ctx,
+		  ((connection) ? connection->nexus : NULL));
 
 	return connection;
 

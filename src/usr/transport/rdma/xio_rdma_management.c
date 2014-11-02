@@ -2084,7 +2084,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
 	if ((rdma_hndl->state == XIO_STATE_CONNECTED) ||
-	    (rdma_hndl->state = XIO_STATE_CONNECTING)) {
+	    (rdma_hndl->state == XIO_STATE_CONNECTING)) {
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
