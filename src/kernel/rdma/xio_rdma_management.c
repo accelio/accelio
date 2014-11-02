@@ -152,8 +152,9 @@ static struct ib_client xio_client = {
 static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
-	struct xio_rdma_transport *rdma_hndl;
-	struct xio_cq *tcq;
+	struct xio_rdma_transport	*rdma_hndl;
+	struct xio_cq			*tcq;
+	int				retval;
 
 	if (!trans_hndl) {
 		TRACE_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
