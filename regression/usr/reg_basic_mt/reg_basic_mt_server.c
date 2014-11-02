@@ -65,6 +65,8 @@ struct  connection_entry {
 
 struct session_entry {
 	struct xio_session		*session;
+	volatile int			disconnected;
+	int				pad;
 	TAILQ_HEAD(, connection_entry)	conns_list;
 	TAILQ_ENTRY(session_entry)	sessions_list_entry;
 };
@@ -232,6 +234,7 @@ static int on_request(struct xio_session *session,
 				   &tdata->server_data->sessions_list,
 				   sessions_list_entry) {
 			if (session_entry->session == session) {
+				session_entry->disconnected = 1;
 				TAILQ_FOREACH_SAFE(connection_entry,
 						   tmp_connection_entry,
 						   &session_entry->conns_list,
@@ -430,13 +433,16 @@ static int on_new_connection(struct xio_session *session,
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
+
 		if (session_entry->session == session) {
-			connection_entry = calloc(1, sizeof(*connection_entry));
+		connection_entry = calloc(1, sizeof(*connection_entry));
 			if (connection_entry == NULL)
 				return -1;
 			connection_entry->connection = connection;
 			TAILQ_INSERT_TAIL(&session_entry->conns_list,
 					  connection_entry, conns_list_entry);
+			if (session_entry->disconnected == 1)
+				xio_disconnect(connection);
 			break;
 		}
 	}
