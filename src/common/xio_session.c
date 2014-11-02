@@ -633,7 +633,9 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
+		omsg->flags	  = task->omsg_flags;
 		connection->tx_queued_msgs--;
+
 		if (sender_task->omsg_flags &
 		    XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
 			if (connection->ses_ops.on_msg_delivered)
