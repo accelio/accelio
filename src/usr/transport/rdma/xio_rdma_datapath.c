@@ -2988,6 +2988,13 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				task->status = XIO_E_NO_USER_MR;
 				return -1;
 			}
+			if (sge_addr(sgtbl_ops, sg) == NULL) {
+				ERROR_LOG("application has provided " \
+					  "null address\n");
+				ERROR_LOG("rdma read is ignored\n");
+				task->status = XIO_E_NO_USER_BUFS;
+				return -1;
+			}
 			llen += sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
