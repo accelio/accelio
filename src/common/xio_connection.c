@@ -489,7 +489,8 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
 		xio_session_notify_msg_error(connection, pmsg,
-					     XIO_E_MSG_FLUSHED);
+					     XIO_E_MSG_FLUSHED,
+					     XIO_MSG_DIRECTION_OUT);
 	}
 }
 
@@ -521,7 +522,8 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 		if (!IS_APPLICATION_MSG(pmsg))
 			continue;
 		xio_session_notify_msg_error(connection, pmsg,
-					     XIO_E_MSG_FLUSHED);
+					     XIO_E_MSG_FLUSHED,
+					     XIO_MSG_DIRECTION_OUT);
 	}
 }
 
@@ -982,7 +984,8 @@ int xio_send_response(struct xio_msg *msg)
 			xio_set_error(ESHUTDOWN);
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
-						     XIO_E_MSG_DISCARDED);
+						     XIO_E_MSG_DISCARDED,
+						     XIO_MSG_DIRECTION_OUT);
 
 			pmsg = pmsg->next;
 			continue;
@@ -992,7 +995,8 @@ int xio_send_response(struct xio_msg *msg)
 			ERROR_LOG("duplicate response send. request sn:%llu\n",
 				  task->imsg.sn);
 			xio_session_notify_msg_error(connection, pmsg,
-						     XIO_E_MSG_INVALID);
+						     XIO_E_MSG_INVALID,
+						     XIO_MSG_DIRECTION_OUT);
 			pmsg = pmsg->next;
 			continue;
 		}

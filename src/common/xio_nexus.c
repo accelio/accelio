@@ -1308,6 +1308,7 @@ static void xio_nexus_on_message_error(struct xio_nexus *nexus,
 	union xio_nexus_event_data	nexus_event_data;
 
 	nexus_event_data.msg_error.reason =  event_data->msg_error.reason;
+	nexus_event_data.msg_error.direction = event_data->msg_error.direction;
 	nexus_event_data.msg_error.task	=  event_data->msg_error.task;
 
 	xio_observable_notify_any_observer(&nexus->observable,
@@ -2137,6 +2138,7 @@ static int xio_nexus_xmit(struct xio_nexus *nexus)
 			ERROR_LOG("transport send failed err:%d\n",
 				  xio_errno());
 			nexus_event_data.msg_error.reason = xio_errno();
+			nexus_event_data.msg_error.direction = XIO_MSG_DIRECTION_OUT;
 			nexus_event_data.msg_error.task	= task;
 
 			xio_set_error(ENOMSG); /* special error for connection */

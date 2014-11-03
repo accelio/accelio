@@ -78,16 +78,16 @@ union xio_transport_event_data {
 		int			pad;
 	} msg;
 	struct {
-		struct xio_task	 *task;
-		int		 is_assigned;
-		int		 pad;
+		struct xio_task		*task;
+		int			is_assigned;
+		int			pad;
 	} assign_in_buf;
 	struct {
-		void		*ulp_msg;
-		size_t		ulp_msg_sz;
-		struct xio_task	*task;
-		enum xio_status	result;
-		int		pad;
+		void			*ulp_msg;
+		size_t			ulp_msg_sz;
+		struct xio_task		*task;
+		enum xio_status		result;
+		int			pad;
 	} cancel;
 	struct {
 		struct xio_transport_base	*child_trans_hndl;
@@ -96,9 +96,9 @@ union xio_transport_event_data {
 		uint32_t	cid;
 	} established;
 	struct {
-		struct xio_task	 *task;
-		enum xio_status	reason;
-		int		pad;
+		struct xio_task		*task;
+		enum xio_status		reason;
+		enum xio_msg_direction	direction;
 	} msg_error;
 	struct {
 		enum xio_status	reason;

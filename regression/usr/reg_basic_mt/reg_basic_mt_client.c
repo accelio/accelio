@@ -372,7 +372,9 @@ static int on_session_event(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *req,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *req,
 			void *cb_user_context)
 {
 	struct connection_entry	*conn_entry	= cb_user_context;

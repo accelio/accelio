@@ -374,8 +374,10 @@ static int on_response(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_user_context)
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	struct thread_data  *tdata = cb_user_context;
 

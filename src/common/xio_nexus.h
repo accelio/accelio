@@ -98,13 +98,14 @@ union xio_nexus_event_data {
 	struct {
 		struct xio_task		*task;
 		enum xio_status		reason;
-		int			pad;
+		enum xio_msg_direction	direction;
 	} msg_error;
 	struct {
 		struct xio_nexus	*child_nexus;
 	} new_nexus;
 	struct {
 		enum xio_status		reason;
+		enum xio_msg_direction	direction;
 	} error;
 	struct {
 		struct xio_task		*task;

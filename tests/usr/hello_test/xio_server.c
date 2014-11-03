@@ -249,7 +249,9 @@ static int on_send_response_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;

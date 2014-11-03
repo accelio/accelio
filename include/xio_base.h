@@ -157,6 +157,16 @@ enum xio_msg_type {
 };
 
 /**
+ * @enum xio_msg_direction
+ * @brief message flow direction
+ */
+enum xio_msg_direction {
+	XIO_MSG_DIRECTION_OUT,
+	XIO_MSG_DIRECTION_IN
+};
+
+
+/**
  * @enum xio_msg_flags
  * @brief message level specific flags
  */
@@ -510,6 +520,7 @@ struct xio_session_ops {
 	 */
 	int (*on_msg_error)(struct xio_session *session,
 			enum xio_status error,
+			enum xio_msg_direction,
 			struct xio_msg  *msg,
 			void *conn_user_context);
 

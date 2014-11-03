@@ -218,7 +218,8 @@ void xio_session_notify_connection_teardown(
 					struct xio_connection *connection);
 
 int xio_session_notify_msg_error(struct xio_connection *connection,
-				 struct xio_msg *msg, enum xio_status result);
+				 struct xio_msg *msg, enum xio_status result,
+				 enum xio_msg_direction direction);
 
 void xio_session_notify_teardown(struct xio_session *session, int reason);
 

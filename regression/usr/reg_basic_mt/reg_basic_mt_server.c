@@ -311,11 +311,13 @@ static int on_send_rsp_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *rsp,
-		 void *cb_prv_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *rsp,
+			void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&rsp->out);
 
 	if (tdata->server_data->server_dlen) {

@@ -525,7 +525,8 @@ static int xio_on_req_recv(struct xio_connection *connection,
 
 	/* notify the upper layer */
 	if (task->status) {
-		xio_session_notify_msg_error(connection, msg, task->status);
+		xio_session_notify_msg_error(connection, msg, task->status,
+					     XIO_MSG_DIRECTION_IN);
 		task->status = 0;
 	} else {
 		/*if (connection->ses_ops.on_msg) */
@@ -691,7 +692,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			omsg->request	= msg;
 			if (task->status) {
 				xio_session_notify_msg_error(
-					connection, omsg, task->status);
+					connection, omsg, task->status,
+					XIO_MSG_DIRECTION_IN);
 				task->status = 0;
 			} else {
 				/*if (connection->ses_ops.on_msg) */
@@ -918,6 +920,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 		task->session->ses_ops.on_msg_error(
 				task->session,
 				event_data->msg_error.reason,
+				event_data->msg_error.direction,
 				task->omsg,
 				task->connection->cb_user_context);
 
@@ -1560,13 +1563,14 @@ int xio_session_notify_cancel(struct xio_connection *connection,
 /* xio_session_notify_msg_error						     */
 /*---------------------------------------------------------------------------*/
 int xio_session_notify_msg_error(struct xio_connection *connection,
-				 struct xio_msg *msg, enum xio_status result)
+				 struct xio_msg *msg, enum xio_status result,
+				 enum xio_msg_direction direction)
 {
 	/* notify the upper layer */
 	if (connection->ses_ops.on_msg_error)
 		connection->ses_ops.on_msg_error(
 				connection->session,
-				result, msg,
+				result, direction, msg,
 				connection->cb_user_context);
 
 	return 0;

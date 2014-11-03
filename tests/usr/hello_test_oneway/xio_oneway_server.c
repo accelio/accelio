@@ -286,9 +286,11 @@ static int on_message_delivered(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_user_context)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	struct ow_test_params *ow_params = cb_user_context;
 

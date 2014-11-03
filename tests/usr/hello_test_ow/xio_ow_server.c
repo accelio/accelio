@@ -210,7 +210,9 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
 	printf("**** [%p] message [%lu] failed. reason: %s\n",

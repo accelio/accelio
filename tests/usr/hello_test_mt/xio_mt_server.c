@@ -220,11 +220,13 @@ static int on_send_response_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_prv_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
