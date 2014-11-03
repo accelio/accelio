@@ -942,9 +942,6 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
 		}
-		connection = tmp_connection;
-		if (session->state == XIO_SESSION_STATE_ONLINE)
-			xio_connection_send_hello_req(connection);
 	}
 
 	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
