@@ -301,19 +301,19 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
 	ptr  = ptr + len;
 
-	/* read the peer tx queue depth */
-	len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
-	ptr = ptr + len;
-
-	/* read the peer rx queue depth */
-	len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
-	ptr = ptr + len;
-
 	len = xio_read_uint16(action, 0, ptr);
 	ptr = ptr + len;
 
 	switch (*action) {
 	case XIO_ACTION_ACCEPT:
+		/* read the peer tx queue depth */
+		len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
+		ptr = ptr + len;
+
+		/* read the peer rx queue depth */
+		len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
+		ptr = ptr + len;
+
 		len = xio_read_uint16(&session->portals_array_len, 0, ptr);
 		ptr = ptr + len;
 

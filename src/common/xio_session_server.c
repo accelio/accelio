@@ -236,17 +236,19 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	len = xio_write_uint32(session->session_id , 0, ptr);
 	ptr  = ptr + len;
 
-	/* tx queue depth */
-	len = xio_write_uint16(session->snd_queue_depth, 0, ptr);
-	ptr  = ptr + len;
-
-	/* rx queue depth */
-	len = xio_write_uint16(session->rcv_queue_depth, 0, ptr);
-	ptr  = ptr + len;
-
 	/* action */
 	len = xio_write_uint16(action, 0, ptr);
 	ptr  = ptr + len;
+
+	if (action == XIO_ACTION_ACCEPT) {
+		/* tx queue depth */
+		len = xio_write_uint16(session->snd_queue_depth, 0, ptr);
+		ptr  = ptr + len;
+
+		/* rx queue depth */
+		len = xio_write_uint16(session->rcv_queue_depth, 0, ptr);
+		ptr  = ptr + len;
+	}
 
 	/* portals_array_len */
 	len = xio_write_uint16(portals_array_len, 0, ptr);
