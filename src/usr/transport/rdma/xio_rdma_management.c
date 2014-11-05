@@ -1908,6 +1908,8 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
 	rdma_hndl->client_initiator_depth = cm_params.initiator_depth;
+	rdma_hndl->state = XIO_STATE_CONNECTING;
+
 
 
 	return;
@@ -2705,8 +2707,6 @@ static int xio_rdma_do_connect(struct xio_transport_base *trans_hndl,
 			goto exit2;
 		}
 	}
-	rdma_hndl->state = XIO_STATE_CONNECTING;
-
 	retval = rdma_resolve_addr(rdma_hndl->cm_id, NULL, &sa.sa,
 				   ADDR_RESOLVE_TIMEOUT);
 	if (retval) {
