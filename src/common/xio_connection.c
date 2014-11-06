@@ -897,14 +897,14 @@ int xio_send_request(struct xio_connection *connection,
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
-			DEBUG_LOG("invalid in message\n");
+			ERROR_LOG("invalid in message\n");
 			retval = -1;
 			goto send;
 		}
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
-			DEBUG_LOG("invalid out message\n");
+			ERROR_LOG("invalid out message\n");
 			retval = -1;
 			goto send;
 		}
