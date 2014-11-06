@@ -325,6 +325,20 @@ static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 		goto close_eventfd;
 	info->evt_fd = afd;
 
+	ret = fstat64(fd, &dev->stbuf);
+	if (ret == 0) {
+		if (S_ISBLK(dev->stbuf.st_mode)) {
+			ret = ioctl(fd, BLKGETSIZE64, &dev->stbuf.st_size);
+			if (ret < 0) {
+				fprintf(stderr, "Cannot get size, %m\n");
+				goto close_eventfd;
+			}
+		}
+	} else {
+		fprintf(stderr, "Cannot stat file, %m\n");
+		goto close_eventfd;
+	}
+
 	return 0;
 
 close_eventfd:

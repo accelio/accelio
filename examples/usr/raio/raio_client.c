@@ -65,6 +65,7 @@
 
 static char		*file_path;
 static char		*server_addr;
+static char		*transport;
 static uint16_t		server_port;
 static int		block_size;
 static int		loops;
@@ -164,7 +165,7 @@ static void usage(const char *argv0)
 	printf("\n");
 	printf("options:\n");
 	printf("%s -a <server_addr> -p <port> -f <file_path>  " \
-	       "-b <block_size> -l <loops>\n",
+	       "-b <block_size> -l <loops> [-t <transport:rdma,tcp>]\n",
 	      argv0);
 
 	exit(0);
@@ -180,6 +181,10 @@ static void free_cmdline_params(void)
 		free(server_addr);
 		server_addr = NULL;
 	}
+	if (transport) {
+		free(transport);
+		transport = NULL;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -190,6 +195,7 @@ int parse_cmdline(int argc, char **argv)
 	static struct option const long_options[] = {
 		{ .name = "addr",	.has_arg = 1, .val = 'a'},
 		{ .name = "port",	.has_arg = 1, .val = 'p'},
+		{ .name = "transport",	.has_arg = 1, .val = 't'},
 		{ .name = "file-path",	.has_arg = 1, .val = 'f'},
 		{ .name = "block-size",	.has_arg = 1, .val = 'b'},
 		{ .name = "loops",	.has_arg = 1, .val = 'l'},
@@ -200,11 +206,12 @@ int parse_cmdline(int argc, char **argv)
 	opterr = 0;
 	server_addr = NULL;
 	file_path = NULL;
+	transport = NULL;
 
 	while (1) {
 		int c;
 
-		static char *short_options = "a:p:f:b:l:h";
+		static char *short_options = "a:p:t:f:b:l:h";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -221,6 +228,12 @@ int parse_cmdline(int argc, char **argv)
 		case 'p':
 			server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
+			break;
+		case 't':
+			if (transport == NULL)
+				transport = strdup(optarg);
+			if (transport == NULL)
+				goto cleanup;
 			break;
 		case 'f':
 			if (file_path == NULL)
@@ -292,6 +305,7 @@ int main(int argc, char *argv[])
 #endif
 
 	file_path = NULL;
+	transport = NULL;
 	server_addr = NULL;
 	server_port = 0;
 	block_size = 0;
@@ -301,10 +315,19 @@ int main(int argc, char *argv[])
 	if ((server_addr == NULL) || (server_port == 0) ||
 	    (loops == 0) || (file_path == NULL) || (block_size == 0)) {
 		fprintf(stderr, " invalid command or flag.\n");
-			fprintf(stderr,
-				" please check command line and run again.\n\n");
-			usage(argv[0]);
+		fprintf(stderr,
+			" please check command line and run again.\n\n");
+		usage(argv[0]);
 	}
+	if (transport == NULL)
+		transport = strdup("rdma");
+	else if (strcmp(transport, "rdma") && strcmp(transport, "tcp")) {
+		fprintf(stderr, " invalid transport\n");
+		fprintf(stderr,
+			" please check command line and run again.\n\n");
+		usage(argv[0]);
+	}
+
 	/* get clock cycles */
 	mhz = get_cpu_mhz(0);
 
@@ -320,11 +343,11 @@ int main(int argc, char *argv[])
 #endif
 
 	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
-	fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
+	fd = raio_open(transport, (struct sockaddr *)&servaddr, sizeof(servaddr),
 		       file_path, flags);
 	if (fd == -1) {
-		fprintf(stderr, "raio_open failed - file:%s:%d/%s " \
-			"flags:%x %m\n", server_addr, server_port,
+		fprintf(stderr, "raio_open failed %s://%s:%d/%s flags:%x %m\n",
+			transport, server_addr, server_port,
 			file_path, flags);
 		return -1;
 	}

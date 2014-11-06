@@ -67,6 +67,7 @@ int raio_bs_null_cmd_submit(struct raio_bs *dev,
 /*---------------------------------------------------------------------------*/
 static int raio_bs_null_open(struct raio_bs *dev, int fd)
 {
+	dev->stbuf.st_size = NULL_BS_DEV_SIZE;
 	return 0;
 }
 

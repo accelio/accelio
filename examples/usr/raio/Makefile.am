@@ -27,7 +27,7 @@ libraio_includedir = $(includedir)/
 libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/libraio.h 
 
 libraio_headers   =  get_clock.h		\
-		     msg_pool.h			\
+		     raio_msg_pool.h		\
 		     raio_bs.h			\
 		     raio_buffer.h		\
 		     raio_command.h		\
@@ -36,7 +36,7 @@ libraio_headers   =  get_clock.h		\
 
 libraio_la_SOURCES = $(libraio_include_HEADERS) 	\
 		     $(libraio_headers)		      	\
-		     msg_pool.c			      	\
+		     raio_msg_pool.c			\
 		     raio_utils.c			\
 		     raio_api.c		
 

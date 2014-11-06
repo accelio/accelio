@@ -109,7 +109,8 @@ struct raio_event {
  * RETURNS: return the new file descriptor, or -1 if an error occurred (in
  * which case, errno is set appropriately)
  */
-int raio_open(const struct sockaddr *addr, socklen_t addrlen,
+int raio_open(const char *transport,
+	      const struct sockaddr *addr, socklen_t addrlen,
 	      const char *pathname, int flags);
 
 /**

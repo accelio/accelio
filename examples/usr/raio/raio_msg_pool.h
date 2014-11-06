@@ -35,56 +35,88 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef RAIO_UTILS_H
-#define RAIO_UTILS_H
+#ifndef MSG_POOL_H
+#define MSG_POOL_H
 
-#include <libraio.h>
 
-#define SUBMIT_BLOCK_SIZE				\
-	+ sizeof(uint32_t) /* raio_filedes */		\
-	+ sizeof(uint32_t) /* raio_lio_opcode */	\
-	+ sizeof(uint64_t) /* nbytes */			\
-	+ sizeof(uint64_t) /* offset */
+#include <libxio.h>
 
-#define STAT_BLOCK_SIZE					\
-	+ sizeof(uint64_t) /* dev */			\
-	+ sizeof(uint64_t) /* ino */			\
-	+ sizeof(uint32_t) /* mode */			\
-	+ sizeof(uint32_t) /* nlink */                  \
-	+ sizeof(uint64_t) /* uid */			\
-	+ sizeof(uint64_t) /* gid */			\
-	+ sizeof(uint64_t) /* rdev */			\
-	+ sizeof(uint64_t) /* size */                   \
-	+ sizeof(uint32_t) /* blksize */                \
-	+ sizeof(uint32_t) /* blocks */                 \
-	+ sizeof(uint64_t) /* atime */                  \
-	+ sizeof(uint64_t) /* mtime */                  \
-	+ sizeof(uint64_t) /* ctime */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 
+/**
+ * msg_pool_create - creates pool for xio messages
+ *
+ * @msg_size:	pointer to event loop
+ * @num_of_msgs: the added file descrptor
+ *
+ * RETURNS: pointer to the new created pool
+ */
+struct msg_pool *msg_pool_create(size_t hdr_size, size_t data_size,
+				 int num_of_msgs);
 
-char *pack_stat64(struct stat64 *stbuf, char *buffer);
-const char *unpack_stat64(struct stat64 *result, const char *buffer);
-char *pack_iocb(struct raio_iocb *iocb, char *buffer);
-const char *unpack_iocb(struct raio_iocb *iocb, const char *buffer);
+/**
+ * msg_pool_delete - deletes pool of xio messages
+ *
+ * @pool: pointer to the pool
+ *
+ * RETURNS: void
+ */
+void msg_pool_delete(struct msg_pool *pool);
 
-void pack_open_command(const char *pathname, int flags,
-		       void *buf, size_t *len);
-void pack_close_command(int fd, void *buf, size_t *len);
-void pack_fstat_command(int fd, void *buf, size_t *len);
-void pack_setup_command(int fd, int maxevents,
-			void *buf, size_t *len);
-void pack_destroy_command(void *buf, size_t *len);
-void pack_submit_command(struct raio_iocb *iocb, int is_last_in_batch,
-			 void *buf, size_t *len);
+/**
+ * msg_pool_get - gets one message from pool
+ *
+ * @pool: pointer to the pool
+ *
+ * RETURNS: xio message
+ */
+struct xio_msg *msg_pool_get(struct msg_pool *pool);
+
+/**
+ * msg_pool_put - puts one message from pool
+ *
+ * @pool: pointer to the pool
+ * @msg: pointer to xio's message
+ *
+ * RETURNS: void
+ */
+void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
+
+/**
+ * msg_pool_get_array - gets array of messages from pool
+ *
+ * @pool: pointer to the pool
+ * @vec: array of pointer to messages
+ * @veclen: the array length
+ *
+ * RETURNS: number of messages filled in the array.
+ */
+int msg_pool_get_array(struct msg_pool *pool, struct xio_msg **vec,
+		       int veclen);
 
 
+/**
+ * msg_pool_put_array - puts array of messages back to pool
+ *
+ * @pool: pointer to the pool
+ * @vec: array of pointer to messages
+ * @veclen: the array length
+ *
+ * RETURNS: void
+ */
+void msg_pool_put_array(struct msg_pool *pool, struct xio_msg **vec,
+			int veclen);
 
-int unpack_open_answer(char *buf, size_t len, int *fd);
-int unpack_close_answer(char *buf, size_t len);
-int unpack_fstat_answer(char *buf, size_t len, struct stat64 *stbuf);
-int unpack_setup_answer(char *buf, size_t len);
+void  msg_reset(struct xio_msg *msg);
 
-#endif  /* RAIO_UTILS_H */
+#ifdef __cplusplus
+}
+#endif
+
+
+#endif /* MSG_POOL_H */
 

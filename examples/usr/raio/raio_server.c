@@ -376,6 +376,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
 		on_new_connection(session, event_data->conn, cb_user_context);
 		break;
+	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
@@ -483,6 +484,7 @@ int main(int argc, char *argv[])
 	uint16_t		port = atoi(argv[2]);
 	int			curr_cpu;
 	int			max_cpus;
+	int			opt;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
@@ -491,6 +493,24 @@ int main(int argc, char *argv[])
 	}
 
 	xio_init();
+
+	opt = 0;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &opt, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &opt, sizeof(int));
+
+	opt = 2048;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH,
+		    &opt, sizeof(int));
+	opt = 2048;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH,
+		    &opt, sizeof(int));
+
 
 	curr_cpu = sched_getcpu();
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
