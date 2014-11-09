@@ -50,7 +50,6 @@
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
 #define MAX_THREADS		6
-#define SIMULATE_DESTROY	0
 
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -112,6 +111,8 @@ struct raio_server_data {
 	struct xio_context			*ctx;
 	int					last_used;
 	int					last_reaped;
+	int					finite_run;
+	int					pad;
 
 	TAILQ_HEAD(, raio_session_data)		sessions_list;
 
@@ -403,11 +404,11 @@ static int on_session_event(struct xio_session *session,
 			}
 		}
 		xio_session_destroy(session);
-#if SIMULATE_DESTROY
-		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
-		xio_context_stop_loop(server_data->ctx, 0);
-#endif
+		if (server_data->finite_run) {
+			for (i = 0; i < MAX_THREADS; i++)
+				xio_context_stop_loop(server_data->tdata[i].ctx, 0);
+			xio_context_stop_loop(server_data->ctx, 0);
+		}
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		on_connection_teardown(session, event_data->conn,
@@ -487,8 +488,8 @@ int main(int argc, char *argv[])
 	int			opt;
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional> " \
+		       "<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 
@@ -517,6 +518,9 @@ int main(int argc, char *argv[])
 
 	memset(&server_data, 0, sizeof(server_data));
 	server_data.last_reaped = -1;
+	if (argc == 5)
+		server_data.finite_run = strtol(argv[4], NULL, 0);
+
 	TAILQ_INIT(&server_data.sessions_list);
 
 	/* create thread context for the client */
