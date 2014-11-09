@@ -1842,7 +1842,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 		spin_lock(&session->connections_list_lock);
 		if (session->connections_nr == 1)  {
 			session->state = XIO_SESSION_STATE_CLOSING;
-			destroy_session = 1;
 		}
 		session->connections_nr--;
 		list_del(&connection->connections_list_entry);
@@ -1856,38 +1855,37 @@ static void xio_connection_post_destroy(struct kref *kref)
 	if (session->disable_teardown)
 		return;
 
+	switch (state) {
+	case XIO_SESSION_STATE_REJECTED:
+		if (session->type == XIO_SESSION_SERVER)
+			xio_session_destroy(session);
+		else
+			xio_session_notify_rejected(session);
+		return;
+	case XIO_SESSION_STATE_ACCEPTED:
+		if (session->type == XIO_SESSION_SERVER)
+			reason = XIO_E_SESSION_DISCONNECTED;
+		else
+			reason = XIO_E_SESSION_REFUSED;
+		break;
+	default:
+		reason = close_reason;
+		break;
+	}
+
+	/* last chance to teardown */
+	spin_lock(&session->connections_list_lock);
+	destroy_session = ((session->connections_nr == 0) &&
+			(session->lead_connection == NULL) &&
+			(session->redir_connection == NULL));
+	spin_unlock(&session->connections_list_lock);
 	if (destroy_session) {
-		switch (state) {
-		case XIO_SESSION_STATE_REJECTED:
-			if (session->type == XIO_SESSION_SERVER)
-				xio_session_destroy(session);
-			else
-				xio_session_notify_rejected(session);
-			return;
-		case XIO_SESSION_STATE_ACCEPTED:
-			if (session->type == XIO_SESSION_SERVER)
-				reason = XIO_E_SESSION_DISCONNECTED;
-			else
-				reason = XIO_E_SESSION_REFUSED;
-			break;
-		default:
-			reason = close_reason;
-			break;
-		}
-		/* last chance to teardown */
-		spin_lock(&session->connections_list_lock);
-		destroy_session = ((session->connections_nr == 0) &&
-				   (session->lead_connection == NULL) &&
-				   (session->redir_connection == NULL));
-		spin_unlock(&session->connections_list_lock);
-		if (destroy_session) {
-			session->teardown_reason = reason;
-			retval = xio_ctx_add_work(
-					ctx,
-					session,
-					xio_session_teardown,
-					&session->teardown_work);
-		}
+		session->teardown_reason = reason;
+		retval = xio_ctx_add_work(
+				ctx,
+				session,
+				xio_session_teardown,
+				&session->teardown_work);
 	}
 }
 
