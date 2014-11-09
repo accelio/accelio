@@ -3,7 +3,7 @@
 export LD_LIBRARY_PATH=../../../src/usr/:../../../examples/usr/raio
 
 # Configuring Running Directory
-TOP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+RUNNING_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 
 # Arguments Check
@@ -28,6 +28,6 @@ fi
 
 # ./raio_client -a <server_addr> -p <port> -f <file_path>  -b <block_size> -l <loops>
 #
-taskset -c 1 ./raio_client -a ${server_ip} -p ${port} -f ${file} -b ${block_size} -l ${loops} -t ${trans}
+taskset -c 1 ${RUNNING_DIR}/raio_client -a ${server_ip} -p ${port} -f ${file} -b ${block_size} -l ${loops} -t ${trans}
 
 

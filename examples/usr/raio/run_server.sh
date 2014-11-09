@@ -9,6 +9,9 @@ fi
 
 export LD_LIBRARY_PATH=../../../src/usr/
 
+# Configuring Running Directory
+RUNNING_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 server_ip=$1
 port=$2
 
@@ -28,7 +31,7 @@ else
 	finite_run=$4
 fi
 
-taskset -c 1 ./raio_server ${server_ip} ${port} ${trans} ${finite_run}
+taskset -c 1 ${RUNNING_DIR}/raio_server ${server_ip} ${port} ${trans} ${finite_run}
 
 
 
