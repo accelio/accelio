@@ -320,7 +320,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	xio_ev_loop_add(ctx->ev_loop, fd, XIO_POLLIN,
 			xio_stats_handler, ctx);
 
-	ctx->stats.hertz = get_cpu_mhz(0) * 1000000.0 + 0.5;
+	ctx->stats.hertz = g_mhz * 1000000.0 + 0.5;
 	/* Init default counters' name */
 	ctx->stats.name[XIO_STAT_TX_MSG] = strdup("TX_MSG");
 	ctx->stats.name[XIO_STAT_RX_MSG] = strdup("RX_MSG");
