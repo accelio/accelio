@@ -36,10 +36,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <unistd.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+#include <getopt.h>
+#include <libgen.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <sys/queue.h>
 #include "libxio.h"
 #include "raio_handlers.h"
@@ -119,6 +122,11 @@ struct raio_server_data {
 	pthread_t				thread_id[MAX_THREADS];
 	struct raio_thread_data			tdata[MAX_THREADS];
 };
+
+static char		*server_addr;
+static char		*transport;
+static int		finite_run;
+static uint16_t		server_port;
 
 /*---------------------------------------------------------------------------*/
 /* portals_get								     */
@@ -474,6 +482,109 @@ static struct xio_session_ops  server_ops = {
 };
 
 /*---------------------------------------------------------------------------*/
+/* usage                                                                     */
+/*---------------------------------------------------------------------------*/
+static void usage(const char *app) {
+	printf("Usage:\n");
+	printf("\t%s [OPTIONS] - raio file server\n", basename((char *)app));
+	printf("options:\n");
+	printf("\t--addr, -a <addr> : server ip address\n");
+	printf("\t--port, -p <port> : server port\n");
+	printf("\t--finite, -f      : finite run (default: infinite)\n");
+	printf("\t--transport, -t   : rdma,tcp (default: rdma)\n");
+	printf("\t--help, -h        : print this message and exit\n");
+	exit(0);
+}
+
+static void free_cmdline_params(void) {
+	if (server_addr) {
+		free(server_addr);
+		server_addr = NULL;
+	}
+	if (transport) {
+		free(transport);
+		transport = NULL;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* parse_cmdline                                                             */
+/*---------------------------------------------------------------------------*/
+int parse_cmdline(int argc, char **argv) {
+	static struct option const long_options[] = {
+		{ .name = "addr", .has_arg = 1, .val = 'a'},
+		{ .name = "port", .has_arg = 1, .val = 'p'},
+		{ .name = "transport", .has_arg = 1, .val = 't'},
+		{ .name = "finite", .has_arg = 0, .val = 'f'},
+		{ .name = "help", .has_arg = 0, .val = 'h'},
+		{0, 0, 0, 0},
+	};
+	static char *short_options = "a:p:t:fh";
+	int c;
+
+	server_addr = NULL;
+	transport = NULL;
+	server_port = 0;
+	finite_run = 0;
+
+	optind = 0;
+	opterr = 0;
+
+	while (1) {
+		c = getopt_long(argc, argv, short_options,
+				long_options, NULL);
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'a':
+			if (server_addr == NULL)
+				server_addr = strdup(optarg);
+			if (server_addr == NULL)
+				goto cleanup;
+			break;
+		case 'p':
+			server_port =
+				(uint16_t) strtol(optarg, NULL, 0);
+			break;
+		case 't':
+			if (transport == NULL)
+				transport = strdup(optarg);
+			if (transport == NULL)
+				goto cleanup;
+			break;
+		case 'f':
+			finite_run = 1;
+			break;
+		case 'h':
+			usage(argv[0]);
+			exit(0);
+			break;
+		default:
+			fprintf(stderr, "\nError:\n\tInvalid param: %s\n",
+				argv[optind-1]);
+			goto cleanup;
+			break;
+		}
+	}
+	if (argc == 1)
+		usage(argv[0]);
+	if (optind < argc) {
+		fprintf(stderr, "\nError:\n\tInvalid param: %s\n",
+			argv[optind]);
+		goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	free_cmdline_params();
+	fprintf(stderr,	"Failed to parse command line params.\n\n");
+	usage(argv[0]);
+	exit(-1);
+}
+
+/*---------------------------------------------------------------------------*/
 /* main									     */
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
@@ -482,15 +593,21 @@ int main(int argc, char *argv[])
 	struct raio_server_data	server_data;
 	char			url[256];
 	int			i;
-	uint16_t		port = atoi(argv[2]);
 	int			curr_cpu;
 	int			max_cpus;
 	int			opt;
 
-	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional> " \
-		       "<finite run:optional>\n", argv[0]);
-		exit(1);
+	parse_cmdline(argc, argv);
+	if ((server_addr == NULL) || (server_port == 0)) {
+		fprintf(stderr, "Error:\n\tno server address and/or port\n");
+		usage(argv[0]);
+	}
+	if (transport == NULL)
+		transport = strdup("rdma");
+	else if (strcmp(transport, "rdma") && strcmp(transport, "tcp")) {
+		fprintf(stderr, "Error:\n\tinvalid transport name: %s\n",
+			transport);
+		usage(argv[0]);
 	}
 
 	xio_init();
@@ -512,25 +629,20 @@ int main(int argc, char *argv[])
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH,
 		    &opt, sizeof(int));
 
-
 	curr_cpu = sched_getcpu();
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 	memset(&server_data, 0, sizeof(server_data));
 	server_data.last_reaped = -1;
-	if (argc == 5)
-		server_data.finite_run = strtol(argv[4], NULL, 0);
-
+	server_data.finite_run = finite_run;
 	TAILQ_INIT(&server_data.sessions_list);
 
 	/* create thread context for the client */
 	server_data.ctx	= xio_context_create(NULL, 0, curr_cpu);
 
 	/* create url to connect to */
-	if (argc > 3)
-		sprintf(url, "%s://%s:%d", argv[3], argv[1], port);
-	else
-		sprintf(url, "rdma://%s:%d", argv[1], port);
+	sprintf(url, "%s://%s:%d", transport, server_addr, server_port);
+
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
 			  url, NULL, 0, &server_data);
@@ -545,13 +657,9 @@ int main(int argc, char *argv[])
 		server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
-		port += 1;
-		if (argc > 3)
-			sprintf(server_data.tdata[i].portal, "%s://%s:%d",
-				argv[3], argv[1], port);
-		else
-			sprintf(server_data.tdata[i].portal, "rdma://%s:%d",
-				argv[1], port);
+		server_port ++;
+		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
+			transport, server_addr, server_port);
 		pthread_create(&server_data.thread_id[i], NULL,
 			       portal_server_cb, &server_data.tdata[i]);
 	}

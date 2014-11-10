@@ -31,7 +31,7 @@ else
 	finite_run=$4
 fi
 
-taskset -c 1 ${RUNNING_DIR}/raio_server ${server_ip} ${port} ${trans} ${finite_run}
+taskset -c 1 ${RUNNING_DIR}/raio_server -a ${server_ip} -p ${port} -t ${trans} -f ${finite_run}
 
 
 
