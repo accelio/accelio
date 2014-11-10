@@ -794,9 +794,9 @@ static void xio_txd_init(struct xio_work_req *txd,
 /*---------------------------------------------------------------------------*/
 /* xio_rdmad_init							     */
 /*---------------------------------------------------------------------------*/
-static void xio_rdmad_init(struct xio_work_req *rdmad,
-			   size_t rdmad_nr,
-			   struct xio_task *task)
+static int xio_rdmad_init(struct xio_work_req *rdmad,
+			  size_t rdmad_nr,
+			  struct xio_task *task)
 {
 	rdmad->send_wr.wr_id = uint64_from_ptr(task);
 	rdmad->send_wr.sg_list = rdmad->sge;
@@ -805,9 +805,16 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 	rdmad->send_wr.send_flags = IB_SEND_SIGNALED;
 
 	/* rdmad has no sgl of it's own since it doesn't have a buffer */
-	rdmad->sgt.sgl = NULL;
-	rdmad->sgt.orig_nents = 0;
-	rdmad->sgt.nents = 0;
+	if (rdmad_nr) {
+		if (sg_alloc_table(&rdmad->sgt, rdmad_nr, GFP_KERNEL)) {
+			ERROR_LOG("sg_write_table(rdmad)\n");
+			return -1;
+		}
+	} else {
+		rdmad->sgt.sgl = NULL;
+		rdmad->sgt.orig_nents = 0;
+		rdmad->sgt.nents = 0;
+	}
 
 	rdmad->nents  = 1;
 	rdmad->mapped = 0;
@@ -816,6 +823,7 @@ static void xio_rdmad_init(struct xio_work_req *rdmad,
 	   rdmad->xio_ib_op, rdmad->send_wr.opcode
 	   rdmad->sge.addr, rdmad->sge.length
 	   rdmad->send_wr.wr.rdma.(remote_addr,rkey) */
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1339,10 +1347,6 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	ptr += rdma_hndl->max_sge*sizeof(struct ib_sge);
 	/*****************************************/
 
-	if (sg_alloc_table(&rdma_task->rdmad.sgt, max_sge, GFP_KERNEL)) {
-		ERROR_LOG("sg_weite_table(rdmad)\n");
-		return -1;
-	}
 
 	rdma_task->ib_op = 0x200;
 	xio_rdma_task_init(
@@ -1684,17 +1688,12 @@ static int xio_rdma_primary_pool_slab_init_task(
 	}
 #endif
 
-	if (sg_alloc_table(&rdma_task->rdmad.sgt, max_sge, GFP_KERNEL)) {
-		ERROR_LOG("sg_weite_table(rdmad)\n");
-		goto cleanup2;
-	}
-
 	rdma_task->ib_op = 0x200;
 
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
-		goto cleanup3;
+		goto cleanup2;
 	}
 
 	rdma_slab->count++;
@@ -1710,8 +1709,6 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	return 0;
 
-cleanup3:
-	sg_free_table(&rdma_task->rdmad.sgt);
 cleanup2:
 #if 0
 	sg_free_table(&rdma_task->write_sge.sgt);

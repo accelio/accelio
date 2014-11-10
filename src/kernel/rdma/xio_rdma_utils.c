@@ -58,8 +58,8 @@
 /*---------------------------------------------------------------------------*/
 int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 struct xio_sge *rsg_list, size_t rsize,
-			 int max_sge,
 			 int op_size,
+			 int max_sge,
 			 int *tasks_used)
 {
 	struct sg_table *sgtbl;
@@ -122,6 +122,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			tot_len += llen;
 			if (l == lsize)
 				break;
+			liov++;
 			k++;
 			if (k == max_sge - 1) {
 				/* reached last index */
@@ -134,6 +135,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			llen	= liov->length;
 		} else {
 			l++;
+			liov++;
 			r++;
 			tot_len	+= llen;
 			if ((l == lsize) || (r == rsize))

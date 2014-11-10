@@ -1332,7 +1332,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	tmp_rdma_task = (struct xio_rdma_task *)tmp_task->dd_data;
 	rdmad = &tmp_rdma_task->rdmad;
 	sg = rdmad->sgt.sgl;
-	sg_init_table(sg, XIO_MAX_IOV);
+	/*sg_init_table(sg, XIO_MAX_IOV);*/
 
 	while (1) {
 		if (rlen < llen) {
@@ -1410,6 +1410,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* advance the local index */
 			l++;
 			k++;
+			liov++;
 			if (l == lsize || k == max_sge - 1) {
 				/* .num_sge will come from rdmad->mapped */
 				rdmad->send_wr.wr_id		   =
@@ -1497,6 +1498,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			/* advance the remote and local indices */
 			r++;
 			l++;
+			liov++;
 			if ((l == lsize) || (r == rsize))
 				break;
 
