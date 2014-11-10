@@ -62,7 +62,7 @@
 #define MAXBLOCKSIZE	(128*1024)
 #define BS_IODEPTH	128
 #define NULL_BS_DEV_SIZE (1ULL << 32)
-#define EXTRA_MSGS	256
+#define EXTRA_MSGS	512
 
 #ifndef TAILQ_FOREACH_SAFE
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
@@ -486,10 +486,7 @@ static int raio_handle_destroy(void *prv_session_data,
 			       char *cmd_data,
 			       struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
 	struct raio_io_portal_data	*pd = prv_portal_data;
-	struct raio_io_portal_data	*cpd;
-	int				i, j;
 	int				retval = 0;
 
 	if (0 != cmd->data_len) {
@@ -497,21 +494,6 @@ static int raio_handle_destroy(void *prv_session_data,
 		errno = EINVAL;
 		printf("destroy request rejected\n");
 		goto reject;
-	}
-
-	for (i = 0; i < sd->portals_nr; i++) {
-		cpd = &sd->pd[i];
-		/* unregister each io_u in the free list */
-		for (j = 0; j < cpd->io_u_free_nr; j++) {
-			TAILQ_REMOVE(&cpd->io_u_free_list,
-					&cpd->io_us_free[j],
-					io_u_list);
-			msg_pool_put(cpd->rsp_pool, cpd->io_us_free[j].rsp);
-			cpd->io_us_free[j].buf = NULL;
-		}
-		cpd->io_u_free_nr = 0;
-		free(cpd->io_us_free);
-		msg_pool_delete(cpd->rsp_pool);
 	}
 
 reject:
@@ -593,6 +575,8 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 		if (iocmd->res != (int)iocmd->bcount) {
 			if (iocmd->res < (int)iocmd->bcount) {
 				sglist[0].iov_len = iocmd->res;
+				if (iocmd->res == 0)
+					vmsg_sglist_set_nents(&io_u->rsp->out, 0);
 			} else {
 				vmsg_sglist_set_nents(&io_u->rsp->out, 0);
 				sglist[0].iov_len = iocmd->res;
@@ -737,6 +721,36 @@ static int raio_handle_submit_comp(void *prv_session_data,
 }
 
 /*---------------------------------------------------------------------------*/
+/* raio_handle_destroy_comp				                     */
+/*---------------------------------------------------------------------------*/
+static int raio_handle_destroy_comp(void *prv_session_data,
+				   void *prv_portal_data,
+				   struct xio_msg *rsp)
+{
+
+	struct raio_io_session_data	*sd = prv_session_data;
+	struct raio_io_portal_data	*cpd;
+	int				i, j;
+
+	for (i = 0; i < sd->portals_nr; i++) {
+		cpd = &sd->pd[i];
+		/* unregister each io_u in the free list */
+		for (j = 0; j < cpd->io_u_free_nr; j++) {
+			TAILQ_REMOVE(&cpd->io_u_free_list,
+					&cpd->io_us_free[j],
+					io_u_list);
+			msg_pool_put(cpd->rsp_pool, cpd->io_us_free[j].rsp);
+			cpd->io_us_free[j].buf = NULL;
+		}
+		cpd->io_u_free_nr = 0;
+		free(cpd->io_us_free);
+		msg_pool_delete(cpd->rsp_pool);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* raio_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
 int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
@@ -831,9 +845,13 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 					prv_portal_data,
 					rsp);
 		break;
+	case RAIO_CMD_IO_DESTROY:
+		raio_handle_destroy_comp(prv_session_data,
+					 prv_portal_data,
+					 rsp);
+		break;
 	case RAIO_CMD_CLOSE:
 	case RAIO_CMD_UNKNOWN:
-	case RAIO_CMD_IO_DESTROY:
 	case RAIO_CMD_OPEN:
 	case RAIO_CMD_FSTAT:
 	case RAIO_CMD_IO_SETUP:

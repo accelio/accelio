@@ -399,7 +399,7 @@ int main(int argc, char *argv[])
 		do {
 			if (tot_submitted < tot_num) {
 				for (i = nqueued; i < IODEPTH; i++) {
-					if ((uint64_t)stbuf.st_size < offset)
+					if ((uint64_t)stbuf.st_size <= offset)
 						break;
 					piocb[i] = raio_pool_get(iocb_pool);
 					if (piocb[i])  {
