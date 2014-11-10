@@ -3238,13 +3238,15 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 
 	count = 0;
 	exit = 0;
-	while (task && count < batch_nr && !exit) {
+	while (task && (&task->tasks_list_entry != &tcp_hndl->rx_list) && 
+	       (count < batch_nr) && !exit) {
 		tcp_task = task->dd_data;
 
 		switch (tcp_task->rxd.stage) {
 		case XIO_TCP_RX_START:
 			/* ORK todo find a better place to rearm rx_list?*/
-			if (tcp_hndl->state == XIO_STATE_CONNECTED) {
+			if (tcp_hndl->state == XIO_STATE_CONNECTED ||
+			    tcp_hndl->state == XIO_STATE_DISCONNECTED) {
 				task_next =
 					xio_tcp_primary_task_alloc(tcp_hndl);
 				if (task_next == NULL) {
