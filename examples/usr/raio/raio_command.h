@@ -53,6 +53,7 @@ enum raio_server_commands {
 	RAIO_CMD_IO_SUBMIT,
 	RAIO_CMD_IO_RELEASE,
 	RAIO_CMD_IO_DESTROY,
+	RAIO_CMD_REJECT,
 
 	RAIO_CMD_LAST
 };
