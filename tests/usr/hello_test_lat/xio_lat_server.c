@@ -403,6 +403,7 @@ int main(int argc, char *argv[])
 {
 	struct xio_server	*server;
 	char			url[256];
+	int			opt;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -411,6 +412,11 @@ int main(int argc, char *argv[])
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
+
+	opt = 1;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_TCP, XIO_OPTNAME_TCP_NO_DELAY,
+		    &opt, sizeof(int));
 
 	ctx	= xio_context_create(NULL, POLLING_TIMEOUT, test_config.cpu);
 
@@ -438,6 +444,7 @@ int main(int argc, char *argv[])
 	} else {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
+		xio_context_destroy(ctx);
 		xio_assert(0);
 	}
 
