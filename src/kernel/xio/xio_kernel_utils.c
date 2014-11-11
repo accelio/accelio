@@ -221,7 +221,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			ss_len = sizeof(struct sockaddr_in);
 		} else if (retval == 1) {
 			ss_len = sizeof(struct sockaddr_in6);
-		}												}
+		}
 	}
 
 	kfree(host);
