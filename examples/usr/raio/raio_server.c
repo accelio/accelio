@@ -554,7 +554,8 @@ int parse_cmdline(int argc, char **argv) {
 				goto cleanup;
 			break;
 		case 'f':
-			finite_run = 1;
+			finite_run =
+				(uint16_t) strtol(optarg, NULL, 0);
 			break;
 		case 'h':
 			usage(argv[0]);
