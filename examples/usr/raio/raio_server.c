@@ -515,11 +515,11 @@ int parse_cmdline(int argc, char **argv) {
 		{ .name = "addr", .has_arg = 1, .val = 'a'},
 		{ .name = "port", .has_arg = 1, .val = 'p'},
 		{ .name = "transport", .has_arg = 1, .val = 't'},
-		{ .name = "finite", .has_arg = 0, .val = 'f'},
+		{ .name = "finite", .has_arg = 1, .val = 'f'},
 		{ .name = "help", .has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
-	static char *short_options = "a:p:t:fh";
+	static char *short_options = "a:p:t:f:h";
 	int c;
 
 	server_addr = NULL;
