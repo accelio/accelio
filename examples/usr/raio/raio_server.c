@@ -488,11 +488,11 @@ static void usage(const char *app) {
 	printf("Usage:\n");
 	printf("\t%s [OPTIONS] - raio file server\n", basename((char *)app));
 	printf("options:\n");
-	printf("\t--addr, -a <addr> : server ip address\n");
-	printf("\t--port, -p <port> : server port\n");
-	printf("\t--finite, -f      : finite run (default: infinite)\n");
-	printf("\t--transport, -t   : rdma,tcp (default: rdma)\n");
-	printf("\t--help, -h        : print this message and exit\n");
+	printf("\t--addr, -a <addr>      : server ip address\n");
+	printf("\t--port, -p <port>      : server port\n");
+	printf("\t--finite, -f           : finite run (default: infinite)\n");
+	printf("\t--transport, -t <name> : rdma,tcp (default: rdma)\n");
+	printf("\t--help, -h             : print this message and exit\n");
 	exit(0);
 }
 

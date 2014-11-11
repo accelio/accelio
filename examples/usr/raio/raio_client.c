@@ -158,19 +158,19 @@ void raio_pool_free(struct raio_pool *q)
 /*---------------------------------------------------------------------------*/
 /* usage                                                                     */
 /*---------------------------------------------------------------------------*/
-static void usage(const char *argv0)
-{
+static void usage(const char *app) {
 	printf("Usage:\n");
-	printf("  %s [OPTIONS]\traio file reader\n", argv0);
-	printf("\n");
+	printf("\t%s [OPTIONS] - raio simple file client\n", basename((char *)app));
 	printf("options:\n");
-	printf("%s -a <server_addr> -p <port> -f <file_path>  " \
-	       "-b <block_size> -l <loops> [-t <transport:rdma,tcp>]\n",
-	      argv0);
-
+	printf("\t--addr, -a <addr>       : server ip address\n");
+	printf("\t--port, -p <port>       : server port\n");
+	printf("\t--file-path, -f <path>  : file path\n");
+	printf("\t--block-size, -b <size> : block size in bytes\n");
+	printf("\t--loops, -l <num>       : num of run loops\n");
+	printf("\t--transport, -t <name>  : rdma,tcp (default: rdma)\n");
+	printf("\t--help, -h              : print this message and exit\n");
 	exit(0);
 }
-
 static void free_cmdline_params(void)
 {
 	if (file_path) {
