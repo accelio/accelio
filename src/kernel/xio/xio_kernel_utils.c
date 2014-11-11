@@ -117,6 +117,8 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	const char	*p1, *p2;
 	size_t		len;
 	int		ipv6_hint = 0;
+	int		ss_len = -1;
+	int		retval;
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
@@ -203,6 +205,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			memset((void *)&s6->sin6_addr,
 			       0, sizeof(s6->sin6_addr));
 			s6->sin6_port	= port_be16;
+			ss_len = sizeof(struct sockaddr_in6);
 		} else {
 			struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
 			s4->sin_family		= AF_INET;
@@ -210,14 +213,19 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			s4->sin_port		= port_be16;
 		}
 	} else {
-		if (priv_parse_ip_addr(host, len, port_be16, ss) < 0) {
+		retval = priv_parse_ip_addr(host, len, port_be16, ss);
+		if (retval < 0) {
 			ERROR_LOG("unresolved address\n");
 			goto cleanup;
-		}
+		} else if (retval == 0) {
+			ss_len = sizeof(struct sockaddr_in);
+		} else if (retval == 1) {
+			ss_len = sizeof(struct sockaddr_in6);
+		}												}
 	}
 
 	kfree(host);
-	return 0;
+	return ss_len;
 
 cleanup:
 	kfree(host);
