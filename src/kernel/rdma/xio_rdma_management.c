@@ -1357,7 +1357,7 @@ static int xio_rdma_phantom_pool_slab_init_task(
 			NULL,
 			0,			/* txd_nr */
 			0,			/* rxd_nr */
-			rdma_hndl->max_sge);	/* rdmad_nr */
+			max_sge);		/* rdmad_nr */
 
 	return 0;
 }
