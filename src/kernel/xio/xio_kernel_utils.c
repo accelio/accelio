@@ -211,6 +211,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			s4->sin_family		= AF_INET;
 			s4->sin_addr.s_addr	= INADDR_ANY;
 			s4->sin_port		= port_be16;
+			ss_len = sizeof(struct sockaddr_in);
 		}
 	} else {
 		retval = priv_parse_ip_addr(host, len, port_be16, ss);
