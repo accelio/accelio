@@ -2078,10 +2078,10 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 				 struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
-	unsigned int		i;
+	unsigned int		i, vec_size = 0;
 	int			retval;
 	int			user_assign_flag = 0;
-	size_t			rlen = 0;
+	size_t			rlen = 0, llen = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
@@ -2139,27 +2139,28 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			return -1;
 		}
 
-		if (tcp_task->req_write_num_sge > tbl_nents(sgtbl_ops, sgtbl)) {
-			WARN_LOG("app has not provided enough buffers\n");
-			WARN_LOG("provided=%d, required=%d\n",
-				 tbl_nents(sgtbl_ops, sgtbl),
-				 tcp_task->req_write_num_sge);
-			WARN_LOG("tcp read is ignored\n");
-			task->status = XIO_E_USER_BUF_OVERFLOW;
-			return -1;
-		}
-
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_write_num_sge);
-
-		/*
-		for (i = 0;  i < task->imsg.in.data_iovlen; i++) {
-			if (task->imsg.in.pdata_iov[i].mr == NULL) {
+		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
+			if (sge_mr(sgtbl_ops, sg) == NULL) {
 				ERROR_LOG("application has not provided mr\n");
 				ERROR_LOG("tcp read is ignored\n");
-				task->status = EINVAL;
+				task->status = XIO_E_NO_USER_MR;
 				return -1;
 			}
-			llen += task->imsg.in.pdata_iov[i].iov_len;
+			if (sge_addr(sgtbl_ops, sg) == NULL) {
+				ERROR_LOG("application has provided " \
+					  "null address\n");
+				ERROR_LOG("tcp read is ignored\n");
+				task->status = XIO_E_NO_USER_BUFS;
+				return -1;
+			}
+			llen += sge_length(sgtbl_ops, sg);
+			vec_size++;
+			if (llen > rlen) {
+				sge_set_length(sgtbl_ops, sg, rlen - (llen - sge_length(sgtbl_ops, sg)));
+				tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
+				break;
+			}
+			tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
 			ERROR_LOG("application provided too small iovec\n");
@@ -2167,29 +2168,12 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 				  "local peer provided buffer size %zd bytes\n",
 				  rlen, llen);
 			ERROR_LOG("tcp read is ignored\n");
-			task->status = EINVAL;
+			task->status = XIO_E_USER_BUF_OVERFLOW;
 			return -1;
 		}
-		*/
 
-		/* ORK todo force user to provide same iovec,
-		 or receive data in a different segmentation
-		 as long as llen > rlen?? */
-		sg = sge_first(sgtbl_ops, sgtbl);
-		for (i = 0;  i < tcp_task->req_write_num_sge; i++) {
-			if (sge_length(sgtbl_ops, sg) <
-			    tcp_task->req_write_sge[i].length) {
-				ERROR_LOG("app provided too small iovec\n");
-				ERROR_LOG("iovec #%d: len=%d, required=%d\n",
-					  i,
-					  sge_length(sgtbl_ops, sg),
-					  tcp_task->req_write_sge[i].length);
-				ERROR_LOG("tcp read is ignored\n");
-				task->status = XIO_E_USER_BUF_OVERFLOW;
-				return -1;
-			}
-			sg = sge_next(sgtbl_ops, sgtbl, sg);
-		}
+		tcp_task->req_write_num_sge = vec_size;
+		tbl_set_nents(sgtbl_ops, sgtbl, vec_size);
 	} else {
 		if (tcp_hndl->tcp_mempool == NULL) {
 				ERROR_LOG("message /read/write failed - " \
