@@ -236,7 +236,7 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		connection->session	= session;
 		connection->nexus	= NULL;
 		connection->ctx		= ctx;
-		connection->ack_sn	=~0;
+		connection->ack_sn	= ~0;
 		connection->credits_ack_watermark = session->rcv_queue_depth/2;
 
 		connection->conn_idx	= conn_idx;
@@ -316,8 +316,8 @@ int xio_connection_send(struct xio_connection *connection,
 	int			standalone_receipt = 0;
 
 	if (IS_RESPONSE(msg->type) &&
-	    ((msg->flags & (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-	    XIO_MSG_RSP_FLAG_FIRST)) {
+	    ((msg->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
+	    XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 		/* this is a receipt message */
 		task = xio_nexus_get_primary_task(connection->nexus);
 		if (task == NULL) {
@@ -407,6 +407,7 @@ int xio_connection_send(struct xio_connection *connection,
 	}
 
 	xio_session_write_header(task, &hdr);
+	xio_clear_flags(&hdr.flags);
 
 	/* send it */
 	retval = xio_nexus_send(connection->nexus, task);
@@ -515,8 +516,8 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 		/* this is read receipt  */
 		if (IS_RESPONSE(pmsg->type) &&
 		    ((pmsg->flags &
-		      (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-				 XIO_MSG_RSP_FLAG_FIRST)) {
+		      (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
+				 XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 			continue;
 		}
 		if (!IS_APPLICATION_MSG(pmsg))
@@ -644,9 +645,9 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 				  ptask->tlv_type, ptask->ltid);
 			if (IS_RESPONSE(ptask->tlv_type) &&
 			    ((ptask->omsg_flags &
-			     (XIO_MSG_RSP_FLAG_FIRST |
-			      XIO_MSG_RSP_FLAG_LAST)) ==
-					     XIO_MSG_RSP_FLAG_FIRST))
+			     (XIO_MSG_FLAG_EX_RECEIPT_FIRST |
+			      XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
+					     XIO_MSG_FLAG_EX_RECEIPT_FIRST))
 				/* this is a receipt message */
 				is_req = 1;
 			else
@@ -1022,11 +1023,11 @@ int xio_send_response(struct xio_msg *msg)
 			     vmsg->header.iov_len +
 			     tbl_length(sgtbl_ops, sgtbl));
 
-		pmsg->flags = XIO_MSG_RSP_FLAG_LAST;
+		pmsg->flags |= XIO_MSG_FLAG_EX_RECEIPT_LAST;
 		if ((pmsg->request->flags &
 		     XIO_MSG_FLAG_REQUEST_READ_RECEIPT) &&
 		    (task->state == XIO_TASK_STATE_DELIVERED))
-			pmsg->flags |= XIO_MSG_RSP_FLAG_FIRST;
+			pmsg->flags |= XIO_MSG_FLAG_EX_RECEIPT_FIRST;
 		task->state = XIO_TASK_STATE_READ;
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
@@ -1073,7 +1074,7 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	rsp->type = (msg->type & ~XIO_REQUEST) | XIO_RESPONSE;
 	rsp->request = msg;
 
-	rsp->flags = XIO_MSG_RSP_FLAG_FIRST;
+	rsp->flags = XIO_MSG_FLAG_EX_RECEIPT_FIRST;
 	task->state = XIO_TASK_STATE_READ;
 
 	rsp->out.header.iov_len = 0;
@@ -1544,7 +1545,7 @@ int xio_disconnect(struct xio_connection *connection)
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
 	    connection->disconnecting) {
 		/* delay the disconnection to when connection become online */
-	    	connection->disconnecting = 1;
+		connection->disconnecting = 1;
 		return 0;
 	}
 	connection->disconnecting = 1;
@@ -1840,9 +1841,9 @@ static void xio_connection_post_destroy(struct kref *kref)
 		TRACE_LOG("redirected connection is closed\n");
 	} else {
 		spin_lock(&session->connections_list_lock);
-		if (session->connections_nr == 1)  {
+		if (session->connections_nr == 1)
 			session->state = XIO_SESSION_STATE_CLOSING;
-		}
+
 		session->connections_nr--;
 		list_del(&connection->connections_list_entry);
 		spin_unlock(&session->connections_list_lock);
@@ -2311,7 +2312,8 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 		DEBUG_LOG("got hello response. session:%p, connection:%p\n",
 			  session, connection);
 
-		xio_connection_release_hello(connection, task->sender_task->omsg);
+		xio_connection_release_hello(connection,
+					     task->sender_task->omsg);
 		/* recycle the task */
 		xio_tasks_pool_put(task->sender_task);
 		task->sender_task = NULL;
@@ -2323,9 +2325,9 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 	/* delayed disconnect request should be done now */
 	if (connection->state == XIO_CONNECTION_STATE_INIT &&
 	    connection->disconnecting) {
-	    	connection->disconnecting = 0;
+		connection->disconnecting = 0;
 		xio_connection_set_state(connection,
-				 XIO_CONNECTION_STATE_ONLINE);
+					 XIO_CONNECTION_STATE_ONLINE);
 		xio_disconnect(connection);
 		return 0;
 	}
@@ -2393,7 +2395,7 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 
 	if (connection->state == XIO_CONNECTION_STATE_INIT &&
 	    connection->disconnecting) {
-	    	connection->disconnecting = 0;
+		connection->disconnecting = 0;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 		xio_disconnect(connection);

@@ -73,12 +73,20 @@ void xio_set_error(int errnum);
 #define MAX_PRIVATE_DATA_LEN		1024
 
 /**
- * message flags
+ * extended message flags
  */
+enum xio_msg_flags_ex {
+	/* [0x01 - 0x99] - reserved for application usage */
+	/* [0x100 - 0x200] - reserved for library usage */
+	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = 0x100, /**< read receipt first */
+	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = 0x101, /**< read receipt last  */
+	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = 0x102, /**< immediate receipt  */
+};
 
-/* response flags */
-#define XIO_MSG_RSP_FLAG_FIRST		0x1
-#define XIO_MSG_RSP_FLAG_LAST		0x2
+#define xio_clear_flags(flag) \
+	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
+			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
+			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))
 
 /**
  *  TLV types

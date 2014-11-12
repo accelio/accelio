@@ -578,8 +578,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	/* standalone receipt */
 	if ((hdr.flags &
-	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-	     XIO_MSG_RSP_FLAG_FIRST) {
+	    (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
+	     XIO_MSG_FLAG_EX_RECEIPT_FIRST) {
 		standalone_receipt = 1;
 	}
 	/* update receive + send window */
@@ -589,7 +589,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		connection->peer_credits += hdr.credits;
 	} else {
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
-				connection->exp_sn, hdr.sn);
+			  connection->exp_sn, hdr.sn);
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
@@ -614,7 +614,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		xio_connection_remove_in_flight(connection, omsg);
 	} else {
 		if (task->tlv_type == XIO_ONE_WAY_RSP)
-			if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST)
+			if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST)
 				xio_connection_remove_in_flight(connection,
 								omsg);
 	}
@@ -628,7 +628,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
 		/* one way message with "read receipt" */
-		if (!(hdr.flags & XIO_MSG_RSP_FLAG_FIRST))
+		if (!(hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST))
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
 
@@ -655,7 +655,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
 	} else {
-		if (hdr.flags & XIO_MSG_RSP_FLAG_FIRST) {
+		if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST) {
 			if (connection->ses_ops.on_msg_delivered) {
 				omsg->receipt_res = hdr.receipt_result;
 				omsg->sn	  = hdr.serial_num;
@@ -676,7 +676,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				xio_tasks_pool_put(task);
 			}
 		}
-		if (hdr.flags & XIO_MSG_RSP_FLAG_LAST) {
+		if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_LAST) {
 			struct xio_vmsg *vmsg = &msg->in;
 			struct xio_sg_table_ops	*sgtbl_ops;
 			void			*sgtbl;
@@ -730,8 +730,8 @@ static int xio_on_rsp_send_comp(
 	 * completion of receipt
 	 */
 	if ((task->omsg_flags &
-	    (XIO_MSG_RSP_FLAG_FIRST | XIO_MSG_RSP_FLAG_LAST)) ==
-	     XIO_MSG_RSP_FLAG_FIRST) {
+	    (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
+	     XIO_MSG_FLAG_EX_RECEIPT_FIRST) {
 		xio_connection_release_read_receipt(connection, task->omsg);
 		xio_release_response_task(task);
 	} else {

@@ -176,6 +176,8 @@ enum xio_msg_flags {
 	XIO_MSG_FLAG_IMM_SEND_COMP	  = 0x4, /**< request an immediate    */
 						 /**< send completion         */
 	XIO_MSG_FLAG_LAST_IN_BATCH	  = 0x8, /**< last in batch	      */
+
+	/* [0x100 - 0x200] - reserved for library usage */
 };
 
 /**
@@ -430,8 +432,8 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_session_event)(struct xio_session *session,
-			struct xio_session_event_data *data,
-			void *cb_user_context);
+				struct xio_session_event_data *data,
+				void *cb_user_context);
 
 	/**
 	 * new session notification - server side only
@@ -443,8 +445,8 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_new_session)(struct xio_session *session,
-			struct xio_new_session_req *req,
-			void *cb_user_context);
+			      struct xio_new_session_req *req,
+			      void *cb_user_context);
 
 	/**
 	 * session established notification - client side only
@@ -456,8 +458,8 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_session_established)(struct xio_session *session,
-			struct xio_new_session_rsp *rsp,
-			void *cb_user_context);
+				      struct xio_new_session_rsp *rsp,
+				      void *cb_user_context);
 
 	/**
 	 * send completion notification - responder only
@@ -470,8 +472,8 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_msg_send_complete)(struct xio_session *session,
-			struct xio_msg *rsp,
-			void *conn_user_context);
+				    struct xio_msg *rsp,
+				    void *conn_user_context);
 
 	/**
 	 * message arrived notification
@@ -486,9 +488,9 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_msg)(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *conn_user_context);
+		      struct xio_msg *msg,
+		      int more_in_batch,
+		      void *conn_user_context);
 
 	/**
 	 * one way message delivery receipt notification
@@ -503,9 +505,9 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_msg_delivered)(struct xio_session *session,
-			struct xio_msg *msg,
-			int more_in_batch,
-			void *conn_user_context);
+				struct xio_msg *msg,
+				int more_in_batch,
+				void *conn_user_context);
 
 	/**
 	 * message error notification
@@ -519,10 +521,10 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_msg_error)(struct xio_session *session,
-			enum xio_status error,
-			enum xio_msg_direction,
-			struct xio_msg  *msg,
-			void *conn_user_context);
+			    enum xio_status error,
+			    enum xio_msg_direction,
+			    struct xio_msg  *msg,
+			    void *conn_user_context);
 
 	/**
 	 * requester's message cancellation notification
@@ -536,9 +538,9 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*on_cancel)(struct xio_session *session,
-			struct xio_msg  *msg,
-			enum xio_status result,
-			void *conn_user_context);
+			 struct xio_msg  *msg,
+			 enum xio_status result,
+			 void *conn_user_context);
 
 	/**
 	 * responder's message cancellation notification
@@ -564,7 +566,7 @@ struct xio_session_ops {
 	 *  @returns 0
 	 */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
-			void *conn_user_context);
+				  void *conn_user_context);
 
 	/**
 	 * sender's send completion notification - one way message only
@@ -718,8 +720,8 @@ int xio_connection_destroy(struct xio_connection *conn);
  * @returns success (0), or a (negative) error value
  */
 int xio_modify_connection(struct xio_connection *conn,
-		       struct xio_connection_attr *attr,
-		       int attr_mask);
+			  struct xio_connection_attr *attr,
+			  int attr_mask);
 /**
  * query connection parameters
  *
@@ -730,7 +732,7 @@ int xio_modify_connection(struct xio_connection *conn,
  * @returns success (0), or a (negative) error value
  */
 int xio_query_connection(struct xio_connection *conn,
-		         struct xio_connection_attr *attr,
+			 struct xio_connection_attr *attr,
 			 int attr_mask);
 /**
  * send request to responder
