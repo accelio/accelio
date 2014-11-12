@@ -230,11 +230,11 @@ void xio_session_write_header(struct xio_task *task,
 	/* fill header */
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
 	PACK_LLVAL(hdr, tmp_hdr, serial_num);
-	PACK_LVAL(hdr, tmp_hdr, flags);
-	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 	PACK_SVAL(hdr, tmp_hdr, sn);
 	PACK_SVAL(hdr, tmp_hdr, ack_sn);
 	PACK_SVAL(hdr, tmp_hdr, credits);
+	PACK_LVAL(hdr, tmp_hdr, flags);
+	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -251,13 +251,13 @@ void xio_session_read_header(struct xio_task *task,
 	tmp_hdr = xio_mbuf_set_session_hdr(&task->mbuf);
 
 	/* fill request */
-	UNPACK_LLVAL(tmp_hdr, hdr, serial_num);
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
-	UNPACK_LVAL(tmp_hdr, hdr, flags);
-	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
+	UNPACK_LLVAL(tmp_hdr, hdr, serial_num);
 	UNPACK_SVAL(tmp_hdr, hdr, sn);
 	UNPACK_SVAL(tmp_hdr, hdr, ack_sn);
 	UNPACK_SVAL(tmp_hdr, hdr, credits);
+	UNPACK_LVAL(tmp_hdr, hdr, flags);
+	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -486,18 +486,19 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	/* read session header */
 	xio_session_read_header(task, &hdr);
 
-	if (connection->exp_sn == hdr.sn) {
-		connection->exp_sn++;
-		connection->ack_sn = hdr.sn;
+	if (connection->req_exp_sn == hdr.sn) {
+		connection->req_exp_sn++;
+		connection->req_ack_sn = hdr.sn;
 		connection->peer_credits += hdr.credits;
 	} else {
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
-			  connection->exp_sn, hdr.sn);
+			  connection->req_exp_sn, hdr.sn);
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
 		  __func__,
-		  connection->sn, connection->exp_sn, connection->ack_sn,
+		  connection->req_sn, connection->req_exp_sn,
+		  connection->req_ack_sn,
 		  connection->credits, connection->peer_credits);
 	*/
 	msg->sn		= hdr.serial_num;
@@ -517,6 +518,12 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	 */
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		xio_task_addref(task);
+
+	if (test_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &hdr.flags)) {
+		xio_task_addref(task);
+		/* send receipt before calling the callback */
+		xio_connection_send_read_receipt(connection, msg);
+	}
 
 	msg->timestamp = get_cycles();
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
@@ -583,18 +590,20 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		standalone_receipt = 1;
 	}
 	/* update receive + send window */
-	if (connection->exp_sn == hdr.sn) {
-		connection->exp_sn++;
-		connection->ack_sn = hdr.sn;
+	if (connection->rsp_exp_sn == hdr.sn) {
+		connection->rsp_exp_sn++;
+		connection->rsp_ack_sn = hdr.sn;
 		connection->peer_credits += hdr.credits;
 	} else {
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
-			  connection->exp_sn, hdr.sn);
+			  connection->rsp_exp_sn, hdr.sn);
+		abort();
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
 		  __func__,
-		  connection->sn, connection->exp_sn, connection->ack_sn,
+		  connection->rsp_sn, connection->rsp_exp_sn,
+		  connection->rsp_ack_sn,
 		  connection->credits, connection->peer_credits);
 	*/
 	msg->sn = hdr.serial_num;
@@ -605,6 +614,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	omsg->next	= NULL;
+
+	xio_clear_flags(&omsg->flags);
 
 	task->connection = connection;
 	task->session = connection->session;
@@ -738,7 +749,8 @@ static int xio_on_rsp_send_comp(
 		/* send completion notification only to responder to
 		 * release responses
 		 */
-		 if (connection->ses_ops.on_msg_send_complete) {
+		xio_clear_flags(&task->omsg->flags);
+		if (connection->ses_ops.on_msg_send_complete) {
 			connection->ses_ops.on_msg_send_complete(
 					connection->session, task->omsg,
 					connection->cb_user_context);
@@ -762,13 +774,13 @@ int xio_on_credits_ack_recv(struct xio_connection *connection,
 	/* read session header */
 	xio_session_read_header(task, &hdr);
 
-	if (connection->exp_sn == hdr.sn) {
-		connection->exp_sn++;
-		connection->ack_sn = hdr.sn;
+	if (connection->req_exp_sn == hdr.sn) {
+		connection->req_exp_sn++;
+		connection->req_ack_sn = hdr.sn;
 		connection->peer_credits += hdr.credits;
 	} else {
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
-			  connection->exp_sn, hdr.sn);
+			  connection->req_exp_sn, hdr.sn);
 	}
 	connection->credits++;
 	xio_tasks_pool_put(task);
@@ -797,7 +809,8 @@ static int xio_on_ow_req_send_comp(
 	}
 
 	if (!omsg || omsg->flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
-	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
+	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
+	    task->omsg->flags & XIO_MSG_FLAG_EX_IMM_READ_RECEIPT)
 		return 0;
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
@@ -806,6 +819,7 @@ static int xio_on_ow_req_send_comp(
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
 	connection->tx_queued_msgs--;
+	xio_clear_flags(&omsg->flags);
 
 	/* send completion notification to
 	 * release request

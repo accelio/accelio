@@ -236,7 +236,8 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		connection->session	= session;
 		connection->nexus	= NULL;
 		connection->ctx		= ctx;
-		connection->ack_sn	= ~0;
+		connection->req_ack_sn	= ~0;
+		connection->rsp_ack_sn	= ~0;
 		connection->credits_ack_watermark = session->rcv_queue_depth/2;
 
 		connection->conn_idx	= conn_idx;
@@ -289,16 +290,16 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 	 * do "rdma read" but will use send/receive
 	 */
 	if (tbl_nents(sgtbl_ops, sgtbl) > XIO_IOV_THRESHOLD) {
-		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
+		clr_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &msg->flags);
+		set_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &msg->flags);
 		return;
 	}
 	if (data_len > (ssize_t)g_options.max_inline_data && data_len > 0) {
-		msg->flags |= XIO_MSG_FLAG_REQUEST_READ_RECEIPT;
-		msg->flags &= ~XIO_MSG_FLAG_IMM_SEND_COMP;
+		clr_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &msg->flags);
+		set_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &msg->flags);
 		return;
 	}
-	msg->flags |= XIO_MSG_FLAG_IMM_SEND_COMP;
+	set_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &msg->flags);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -391,15 +392,28 @@ int xio_connection_send(struct xio_connection *connection,
 	hdr.flags		= msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
 	if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
-		/*
-		DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, " \
-			  "peer_credits:%d\n", __func__,
-			connection->sn, connection->exp_sn,
-			connection->ack_sn, connection->credits,
-			connection->peer_credits);
-		*/
-		hdr.sn		= connection->sn++;
-		hdr.ack_sn	= connection->ack_sn;
+		if (IS_REQUEST(msg->type)) {
+			/*
+			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits:%d, " \
+				  "peer_credits:%d\n", __func__,
+				  connection->req_sn, connection->req_exp_sn,
+				  connection->req_ack_sn, connection->credits,
+				  connection->peer_credits);
+			*/
+			hdr.sn		= connection->req_sn++;
+			hdr.ack_sn	= connection->req_ack_sn;
+		} else {
+			/*
+			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits:%d, " \
+				  "peer_credits:%d\n", __func__,
+				  connection->rsp_sn, connection->rsp_sn,
+				  connection->rsp_exp_sn,
+				  connection->req_ack_sn, connection->credits,
+				  connection->peer_credits);
+			*/
+			hdr.sn		= connection->rsp_sn++;
+			hdr.ack_sn	= connection->rsp_ack_sn;
+		}
 		hdr.credits	= connection->credits;
 		connection->credits = 0;
 		if (!standalone_receipt)
@@ -407,7 +421,6 @@ int xio_connection_send(struct xio_connection *connection,
 	}
 
 	xio_session_write_header(task, &hdr);
-	xio_clear_flags(&hdr.flags);
 
 	/* send it */
 	retval = xio_nexus_send(connection->nexus, task);

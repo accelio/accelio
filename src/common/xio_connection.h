@@ -72,9 +72,12 @@ struct xio_connection {
 	/* server's session may have multiple connections each has
 	 * private data assignd by bind
 	 */
-	uint16_t			sn;
-	uint16_t			ack_sn;
-	uint16_t			exp_sn;
+	uint16_t			req_sn;
+	uint16_t			req_exp_sn;
+	uint16_t			req_ack_sn;
+	uint16_t			rsp_sn;
+	uint16_t			rsp_exp_sn;
+	uint16_t			rsp_ack_sn;
 	uint16_t			credits;
 	uint16_t			peer_credits;
 	uint16_t			credits_ack_watermark;
@@ -85,7 +88,7 @@ struct xio_connection {
 	uint16_t			disconnecting;
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
-	uint16_t			pad;
+	uint16_t			pad[2];
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
 	struct kref			kref;
