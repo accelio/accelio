@@ -597,7 +597,6 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	} else {
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
 			  connection->rsp_exp_sn, hdr.sn);
-		abort();
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
