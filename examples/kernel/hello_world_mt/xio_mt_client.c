@@ -465,6 +465,7 @@ static int xio_client_main(void *data)
 	/* create URL to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 
+	memset(&params, 0, sizeof(params));
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
 	params.user_context	= sdata;
