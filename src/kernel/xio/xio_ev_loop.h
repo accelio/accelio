@@ -50,6 +50,9 @@
 #define XIO_EV_LOOP_IN_HANDLER	(1 << 4)
 #define XIO_EV_LOOP_ACTIVE	(1 << 5)
 
+#define XIO_EV_HANDLER_PENDING	1
+#define XIO_EV_HANDLER_ENABLED	(1 << 1)
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/

@@ -221,7 +221,9 @@ static int priv_ev_add_thread(void *loop_hndl, struct xio_ev_data *event)
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
 		return 0;
 
-	llist_add(&event->ev_llist, &loop->ev_llist);
+	set_bit(XIO_EV_HANDLER_ENABLED, &event->states);
+	if (!test_and_set_bit(XIO_EV_HANDLER_PENDING, &event->states))
+		llist_add(&event->ev_llist, &loop->ev_llist);
 
 	/* don't wake up */
 	if (test_bit(XIO_EV_LOOP_STOP, &loop->states))
@@ -286,7 +288,9 @@ static int priv_ev_add_tasklet(void *loop_hndl, struct xio_ev_data *event)
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
 		return 0;
 
-	llist_add(&event->ev_llist, &loop->ev_llist);
+	set_bit(XIO_EV_HANDLER_ENABLED, &event->states);
+	if (!test_and_set_bit(XIO_EV_HANDLER_PENDING, &event->states))
+		llist_add(&event->ev_llist, &loop->ev_llist);
 
 	/* don't wake up */
 	if (test_bit(XIO_EV_LOOP_STOP, &loop->states))
@@ -306,6 +310,10 @@ static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event)
 
 	/* don't add events */
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
+		return 0;
+
+	set_bit(XIO_EV_HANDLER_ENABLED, &event->states);
+	if (test_and_set_bit(XIO_EV_HANDLER_PENDING, &event->states))
 		return 0;
 
 	if (test_bit(XIO_EV_LOOP_STOP, &loop->states)) {
@@ -379,11 +387,13 @@ retry_dont_wait:
 			node = llist_next(node);
 			loop->first = node;
 			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
+			clear_bit(XIO_EV_HANDLER_PENDING, &tev->states);
 			if (time_after(jiffies, start_time)) {
 				schedule();
 				start_time = jiffies;
 			}
-			tev->handler(tev->data);
+			if (test_bit(XIO_EV_HANDLER_ENABLED, &tev->states))
+				tev->handler(tev->data);
 			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 		}
 		loop->last = NULL;
@@ -438,7 +448,9 @@ static void priv_ev_loop_run_tasklet(unsigned long data)
 			node = llist_next(node);
 			loop->first = node;
 			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
-			tev->handler(tev->data);
+			clear_bit(XIO_EV_HANDLER_PENDING, &tev->states);
+			if (test_bit(XIO_EV_HANDLER_ENABLED, &tev->states))
+				tev->handler(tev->data);
 			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 		}
 		loop->last = NULL;
@@ -453,7 +465,9 @@ static void priv_ev_loop_run_work(struct work_struct *work)
 	struct xio_ev_data *tev = container_of(work, struct xio_ev_data, work);
 
 	/*  CURRENTLY CAN'T MARK IN LOOP */
-	tev->handler(tev->data);
+	clear_bit(XIO_EV_HANDLER_PENDING, &tev->states);
+	if (test_bit(XIO_EV_HANDLER_ENABLED, &tev->states))
+		tev->handler(tev->data);
 }
 
 /*---------------------------------------------------------------------------*/

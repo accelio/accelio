@@ -157,6 +157,7 @@ struct xio_ev_data {
 		struct llist_node  ev_llist;
 		struct work_struct work;
 	};
+	volatile long unsigned int states; /* xio private data */
 };
 
 /**
