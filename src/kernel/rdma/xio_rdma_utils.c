@@ -44,7 +44,7 @@
 #include "xio_common.h"
 #include "xio_log.h"
 #include "xio_observer.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
 #include "xio_task.h"

@@ -35,13 +35,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_RDMA_MEMPOOL_H
-#define XIO_RDMA_MEMPOOL_H
+#ifndef XIO_MEMPOOL_H
+#define XIO_MEMPOOL_H
 
 #include <linux/types.h>
 #include <linux/kernel.h>
 
-struct xio_rdma_mempool;
+struct xio_mempool;
 struct xio_sge;
 
 struct xio_mem_reg {
@@ -52,16 +52,16 @@ struct xio_mem_reg {
 	void *mem_h; /* it is void as it might be FMR or FRWR */
 };
 
-struct xio_rdma_mp_mem {
+struct xio_mp_mem {
 	void		*addr;
 	size_t		length;
 	void		*cache;
 };
 
-struct xio_rdma_mem_desc {
+struct xio_mem_desc {
 	/* sg table for dma mapping */
 	struct sg_table		sgt;
-	struct xio_rdma_mp_mem	*mp_sge;
+	struct xio_mp_mem	*mp_sge;
 	u32			num_sge;
 	unsigned int		nents;
 	unsigned int		mapped;
@@ -91,15 +91,17 @@ struct xio_rdma_mem_desc {
 #define XIO_1M_ALLOC_NR		128
 
 
-struct xio_rdma_mempool *xio_rdma_mempool_create(void);
-void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
+struct xio_mempool *xio_mempool_create(void);
+void xio_mempool_destroy(struct xio_mempool *mpool);
 
-int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
-			   size_t length, struct xio_rdma_mp_mem *mp_mem);
+int xio_mempool_alloc(struct xio_mempool *mpool,
+		      size_t length, struct xio_mp_mem *mp_mem);
 
-int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *mpool, struct xio_sge *sge,
-			  u32 num_sge, struct xio_rdma_mem_desc *desc);
+int xio_mp_sge_alloc(struct xio_mempool *mpool, struct xio_sge *sge,
+		     u32 num_sge, struct xio_mem_desc *desc);
 
-void xio_rdma_mempool_free(struct xio_rdma_mem_desc *desc);
+void xio_mempool_free(struct xio_mem_desc *desc);
+
+void xio_mempool_free_mp(struct xio_mp_mem *mp_me);
 
 #endif

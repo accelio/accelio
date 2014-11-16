@@ -58,7 +58,7 @@
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
@@ -408,7 +408,7 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 /*---------------------------------------------------------------------------*/
 /* xio_reset_desc							     */
 /*---------------------------------------------------------------------------*/
-void xio_reset_desc(struct xio_rdma_mem_desc *desc)
+void xio_reset_desc(struct xio_mem_desc *desc)
 {
 	memset(&desc->sgt, 0, sizeof(desc->sgt));
 }
@@ -417,7 +417,7 @@ void xio_reset_desc(struct xio_rdma_mem_desc *desc)
 /* xio_unmap_desc							     */
 /*---------------------------------------------------------------------------*/
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
-		    struct xio_rdma_mem_desc *desc,
+		    struct xio_mem_desc *desc,
 		    enum dma_data_direction direction)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -443,7 +443,7 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 /* xio_map_desc								     */
 /*---------------------------------------------------------------------------*/
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
-		 struct xio_rdma_mem_desc *desc,
+		 struct xio_mem_desc *desc,
 		 enum dma_data_direction direction)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -481,7 +481,7 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 		   struct xio_rdma_transport *rdma_nhndl,
-		   struct xio_rdma_mem_desc *desc,
+		   struct xio_mem_desc *desc,
 		   enum dma_data_direction direction)
 {
 	struct xio_device *dev;
@@ -534,14 +534,14 @@ int xio_create_dummy_pool(struct xio_rdma_transport *rdma_hndl)
 }
 
 void xio_unreg_mem_dummy(struct xio_rdma_transport *rdma_hndl,
-			 struct xio_rdma_mem_desc *desc,
+			 struct xio_mem_desc *desc,
 			 enum dma_data_direction cmd_dir)
 {
 	return;
 }
 
 int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
-			   struct xio_rdma_mem_desc *desc,
+			   struct xio_mem_desc *desc,
 			   enum dma_data_direction cmd_dir)
 {
 	desc->mem_reg.mem_h = NULL;
@@ -562,7 +562,7 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  * consecutive elements. Also, it handles one entry SG.
  */
 
-static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
+static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 			      struct ib_device *ibdev, u64 *pages,
 			      int *offset, int *data_size)
 {
@@ -614,7 +614,7 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
  * the number of entries which are aligned correctly. Supports the case where
  * consecutive SG elements are actually fragments of the same physcial page.
  */
-static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
+static int xio_data_buf_aligned_len(struct xio_mem_desc *mdesc,
 				    struct ib_device *ibdev)
 {
 	struct scatterlist *sgl, *sg, *next_sg = NULL;
@@ -749,7 +749,7 @@ err:
 }
 
 void xio_unreg_mem_frwr(struct xio_rdma_transport *rdma_hndl,
-			struct xio_rdma_mem_desc *mdesc,
+			struct xio_mem_desc *mdesc,
 			enum dma_data_direction cmd_dir)
 {
 	struct xio_mem_reg *reg = &mdesc->mem_reg;
@@ -853,7 +853,7 @@ static struct fast_reg_descriptor *get_fdesc(
  * returns 0 on success, errno code on failure
  */
 int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
-			  struct xio_rdma_mem_desc *mdesc,
+			  struct xio_mem_desc *mdesc,
 			  enum dma_data_direction cmd_dir)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -932,7 +932,7 @@ int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops)
 		(((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
 
 void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
-			     struct xio_rdma_mp_mem *mp)
+			     struct xio_mp_mem *mp)
 {
 	void *ptr = mp->addr;
 	int i;

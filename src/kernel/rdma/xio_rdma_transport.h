@@ -248,8 +248,8 @@ struct xio_rdma_task {
 	u32				write_num_sge;
 	u32				recv_num_sge;
 	u32				pad0;
-	struct xio_rdma_mem_desc	read_sge;
-	struct xio_rdma_mem_desc	write_sge;
+	struct xio_mem_desc		read_sge;
+	struct xio_mem_desc		write_sge;
 
 	/* What this side got from the peer for RDMA R/W */
 	u32				req_read_num_sge;
@@ -331,10 +331,10 @@ struct xio_fastreg_ops {
 	int	(*alloc_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
 	void	(*free_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
 	int	(*reg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
-				struct xio_rdma_mem_desc *desc,
+				struct xio_mem_desc *desc,
 				enum dma_data_direction cmd_dir);
 	void	(*unreg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
-				  struct xio_rdma_mem_desc *desc,
+				  struct xio_mem_desc *desc,
 				  enum dma_data_direction cmd_dir);
 };
 
@@ -383,7 +383,7 @@ struct xio_rdma_transport {
 	struct xio_cq			*tcq;
 	struct xio_device		*dev;
 	struct ib_qp			*qp;
-	struct xio_rdma_mempool		*rdma_mempool;
+	struct xio_mempool		*rdma_mempool;
 	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
 	struct xio_ev_data		event_data;
@@ -560,19 +560,19 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 		       struct xio_work_req *xd,
 		       enum dma_data_direction direction);
 
-void xio_reset_desc(struct xio_rdma_mem_desc *desc);
+void xio_reset_desc(struct xio_mem_desc *desc);
 
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
-		    struct xio_rdma_mem_desc *desc,
+		    struct xio_mem_desc *desc,
 		    enum dma_data_direction direction);
 
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
-		 struct xio_rdma_mem_desc *desc,
+		 struct xio_mem_desc *desc,
 		 enum dma_data_direction direction);
 
 int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 		   struct xio_rdma_transport *rdma_nhndl,
-		   struct xio_rdma_mem_desc *desc,
+		   struct xio_mem_desc *desc,
 		   enum dma_data_direction direction);
 
 void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len);

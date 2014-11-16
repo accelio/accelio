@@ -51,7 +51,7 @@
 #include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
 #include "xio_rdma_utils.h"
 #include "xio_rdma_transport.h"
 #include "xio_sg_table.h"
@@ -89,8 +89,8 @@ MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:d
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_rdma_mempool		*mempool;
-static struct xio_rdma_mempool		**mempool_array;
+static struct xio_mempool		*mempool;
+static struct xio_mempool		**mempool_array;
 static int				mempool_array_len;
 struct xio_options			*g_poptions;
 
@@ -548,21 +548,21 @@ static void xio_rdma_mempool_array_release(void)
 
 	mempool_array = NULL;
 	if (mempool)
-		xio_rdma_mempool_destroy(mempool);
+		xio_mempool_destroy(mempool);
 	mempool = NULL;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mempool_array_get						     */
 /*---------------------------------------------------------------------------*/
-static struct xio_rdma_mempool *xio_rdma_mempool_array_get(
+static struct xio_mempool *xio_rdma_mempool_array_get(
 						struct xio_context *ctx)
 {
 	/* kernel mempool is numa based */
 	if (mempool)
 		return mempool;
 
-	mempool = xio_rdma_mempool_create();
+	mempool = xio_mempool_create();
 	if (!mempool) {
 		ERROR_LOG("xio_rdma_mempool_create failed\n");
 		return NULL;
@@ -1141,10 +1141,10 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 	/* recycle RDMA  buffers back to pool */
 
 	/* put buffers back to pool */
-	xio_rdma_mempool_free(&rdma_task->read_sge);
+	xio_mempool_free(&rdma_task->read_sge);
 	rdma_task->read_num_sge = 0;
 
-	xio_rdma_mempool_free(&rdma_task->write_sge);
+	xio_mempool_free(&rdma_task->write_sge);
 	rdma_task->write_num_sge	= 0;
 	/*
 	rdma_task->req_write_num_sge	= 0;
@@ -1661,10 +1661,10 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_sge*sizeof(struct ib_sge);
 
 	rdma_task->read_sge.mp_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
+	ptr += max_iovsz*sizeof(struct xio_mp_mem);
 
 	rdma_task->write_sge.mp_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_rdma_mp_mem);
+	ptr += max_iovsz*sizeof(struct xio_mp_mem);
 
 	rdma_task->req_read_sge = (void *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
@@ -1742,7 +1742,7 @@ static void xio_rdma_primary_pool_get_params(
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		(max_sge + 1 + max_sge) * sizeof(struct ib_sge) +
-		 2 * max_iovsz * sizeof(struct xio_rdma_mp_mem) +
+		 2 * max_iovsz * sizeof(struct xio_mp_mem) +
 		 4 * max_iovsz * sizeof(struct xio_sge);
 }
 

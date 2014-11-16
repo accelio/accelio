@@ -56,7 +56,7 @@
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
@@ -2179,7 +2179,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 
 cleanup:
-	xio_rdma_mempool_free(&rdma_task->write_sge);
+	xio_mempool_free(&rdma_task->write_sge);
 	rdma_task->write_num_sge = 0;
 
 	return -1;
@@ -2825,7 +2825,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			sg = sge_first(osgtbl_ops, osgtbl);
 			if (sge_addr(osgtbl_ops, sg)) {
 				void *isg;
-				struct xio_rdma_mp_mem *mp_sge;
+				struct xio_mp_mem *mp_sge;
 				mp_sge = &rdma_sender_task->read_sge.mp_sge[0];
 				/* user provided buffer */
 				if (!mp_sge->cache) {
@@ -2852,7 +2852,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					tbl_copy(osgtbl_ops, osgtbl,
 						 isgtbl_ops, isgtbl);
 					/* put bounce buffer back to pool */
-					xio_rdma_mempool_free(
+					xio_mempool_free(
 						&rdma_sender_task->read_sge);
 					rdma_sender_task->read_num_sge = 0;
 				}
@@ -2986,10 +2986,10 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			return -1;
 		}
 	} else {
-		retval = xio_rdma_mp_sge_alloc(rdma_hndl->rdma_mempool,
-					       rdma_task->req_write_sge,
-					       rdma_task->req_write_num_sge,
-					       &rdma_task->read_sge);
+		retval = xio_mp_sge_alloc(rdma_hndl->rdma_mempool,
+					  rdma_task->req_write_sge,
+					  rdma_task->req_write_num_sge,
+					  &rdma_task->read_sge);
 		if (retval) {
 			ERROR_LOG("mempool alloc failed\n");
 			task->status = ENOMEM;

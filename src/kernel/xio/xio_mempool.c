@@ -44,21 +44,12 @@
 #include <linux/scatterlist.h>
 #include <linux/mempool.h>
 
-#include <rdma/ib_verbs.h>
-#include <rdma/rdma_cm.h>
-
 #include "libxio.h"
 #include "xio_os.h"
-#include "xio_observer.h"
 #include "xio_log.h"
 #include "xio_common.h"
-#include "xio_mem.h"
-#include "xio_protocol.h"
-#include "xio_mbuf.h"
-#include "xio_task.h"
-#include "xio_rdma_mempool.h"
-#include "xio_transport.h"
-#include "xio_rdma_transport.h"
+#include "xio_mempool.h"
+
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -84,14 +75,14 @@ struct xio_chunks_list {
 			 */
 };
 
-struct xio_rdma_mempool {
+struct xio_mempool {
 	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_destroy						     */
+/* xio_mempool_destroy							     */
 /*---------------------------------------------------------------------------*/
-void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
+void xio_mempool_destroy(struct xio_mempool *p)
 {
 	struct xio_chunks_list *ch;
 	int real_ones, i;
@@ -112,13 +103,14 @@ void xio_rdma_mempool_destroy(struct xio_rdma_mempool *p)
 
 	kfree(p);
 }
+EXPORT_SYMBOL(xio_mempool_destroy);
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempol_create						     */
+/* xio_mempol_create							     */
 /*---------------------------------------------------------------------------*/
-struct xio_rdma_mempool *xio_rdma_mempool_create(void)
+struct xio_mempool *xio_mempool_create(void)
 {
-	struct xio_rdma_mempool *p;
+	struct xio_mempool *p;
 	struct xio_chunks_list *ch;
 	int real_ones, i;
 
@@ -136,7 +128,7 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 		 * Use the address of the pool structure to create a unique
 		 * name for the pool
 		 */
-		sprintf(ch->name, "rdma_pool-%zuK-%p",
+		sprintf(ch->name, "xio_mempool-%zuK-%p",
 			ch->block_sz/1024, p);
 		ch->kcache = kmem_cache_create(ch->name,
 					       ch->block_sz, PAGE_SIZE,
@@ -153,18 +145,19 @@ struct xio_rdma_mempool *xio_rdma_mempool_create(void)
 	return p;
 
 cleanup:
-	xio_rdma_mempool_destroy(p);
+	xio_mempool_destroy(p);
 
 cleanup0:
 	ERROR_LOG("%s failed\n", __func__);
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_mempool_create);
 
 /*---------------------------------------------------------------------------*/
 /* size2index								     */
 /*---------------------------------------------------------------------------*/
-static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
+static inline int size2index(struct xio_mempool *p, size_t sz)
 {
 	int i;
 
@@ -176,10 +169,10 @@ static inline int size2index(struct xio_rdma_mempool *p, size_t sz)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_alloc						     */
+/* xio__mempool_alloc							     */
 /*---------------------------------------------------------------------------*/
-int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
-			   struct xio_rdma_mp_mem *mp_mem)
+int xio_mempool_alloc(struct xio_mempool *p, size_t length,
+		      struct xio_mp_mem *mp_mem)
 {
 	int index;
 
@@ -204,18 +197,19 @@ int xio_rdma_mempool_alloc(struct xio_rdma_mempool *p, size_t length,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_mempool_alloc);
 
-int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *pool, struct xio_sge *sge,
-			  u32 num_sge, struct xio_rdma_mem_desc *desc)
+int xio_mp_sge_alloc(struct xio_mempool *pool, struct xio_sge *sge,
+		     u32 num_sge, struct xio_mem_desc *desc)
 {
-	struct xio_rdma_mp_mem *mp_sge;
+	struct xio_mp_mem *mp_sge;
 	int i;
 
 	desc->num_sge = 0;
 	mp_sge = desc->mp_sge;
 
 	for (i = 0; i < num_sge; i++) {
-		if (xio_rdma_mempool_alloc(pool, sge->length, mp_sge))
+		if (xio_mempool_alloc(pool, sge->length, mp_sge))
 			goto cleanup0;
 		mp_sge++;
 	}
@@ -226,11 +220,12 @@ int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *pool, struct xio_sge *sge,
 cleanup0:
 	return -1;
 }
+EXPORT_SYMBOL(xio_mp_sge_alloc);
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_free						     */
+/* xio_mempool_free						     */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_mempool_free_mp(struct xio_rdma_mp_mem *mp_mem)
+void xio_mempool_free_mp(struct xio_mp_mem *mp_mem)
 {
 	if (!mp_mem) {
 		ERROR_LOG("%s mp_mem\n", __func__);
@@ -259,15 +254,17 @@ cleanup1:
 cleanup0:
 	ERROR_LOG("%s failed\n", __func__);
 }
+EXPORT_SYMBOL(xio_mempool_free_mp);
 
-void xio_rdma_mempool_free(struct xio_rdma_mem_desc *desc)
+void xio_mempool_free(struct xio_mem_desc *desc)
 {
 	int i;
 
 	for (i = 0; i < desc->num_sge; i++) {
 		if (desc->mp_sge[i].cache)
-			xio_rdma_mempool_free_mp(&desc->mp_sge[i]);
+			xio_mempool_free_mp(&desc->mp_sge[i]);
 	}
 
 	desc->num_sge = 0;
 }
+EXPORT_SYMBOL(xio_mempool_free);
