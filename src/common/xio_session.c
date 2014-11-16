@@ -519,16 +519,16 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		xio_task_addref(task);
 
+	msg->timestamp = get_cycles();
+	xio_stat_inc(stats, XIO_STAT_RX_MSG);
+	xio_stat_add(stats, XIO_STAT_RX_BYTES,
+		     vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl));
+
 	if (test_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &hdr.flags)) {
 		xio_task_addref(task);
 		/* send receipt before calling the callback */
 		xio_connection_send_read_receipt(connection, msg);
 	}
-
-	msg->timestamp = get_cycles();
-	xio_stat_inc(stats, XIO_STAT_RX_MSG);
-	xio_stat_add(stats, XIO_STAT_RX_BYTES,
-		     vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl));
 
 	/* notify the upper layer */
 	if (task->status) {
@@ -814,6 +814,9 @@ static int xio_on_ow_req_send_comp(
 
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
+	xio_stat_inc(stats, XIO_STAT_RX_MSG); /* need to replace with
+					       * TX_COMP
+					       */
 
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
