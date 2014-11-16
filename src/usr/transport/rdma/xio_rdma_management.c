@@ -1883,6 +1883,9 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 	}
 
 	memset(&cm_params, 0 , sizeof(cm_params));
+	cm_params.rnr_retry_count = 3; /* 7 - infinite retry */
+	cm_params.retry_count     = 3;
+
 	/*
 	 * When choosing the responder resources for a ULP, it is usually
 	 * best to use the maximum value of the HCA.  If the other side is

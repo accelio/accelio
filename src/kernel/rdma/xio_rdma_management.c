@@ -1834,8 +1834,8 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 	struct rdma_conn_param		cm_params = {
 		.initiator_depth		= 1,
 		.responder_resources		= 1,
-		.rnr_retry_count		= 0, /* 7 - infinite retry */
-		.retry_count			= 0
+		.rnr_retry_count		= 3, /* 7 - infinite retry */
+		.retry_count			= 3
 	};
 	int	retval = 0;
 
