@@ -317,8 +317,7 @@ int xio_connection_send(struct xio_connection *connection,
 	int			standalone_receipt = 0;
 
 	if (IS_RESPONSE(msg->type) &&
-	    ((msg->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
-	    XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
+	    (xio_app_receipt_request(msg) == XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 		/* this is a receipt message */
 		task = xio_nexus_get_primary_task(connection->nexus);
 		if (task == NULL) {
@@ -528,9 +527,8 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 
 		/* this is read receipt  */
 		if (IS_RESPONSE(pmsg->type) &&
-		    ((pmsg->flags &
-		      (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
-				 XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
+		    (xio_app_receipt_request(pmsg) ==
+		     XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 			continue;
 		}
 		if (!IS_APPLICATION_MSG(pmsg))

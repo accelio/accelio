@@ -584,11 +584,10 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	xio_session_read_header(task, &hdr);
 
 	/* standalone receipt */
-	if ((hdr.flags &
-	    (XIO_MSG_FLAG_EX_RECEIPT_FIRST | XIO_MSG_FLAG_EX_RECEIPT_LAST)) ==
-	     XIO_MSG_FLAG_EX_RECEIPT_FIRST) {
+	if (xio_app_receipt_request(&hdr) ==
+	    XIO_MSG_FLAG_EX_RECEIPT_FIRST)
 		standalone_receipt = 1;
-	}
+
 	/* update receive + send window */
 	if (connection->rsp_exp_sn == hdr.sn) {
 		connection->rsp_exp_sn++;
@@ -624,7 +623,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		xio_connection_remove_in_flight(connection, omsg);
 	} else {
 		if (task->tlv_type == XIO_ONE_WAY_RSP)
-			if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST)
+			if (xio_app_receipt_first_request(&hdr))
 				xio_connection_remove_in_flight(connection,
 								omsg);
 	}
@@ -638,7 +637,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	if (task->tlv_type == XIO_ONE_WAY_RSP) {
 		/* one way message with "read receipt" */
-		if (!(hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST))
+		if (!xio_app_receipt_first_request(&hdr))
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
 
@@ -665,7 +664,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		sender_task->omsg = NULL;
 		xio_release_response_task(task);
 	} else {
-		if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST) {
+		if (xio_app_receipt_first_request(&hdr)) {
 			if (connection->ses_ops.on_msg_delivered) {
 				omsg->receipt_res = hdr.receipt_result;
 				omsg->sn	  = hdr.serial_num;
@@ -686,7 +685,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				xio_tasks_pool_put(task);
 			}
 		}
-		if (hdr.flags & XIO_MSG_FLAG_EX_RECEIPT_LAST) {
+		if (xio_app_receipt_last_request(&hdr)) {
 			struct xio_vmsg *vmsg = &msg->in;
 			struct xio_sg_table_ops	*sgtbl_ops;
 			void			*sgtbl;

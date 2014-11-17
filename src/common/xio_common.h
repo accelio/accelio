@@ -88,6 +88,20 @@ enum xio_msg_flags_ex {
 			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
 			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))
 
+
+#define xio_app_receipt_request(rq) \
+	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
+			XIO_MSG_FLAG_EX_RECEIPT_LAST))
+
+#define xio_app_receipt_first_request(rq) \
+	(((rq)->flags & XIO_MSG_FLAG_EX_RECEIPT_FIRST) == \
+			XIO_MSG_FLAG_EX_RECEIPT_FIRST)
+
+#define xio_app_receipt_last_request(rq) \
+	(((rq)->flags & XIO_MSG_FLAG_EX_RECEIPT_LAST) == \
+			XIO_MSG_FLAG_EX_RECEIPT_LAST)
+
+
 /**
  *  TLV types
  */
@@ -152,6 +166,7 @@ enum xio_msg_flags_ex {
 #define clr_bits(mask, addr)    ((*addr) &= ~(mask))
 #define set_bits(mask, addr)    ((*addr) |= (mask))
 
+#define test_flag(flag, addr)   (((*addr) & (flag)) == (flag))
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
