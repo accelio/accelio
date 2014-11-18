@@ -1284,6 +1284,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	size_t lsize;
 	uint64_t laddr;
 	uint64_t raddr;
+	uint64_t raddr_base;
 	uint32_t llen;
 	uint32_t rlen;
 	uint32_t rkey;
@@ -1300,6 +1301,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 	r = 0;
 	rlen  = rsg_list[r].length;
 	raddr = rsg_list[r].addr;
+	raddr_base = raddr;
 	rkey  = rsg_list[r].stag;
 
 	l = 0;
@@ -1343,7 +1345,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			rdmad->send_wr.opcode		= opcode;
 			rdmad->send_wr.send_flags	=
 					(signaled ? IB_SEND_SIGNALED : 0);
-			rdmad->send_wr.wr.rdma.remote_addr = raddr;
+			rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 			rdmad->send_wr.wr.rdma.rkey	   = rkey;
 
 			/* Address is not yet mapped */
@@ -1397,6 +1399,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			rkey	= rsg_list[r].stag;
+			raddr_base = raddr;
 		} else if (llen < rlen) {
 			/* Address is not yet mapped */
 			sg_set_page(sg, virt_to_page(laddr),
@@ -1419,7 +1422,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				rdmad->send_wr.opcode		   = opcode;
 				rdmad->send_wr.send_flags	=
 					   (signaled ? IB_SEND_SIGNALED : 0);
-				rdmad->send_wr.wr.rdma.remote_addr = raddr;
+				rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 				rdmad->send_wr.wr.rdma.rkey	   = rkey;
 				tmp_rdma_task->ib_op		   = xio_ib_op;
 				tmp_rdma_task->phantom_idx	   = task_idx;
@@ -1472,7 +1475,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			rdmad->send_wr.opcode		= opcode;
 			rdmad->send_wr.send_flags	=
 					(signaled ? IB_SEND_SIGNALED : 0);
-			rdmad->send_wr.wr.rdma.remote_addr = raddr;
+			rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 			rdmad->send_wr.wr.rdma.rkey	   = rkey;
 
 			/* Address is not yet mapped */
@@ -1529,6 +1532,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			rkey	= rsg_list[r].stag;
+			raddr_base = raddr;
 		}
 	}
 	sgtbl->nents = l;

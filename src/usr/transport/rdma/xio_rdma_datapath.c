@@ -2637,7 +2637,7 @@ static int xio_prep_rdma_op(
 
 	uint64_t laddr  = lsg_list[0].addr;
 	uint64_t raddr  = rsg_list[0].addr;
-
+	uint64_t raddr_base  = raddr;
 	uint32_t llen	= lsg_list[0].length;
 	uint32_t rlen	= rsg_list[0].length;
 	uint32_t lkey	= lsg_list[0].stag;
@@ -2680,7 +2680,7 @@ static int xio_prep_rdma_op(
 			rdmad->send_wr.opcode		= opcode;
 			rdmad->send_wr.send_flags	=
 					(signaled ? IBV_SEND_SIGNALED : 0);
-			rdmad->send_wr.wr.rdma.remote_addr = raddr;
+			rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 			rdmad->send_wr.wr.rdma.rkey	   = rkey;
 
 			rdmad->sge[k].addr		= laddr;
@@ -2727,6 +2727,7 @@ static int xio_prep_rdma_op(
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			rkey	= rsg_list[r].stag;
+			raddr_base  = raddr;
 		} else if (llen < rlen) {
 			rdmad->sge[k].addr	= laddr;
 			rdmad->sge[k].length	= llen;
@@ -2748,7 +2749,7 @@ static int xio_prep_rdma_op(
 				rdmad->send_wr.opcode		   = opcode;
 				rdmad->send_wr.send_flags	=
 					   (signaled ? IBV_SEND_SIGNALED : 0);
-				rdmad->send_wr.wr.rdma.remote_addr = raddr;
+				rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 				rdmad->send_wr.wr.rdma.rkey	   = rkey;
 				tmp_rdma_task->ib_op		   = xio_ib_op;
 				tmp_rdma_task->phantom_idx	   = task_idx;
@@ -2787,9 +2788,7 @@ static int xio_prep_rdma_op(
 				k = 0;
 			}
 			rlen	-= llen;
-
-			if (xio_ib_op == XIO_IB_RDMA_READ)
-				raddr	+= llen;
+			raddr	+= llen;
 
 			laddr	= lsg_list[l].addr;
 			llen	= lsg_list[l].length;
@@ -2802,7 +2801,7 @@ static int xio_prep_rdma_op(
 			rdmad->send_wr.opcode		= opcode;
 			rdmad->send_wr.send_flags	=
 					(signaled ? IBV_SEND_SIGNALED : 0);
-			rdmad->send_wr.wr.rdma.remote_addr = raddr;
+			rdmad->send_wr.wr.rdma.remote_addr = raddr_base;
 			rdmad->send_wr.wr.rdma.rkey	   = rkey;
 
 			rdmad->sge[k].addr		= laddr;
@@ -2857,6 +2856,7 @@ static int xio_prep_rdma_op(
 			raddr	= rsg_list[r].addr;
 			rlen	= rsg_list[r].length;
 			rkey	= rsg_list[r].stag;
+			raddr_base  = raddr;
 		}
 	}
 	*out_lsize = l;
