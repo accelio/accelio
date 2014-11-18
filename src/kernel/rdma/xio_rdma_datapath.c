@@ -2103,7 +2103,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->txd.send_wr.num_sge = 1;
 
 	/* test for using send/receive or rdma_read */
-	tx_by_sr = (tbl_nents(sgtbl_ops, sgtbl)  < (rdma_hndl->max_sge - 1) &&
+	tx_by_sr = (tbl_nents(sgtbl_ops, sgtbl)  <= (rdma_hndl->max_sge - 1) &&
 		    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
 		      rdma_hndl->max_inline_buf_sz) &&
 		     (((int)(ulp_out_imm_len) <=
