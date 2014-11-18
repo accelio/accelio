@@ -68,8 +68,12 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	void	*ssge;
 	int	i;
 
-	if (tbl_max_nents(dtbl_ops, dtbl) < tbl_max_nents(stbl_ops, stbl))
+	if (tbl_max_nents(dtbl_ops, dtbl) < tbl_nents(stbl_ops, stbl)) {
+		ERROR_LOG("dest max nents is %d while src nents is %d\n",
+			  tbl_max_nents(dtbl_ops, dtbl),
+			  tbl_nents(stbl_ops, stbl));
 		return -1;
+	}
 
 	tbl_set_nents(dtbl_ops, dtbl,
 		      tbl_nents(stbl_ops, stbl));
