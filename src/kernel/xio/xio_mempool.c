@@ -50,7 +50,6 @@
 #include "xio_common.h"
 #include "xio_mempool.h"
 
-
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
@@ -192,7 +191,7 @@ int xio_mempool_alloc(struct xio_mempool *p, size_t length,
 		return -ENOMEM;
 	}
 
-	mp_mem->cache = (void *)&p->pool[index];
+	mp_mem->cache = (void *)p->pool[index].kcache;
 	mp_mem->length = p->pool[index].block_sz;
 
 	return 0;

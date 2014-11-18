@@ -57,6 +57,8 @@
 #include "xio_sg_table.h"
 #include "xio_ev_data.h"
 #include "xio_workqueue.h"
+#include "xio_ev_loop.h"
+#include "xio_context_priv.h"
 #include "xio_context.h"
 
 MODULE_AUTHOR("Eyal Solomon, Shlomo Pongratz");
@@ -89,9 +91,6 @@ MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:d
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
-static struct xio_mempool		*mempool;
-static struct xio_mempool		**mempool_array;
-static int				mempool_array_len;
 struct xio_options			*g_poptions;
 
 /* rdma options */
@@ -525,49 +524,6 @@ static void xio_device_release(struct xio_device *dev)
 	 *  (kerf)
 	 */
 	xio_device_put(dev);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rmda_mempool_array_init						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_mempool_array_init(void)
-{
-	/* kernel mempool is numa based */
-	mempool_array = &mempool;
-	mempool_array_len = 1;
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_array_release					     */
-/*---------------------------------------------------------------------------*/
-static void xio_rdma_mempool_array_release(void)
-{
-	/* kernel mempool is numa based */
-
-	mempool_array = NULL;
-	if (mempool)
-		xio_mempool_destroy(mempool);
-	mempool = NULL;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_mempool_array_get						     */
-/*---------------------------------------------------------------------------*/
-static struct xio_mempool *xio_rdma_mempool_array_get(
-						struct xio_context *ctx)
-{
-	/* kernel mempool is numa based */
-	if (mempool)
-		return mempool;
-
-	mempool = xio_mempool_create();
-	if (!mempool) {
-		ERROR_LOG("xio_rdma_mempool_create failed\n");
-		return NULL;
-	}
-	return mempool;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2245,7 +2201,7 @@ static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 		return NULL;
 	}
 
-	rdma_hndl->rdma_mempool = xio_rdma_mempool_array_get(ctx);
+	rdma_hndl->rdma_mempool = xio_mempool_get(ctx);
 	if (rdma_hndl->rdma_mempool == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("allocating rdma mempool failed.\n");
@@ -2788,24 +2744,6 @@ static int xio_rdma_get_opt(void  *xio_obj,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_init						     */
-/*---------------------------------------------------------------------------*/
-static int xio_rdma_transport_init(struct xio_transport *transport)
-{
-	xio_rdma_mempool_array_init();
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_transport_release						     */
-/*---------------------------------------------------------------------------*/
-static void xio_rdma_transport_release(struct xio_transport *transport)
-{
-	xio_rdma_mempool_array_release();
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_is_valid_in_req							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
@@ -2980,7 +2918,6 @@ static struct xio_transport xio_rdma_transport = {
 static int __init xio_rdma_transport_constructor(void)
 {
 	struct xio_transport *transport = &xio_rdma_transport;
-	int retval;
 
 	/* set cpu latency until process is down */
 	/* xio_set_cpu_latency(); */
@@ -2988,18 +2925,7 @@ static int __init xio_rdma_transport_constructor(void)
 	/* register the transport */
 	xio_reg_transport(transport);
 
-	/* initialize the transport */
-	retval = xio_rdma_transport_init(transport);
-	if (retval != 0) {
-		ERROR_LOG("rdma transport constructor failed\n");
-		goto cleanup;
-	}
-
 	return 0;
-
-cleanup:
-	xio_unreg_transport(transport);
-	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3010,9 +2936,6 @@ static void __exit xio_rdma_transport_destructor(void)
 	struct xio_transport *transport = &xio_rdma_transport;
 
 	/* Called after all devices were deleted */
-
-	/* release the transport */
-	xio_rdma_transport_release(transport);
 
 	xio_unreg_transport(transport);
 }

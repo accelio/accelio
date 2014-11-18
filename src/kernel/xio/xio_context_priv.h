@@ -59,4 +59,6 @@ static inline int xio_context_is_pending_event(struct xio_ev_data *data)
 	return test_bit(XIO_EV_HANDLER_PENDING, &data->states);
 }
 
+struct xio_mempool *xio_mempool_get(struct xio_context *ctx);
+
 #endif /* XIO_CONTEXT_PRIV_H_ */

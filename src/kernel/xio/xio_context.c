@@ -55,6 +55,7 @@
 #include "xio_ev_loop.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
+#include "xio_mempool.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -277,6 +278,11 @@ void xio_context_destroy(struct xio_context *ctx)
 
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 
+	if (ctx->mempool) {
+		xio_mempool_destroy(ctx->mempool);
+		ctx->mempool = NULL;
+	}
+
 	kfree(ctx);
 }
 EXPORT_SYMBOL(xio_context_destroy);
@@ -402,3 +408,21 @@ int xio_ctx_del_work(struct xio_context *ctx,
 
 	return retval;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_mempool_get							     */
+/*---------------------------------------------------------------------------*/
+struct xio_mempool *xio_mempool_get(struct xio_context *ctx)
+{
+	if (ctx->mempool)
+		return ctx->mempool;
+
+	ctx->mempool = xio_mempool_create();
+
+	if (!ctx->mempool) {
+		ERROR_LOG("xio_mempool_create failed\n");
+		return NULL;
+	}
+	return ctx->mempool;
+}
+EXPORT_SYMBOL(xio_mempool_get);
