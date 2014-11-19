@@ -69,7 +69,7 @@ struct xio_ev_loop {
 int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		    xio_ev_handler_t handler, void *data)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct epoll_event	ev;
 	struct xio_ev_data	*tev = NULL;
 	int			err;
@@ -88,7 +88,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		ev.events |= EPOLLONESHOT;
 
 	if (fd != loop->wakeup_event) {
-		tev = ucalloc(1, sizeof(*tev));
+		tev = (struct xio_ev_data *)ucalloc(1, sizeof(*tev));
 		if (!tev) {
 			xio_set_error(errno);
 			ERROR_LOG("calloc failed, %m\n");
@@ -122,7 +122,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 /*---------------------------------------------------------------------------*/
 static struct xio_ev_data *xio_event_lookup(void *loop_hndl, int fd)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct xio_ev_data	*tev;
 
 	list_for_each_entry(tev, &loop->poll_events_list, events_list_entry) {
@@ -137,7 +137,7 @@ static struct xio_ev_data *xio_event_lookup(void *loop_hndl, int fd)
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_del(void *loop_hndl, int fd)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct xio_ev_data	*tev;
 	int ret;
 
@@ -171,7 +171,7 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct epoll_event	ev;
 	struct xio_ev_data	*tev = NULL;
 	int			retval;
@@ -218,7 +218,7 @@ void *xio_ev_loop_create()
 	int			retval;
 	eventfd_t		val = 1;
 
-	loop = ucalloc(1, sizeof(struct xio_ev_loop));
+	loop = (struct xio_ev_loop *)ucalloc(1, sizeof(struct xio_ev_loop));
 	if (loop == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
@@ -280,7 +280,7 @@ void xio_ev_loop_init_event(struct xio_ev_data *evt,
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_add_event(void *_loop, struct xio_ev_data *evt)
 {
-	struct xio_ev_loop *loop = _loop;
+	struct xio_ev_loop *loop = (struct xio_ev_loop *)_loop;
 
 	if (!evt->scheduled) {
 		evt->scheduled = 1;
@@ -330,7 +330,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 /*---------------------------------------------------------------------------*/
 static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	int			nevent = 0, i, j, found = 0;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
@@ -452,7 +452,7 @@ int xio_ev_loop_run(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
 	if (loop == NULL)
 		return;
@@ -508,7 +508,7 @@ void xio_ev_loop_destroy(void **loop_hndl)
 /*---------------------------------------------------------------------------*/
 static void xio_ev_loop_handler(int fd, int events, void *data)
 {
-	struct xio_ev_loop	*loop = data;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)data;
 
 	loop->stop_loop = 1;
 	xio_ev_loop_run_helper(loop, 0);
@@ -520,7 +520,7 @@ static void xio_ev_loop_handler(int fd, int events, void *data)
 int xio_ev_loop_get_poll_params(void *loop_hndl,
 				struct xio_poll_params *poll_params)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
 	if (!loop_hndl || !poll_params) {
 		xio_set_error(EINVAL);
