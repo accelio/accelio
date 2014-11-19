@@ -185,7 +185,7 @@ int xio_mempool_alloc(struct xio_mempool *p, size_t length,
 		return -EINVAL;
 	}
 
-	mp_mem->addr = kmem_cache_zalloc(p->pool[index].kcache, GFP_KERNEL);
+	mp_mem->addr = kmem_cache_alloc(p->pool[index].kcache, GFP_KERNEL);
 	if (!mp_mem->addr) {
 		xio_set_error(ENOMEM);
 		return -ENOMEM;
