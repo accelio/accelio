@@ -366,8 +366,11 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 	int err;
 
 
-	while (!list_empty(&rdma_hndl->rdma_rd_list) &&
-	       rdma_hndl->sqe_avail > num_reqs) {
+	if (list_empty(&rdma_hndl->rdma_rd_list) ||
+	    rdma_hndl->sqe_avail == 0)
+		return 0;
+
+	do {
 		task = list_first_entry(
 				&rdma_hndl->rdma_rd_list,
 				struct xio_task,  tasks_list_entry);
@@ -390,7 +393,8 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 		prev_wr = &rdma_task->rdmad;
 
 		num_reqs++;
-	}
+	} while (!list_empty(&rdma_hndl->rdma_rd_list) &&
+		 rdma_hndl->sqe_avail > num_reqs);
 
 	rdma_hndl->kick_rdma_rd = 0;
 	if (num_reqs) {
