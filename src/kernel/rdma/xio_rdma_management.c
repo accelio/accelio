@@ -37,6 +37,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/interrupt.h>
 
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
