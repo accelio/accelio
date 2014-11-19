@@ -515,6 +515,7 @@ close_file:
 	free_cmdline_params();
 
 	printf("good bye\n");
-	return fd;
+
+	return 0;
 }
 
