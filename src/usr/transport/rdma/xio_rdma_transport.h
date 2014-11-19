@@ -513,7 +513,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev);
 /*---------------------------------------------------------------------------*/
 /* xio_rkey_table_create						     */
 /*---------------------------------------------------------------------------*/
-int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
+int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 			  struct xio_rkey_tbl **htbl, uint16_t *len);
 
 #endif  /* XIO_RDMA_TRANSPORT_H */

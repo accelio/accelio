@@ -449,7 +449,7 @@ int xio_mr_list_free(void)
 /*---------------------------------------------------------------------------*/
 /* xio_rkey_table_create						     */
 /*---------------------------------------------------------------------------*/
-int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
+int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 			  struct xio_rkey_tbl **htbl, uint16_t *len)
 {
 	struct xio_rkey_tbl *tbl, *te;
@@ -473,7 +473,7 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
 	 * axis and device is the other axis
 	 */
 	old_h = &old->xm_list;
-	new_h = &new->xm_list;
+	new_h = &_new->xm_list;
 	te = tbl;
 
 	for (old_n = old_h->next, new_n = new_h->next;

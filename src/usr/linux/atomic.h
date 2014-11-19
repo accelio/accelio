@@ -151,12 +151,12 @@ static inline void atomic_set_mask(unsigned int mask, atomic_t *v)
  * Dummy version of cmpxchg.
  */
 
-static inline int atomic_cmpxchg(atomic_t *v, int old, int new)
+static inline int atomic_cmpxchg(atomic_t *v, int old, int _new)
 {
 	int prev = v->counter;
 
 	if (prev == old)
-		v->counter = new;
+		v->counter = _new;
 
 	return prev;
 }

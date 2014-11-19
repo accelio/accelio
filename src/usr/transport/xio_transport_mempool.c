@@ -120,16 +120,16 @@ struct xio_mempool {
  */
 static inline int decrement_and_test_and_set(combined_t *ptr)
 {
-	int old, new;
+	int old, _new;
 
 	do {
-		old = *ptr;
-		new = old - 2;
-		if (new == 0)
-			new = 1; /* claimed be MP */
-	} while (!__sync_bool_compare_and_swap(ptr, old, new));
+		old  = *ptr;
+		_new = old - 2;
+		if (_new == 0)
+			_new = 1; /* claimed be MP */
+	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
 
-	return (old - new) & 1;
+	return (old - _new) & 1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -137,12 +137,12 @@ static inline int decrement_and_test_and_set(combined_t *ptr)
 /*---------------------------------------------------------------------------*/
 static inline void clear_lowest_bit(combined_t *ptr)
 {
-	int old, new;
+	int old, _new;
 
 	do {
 		old = *ptr;
-		new = old - 1;
-	} while (!__sync_bool_compare_and_swap(ptr, old, new));
+		_new = old - 1;
+	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
 }
 
 /*---------------------------------------------------------------------------*/

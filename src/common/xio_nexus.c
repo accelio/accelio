@@ -438,12 +438,12 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_swap							     */
 /*---------------------------------------------------------------------------*/
-static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *new)
+static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *_new)
 {
 	struct xio_transport		*transport;
 	struct xio_tasks_pool		*initial_tasks_pool;
 
-	if (old->transport != new->transport) {
+	if (old->transport != _new->transport) {
 		ERROR_LOG("can't swap not the same transport\n");
 		return -1;
 	}
@@ -458,8 +458,8 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *new)
 	/* SWAP observers */
 	/* disconnect observers */
 	xio_observable_unreg_observer(
-			&new->transport_hndl->observable,
-			&new->trans_observer);
+			&_new->transport_hndl->observable,
+			&_new->trans_observer);
 
 	xio_observable_unreg_observer(
 			&old->transport_hndl->observable,
@@ -467,32 +467,32 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *new)
 
 	/* reconnect observers (swapped) */
 	xio_observable_reg_observer(
-			&new->transport_hndl->observable,
+			&_new->transport_hndl->observable,
 			&old->trans_observer);
 
 	xio_observable_reg_observer(
 			&old->transport_hndl->observable,
-			&new->trans_observer);
+			&_new->trans_observer);
 
 	/* Swap the initial pool as the setup request arrived on the a task
 	 * from the initial pool and should be answered using the same task
 	 */
 	initial_tasks_pool = old->initial_tasks_pool;
-	old->initial_tasks_pool = new->initial_tasks_pool;
-	new->initial_tasks_pool = initial_tasks_pool;
+	old->initial_tasks_pool = _new->initial_tasks_pool;
+	_new->initial_tasks_pool = initial_tasks_pool;
 
-	xio_tasks_pool_remap(old->primary_tasks_pool, new->transport_hndl);
+	xio_tasks_pool_remap(old->primary_tasks_pool, _new->transport_hndl);
 	/* make old_nexus->transport_hndl copy of new_nexus->transport_hndl
 	 * old_nexus->trasport_hndl will be closed, note that observers were
 	 * swapped
 	 */
-	if (transport->dup2(new->transport_hndl, &old->transport_hndl)) {
+	if (transport->dup2(_new->transport_hndl, &old->transport_hndl)) {
 		ERROR_LOG("dup2 transport failed\n");
 		return -1;
 	}
 
 	/* silently close new_nexus */
-	xio_nexus_close(new, NULL);
+	xio_nexus_close(_new, NULL);
 
 	/* TODO what about messages held by the application */
 
