@@ -1,0 +1,73 @@
+# Makefile.in for kernel module
+
+SHELL = /bin/sh
+INSTALL = @INSTALL@
+mkdir_p = mkdir -p
+VERSION = @PACKAGE_VERSION@
+OFED_CFLAGS = @OFED_CFLAGS@
+KSYMVERS = @RDMA_SYMVERS@
+
+NOSTDINC_FLAGS += @OFED_CFLAGS@
+
+
+DISTFILES = Makefile.in configure.ac configure ../install-sh \
+	libxio.h\
+	xio_msg.h \
+	xio_test_utils.h \
+	xio_client.c \
+	xio_server.c \
+	../common/xio_msg.c \
+	../common/xio_test_utils.c 
+
+xiomoduledir = @kmoduledir@/extra/net/xio
+
+xiomodule1 := xio_hello_client.ko
+xiomodule2 := xio_hello_server.ko
+
+all: all-@ENABLE_XIO_MODULE@
+install: install-@ENABLE_XIO_MODULE@
+uninstall: uninstall-@ENABLE_XIO_MODULE@
+
+all-n:
+install-n:
+uninstall-n:
+
+all-y: all-spec
+
+install-y: all
+	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
+	$(INSTALL) -m 644 $(xiomodule1) $(DESTDIR)$(xiomoduledir)/$(xiomodule1)
+	$(INSTALL) -m 644 $(xiomodule2) $(DESTDIR)$(xiomoduledir)/$(xiomodule2)
+	-/sbin/depmod -a
+
+uninstall-y:
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule1)
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule2)
+	-/sbin/depmod -a
+
+clean:
+	-rm -f $(xiomodule1) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned ../common/.*.cmd ../common/*.o
+	-rm -f $(xiomodule2) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned ../common/.*.cmd ../common/*.o
+
+distclean: clean
+	rm -f Makefile configure config.status
+	rm -f config.h config.log config.status config.cache
+	rm -rf .tmp_versions autom4te.cache
+
+maintainer-clean: distclean
+
+distdir: $(DISTFILES)
+	cp -p $(DISTFILES) $(distdir)
+
+
+ccflags-y += -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../common
+obj-m := xio_tests_common.o xio_hello_server.o xio_hello_client.o
+xio_hello_server-objs := xio_server.o xio_tests_common.o
+xio_hello_client-objs := xio_client.o xio_tests_common.o
+xio_tests_common-objs := \
+	../common/xio_msg.o \
+	../common/xio_test_utils.o
+
+all-spec:
+	export NOSTDINC_FLAGS
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules
