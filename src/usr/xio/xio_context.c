@@ -235,7 +235,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 
 	/* allocate new context */
-	ctx = ucalloc(1, sizeof(struct xio_context));
+	ctx = (struct xio_context *)ucalloc(1, sizeof(struct xio_context));
 	if (ctx == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
@@ -382,7 +382,7 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_workqueue_destroy(ctx->workqueue);
 
 	if (ctx->mempool) {
-		xio_mempool_destroy(ctx->mempool);
+		xio_mempool_destroy((struct xio_mempool *)ctx->mempool);
 		ctx->mempool = NULL;
 	}
 

@@ -103,11 +103,12 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	ptr = buf;
 
 	/* slab */
-	s = (void *)((char *)buf + tasks_alloc_sz);
+	s = (struct xio_tasks_slab *)((char *)buf + tasks_alloc_sz);
 	s->dd_data = (void *)((char *)s + sizeof(struct xio_tasks_slab));
 
 	/* array */
-	s->array = (void *)((char *)(s->dd_data) + q->params.slab_dd_data_sz);
+	s->array = (struct xio_task **)
+			((char *)(s->dd_data) + q->params.slab_dd_data_sz);
 
 	/* fix indexes */
 	s->start_idx = q->curr_idx;
@@ -127,7 +128,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	}
 
 	for (i = 0; i < alloc_nr; i++) {
-		s->array[i]		= data;
+		s->array[i]		= (struct xio_task *)data;
 		s->array[i]->ltid	= s->start_idx + i;
 		s->array[i]->magic	= XIO_TASK_MAGIC;
 		s->array[i]->pool	= (void *)q;
@@ -140,7 +141,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		s->array[i]->imsg.in.sgl_type		 =
 						XIO_SGL_TYPE_IOV_PTR;
 		s->array[i]->imsg.in.pdata_iov.sglist	 =
-						data;
+						(struct xio_iovec_ex *)data;
 		s->array[i]->imsg.in.pdata_iov.max_nents =
 						g_options.max_in_iovsz;
 
@@ -150,7 +151,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 		s->array[i]->imsg.out.sgl_type		  =
 						XIO_SGL_TYPE_IOV_PTR;
 		s->array[i]->imsg.out.pdata_iov.sglist	  =
-						data;
+						(struct xio_iovec_ex *)data;
 		s->array[i]->imsg.out.pdata_iov.max_nents =
 						g_options.max_out_iovsz;
 
@@ -205,13 +206,13 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	char			*buf;
 
 	/* pool */
-	buf = ucalloc(sizeof(*q)+params->pool_dd_data_sz, 1);
+	buf = (char *)ucalloc(sizeof(*q)+params->pool_dd_data_sz, 1);
 	if (buf == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed\n");
 		return NULL;
 	}
-	q		= (void *)buf;
+	q		= (struct xio_tasks_pool *)buf;
 	if (params->pool_dd_data_sz)
 		q->dd_data = (void *)(q + 1);
 	else

@@ -338,7 +338,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 			  ((xio_msg->request) ? xio_msg->request->sn : (uint64_t)-1));
 
 	sgtbl		= xio_sg_table_get(&xio_msg->in);
-	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->in.sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(xio_msg->in.sgl_type);
 
 	ERROR_LOG("in header: length:%zd, address:%p\n",
 		  xio_msg->in.header.iov_len, xio_msg->in.header.iov_base);
@@ -348,7 +349,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 		  tbl_nents(sgtbl_ops, sgtbl));
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
-		mr = sge_mr(sgtbl_ops, sge);
+		mr = (struct xio_mr *)sge_mr(sgtbl_ops, sge);
 		if (mr)
 			ERROR_LOG("in data[%d]: length:%zd, " \
 				  "address:%p, mr:%p " \
@@ -364,7 +365,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	}
 
 	sgtbl		= xio_sg_table_get(&xio_msg->out);
-	sgtbl_ops	= xio_sg_table_ops_get(xio_msg->out.sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(xio_msg->out.sgl_type);
 
 	ERROR_LOG("out header: length:%zd, address:%p\n",
 		  xio_msg->out.header.iov_len, xio_msg->out.header.iov_base);
@@ -373,7 +375,7 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	ERROR_LOG("out data size:%zd\n", tbl_nents(sgtbl_ops, sgtbl));
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
-		mr = sge_mr(sgtbl_ops, sge);
+		mr = (struct xio_mr *)sge_mr(sgtbl_ops, sge);
 		if (mr)
 			ERROR_LOG("out data[%d]: length:%zd, " \
 				  "address:%p, mr:%p " \
@@ -396,7 +398,8 @@ struct getcpu_cache {
 	unsigned long blob[128 / sizeof(long)];
 };
 
-static long (*vgetcpu)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
+typedef long (*vgetcpu_fn)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
+static vgetcpu_fn vgetcpu;
 
 static int init_vgetcpu(void)
 {
@@ -406,7 +409,7 @@ static int init_vgetcpu(void)
 	vdso = dlopen("linux-vdso.so.1", RTLD_LAZY);
 	if (vdso == NULL)
 		return -1;
-	vgetcpu = dlsym(vdso, "__vdso_getcpu");
+	vgetcpu = (vgetcpu_fn)dlsym(vdso, "__vdso_getcpu");
 	dlclose(vdso);
 	return vgetcpu == NULL ? -1 : 0;
 }

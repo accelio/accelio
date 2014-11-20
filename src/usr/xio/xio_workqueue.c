@@ -158,7 +158,7 @@ static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 /*---------------------------------------------------------------------------*/
 static void xio_delayed_action_handler(int fd, int events, void *user_context)
 {
-	struct xio_workqueue	*work_queue = user_context;
+	struct xio_workqueue *work_queue = (struct xio_workqueue *)user_context;
 	int64_t			exp;
 	ssize_t			s;
 
@@ -188,7 +188,7 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 /*---------------------------------------------------------------------------*/
 static void xio_work_action_handler(int fd, int events, void *user_context)
 {
-	struct xio_workqueue	*work_queue = user_context;
+	struct xio_workqueue *work_queue = (struct xio_workqueue *)user_context;
 	uint64_t		exp;
 	ssize_t			s;
 	xio_work_handle_t	*work;
@@ -208,7 +208,7 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			ERROR_LOG("failed to read from pipe, %m\n");
 			return;
 		}
-		work = ptr_from_int64(exp);
+		work = (xio_work_handle_t *)ptr_from_int64(exp);
 		if (!work) {
 			ERROR_LOG("null work\n");
 			return;
@@ -242,7 +242,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	struct xio_workqueue	*work_queue;
 	int			retval;
 
-	work_queue = ucalloc(1, sizeof(*work_queue));
+	work_queue = (struct xio_workqueue *)ucalloc(1, sizeof(*work_queue));
 	if (work_queue == NULL) {
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;

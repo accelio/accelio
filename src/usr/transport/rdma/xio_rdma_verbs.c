@@ -112,7 +112,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 			xio_validate_ulimit_memlock();
 		return NULL;
 	}
-	mr_elem = ucalloc(1, sizeof(*mr_elem));
+	mr_elem = (struct xio_mr_elem *)ucalloc(1, sizeof(*mr_elem));
 	if (mr_elem == NULL)
 		goto  cleanup;
 
@@ -161,7 +161,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	}
 	spin_unlock(&dev_list_lock);
 
-	tmr = ucalloc(1, sizeof(*tmr));
+	tmr = (struct xio_mr *)ucalloc(1, sizeof(*tmr));
 	if (tmr == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
@@ -354,7 +354,7 @@ struct xio_buf *xio_alloc(size_t length)
 		 IBV_ACCESS_REMOTE_WRITE|
 		 IBV_ACCESS_REMOTE_READ;
 
-	buf = ucalloc(1, sizeof(*buf));
+	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
 	if (!buf) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
@@ -463,7 +463,7 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 		return 0;
 	}
 
-	tbl = ucalloc(mr_num, sizeof(*tbl));
+	tbl = (struct xio_rkey_tbl *)ucalloc(mr_num, sizeof(*tbl));
 	if (!tbl) {
 		*len = 0;
 		return -ENOMEM;
