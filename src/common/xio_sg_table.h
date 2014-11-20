@@ -39,28 +39,47 @@
 #ifndef XIO_SG_TABLE_OPS
 #define XIO_SG_TABLE_OPS
 
+typedef	void		(*sge_set_buf_fn)(void *sge, const void *buf,
+					  uint32_t buflen, void *mr);
+typedef	void		*(*sge_addr_fn)(void *sge);
+typedef	void		(*sge_set_addr_fn)(void *sge, void *addr);
+typedef	void		*(*sge_mr_fn)(void *sge);
+typedef	void		(*sge_set_mr_fn)(void *sge, void *mr);
+typedef	size_t		(*sge_length_fn)(void *sge);
+typedef	void		(*sge_set_length_fn)(void *sge, size_t len);
+
+typedef	void		*(*sge_first_fn)(void *tbl);
+typedef	void		*(*sge_last_fn)(void *tbl);
+typedef	void		*(*sge_next_fn)(void *tbl, void *sge);
+
+typedef	int		(*tbl_empty_fn)(void *tbl);
+typedef	void		*(*tbl_sglist_fn)(void *tbl);
+typedef	uint32_t	(*tbl_nents_fn)(void *tbl);
+typedef	void		(*tbl_set_nents_fn)(void *tbl, uint32_t nents);
+typedef	uint32_t	(*tbl_max_nents_fn)(void *tbl);
+typedef	void		(*tbl_set_max_nents_fn)(void *tbl, uint32_t max_nents);
+typedef	size_t		(*tbl_length_fn)(void *tbl);
 
 struct  xio_sg_table_ops {
-	void		(*sge_set_buf)(void *sge, const void *buf,
-				       uint32_t buflen, void *mr);
-	void		*(*sge_addr)(void *sge);
-	void		(*sge_set_addr)(void *sge, void *addr);
-	void		*(*sge_mr)(void *sge);
-	void		(*sge_set_mr)(void *sge, void *mr);
-	size_t		(*sge_length)(void *sge);
-	void		(*sge_set_length)(void *sge, size_t len);
+	sge_set_buf_fn		sge_set_buf;
+	sge_addr_fn		sge_addr;
+	sge_set_addr_fn		sge_set_addr;
+	sge_mr_fn		sge_mr;
+	sge_set_mr_fn		sge_set_mr;
+	sge_length_fn		sge_length;
+	sge_set_length_fn	sge_set_length;
 
-	void		*(*sge_first)(void *tbl);
-	void		*(*sge_last)(void *tbl);
-	void		*(*sge_next)(void *tbl, void *sge);
+	sge_first_fn		sge_first;
+	sge_last_fn		sge_last;
+	sge_next_fn		sge_next;
 
-	int		(*tbl_empty)(void *tbl);
-	void		*(*tbl_sglist)(void *tbl);
-	uint32_t	(*tbl_nents)(void *tbl);
-	void		(*tbl_set_nents)(void *tbl, uint32_t nents);
-	uint32_t	(*tbl_max_nents)(void *tbl);
-	void		(*tbl_set_max_nents)(void *tbl, uint32_t max_nents);
-	size_t		(*tbl_length)(void *tbl);
+	tbl_empty_fn		tbl_empty;
+	tbl_sglist_fn		tbl_sglist;
+	tbl_nents_fn		tbl_nents;
+	tbl_set_nents_fn	tbl_set_nents;
+	tbl_max_nents_fn	tbl_max_nents;
+	tbl_set_max_nents_fn	tbl_set_max_nents;
+	tbl_length_fn		tbl_length;
 };
 
 int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
