@@ -156,7 +156,8 @@ static void xio_async_ev_handler(int fd, int events, void *user_context)
 		if (async_event.event_type == IBV_EVENT_COMM_EST) {
 			struct xio_rdma_transport *rdma_hndl;
 
-			rdma_hndl = async_event.element.qp->qp_context;
+			rdma_hndl = (struct xio_rdma_transport *)
+					async_event.element.qp->qp_context;
 			/* force "connection established" event */
 			rdma_notify(rdma_hndl->cm_id, IBV_EVENT_COMM_EST);
 		}
@@ -321,7 +322,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 			return tcq;
 		}
 	}
-	tcq = ucalloc(1, sizeof(struct xio_cq));
+	tcq = (struct xio_cq *)ucalloc(1, sizeof(struct xio_cq));
 	if (tcq == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed. %m\n");
@@ -331,7 +332,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	tcq->wc_array_len = MAX_CQE_PER_QP;
 	/* allocate device wc array */
-	tcq->wc_array = ucalloc(tcq->wc_array_len, sizeof(struct ibv_wc));
+	tcq->wc_array = (struct ibv_wc *)ucalloc(tcq->wc_array_len,
+						 sizeof(struct ibv_wc));
 	if (tcq->wc_array == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("ev_loop_add failed. (errno=%d %m)\n", errno);
@@ -511,7 +513,7 @@ static struct xio_device *xio_device_init(struct ibv_context *ib_ctx)
 	struct xio_device	*dev;
 	int			retval;
 
-	dev = ucalloc(1, sizeof(*dev));
+	dev = (struct xio_device *)ucalloc(1, sizeof(*dev));
 	if (dev == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("ucalloc failed. (errno=%d %m)\n", errno);
@@ -851,7 +853,7 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 static int xio_on_context_event(void *observer, void *sender,
 				int event, void *event_data)
 {
-	struct xio_cq	*cq = observer;
+	struct xio_cq	*cq = (struct xio_cq *)observer;
 
 	if (event == XIO_CONTEXT_EVENT_CLOSE) {
 		TRACE_LOG("context: [close] ctx:%p\n", sender);
@@ -1386,10 +1388,10 @@ static int xio_rdma_initial_pool_slab_init_task(
 	ptr += sizeof(struct xio_rdma_task);
 
 	/* fill xio_work_req */
-	rdma_task->txd.sge = (void *)ptr;
+	rdma_task->txd.sge = (struct ibv_sge *)ptr;
 	ptr += sizeof(struct ibv_sge);
 
-	rdma_task->rxd.sge = (void *)ptr;
+	rdma_task->rxd.sge = (struct ibv_sge *)ptr;
 	ptr += sizeof(struct ibv_sge);
 	/*****************************************/
 
@@ -1447,7 +1449,7 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	ptr += sizeof(struct xio_rdma_task);
 
 	/* fill xio_work_req */
-	rdma_task->rdmad.sge = (void *)ptr;
+	rdma_task->rdmad.sge = (struct ibv_sge *)ptr;
 	/*ptr += rdma_hndl->max_sge*sizeof(struct ibv_sge);*/
 	/*****************************************/
 
@@ -1481,10 +1483,11 @@ static int xio_rdma_phantom_pool_create(struct xio_rdma_transport *rdma_hndl)
 
 	params.pool_hooks.context	   = rdma_hndl;
 	params.pool_hooks.slab_init_task   =
-		(void *)xio_rdma_phantom_pool_slab_init_task;
+		(int (*)(void *, void *, void *, int,  struct xio_task *))
+		xio_rdma_phantom_pool_slab_init_task;
 	params.pool_hooks.slab_uninit_task = NULL;
 	params.pool_hooks.task_pre_put	   =
-		(void *)xio_rdma_task_pre_put;
+		(int (*)(void *, struct xio_task *))xio_rdma_task_pre_put;
 
 	/* initialize the tasks pool */
 	rdma_hndl->phantom_tasks_pool = xio_tasks_pool_create(&params);
@@ -1721,25 +1724,25 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += sizeof(struct xio_rdma_task);
 
 	/* fill xio_work_req */
-	rdma_task->txd.sge = (void *)ptr;
+	rdma_task->txd.sge = (struct ibv_sge *)ptr;
 	ptr += max_sge*sizeof(struct ibv_sge);
-	rdma_task->rxd.sge = (void *)ptr;
+	rdma_task->rxd.sge = (struct ibv_sge *)ptr;
 	ptr += sizeof(struct ibv_sge);
-	rdma_task->rdmad.sge = (void *)ptr;
+	rdma_task->rdmad.sge = (struct ibv_sge *)ptr;
 	ptr += max_sge*sizeof(struct ibv_sge);
 
-	rdma_task->read_sge = (void *)ptr;
+	rdma_task->read_sge = (struct xio_mempool_obj *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
-	rdma_task->write_sge = (void *)ptr;
+	rdma_task->write_sge = (struct xio_mempool_obj *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
 
-	rdma_task->req_read_sge = (void *)ptr;
+	rdma_task->req_read_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
-	rdma_task->req_write_sge = (void *)ptr;
+	rdma_task->req_write_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
-	rdma_task->req_recv_sge = (void *)ptr;
+	rdma_task->req_recv_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
-	rdma_task->rsp_write_sge = (void *)ptr;
+	rdma_task->rsp_write_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
@@ -2075,7 +2078,7 @@ static void on_cm_timewait_exit(struct rdma_cm_event *ev,
 static inline void xio_timewait_exit_timeout(void *data)
 {
 	WARN_LOG("\"timewait exit\" timeout. rdma_hndl:%p\n", data);
-	on_cm_timewait_exit(NULL, data);
+	on_cm_timewait_exit(NULL, (struct xio_rdma_transport *)data);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2286,7 +2289,8 @@ static struct xio_cm_channel *xio_cm_channel_get(struct xio_context *ctx)
 	}
 	pthread_rwlock_unlock(&cm_lock);
 
-	channel = ucalloc(1, sizeof(struct xio_cm_channel));
+	channel = (struct xio_cm_channel *)
+			ucalloc(1, sizeof(struct xio_cm_channel));
 	if (!channel) {
 		ERROR_LOG("rdma_create_event_channel failed " \
 				"(errno=%d %m)\n", errno);
@@ -2355,7 +2359,8 @@ static struct xio_transport_base *xio_rdma_open(
 
 
 	/*allocate rdma handle */
-	rdma_hndl = ucalloc(1, sizeof(struct xio_rdma_transport));
+	rdma_hndl = (struct xio_rdma_transport *)
+			ucalloc(1, sizeof(struct xio_rdma_transport));
 	if (!rdma_hndl) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed. %m\n");
@@ -3054,7 +3059,8 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	int			mr_found = 0;
 
 	sgtbl		= xio_sg_table_get(vmsg);
-	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(vmsg->sgl_type);
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
@@ -3101,7 +3107,8 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 
 
 	sgtbl		= xio_sg_table_get(&msg->out);
-	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(msg->out.sgl_type);
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
