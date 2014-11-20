@@ -603,7 +603,7 @@ static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 	}
 
 	*data_size = total_sz;
-	DEBUG_LOG("page_vec->data_size:%d cur_page %d\n",
+	TRACE_LOG("page_vec->data_size:%d cur_page %d\n",
 		  *data_size, cur_page);
 	return cur_page;
 }
@@ -649,7 +649,7 @@ static int xio_data_buf_aligned_len(struct xio_mem_desc *mdesc,
 			break;
 	}
 	ret_len = (next_sg) ? i : i+1;
-	DEBUG_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
+	TRACE_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
 		  ret_len, mdesc->nents, mdesc);
 	return ret_len;
 }

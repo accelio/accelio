@@ -905,6 +905,12 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 		xio_transport_flush_task_list(&rdma_hndl->rx_list);
 	}
 
+	rdma_hndl->kick_rdma_rd = 0;
+	rdma_hndl->rdma_in_flight = 0;
+	rdma_hndl->reqs_in_flight_nr = 0;
+	rdma_hndl->rsps_in_flight_nr = 0;
+	rdma_hndl->tx_ready_tasks_num = 0;
+
 	return 0;
 }
 
