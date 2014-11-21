@@ -175,11 +175,14 @@ struct xio_options {
 	int			max_in_iovsz;
 	int			max_out_iovsz;
 	int			reconnect;
-	int			snd_queue_depth;
-	int			rcv_queue_depth;
 	/* transport options needed globally */
 	int			max_inline_hdr;
 	int			max_inline_data;
+	int			enable_flow_control;
+	int			snd_queue_depth_msgs;
+	int			rcv_queue_depth_msgs;
+	uint64_t		snd_queue_depth_bytes;
+	uint64_t		rcv_queue_depth_bytes;
 };
 
 struct xio_sge {
@@ -199,14 +202,14 @@ struct __attribute__((__packed__)) xio_tlv {
 
 struct __attribute__((__packed__)) xio_session_hdr {
 	uint32_t		dest_session_id;
-	uint32_t		pad;
+	uint32_t		flags;
 	uint64_t		serial_num;
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		ack_sn;		/* ack serial number	*/
-	uint16_t		credits;
-	uint16_t		pad1;
-	uint32_t		flags;
+	uint16_t		credits_msgs;
+	uint16_t		pad[3];
 	uint32_t		receipt_result;
+	uint64_t		credits_bytes;
 };
 
 /* setup flags */

@@ -422,11 +422,11 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 
 	opt = 2048;
 	xio_set_opt(NULL,
-		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 	opt = 2048;
 	xio_set_opt(NULL,
-		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 
 

@@ -2177,8 +2177,8 @@ static void xio_tcp_primary_pool_get_params(
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = max((g_options.snd_queue_depth +
-		       g_options.rcv_queue_depth)*40, 1024);
+	*max_nr = max((g_options.snd_queue_depth_msgs +
+		       g_options.rcv_queue_depth_msgs)*40, 1024);
 
 
 	*pool_dd_sz = 0;

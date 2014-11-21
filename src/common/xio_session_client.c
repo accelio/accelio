@@ -99,16 +99,26 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	len = xio_write_uint32(session->session_id , 0, ptr);
 	ptr  = ptr + len;
 
-	/* tx queue depth */
-	len = xio_write_uint16((uint16_t)session->snd_queue_depth , 0, ptr);
+	/* tx queue depth bytes*/
+	len = xio_write_uint64(session->snd_queue_depth_bytes, 0, ptr);
 	ptr  = ptr + len;
 
-	/* rx queue depth */
-	len = xio_write_uint16((uint16_t)session->rcv_queue_depth , 0, ptr);
+	/* rx queue depth bytes*/
+	len = xio_write_uint64(session->rcv_queue_depth_bytes, 0, ptr);
+	ptr  = ptr + len;
+
+	/* tx queue depth msgs*/
+	len = xio_write_uint16((uint16_t)session->snd_queue_depth_msgs,
+			       0, ptr);
+	ptr  = ptr + len;
+
+	/* rx queue depth msgs*/
+	len = xio_write_uint16((uint16_t)session->rcv_queue_depth_msgs,
+			       0, ptr);
 	ptr  = ptr + len;
 
 	/* uri length */
-	len = xio_write_uint16((uint16_t)session->uri_len , 0, ptr);
+	len = xio_write_uint16((uint16_t)session->uri_len, 0, ptr);
 	ptr  = ptr + len;
 
 	/* private length */
@@ -306,12 +316,24 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 
 	switch (*action) {
 	case XIO_ACTION_ACCEPT:
-		/* read the peer tx queue depth */
-		len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
+		/* read the peer tx queue depth bytes */
+		len = xio_read_uint64(&session->peer_snd_queue_depth_bytes,
+				      0, ptr);
 		ptr = ptr + len;
 
-		/* read the peer rx queue depth */
-		len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
+		/* read the peer rx queue depth bytes */
+		len = xio_read_uint64(&session->peer_rcv_queue_depth_bytes,
+				      0, ptr);
+		ptr = ptr + len;
+
+		/* read the peer tx queue depth msgs */
+		len = xio_read_uint16(&session->peer_snd_queue_depth_msgs,
+				      0, ptr);
+		ptr = ptr + len;
+
+		/* read the peer rx queue depth msgs */
+		len = xio_read_uint16(&session->peer_rcv_queue_depth_msgs,
+				      0, ptr);
 		ptr = ptr + len;
 
 		len = xio_read_uint16(&session->portals_array_len, 0, ptr);
@@ -505,10 +527,11 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			if (session->connections_nr > 1) {
 				/* open new connections */
-				retval = xio_session_accept_connections(session);
+				retval = xio_session_accept_connections(
+								session);
 				if (retval != 0) {
 					ERROR_LOG(
-						"failed to accept connection\n");
+					    "failed to accept connection\n");
 					return -1;
 				}
 			}
@@ -538,8 +561,9 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 			/* temporary account it as user object */
 			xio_idr_add_uobj(usr_idr, session->lead_connection,
-					"xio_connection");
-			xio_disconnect_initial_connection(session->lead_connection);
+					 "xio_connection");
+			xio_disconnect_initial_connection(
+						session->lead_connection);
 
 			/* open new connections */
 			retval = xio_session_accept_connections(session);
@@ -711,7 +735,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			xio_connection_send_hello_req(connection);
 		} else {
 			xio_connection_set_state(connection,
-					 XIO_CONNECTION_STATE_ONLINE);
+						 XIO_CONNECTION_STATE_ONLINE);
 			xio_connection_xmit_msgs(connection);
 		}
 		break;

@@ -948,8 +948,12 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
 	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
 	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
-	XIO_OPTNAME_SND_QUEUE_DEPTH,	  /**< maximum tx queued msgs	      */
-	XIO_OPTNAME_RCV_QUEUE_DEPTH,	  /**< maximum rx queued msgs	      */
+	XIO_OPTNAME_ENABLE_FLOW_CONTROL,  /**< enables byte based flow control*/
+	XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS, /**< maximum tx queued msgs	      */
+	XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS, /**< maximum rx queued msgs	      */
+	XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES, /**< maximum tx queued bytes	      */
+	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES, /**< maximum rx queued bytes	      */
+
 
 	XIO_OPTNAME_MAX_INLINE_HEADER,    /**< set/get maximum inline header  */
 					  /**< size			      */

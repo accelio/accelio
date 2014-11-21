@@ -229,12 +229,13 @@ void xio_session_write_header(struct xio_task *task,
 
 	/* fill header */
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
+	PACK_LVAL(hdr, tmp_hdr, flags);
 	PACK_LLVAL(hdr, tmp_hdr, serial_num);
 	PACK_SVAL(hdr, tmp_hdr, sn);
 	PACK_SVAL(hdr, tmp_hdr, ack_sn);
-	PACK_SVAL(hdr, tmp_hdr, credits);
-	PACK_LVAL(hdr, tmp_hdr, flags);
+	PACK_SVAL(hdr, tmp_hdr, credits_msgs);
 	PACK_LVAL(hdr, tmp_hdr, receipt_result);
+	PACK_LLVAL(hdr, tmp_hdr, credits_bytes);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -252,12 +253,13 @@ void xio_session_read_header(struct xio_task *task,
 
 	/* fill request */
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
+	UNPACK_LVAL(tmp_hdr, hdr, flags);
 	UNPACK_LLVAL(tmp_hdr, hdr, serial_num);
 	UNPACK_SVAL(tmp_hdr, hdr, sn);
 	UNPACK_SVAL(tmp_hdr, hdr, ack_sn);
-	UNPACK_SVAL(tmp_hdr, hdr, credits);
-	UNPACK_LVAL(tmp_hdr, hdr, flags);
+	UNPACK_SVAL(tmp_hdr, hdr, credits_msgs);
 	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
+	UNPACK_LLVAL(tmp_hdr, hdr, credits_bytes);
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -489,7 +491,8 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (connection->req_exp_sn == hdr.sn) {
 		connection->req_exp_sn++;
 		connection->req_ack_sn = hdr.sn;
-		connection->peer_credits += hdr.credits;
+		connection->peer_credits_msgs += hdr.credits_msgs;
+		connection->peer_credits_bytes += hdr.credits_bytes;
 	} else {
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  connection->req_exp_sn, hdr.sn);
@@ -499,7 +502,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		  __func__,
 		  connection->req_sn, connection->req_exp_sn,
 		  connection->req_ack_sn,
-		  connection->credits, connection->peer_credits);
+		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
 	msg->sn		= hdr.serial_num;
 	msg->flags	= 0;
@@ -592,7 +595,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	if (connection->rsp_exp_sn == hdr.sn) {
 		connection->rsp_exp_sn++;
 		connection->rsp_ack_sn = hdr.sn;
-		connection->peer_credits += hdr.credits;
+		connection->peer_credits_msgs += hdr.credits_msgs;
+		connection->peer_credits_bytes += hdr.credits_bytes;
 	} else {
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
 			  connection->rsp_exp_sn, hdr.sn);
@@ -602,7 +606,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		  __func__,
 		  connection->rsp_sn, connection->rsp_exp_sn,
 		  connection->rsp_ack_sn,
-		  connection->credits, connection->peer_credits);
+		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
 	msg->sn = hdr.serial_num;
 
@@ -641,10 +645,22 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
 
+		connection->tx_queued_msgs--;
+		if (connection->enable_flow_control) {
+			struct xio_sg_table_ops	*sgtbl_ops;
+			void			*sgtbl;
+
+			sgtbl		= xio_sg_table_get(&omsg->out);
+			sgtbl_ops	= xio_sg_table_ops_get(
+							omsg->out.sgl_type);
+			connection->tx_bytes -=
+				(omsg->out.header.iov_len +
+					 tbl_length(sgtbl_ops, sgtbl));
+		}
+
 		omsg->sn	  = msg->sn; /* one way do have response */
 		omsg->receipt_res = hdr.receipt_result;
 		omsg->flags	  = task->omsg_flags;
-		connection->tx_queued_msgs--;
 
 		if (sender_task->omsg_flags &
 		    XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
@@ -775,18 +791,19 @@ int xio_on_credits_ack_recv(struct xio_connection *connection,
 	if (connection->req_exp_sn == hdr.sn) {
 		connection->req_exp_sn++;
 		connection->req_ack_sn = hdr.sn;
-		connection->peer_credits += hdr.credits;
+		connection->peer_credits_msgs += hdr.credits_msgs;
+		connection->peer_credits_bytes += hdr.credits_bytes;
 	} else {
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  connection->req_exp_sn, hdr.sn);
 	}
-	connection->credits++;
+	connection->credits_msgs++;
 	xio_tasks_pool_put(task);
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
 	       __func__,
 	       connection->sn, connection->exp_sn, connection->ack_sn,
-	       connection->credits, connection->peer_credits);
+	       connection->credits_msgs, connection->peer_credits_msgs);
 	*/
 	return 0;
 }
@@ -798,8 +815,8 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
-	struct xio_statistics *stats = &connection->ctx->stats;
-	struct xio_msg *omsg = task->omsg;
+	struct xio_statistics	*stats = &connection->ctx->stats;
+	struct xio_msg		*omsg = task->omsg;
 
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
@@ -810,7 +827,6 @@ static int xio_on_ow_req_send_comp(
 	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
 	    task->omsg->flags & XIO_MSG_FLAG_EX_IMM_READ_RECEIPT)
 		return 0;
-
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG); /* need to replace with
@@ -819,8 +835,20 @@ static int xio_on_ow_req_send_comp(
 
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
-	connection->tx_queued_msgs--;
 	xio_clear_flags(&omsg->flags);
+
+	connection->tx_queued_msgs--;
+	if (connection->enable_flow_control) {
+		struct xio_sg_table_ops	*sgtbl_ops;
+		void			*sgtbl;
+
+		sgtbl		= xio_sg_table_get(&omsg->out);
+		sgtbl_ops	= xio_sg_table_ops_get(
+					omsg->out.sgl_type);
+		connection->tx_bytes -=
+			(omsg->out.header.iov_len +
+			 tbl_length(sgtbl_ops, sgtbl));
+	}
 
 	/* send completion notification to
 	 * release request
@@ -1383,8 +1411,10 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 
 	session->trans_sn		= params->initial_sn;
 	session->state			= XIO_SESSION_STATE_INIT;
-	session->snd_queue_depth	= g_options.snd_queue_depth;
-	session->rcv_queue_depth	= g_options.rcv_queue_depth;
+	session->snd_queue_depth_msgs	= g_options.snd_queue_depth_msgs;
+	session->rcv_queue_depth_msgs	= g_options.rcv_queue_depth_msgs;
+	session->snd_queue_depth_bytes	= g_options.snd_queue_depth_bytes;
+	session->rcv_queue_depth_bytes	= g_options.rcv_queue_depth_bytes;
 
 	memcpy(&session->ses_ops, params->ses_ops,
 	       sizeof(*params->ses_ops));

@@ -623,11 +623,11 @@ int main(int argc, char *argv[])
 
 	opt = 2048;
 	xio_set_opt(NULL,
-		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 	opt = 2048;
 	xio_set_opt(NULL,
-		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 
 	curr_cpu = sched_getcpu();

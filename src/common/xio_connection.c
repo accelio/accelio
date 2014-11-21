@@ -238,7 +238,11 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		connection->ctx		= ctx;
 		connection->req_ack_sn	= ~0;
 		connection->rsp_ack_sn	= ~0;
-		connection->credits_ack_watermark = session->rcv_queue_depth/2;
+		connection->rx_queue_watermark_msgs =
+					session->rcv_queue_depth_msgs/2;
+		connection->rx_queue_watermark_bytes =
+					session->rcv_queue_depth_bytes/2;
+		connection->enable_flow_control = g_options.enable_flow_control;
 
 		connection->conn_idx	= conn_idx;
 		connection->cb_user_context = cb_user_context;
@@ -268,7 +272,6 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 {
-	struct xio_vmsg		*vmsg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	ssize_t			data_len;
@@ -281,9 +284,8 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 	    (msg->type != XIO_ONE_WAY_REQ))
 		return;
 
-	vmsg		= &msg->out;
-	sgtbl		= xio_sg_table_get(vmsg);
-	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+	sgtbl		= xio_sg_table_get(&msg->out);
+	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
 	data_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	/* heuristics to guess in which  cases the lower layer will not
@@ -308,10 +310,13 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 int xio_connection_send(struct xio_connection *connection,
 			struct xio_msg *msg)
 {
-	int			retval = 0;
 	struct xio_task		*task = NULL;
 	struct xio_task		*req_task = NULL;
 	struct xio_session_hdr	hdr = {0};
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	size_t			tx_bytes = 0;
+	int			retval = 0;
 	int			is_req = 0;
 	int			rc = EFAULT;
 	int			standalone_receipt = 0;
@@ -363,6 +368,14 @@ int xio_connection_send(struct xio_connection *connection,
 			hdr.serial_num	= msg->request->sn;
 		}
 	}
+
+	if (connection->enable_flow_control) {
+		sgtbl		= xio_sg_table_get(&msg->out);
+		sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+
+		tx_bytes = msg->out.header.iov_len + tbl_length(sgtbl_ops, sgtbl);
+	}
+
 	/* reset the task mbuf */
 	xio_mbuf_reset(&task->mbuf);
 
@@ -393,30 +406,34 @@ int xio_connection_send(struct xio_connection *connection,
 	if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
 		if (IS_REQUEST(msg->type)) {
 			/*
-			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits:%d, " \
-				  "peer_credits:%d\n", __func__,
+			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
+				  "peer_credits_msgs:%d\n", __func__,
 				  connection->req_sn, connection->req_exp_sn,
-				  connection->req_ack_sn, connection->credits,
-				  connection->peer_credits);
+				  connection->req_ack_sn, connection->credits_msgs,
+				  connection->peer_credits_msgs);
 			*/
 			hdr.sn		= connection->req_sn++;
 			hdr.ack_sn	= connection->req_ack_sn;
 		} else {
 			/*
-			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits:%d, " \
-				  "peer_credits:%d\n", __func__,
+			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
+				  "peer_credits_msgs:%d\n", __func__,
 				  connection->rsp_sn, connection->rsp_sn,
 				  connection->rsp_exp_sn,
-				  connection->req_ack_sn, connection->credits,
-				  connection->peer_credits);
+				  connection->req_ack_sn, connection->credits_msgs,
+				  connection->peer_credits_msgs);
 			*/
 			hdr.sn		= connection->rsp_sn++;
 			hdr.ack_sn	= connection->rsp_ack_sn;
 		}
-		hdr.credits	= connection->credits;
-		connection->credits = 0;
-		if (!standalone_receipt)
-			connection->peer_credits--;
+		hdr.credits_msgs	= connection->credits_msgs;
+		connection->credits_msgs = 0;
+		hdr.credits_bytes	= connection->credits_bytes;
+		connection->credits_bytes = 0;
+		if (!standalone_receipt) {
+			connection->peer_credits_msgs--;
+			connection->peer_credits_bytes -= tx_bytes;
+		}
 	}
 
 	xio_session_write_header(task, &hdr);
@@ -426,9 +443,12 @@ int xio_connection_send(struct xio_connection *connection,
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
 		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
-			connection->credits = hdr.credits;
-			if (!standalone_receipt)
-				connection->peer_credits--;
+			connection->credits_msgs = hdr.credits_msgs;
+			connection->credits_bytes = hdr.credits_bytes;
+			if (!standalone_receipt) {
+				connection->peer_credits_msgs--;
+				connection->peer_credits_bytes -= tx_bytes;
+			}
 		}
 		goto cleanup;
 	}
@@ -463,8 +483,21 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 			xio_msg_list_insert_tail(&connection->reqs_msgq,
 						 pmsg, pdata);
 		if ((pmsg->type == XIO_MSG_TYPE_REQ) ||
-		    (pmsg->type == XIO_ONE_WAY_REQ))
+		    (pmsg->type == XIO_ONE_WAY_REQ)) {
 			connection->tx_queued_msgs--;
+			if (connection->enable_flow_control) {
+				struct xio_sg_table_ops	*sgtbl_ops;
+				void			*sgtbl;
+				size_t			tx_bytes;
+
+				sgtbl		= xio_sg_table_get(&pmsg->out);
+				sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+				tx_bytes	= pmsg->out.header.iov_len + tbl_length(
+						sgtbl_ops,
+						sgtbl);
+				connection->tx_bytes -= tx_bytes;
+			}
+		}
 
 		if (connection->tx_queued_msgs < 0)
 			ERROR_LOG("tx_queued_msgs:%d\n",
@@ -760,7 +793,8 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 
 	while (retry_cnt < 2) {
-		if (connection->peer_credits == 0) {
+		if ((connection->peer_credits_msgs == 0) ||
+		    (connection->peer_credits_bytes == 0)) {
 			struct xio_msg *msg1 = xio_msg_list_first(msgq1);
 			struct xio_msg *msg2 = xio_msg_list_first(msgq2);
 			if ((msg1 && !IS_APPLICATION_MSG(msg1)) ||
@@ -867,14 +901,13 @@ int xio_send_request(struct xio_connection *connection,
 {
 	struct xio_msg_list	reqs_msgq;
 	struct xio_statistics	*stats;
-	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
+	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
 	int			valid;
-
 
 	if (connection  == NULL || msg == NULL) {
 		xio_set_error(EINVAL);
@@ -897,8 +930,8 @@ int xio_send_request(struct xio_connection *connection,
 	pmsg = msg;
 	stats = &connection->ctx->stats;
 	while (pmsg) {
-		if (connection->tx_queued_msgs >=
-		    connection->session->snd_queue_depth) {
+		if (unlikely(connection->tx_queued_msgs >
+		    connection->session->snd_queue_depth_msgs)) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			DEBUG_LOG("send queue overflow %d\n",
 				  connection->tx_queued_msgs);
@@ -907,33 +940,46 @@ int xio_send_request(struct xio_connection *connection,
 		}
 
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
-		if (!valid) {
+		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid in message\n");
 			retval = -1;
 			goto send;
 		}
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
-		if (!valid) {
+		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid out message\n");
 			retval = -1;
 			goto send;
 		}
 
-		vmsg		= &pmsg->out;
-		sgtbl		= xio_sg_table_get(vmsg);
-		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+		sgtbl		= xio_sg_table_get(&pmsg->out);
+		sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+		tx_bytes	= pmsg->out.header.iov_len + tbl_length(
+								    sgtbl_ops,
+								    sgtbl);
+
+		if (unlikely(connection->tx_bytes + tx_bytes >
+		    connection->session->snd_queue_depth_bytes)) {
+			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
+			ERROR_LOG("send queue overflow. queued:%lu bytes\n",
+				  connection->tx_bytes);
+			retval = -1;
+			goto send;
+		}
+
 
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
-		xio_stat_add(stats, XIO_STAT_TX_BYTES,
-			     vmsg->header.iov_len +
-			     tbl_length(sgtbl_ops, sgtbl));
+		xio_stat_add(stats, XIO_STAT_TX_BYTES, tx_bytes);
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
 		connection->tx_queued_msgs++;
+
+		if (connection->enable_flow_control)
+			connection->tx_bytes += tx_bytes;
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -968,6 +1014,7 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_msg		*pmsg = msg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
+	size_t			bytes;
 	int			valid;
 	int			retval = 0;
 
@@ -1027,12 +1074,11 @@ int xio_send_response(struct xio_msg *msg)
 
 		sgtbl		= xio_sg_table_get(vmsg);
 		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
-
+		bytes		= vmsg->header.iov_len +
+					  tbl_length(sgtbl_ops, sgtbl);
 
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
-		xio_stat_add(stats, XIO_STAT_TX_BYTES,
-			     vmsg->header.iov_len +
-			     tbl_length(sgtbl_ops, sgtbl));
+		xio_stat_add(stats, XIO_STAT_TX_BYTES, bytes);
 
 		pmsg->flags |= XIO_MSG_FLAG_EX_RECEIPT_LAST;
 		if ((pmsg->request->flags &
@@ -1042,8 +1088,18 @@ int xio_send_response(struct xio_msg *msg)
 		task->state = XIO_TASK_STATE_READ;
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
+		connection->credits_msgs++;
 
-		connection->credits++;
+		if (connection->enable_flow_control) {
+			vmsg		= &pmsg->request->in;
+			sgtbl		= xio_sg_table_get(vmsg);
+			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			bytes		= vmsg->header.iov_len +
+						tbl_length(sgtbl_ops, sgtbl);
+
+			connection->credits_bytes += bytes;
+		}
+
 
 		xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg, pdata);
 
@@ -1115,10 +1171,10 @@ int xio_send_msg(struct xio_connection *connection,
 {
 	struct xio_msg_list	reqs_msgq;
 	struct xio_statistics	*stats = &connection->ctx->stats;
-	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg = msg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
+	size_t			tx_bytes;
 	int			valid;
 	int			nr = -1;
 	int			retval = 0;
@@ -1137,8 +1193,8 @@ int xio_send_msg(struct xio_connection *connection,
 	}
 
 	while (pmsg) {
-		if (connection->tx_queued_msgs >=
-		    connection->session->snd_queue_depth) {
+		if (unlikely(connection->tx_queued_msgs >
+		    connection->session->snd_queue_depth_msgs)) {
 			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
 			WARN_LOG("send queue overflow %d\n",
 				 connection->tx_queued_msgs);
@@ -1147,26 +1203,37 @@ int xio_send_msg(struct xio_connection *connection,
 		}
 
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
-		if (!valid) {
+		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
 			ERROR_LOG("invalid out message\n");
 			retval = -1;
 			goto send;
 		}
-		vmsg		= &pmsg->out;
-		sgtbl		= xio_sg_table_get(vmsg);
-		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+		sgtbl		= xio_sg_table_get(&pmsg->out);
+		sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+		tx_bytes	= pmsg->out.header.iov_len + tbl_length(
+								    sgtbl_ops,
+								    sgtbl);
+
+		if (unlikely(connection->tx_bytes + tx_bytes >
+		    connection->session->snd_queue_depth_bytes)) {
+			xio_set_error(XIO_E_TX_QUEUE_OVERFLOW);
+			ERROR_LOG("send queue overflow. queued:%lu bytes\n",
+				  connection->tx_bytes);
+			retval = -1;
+			goto send;
+		}
 
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
-		xio_stat_add(stats, XIO_STAT_TX_BYTES,
-			     vmsg->header.iov_len +
-			     tbl_length(sgtbl_ops, sgtbl));
+		xio_stat_add(stats, XIO_STAT_TX_BYTES, tx_bytes);
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_ONE_WAY_REQ;
 
 		connection->tx_queued_msgs++;
+		if (connection->enable_flow_control)
+			connection->tx_bytes += tx_bytes;
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -1270,12 +1337,40 @@ int xio_release_response(struct xio_msg *msg)
 		}
 		connection = task->connection;
 		connection->tx_queued_msgs--;
+		connection->credits_msgs++;
+
+		if (connection->enable_flow_control) {
+			struct xio_vmsg		*vmsg;
+			struct xio_sg_table_ops	*sgtbl_ops;
+			void			*sgtbl;
+			size_t			 bytes;
+
+			vmsg		= &task->sender_task->omsg->out;
+			sgtbl		= xio_sg_table_get(vmsg);
+			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			bytes		= vmsg->header.iov_len +
+						tbl_length(sgtbl_ops, sgtbl);
+
+			connection->tx_bytes -= bytes;
+
+			vmsg		= &task->imsg.in;
+			sgtbl		= xio_sg_table_get(vmsg);
+			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			bytes		= vmsg->header.iov_len +
+				tbl_length(sgtbl_ops, sgtbl);
+
+			connection->credits_bytes += bytes;
+		}
+
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
 		xio_release_response_task(task);
 
-		if (++connection->credits >= connection->credits_ack_watermark)
+		if ((connection->credits_msgs >=
+		     connection->rx_queue_watermark_msgs) ||
+		    (connection->credits_bytes >=
+		     connection->rx_queue_watermark_bytes))
 			xio_send_credits_ack(connection);
 
 		pmsg = pmsg->next;
@@ -1304,15 +1399,34 @@ int xio_release_msg(struct xio_msg *msg)
 			xio_set_error(EINVAL);
 			return -1;
 		}
-
 		connection = task->connection;
+		connection->credits_msgs++;
+
+		if (connection->enable_flow_control) {
+			struct xio_vmsg		*vmsg;
+			struct xio_sg_table_ops	*sgtbl_ops;
+			void			*sgtbl;
+			size_t			 bytes;
+
+			vmsg		= &task->imsg.in;
+			sgtbl		= xio_sg_table_get(vmsg);
+			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			bytes		= vmsg->header.iov_len +
+						tbl_length(sgtbl_ops, sgtbl);
+
+			connection->credits_bytes += bytes;
+		}
+
 		list_move_tail(&task->tasks_list_entry,
 			       &connection->post_io_tasks_list);
 
 		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
 
-		if (++connection->credits >= connection->credits_ack_watermark)
+		if ((connection->credits_msgs >=
+		     connection->rx_queue_watermark_msgs) ||
+		    (connection->credits_bytes >=
+		     connection->rx_queue_watermark_bytes))
 			xio_send_credits_ack(connection);
 
 		pmsg = pmsg->next;
@@ -2330,8 +2444,11 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 		task->sender_task = NULL;
 		xio_tasks_pool_put(task);
 	}
-	connection->peer_credits = session->peer_rcv_queue_depth;
-	connection->credits = 0;
+	connection->peer_credits_msgs = session->peer_rcv_queue_depth_msgs;
+	connection->credits_msgs = 0;
+	connection->peer_credits_bytes = session->peer_rcv_queue_depth_bytes;
+	connection->credits_bytes = 0;
+
 
 	/* delayed disconnect request should be done now */
 	if (connection->state == XIO_CONNECTION_STATE_INIT &&
@@ -2381,9 +2498,13 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 	if (connection->disconnecting == 0) {
 		connection->session->state = XIO_SESSION_STATE_ONLINE;
 		connection->session->disable_teardown = 0;
-		connection->peer_credits =
-				connection->session->peer_rcv_queue_depth;
-		connection->credits = 0;
+		connection->peer_credits_msgs =
+				connection->session->peer_rcv_queue_depth_msgs;
+		connection->credits_msgs = 0;
+		connection->peer_credits_bytes =
+				connection->session->peer_rcv_queue_depth_bytes;
+		connection->credits_bytes = 0;
+
 
 		TRACE_LOG("session state is now ONLINE. session:%p\n",
 			  connection->session);
@@ -2424,10 +2545,10 @@ int xio_send_credits_ack(struct xio_connection *connection)
 	struct xio_msg *msg;
 
 	/*
-	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
+	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits_msgs:%d, peer_credits_msgs:%d\n",
 		  __func__,
 		  connection->sn, connection->exp_sn, connection->ack_sn,
-		  connection->credits, connection->peer_credits);
+		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
@@ -2441,7 +2562,7 @@ int xio_send_credits_ack(struct xio_connection *connection)
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&connection->reqs_msgq, msg, pdata);
 
-	DEBUG_LOG("send credits ack. session:%p, connection:%p\n",
+	DEBUG_LOG("send credits_msgs ack. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	/* do not xmit until connection is assigned */

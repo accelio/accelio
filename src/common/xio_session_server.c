@@ -90,11 +90,20 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
 	ptr  = ptr + len;
 
-	/* queue depth */
-	len = xio_read_uint16(&session->peer_snd_queue_depth, 0, ptr);
+	/* queue depth bytes */
+	len = xio_read_uint64(&session->peer_snd_queue_depth_bytes, 0, ptr);
 	ptr = ptr + len;
 
-	len = xio_read_uint16(&session->peer_rcv_queue_depth, 0, ptr);
+	len = xio_read_uint64(&session->peer_rcv_queue_depth_bytes, 0, ptr);
+	ptr = ptr + len;
+
+	/* queue depth msgs */
+	len = xio_read_uint16((uint16_t *)&session->peer_snd_queue_depth_msgs,
+			      0, ptr);
+	ptr = ptr + len;
+
+	len = xio_read_uint16((uint16_t *)&session->peer_rcv_queue_depth_msgs,
+			      0, ptr);
 	ptr = ptr + len;
 
 	/* uri length */
@@ -201,7 +210,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 
 
 	/* calculate length */
-	tot_len = 5*sizeof(uint16_t) + sizeof(uint32_t);
+	tot_len = 5*sizeof(uint16_t) + sizeof(uint32_t) + 2*sizeof(uint64_t);
 	for (i = 0; i < portals_array_len; i++)
 		tot_len += strlen(portals_array[i]) + sizeof(uint16_t);
 	tot_len += user_context_len;
@@ -241,12 +250,20 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	ptr  = ptr + len;
 
 	if (action == XIO_ACTION_ACCEPT) {
-		/* tx queue depth */
-		len = xio_write_uint16(session->snd_queue_depth, 0, ptr);
+		/* tx queue depth bytes */
+		len = xio_write_uint64(session->snd_queue_depth_bytes, 0, ptr);
 		ptr  = ptr + len;
 
-		/* rx queue depth */
-		len = xio_write_uint16(session->rcv_queue_depth, 0, ptr);
+		/* rx queue depth bytes */
+		len = xio_write_uint64(session->rcv_queue_depth_bytes, 0, ptr);
+		ptr  = ptr + len;
+
+		/* tx queue depth msgs */
+		len = xio_write_uint16(session->snd_queue_depth_msgs, 0, ptr);
+		ptr  = ptr + len;
+
+		/* rx queue depth msgs */
+		len = xio_write_uint16(session->rcv_queue_depth_msgs, 0, ptr);
 		ptr  = ptr + len;
 	}
 
@@ -414,8 +431,13 @@ int xio_accept(struct xio_session *session,
 			  session);
 	} else {
 		/* initialize credits */
-		task->connection->peer_credits	= session->peer_rcv_queue_depth;
-		task->connection->credits	= 0;
+		task->connection->peer_credits_msgs =
+					session->peer_rcv_queue_depth_msgs;
+		task->connection->credits_msgs	= 0;
+		task->connection->peer_credits_bytes =
+					session->peer_rcv_queue_depth_bytes;
+		task->connection->credits_bytes	= 0;
+
 
 		/* server side state is changed to ONLINE, immediately  */
 		session->state = XIO_SESSION_STATE_ONLINE;

@@ -78,9 +78,10 @@ struct xio_connection {
 	uint16_t			rsp_sn;
 	uint16_t			rsp_exp_sn;
 	uint16_t			rsp_ack_sn;
-	uint16_t			credits;
-	uint16_t			peer_credits;
-	uint16_t			credits_ack_watermark;
+	uint16_t			credits_msgs;
+	uint16_t			peer_credits_msgs;
+	uint16_t			rx_queue_watermark_msgs;
+	uint16_t			enable_flow_control;
 	uint16_t			conn_idx;
 	uint16_t			state;
 	uint16_t			fin_req_timeout;
@@ -88,7 +89,7 @@ struct xio_connection {
 	uint16_t			disconnecting;
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
-	uint16_t			pad[2];
+	uint16_t			pad;
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
 	struct kref			kref;
@@ -112,6 +113,11 @@ struct xio_connection {
 	struct list_head		ctx_list_entry;
 	struct xio_session_ops		ses_ops;
 	void				*cb_user_context;
+
+	size_t				tx_bytes;
+	uint64_t			credits_bytes;
+	uint64_t			peer_credits_bytes;
+	uint64_t			rx_queue_watermark_bytes;
 
 };
 
