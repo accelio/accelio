@@ -563,7 +563,7 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 	case XIO_SESSION_STATE_ACCEPTED:
 	case XIO_SESSION_STATE_REJECTED:
 	case XIO_SESSION_STATE_REDIRECTED:
-		xio_disconnect(connection);
+		xio_disconnect_initial_connection(connection);
 		break;
 	default:
 		/* try to transmit now */

@@ -280,25 +280,6 @@ void xio_session_notify_teardown(struct xio_session *session, int reason)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_notify_rejected						     */
-/*---------------------------------------------------------------------------*/
-void xio_session_notify_rejected(struct xio_session *session)
-{
-	/* notify the upper layer */
-	struct xio_session_event_data  ev_data = {
-		.event =		XIO_SESSION_REJECT_EVENT,
-		.reason =		session->reject_reason,
-		.private_data =		session->new_ses_rsp.private_data,
-		.private_data_len =	session->new_ses_rsp.private_data_len
-	};
-
-	if (session->ses_ops.on_session_event)
-		session->ses_ops.on_session_event(
-				session, &ev_data,
-				session->cb_user_context);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_session_notify_new_connection					     */
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_new_connection(struct xio_session *session,

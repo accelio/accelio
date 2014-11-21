@@ -1983,11 +1983,8 @@ static void xio_connection_post_destroy(struct kref *kref)
 
 	switch (state) {
 	case XIO_SESSION_STATE_REJECTED:
-		if (session->type == XIO_SESSION_SERVER)
-			xio_session_destroy(session);
-		else
-			xio_session_notify_rejected(session);
-		return;
+		reason = XIO_E_SESSION_REJECTED;
+		break;
 	case XIO_SESSION_STATE_ACCEPTED:
 		if (session->type == XIO_SESSION_SERVER)
 			reason = XIO_E_SESSION_DISCONNECTED;
@@ -2207,7 +2204,10 @@ static void xio_close_time_wait(void *data)
 		  xio_connection_state_str(connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
-	connection->close_reason = XIO_E_SESSION_CLOSED;
+	if (connection->session->state == XIO_SESSION_STATE_REJECTED)
+		connection->close_reason = XIO_E_SESSION_REJECTED;
+	else
+		connection->close_reason = XIO_E_SESSION_CLOSED;
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
@@ -2345,6 +2345,9 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 			  connection->session, connection);
 		return -1;
 	}
+	/* flush all pending requests */
+	xio_connection_notify_req_msgs_flush(connection);
+
 	if (transition->send_flags & SEND_ACK)
 		xio_send_fin_ack(connection, task);
 

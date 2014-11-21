@@ -143,9 +143,6 @@ static int on_session_event(struct xio_session *session,
 				      XIO_CONNECTION_ATTR_USER_CTX);
 		test_params->connection = event_data->conn;
 		break;
-	case XIO_SESSION_REJECT_EVENT:
-		xio_disconnect(event_data->conn);
-		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		printf("last sent:%lu, last comp:%lu, " \
 		       "delta:%lu\n",
@@ -154,6 +151,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		test_params->connection = NULL;
 		break;
+	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
 		xio_context_stop_loop(test_params->ctx, 0);
@@ -172,15 +170,15 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+//	struct test_params *test_params = cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
 	       get_port((struct sockaddr *)&req->src_addr));
 
-	if (test_params->connection == NULL)
-		xio_accept(session, NULL, 0, NULL, 0);
-	else
+//	if (test_params->connection == NULL)
+//		xio_accept(session, NULL, 0, NULL, 0);
+//	else
 		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
