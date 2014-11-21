@@ -170,15 +170,15 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-//	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
 	       get_port((struct sockaddr *)&req->src_addr));
 
-//	if (test_params->connection == NULL)
-//		xio_accept(session, NULL, 0, NULL, 0);
-//	else
+	if (test_params->connection == NULL)
+		xio_accept(session, NULL, 0, NULL, 0);
+	else
 		xio_reject(session, EISCONN, NULL, 0);
 
 	return 0;
