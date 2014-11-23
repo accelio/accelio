@@ -325,14 +325,14 @@ static struct xio_mem_block *xio_mem_slot_resize(struct xio_mem_slot *slot,
 
 	region_alloc_sz = sizeof(*region) +
 		nr_blocks*sizeof(struct xio_mem_block);
-	buf = ucalloc(region_alloc_sz, sizeof(uint8_t));
+	buf = (char *)ucalloc(region_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
 
 	/* region */
-	region = (void *)buf;
+	region = (struct xio_mem_region *)buf;
 	buf = buf + sizeof(*region);
-	block = (void *)buf;
+	block = (struct xio_mem_block *)buf;
 
 	/* region data */
 	data_alloc_sz = nr_blocks*slot->mb_size;
@@ -487,7 +487,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 			return NULL;
 	}
 
-	p = ucalloc(1, sizeof(struct xio_mempool));
+	p = (struct xio_mempool *)ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
 
@@ -534,7 +534,7 @@ struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 		if (ret)
 			return NULL;
 	}
-	p = ucalloc(1, sizeof(struct xio_mempool));
+	p = (struct xio_mempool *)ucalloc(1, sizeof(struct xio_mempool));
 	if (p == NULL)
 		return NULL;
 
@@ -702,7 +702,7 @@ void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 	if (!mp_obj || !mp_obj->cache)
 		return;
 
-	block = mp_obj->cache;
+	block = (struct xio_mem_block *)mp_obj->cache;
 
 #ifdef DEBUG_MEMPOOL_MT
 	if ((val = __sync_fetch_and_sub(&block->refcnt, 1)) != 1) {

@@ -154,7 +154,7 @@ struct xio_mempool *xio_transport_mempool_get(
 		struct xio_context *ctx, int reg_mr)
 {
 	if (ctx->mempool)
-		return ctx->mempool;
+		return (struct xio_mempool *)ctx->mempool;
 
 	ctx->mempool = xio_mempool_create_prv(
 			ctx->nodeid,
@@ -165,5 +165,5 @@ struct xio_mempool *xio_transport_mempool_get(
 		ERROR_LOG("xio_mempool_create failed (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	return ctx->mempool;
+	return (struct xio_mempool *)ctx->mempool;
 }
