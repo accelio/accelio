@@ -114,7 +114,7 @@ static struct xio_transition xio_transition_table[][2] = {
 /* ERROR */	 {
 		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
 		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		 },
+		  },
 /* INVALID */	  {
 		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0,},
 		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
@@ -182,7 +182,8 @@ static int xio_init_ow_msg_pool(struct xio_connection *connection)
 {
 	int i;
 
-	connection->msg_array = vzalloc(MSG_POOL_SZ * sizeof(struct xio_msg));
+	connection->msg_array = (struct xio_msg *)
+				vzalloc(MSG_POOL_SZ * sizeof(struct xio_msg));
 	if (!connection->msg_array) {
 		ERROR_LOG("failed to allocate ow message pool\n");
 		xio_set_error(ENOMEM);
@@ -227,7 +228,8 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 			return NULL;
 		}
 
-		connection = kcalloc(1, sizeof(*connection), GFP_KERNEL);
+		connection = (struct xio_connection *)
+				kcalloc(1, sizeof(*connection), GFP_KERNEL);
 		if (connection == NULL) {
 			xio_set_error(ENOMEM);
 			return NULL;
@@ -285,7 +287,8 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 		return;
 
 	sgtbl		= xio_sg_table_get(&msg->out);
-	sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(msg->out.sgl_type);
 	data_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	/* heuristics to guess in which  cases the lower layer will not
@@ -335,7 +338,8 @@ int xio_connection_send(struct xio_connection *connection,
 		/* flow control test */
 		if (connection->enable_flow_control) {
 			sgtbl	  = xio_sg_table_get(&msg->out);
-			sgtbl_ops = xio_sg_table_ops_get(msg->out.sgl_type);
+			sgtbl_ops = (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(msg->out.sgl_type);
 
 			tx_bytes  = msg->out.header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
@@ -507,7 +511,9 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 				size_t			tx_bytes;
 
 				sgtbl		= xio_sg_table_get(&pmsg->out);
-				sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+				sgtbl_ops	= (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(
+							pmsg->out.sgl_type);
 				tx_bytes	= pmsg->out.header.iov_len + tbl_length(
 						sgtbl_ops,
 						sgtbl);
@@ -960,7 +966,8 @@ int xio_send_request(struct xio_connection *connection,
 		}
 
 		sgtbl		= xio_sg_table_get(&pmsg->out);
-		sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+		sgtbl_ops	= (struct xio_sg_table_ops *)
+				      xio_sg_table_ops_get(pmsg->out.sgl_type);
 		tx_bytes	= pmsg->out.header.iov_len + tbl_length(
 								    sgtbl_ops,
 								    sgtbl);
@@ -1078,7 +1085,8 @@ int xio_send_response(struct xio_msg *msg)
 		}
 
 		sgtbl		= xio_sg_table_get(vmsg);
-		sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+		sgtbl_ops	= (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(vmsg->sgl_type);
 		bytes		= vmsg->header.iov_len +
 					  tbl_length(sgtbl_ops, sgtbl);
 
@@ -1098,7 +1106,8 @@ int xio_send_response(struct xio_msg *msg)
 		if (connection->enable_flow_control) {
 			vmsg		= &pmsg->request->in;
 			sgtbl		= xio_sg_table_get(vmsg);
-			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			sgtbl_ops	= (struct xio_sg_table_ops *)
+					  xio_sg_table_ops_get(vmsg->sgl_type);
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
@@ -1215,7 +1224,8 @@ int xio_send_msg(struct xio_connection *connection,
 			goto send;
 		}
 		sgtbl		= xio_sg_table_get(&pmsg->out);
-		sgtbl_ops	= xio_sg_table_ops_get(pmsg->out.sgl_type);
+		sgtbl_ops	= (struct xio_sg_table_ops *)
+				       xio_sg_table_ops_get(pmsg->out.sgl_type);
 		tx_bytes	= pmsg->out.header.iov_len + tbl_length(
 								    sgtbl_ops,
 								    sgtbl);
@@ -1352,7 +1362,8 @@ int xio_release_response(struct xio_msg *msg)
 
 			vmsg		= &task->sender_task->omsg->out;
 			sgtbl		= xio_sg_table_get(vmsg);
-			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			sgtbl_ops = (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(vmsg->sgl_type);
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
@@ -1360,7 +1371,8 @@ int xio_release_response(struct xio_msg *msg)
 
 			vmsg		= &task->imsg.in;
 			sgtbl		= xio_sg_table_get(vmsg);
-			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			sgtbl_ops = (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(vmsg->sgl_type);
 			bytes		= vmsg->header.iov_len +
 				tbl_length(sgtbl_ops, sgtbl);
 
@@ -1415,7 +1427,8 @@ int xio_release_msg(struct xio_msg *msg)
 
 			vmsg		= &task->imsg.in;
 			sgtbl		= xio_sg_table_get(vmsg);
-			sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
+			sgtbl_ops = (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(vmsg->sgl_type);
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
@@ -1462,7 +1475,7 @@ int xio_poll_completions(struct xio_connection *connection,
 /*---------------------------------------------------------------------------*/
 static void xio_fin_req_timeout(void *data)
 {
-	struct xio_connection *connection = data;
+	struct xio_connection *connection = (struct xio_connection *)data;
 
 	if (connection->fin_req_timeout)
 		return;
@@ -1633,9 +1646,9 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	return  retval;
 }
 
-static void xio_pre_disconnect(void *_connection)
+static void xio_pre_disconnect(void *conn)
 {
-	struct xio_connection *connection = _connection;
+	struct xio_connection *connection = (struct xio_connection *)conn;
 
 	/* now we are on the right context, reaffirm that in the mean time,
 	 * state was not changed
@@ -1920,7 +1933,7 @@ static inline void xio_connection_release_hello(
 /*---------------------------------------------------------------------------*/
 static inline void xio_session_teardown(void *_session)
 {
-	struct xio_session *session = _session;
+	struct xio_session *session = (struct xio_session *)_session;
 
 	xio_session_notify_teardown(session, session->teardown_reason);
 }
@@ -2201,7 +2214,7 @@ int xio_on_fin_req_send_comp(struct xio_connection *connection,
 
 static void xio_close_time_wait(void *data)
 {
-	struct xio_connection *connection = data;
+	struct xio_connection *connection = (struct xio_connection *)data;
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
@@ -2234,7 +2247,7 @@ static void xio_close_time_wait(void *data)
 
 static void xio_handle_last_ack(void *data)
 {
-	struct xio_connection *connection = data;
+	struct xio_connection *connection = (struct xio_connection *)data;
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
@@ -2427,7 +2440,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static inline void xio_xmit_messages(void *connection)
 {
-	xio_connection_xmit_msgs(connection);
+	xio_connection_xmit_msgs((struct xio_connection *)connection);
 }
 
 /*---------------------------------------------------------------------------*/

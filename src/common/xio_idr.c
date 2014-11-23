@@ -113,7 +113,8 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	if (!idr)
 		return -1;
 
-	idr_entry = kcalloc(1, sizeof(*idr_entry), GFP_KERNEL);
+	idr_entry = (struct xio_idr_entry *)
+			kcalloc(1, sizeof(*idr_entry), GFP_KERNEL);
 	if (idr_entry == NULL)
 		return -1;
 
@@ -142,7 +143,7 @@ struct xio_idr *xio_idr_create(void)
 {
 	struct xio_idr *idr;
 
-	idr = kcalloc(1, sizeof(*idr), GFP_KERNEL);
+	idr = (struct xio_idr *)kcalloc(1, sizeof(*idr), GFP_KERNEL);
 	if (idr == NULL)
 		return NULL;
 

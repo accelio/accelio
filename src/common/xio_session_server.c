@@ -82,7 +82,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	connection->session->setup_req = msg;
 
 	/* read the header */
-	ptr = msg->in.header.iov_base;
+	ptr = (uint8_t *)msg->in.header.iov_base;
 
 	memset(&req, 0, sizeof(req));
 
@@ -115,7 +115,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	ptr = ptr + len;
 
 	if (req.uri_len) {
-		req.uri = kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
+		req.uri = (char *)kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
 		if (req.uri == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("uri allocation failed. len:%d\n",
@@ -136,7 +136,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 				  req.private_data_len);
 			goto cleanup2;
 		}
-		len = xio_read_array(req.private_data, req.private_data_len,
+		len = xio_read_array((uint8_t *)req.private_data, req.private_data_len,
 				     0, ptr);
 		ptr = ptr + len;
 	}
@@ -222,7 +222,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	}
 
 	/* allocate message */
-	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
+	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
 	if (buf == NULL) {
 		ERROR_LOG("message allocation failed\n");
@@ -236,7 +236,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	msg->out.header.iov_len = 0;
 
 
-	ptr = msg->out.header.iov_base;
+	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
@@ -288,7 +288,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	}
 
 	if (user_context_len) {
-		len = xio_write_array(user_context,
+		len = xio_write_array((const uint8_t *)user_context,
 				      user_context_len,
 				      0, ptr);
 		ptr  = ptr + len;
@@ -330,7 +330,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	}
 
 	/* allocate message */
-	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
+	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
 	if (buf == NULL) {
 		ERROR_LOG("message allocation failed\n");
@@ -344,7 +344,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	msg->out.header.iov_len = 0;
 
 
-	ptr = msg->out.header.iov_base;
+	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
@@ -367,7 +367,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	ptr  = ptr + len;
 
 	if (user_context_len) {
-		len = xio_write_array(user_context,
+		len = xio_write_array((const uint8_t *)user_context,
 				      user_context_len,
 				      0, ptr);
 		ptr  = ptr + len;
@@ -588,11 +588,13 @@ int xio_on_server_nexus_established(struct xio_session *session,
 /* xio_server_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
 int xio_server_on_nexus_event(void *observer, void *sender, int event,
-			      void *event_data)
+			      void *_event_data)
 {
-	struct xio_session	*session = observer;
-	struct xio_nexus	*nexus	= sender;
+	struct xio_session	*session = (struct xio_session *)observer;
+	struct xio_nexus	*nexus	= (struct xio_nexus *)sender;
 	int			retval  = 0;
+	union xio_nexus_event_data *event_data = (union xio_nexus_event_data *)
+							_event_data;
 
 
 	switch (event) {

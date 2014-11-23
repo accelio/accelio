@@ -47,7 +47,8 @@ struct xio_observer *xio_observer_create(void *impl, notify_fn_t notify)
 {
 	struct xio_observer *observer;
 
-	observer = kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
+	observer = (struct xio_observer *)
+			kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
 	if (observer == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -77,7 +78,8 @@ struct xio_observable *xio_observable_create(void *impl)
 {
 	struct xio_observable *observable;
 
-	observable = kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
+	observable = (struct xio_observable *)
+			kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
 	if (observable == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -146,7 +148,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 		return;
 	}
 
-	observer_node = kcalloc(1,
+	observer_node = (struct xio_observer_node *)kcalloc(1,
 				sizeof(struct xio_observer_node), GFP_KERNEL);
 	if (observer_node == NULL) {
 		xio_set_error(ENOMEM);

@@ -239,8 +239,8 @@ cleanup:
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data)
 {
-	struct xio_server	*server = observer;
-	struct xio_nexus	*nexus	= notifier;
+	struct xio_server	*server = (struct xio_server *)observer;
+	struct xio_nexus	*nexus	= (struct xio_nexus *)notifier;
 	int			retval  = 0;
 
 	switch (event) {
@@ -249,12 +249,14 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 		TRACE_LOG("server: [notification] - new message. " \
 			  "server:%p, nexus:%p\n", observer, notifier);
 
-		xio_on_new_message(server, nexus, event, event_data);
+		xio_on_new_message(server, nexus, event,
+				   (union xio_nexus_event_data *)event_data);
 		break;
 	case XIO_NEXUS_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("server: [notification] - new connection. " \
 			  "server:%p, nexus:%p\n", observer, notifier);
-		xio_on_new_nexus(server, nexus, event_data);
+		xio_on_new_nexus(server, nexus,
+				 (union xio_nexus_event_data *)event_data);
 		break;
 
 	case XIO_NEXUS_EVENT_DISCONNECTED:
@@ -299,7 +301,8 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	TRACE_LOG("bind to %s\n", uri);
 
 	/* create the server */
-	server = kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
+	server = (struct xio_server *)
+			kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
 	if (server == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;

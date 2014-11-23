@@ -195,7 +195,8 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	xio_mbuf_push(&task->mbuf);
 
 	/* set start of the session header */
-	tmp_hdr = xio_mbuf_set_session_hdr(&task->mbuf);
+	tmp_hdr = (struct xio_session_hdr *)
+			xio_mbuf_set_session_hdr(&task->mbuf);
 
 	xio_mbuf_pop(&task->mbuf);
 
@@ -203,7 +204,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 
 	observer = xio_nexus_observer_lookup(task->nexus, dest_session_id);
 	if (observer != NULL &&  observer->impl)
-		return observer->impl;
+		return (struct xio_session *)observer->impl;
 
 	/* fall back to cache - this is should only happen when new connection
 	 * message arrive to a portal on the server - just for the first
@@ -225,7 +226,7 @@ void xio_session_write_header(struct xio_task *task,
 	struct xio_session_hdr *tmp_hdr;
 
 	/* set start of the session header */
-	tmp_hdr = xio_mbuf_set_session_hdr(&task->mbuf);
+	tmp_hdr = (struct xio_session_hdr *)xio_mbuf_set_session_hdr(&task->mbuf);
 
 	/* fill header */
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
@@ -249,7 +250,8 @@ void xio_session_read_header(struct xio_task *task,
 	struct xio_session_hdr *tmp_hdr;
 
 	/* set start of the session header */
-	tmp_hdr = xio_mbuf_set_session_hdr(&task->mbuf);
+	tmp_hdr = (struct xio_session_hdr *)
+			xio_mbuf_set_session_hdr(&task->mbuf);
 
 	/* fill request */
 	UNPACK_LVAL(tmp_hdr, hdr, dest_session_id);
@@ -464,7 +466,8 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	void			*sgtbl;
 
 	sgtbl		= xio_sg_table_get(&msg->in);
-	sgtbl_ops	= xio_sg_table_ops_get(msg->in.sgl_type);
+	sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(msg->in.sgl_type);
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
@@ -632,8 +635,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			void			*sgtbl;
 
 			sgtbl		= xio_sg_table_get(&omsg->out);
-			sgtbl_ops	= xio_sg_table_ops_get(
-							omsg->out.sgl_type);
+			sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(omsg->out.sgl_type);
 			connection->tx_bytes -=
 				(omsg->out.header.iov_len +
 					 tbl_length(sgtbl_ops, sgtbl));
@@ -687,8 +690,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			void			*sgtbl;
 
 			sgtbl		= xio_sg_table_get(&msg->in);
-			sgtbl_ops	= xio_sg_table_ops_get(
-							msg->in.sgl_type);
+			sgtbl_ops	= (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(msg->in.sgl_type);
 
 			xio_stat_add(stats, XIO_STAT_RX_BYTES,
 				     vmsg->header.iov_len +
@@ -823,8 +826,8 @@ static int xio_on_ow_req_send_comp(
 		void			*sgtbl;
 
 		sgtbl		= xio_sg_table_get(&omsg->out);
-		sgtbl_ops	= xio_sg_table_ops_get(
-					omsg->out.sgl_type);
+		sgtbl_ops	= (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(omsg->out.sgl_type);
 		connection->tx_bytes -=
 			(omsg->out.header.iov_len +
 			 tbl_length(sgtbl_ops, sgtbl));
@@ -1212,7 +1215,8 @@ int xio_on_cancel_request(struct xio_session *sess,
 	struct xio_observer		*observer;
 
 
-	tmp_hdr			 = event_data->cancel.ulp_msg;
+	tmp_hdr			 = (struct xio_session_cancel_hdr *)
+					event_data->cancel.ulp_msg;
 	hdr.sn			 = ntohll(tmp_hdr->sn);
 	hdr.responder_session_id = ntohl(tmp_hdr->responder_session_id);
 
@@ -1222,7 +1226,7 @@ int xio_on_cancel_request(struct xio_session *sess,
 		return -1;
 	}
 
-	session = observer->impl;
+	session = (struct xio_session *)observer->impl;
 
 	connection = xio_session_find_connection(session, nexus);
 	if (connection == NULL) {
@@ -1245,7 +1249,7 @@ int xio_on_cancel_request(struct xio_session *sess,
 	}
 	TRACE_LOG("message to cancel not found %llu\n", hdr.sn);
 
-	req = kcalloc(1, sizeof(*req), GFP_KERNEL);
+	req = (struct xio_msg *)kcalloc(1, sizeof(*req), GFP_KERNEL);
 	if (req == NULL) {
 		ERROR_LOG("req allocation failed\n");
 		return -1;
@@ -1281,7 +1285,8 @@ int xio_on_cancel_response(struct xio_session *sess,
 	}
 
 	if (event_data->cancel.task == NULL) {
-		tmp_hdr			 = event_data->cancel.ulp_msg;
+		tmp_hdr			 = (struct xio_session_cancel_hdr *)
+						event_data->cancel.ulp_msg;
 		hdr.sn			 = ntohll(tmp_hdr->sn);
 		hdr.requester_session_id = ntohl(tmp_hdr->requester_session_id);
 
@@ -1291,10 +1296,10 @@ int xio_on_cancel_response(struct xio_session *sess,
 			ERROR_LOG("failed to find session\n");
 			return -1;
 		}
-		session = observer->impl;
+		session = (struct xio_session *)observer->impl;
 
 		/* large object - allocate it */
-		msg		= kcalloc(1, sizeof(*msg), GFP_KERNEL);
+		msg = (struct xio_msg *)kcalloc(1, sizeof(*msg), GFP_KERNEL);
 		if (msg == NULL) {
 			ERROR_LOG("msg allocation failed\n");
 			return -1;
@@ -1355,7 +1360,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 
 	/* extract portal from uri */
 	/* create the session */
-	session = kcalloc(1, sizeof(struct xio_session), GFP_KERNEL);
+	session = (struct xio_session *)
+			kcalloc(1, sizeof(struct xio_session), GFP_KERNEL);
 	if (session == NULL) {
 		ERROR_LOG("failed to create session\n");
 		xio_set_error(ENOMEM);

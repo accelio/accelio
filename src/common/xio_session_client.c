@@ -79,7 +79,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	}
 
 	/* fill the message */
-	msg = buf;
+	msg = (struct xio_msg *)buf;
 	buf = buf + sizeof(*msg);
 	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
@@ -92,7 +92,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 
 	msg->type = XIO_SESSION_SETUP_REQ;
 
-	ptr = msg->out.header.iov_base;
+	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message on the buffer */
@@ -132,7 +132,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 		ptr  = ptr + len;
 	}
 	if (session->hs_private_data_len) {
-		len = xio_write_array(session->hs_private_data,
+		len = xio_write_array((const uint8_t *)session->hs_private_data,
 				      session->hs_private_data_len,
 				      0, ptr);
 		ptr  = ptr + len;
@@ -305,7 +305,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 	task->sender_task->omsg = NULL;
 
 	/* read the message */
-	ptr = msg->in.header.iov_base;
+	ptr = (uint8_t *)msg->in.header.iov_base;
 
 	/* read the payload */
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
@@ -343,7 +343,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		ptr = ptr + len;
 
 		if (session->portals_array_len) {
-			session->portals_array = kcalloc(
+			session->portals_array = (char **)kcalloc(
 					session->portals_array_len,
 				       sizeof(char *), GFP_KERNEL);
 			if (session->portals_array == NULL) {
@@ -375,7 +375,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 				return -1;
 			}
 
-			len = xio_read_array(rsp->private_data,
+			len = xio_read_array((uint8_t *)rsp->private_data,
 					     rsp->private_data_len, 0, ptr);
 			ptr = ptr + len;
 		} else {
@@ -390,7 +390,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		ptr = ptr + len;
 
 		if (session->services_array_len) {
-			session->services_array = kcalloc(
+			session->services_array = (char **)kcalloc(
 					session->services_array_len,
 					sizeof(char *), GFP_KERNEL);
 			if (session->services_array == NULL) {
@@ -432,7 +432,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 				return -1;
 			}
 
-			len = xio_read_array(rsp->private_data,
+			len = xio_read_array((uint8_t *)rsp->private_data,
 					     rsp->private_data_len, 0, ptr);
 			ptr = ptr + len;
 		} else {
@@ -460,7 +460,7 @@ static int xio_prep_portal(struct xio_connection *connection)
 		ERROR_LOG("parsing uri failed. uri: %s\n", session->uri);
 		return -1;
 	}
-	session->portals_array = kcalloc(
+	session->portals_array = (char **)kcalloc(
 			1,
 			sizeof(char *), GFP_KERNEL);
 	if (session->portals_array == NULL) {
@@ -767,11 +767,13 @@ int xio_on_client_nexus_established(struct xio_session *session,
 /* xio_client_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
 int xio_client_on_nexus_event(void *observer, void *sender, int event,
-			      void *event_data)
+			      void *_event_data)
 {
-	struct xio_session	*session = observer;
-	struct xio_nexus	*nexus	= sender;
+	struct xio_session	*session = (struct xio_session *)observer;
+	struct xio_nexus	*nexus	= (struct xio_nexus *)sender;
 	int			retval  = 0;
+	union xio_nexus_event_data * event_data =
+			(union xio_nexus_event_data *)_event_data;
 
 
 	switch (event) {
