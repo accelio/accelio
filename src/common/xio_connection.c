@@ -320,6 +320,30 @@ int xio_connection_send(struct xio_connection *connection,
 	int			is_req = 0;
 	int			rc = EFAULT;
 	int			standalone_receipt = 0;
+	int			is_control;
+
+
+	/* is control message */
+	is_control = !IS_APPLICATION_MSG(msg);
+
+	if (!is_control) {
+
+		/* flow control test */
+		if (connection->peer_credits_bytes == 0)
+			return -EAGAIN;
+
+		/* flow control test */
+		if (connection->enable_flow_control) {
+			sgtbl	  = xio_sg_table_get(&msg->out);
+			sgtbl_ops = xio_sg_table_ops_get(msg->out.sgl_type);
+
+			tx_bytes  = msg->out.header.iov_len +
+						tbl_length(sgtbl_ops, sgtbl);
+			if (connection->peer_credits_bytes < tx_bytes)
+				return -EAGAIN;
+		}
+	}
+
 
 	if (IS_RESPONSE(msg->type) &&
 	    (xio_app_receipt_request(msg) == XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
@@ -368,14 +392,6 @@ int xio_connection_send(struct xio_connection *connection,
 			hdr.serial_num	= msg->request->sn;
 		}
 	}
-
-	if (connection->enable_flow_control) {
-		sgtbl		= xio_sg_table_get(&msg->out);
-		sgtbl_ops	= xio_sg_table_ops_get(msg->out.sgl_type);
-
-		tx_bytes = msg->out.header.iov_len + tbl_length(sgtbl_ops, sgtbl);
-	}
-
 	/* reset the task mbuf */
 	xio_mbuf_reset(&task->mbuf);
 
@@ -394,7 +410,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->omsg->next	= NULL;
 
 	/* mark as a control message */
-	task->is_control = !IS_APPLICATION_MSG(msg);
+	task->is_control = is_control;
 
 	/* optimize for send complete */
 	if (msg->type == XIO_ONE_WAY_REQ &&
@@ -793,17 +809,6 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 
 	while (retry_cnt < 2) {
-		if ((connection->peer_credits_msgs == 0) ||
-		    (connection->peer_credits_bytes == 0)) {
-			struct xio_msg *msg1 = xio_msg_list_first(msgq1);
-			struct xio_msg *msg2 = xio_msg_list_first(msgq2);
-			if ((msg1 && !IS_APPLICATION_MSG(msg1)) ||
-			    (msg2 && !IS_APPLICATION_MSG(msg2)))  {
-				/* control message send anyway */
-			} else {
-				break;
-			}
-		}
 		retval = xio_connection_xmit_inl(connection,
 						 msgq1, in_flight_msgq1,
 						 &retry_cnt);

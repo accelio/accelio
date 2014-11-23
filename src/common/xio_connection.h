@@ -72,6 +72,7 @@ struct xio_connection {
 	/* server's session may have multiple connections each has
 	 * private data assignd by bind
 	 */
+	uint16_t			enable_flow_control;
 	uint16_t			req_sn;
 	uint16_t			req_exp_sn;
 	uint16_t			req_ack_sn;
@@ -81,7 +82,6 @@ struct xio_connection {
 	uint16_t			credits_msgs;
 	uint16_t			peer_credits_msgs;
 	uint16_t			rx_queue_watermark_msgs;
-	uint16_t			enable_flow_control;
 	uint16_t			conn_idx;
 	uint16_t			state;
 	uint16_t			fin_req_timeout;
