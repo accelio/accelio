@@ -413,13 +413,6 @@ int xio_accept(struct xio_session *session,
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
 
-	retval = xio_connection_send(task->connection, msg);
-	if (retval && retval != -EAGAIN) {
-		ERROR_LOG("failed to send message. errno:%d\n", -retval);
-		xio_set_error(-retval);
-		return -1;
-	}
-
 	if (portals_array_len != 0) {
 		/* server side state is changed to ACCEPT, will be move to
 		 * ONLINE state when first "hello" message arrives
@@ -443,6 +436,12 @@ int xio_accept(struct xio_session *session,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state changed to ONLINE. session:%p\n",
 			  session);
+	}
+	retval = xio_connection_send(task->connection, msg);
+	if (retval && retval != -EAGAIN) {
+		ERROR_LOG("failed to send message. errno:%d\n", -retval);
+		xio_set_error(-retval);
+		return -1;
 	}
 
 	return 0;

@@ -2514,7 +2514,6 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 	/* temporarily set the state to init to delay disconnection */
 	connection->state = XIO_CONNECTION_STATE_INIT;
 	xio_session_notify_new_connection(task->session, connection);
-	xio_connection_send_hello_rsp(connection, task);
 
 	if (connection->disconnecting == 0) {
 		connection->session->state = XIO_SESSION_STATE_ONLINE;
@@ -2533,6 +2532,7 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 	}
+	xio_connection_send_hello_rsp(connection, task);
 
 	return 0;
 }
@@ -2546,8 +2546,8 @@ int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
 	xio_connection_release_hello(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	if (connection->state == XIO_CONNECTION_STATE_INIT &&
-	    connection->disconnecting) {
+	/* deferred disconnect should take place now */
+	if (connection->disconnecting) {
 		connection->disconnecting = 0;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
