@@ -361,6 +361,7 @@ static int on_msg_error(struct xio_session *session,
 		msg_pool_put(pool, msg);
 		switch (error) {
 		case XIO_E_MSG_FLUSHED:
+			break;
 		default:
 			xio_assert(0);
 			break;
