@@ -335,7 +335,8 @@ int xio_connection_send(struct xio_connection *connection,
 			return -EAGAIN;
 
 		sgtbl	  = xio_sg_table_get(&msg->out);
-		sgtbl_ops = xio_sg_table_ops_get(msg->out.sgl_type);
+		sgtbl_ops = (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(msg->out.sgl_type);
 
 		tx_bytes  = msg->out.header.iov_len +
 			tbl_length(sgtbl_ops, sgtbl);
@@ -510,8 +511,8 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 				size_t			tx_bytes;
 
 				sgtbl	  = xio_sg_table_get(&pmsg->out);
-				sgtbl_ops = xio_sg_table_ops_get(
-							pmsg->out.sgl_type);
+				sgtbl_ops = (struct xio_sg_table_ops *)
+					xio_sg_table_ops_get(pmsg->out.sgl_type);
 				tx_bytes  = pmsg->out.header.iov_len +
 					        tbl_length( sgtbl_ops, sgtbl);
 
