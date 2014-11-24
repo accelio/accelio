@@ -329,23 +329,18 @@ int xio_connection_send(struct xio_connection *connection,
 	/* is control message */
 	is_control = !IS_APPLICATION_MSG(msg);
 
-	if (!is_control) {
-
-		/* flow control test */
+	/* flow control test */
+	if (!is_control && connection->enable_flow_control) {
 		if (connection->peer_credits_bytes == 0)
 			return -EAGAIN;
 
-		/* flow control test */
-		if (connection->enable_flow_control) {
-			sgtbl	  = xio_sg_table_get(&msg->out);
-			sgtbl_ops = (struct xio_sg_table_ops *)
-					xio_sg_table_ops_get(msg->out.sgl_type);
+		sgtbl	  = xio_sg_table_get(&msg->out);
+		sgtbl_ops = xio_sg_table_ops_get(msg->out.sgl_type);
 
-			tx_bytes  = msg->out.header.iov_len +
-						tbl_length(sgtbl_ops, sgtbl);
-			if (connection->peer_credits_bytes < tx_bytes)
-				return -EAGAIN;
-		}
+		tx_bytes  = msg->out.header.iov_len +
+			tbl_length(sgtbl_ops, sgtbl);
+		if (connection->peer_credits_bytes < tx_bytes)
+			return -EAGAIN;
 	}
 
 
@@ -446,13 +441,15 @@ int xio_connection_send(struct xio_connection *connection,
 			hdr.sn		= connection->rsp_sn++;
 			hdr.ack_sn	= connection->rsp_ack_sn;
 		}
-		hdr.credits_msgs	= connection->credits_msgs;
-		connection->credits_msgs = 0;
-		hdr.credits_bytes	= connection->credits_bytes;
-		connection->credits_bytes = 0;
-		if (!standalone_receipt) {
-			connection->peer_credits_msgs--;
-			connection->peer_credits_bytes -= tx_bytes;
+		if (connection->enable_flow_control) {
+			hdr.credits_msgs	= connection->credits_msgs;
+			connection->credits_msgs = 0;
+			hdr.credits_bytes	= connection->credits_bytes;
+			connection->credits_bytes = 0;
+			if (!standalone_receipt) {
+				connection->peer_credits_msgs--;
+				connection->peer_credits_bytes -= tx_bytes;
+			}
 		}
 	}
 
@@ -463,11 +460,14 @@ int xio_connection_send(struct xio_connection *connection,
 	if (retval != 0) {
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
 		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
-			connection->credits_msgs = hdr.credits_msgs;
-			connection->credits_bytes = hdr.credits_bytes;
-			if (!standalone_receipt) {
-				connection->peer_credits_msgs--;
-				connection->peer_credits_bytes -= tx_bytes;
+			if (connection->enable_flow_control) {
+				connection->credits_msgs = hdr.credits_msgs;
+				connection->credits_bytes = hdr.credits_bytes;
+				if (!standalone_receipt &&
+						connection->enable_flow_control) {
+					connection->peer_credits_msgs++;
+					connection->peer_credits_bytes += tx_bytes;
+				}
 			}
 		}
 		goto cleanup;
@@ -504,26 +504,26 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 						 pmsg, pdata);
 		if ((pmsg->type == XIO_MSG_TYPE_REQ) ||
 		    (pmsg->type == XIO_ONE_WAY_REQ)) {
-			connection->tx_queued_msgs--;
 			if (connection->enable_flow_control) {
 				struct xio_sg_table_ops	*sgtbl_ops;
 				void			*sgtbl;
 				size_t			tx_bytes;
 
-				sgtbl		= xio_sg_table_get(&pmsg->out);
-				sgtbl_ops	= (struct xio_sg_table_ops *)
-					xio_sg_table_ops_get(
+				sgtbl	  = xio_sg_table_get(&pmsg->out);
+				sgtbl_ops = xio_sg_table_ops_get(
 							pmsg->out.sgl_type);
-				tx_bytes	= pmsg->out.header.iov_len + tbl_length(
-						sgtbl_ops,
-						sgtbl);
+				tx_bytes  = pmsg->out.header.iov_len +
+					        tbl_length( sgtbl_ops, sgtbl);
+
+				connection->tx_queued_msgs--;
 				connection->tx_bytes -= tx_bytes;
+
+				if (connection->tx_queued_msgs < 0)
+					ERROR_LOG("tx_queued_msgs:%d\n",
+						  connection->tx_queued_msgs);
+
 			}
 		}
-
-		if (connection->tx_queued_msgs < 0)
-			ERROR_LOG("tx_queued_msgs:%d\n",
-				  connection->tx_queued_msgs);
 	}
 
 	if (!xio_msg_list_empty(&connection->rsps_msgq))
@@ -988,10 +988,11 @@ int xio_send_request(struct xio_connection *connection,
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
-		connection->tx_queued_msgs++;
 
-		if (connection->enable_flow_control)
+		if (connection->enable_flow_control) {
+			connection->tx_queued_msgs++;
 			connection->tx_bytes += tx_bytes;
+		}
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -1101,7 +1102,6 @@ int xio_send_response(struct xio_msg *msg)
 		task->state = XIO_TASK_STATE_READ;
 
 		pmsg->type = XIO_MSG_TYPE_RSP;
-		connection->credits_msgs++;
 
 		if (connection->enable_flow_control) {
 			vmsg		= &pmsg->request->in;
@@ -1111,6 +1111,7 @@ int xio_send_response(struct xio_msg *msg)
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
+			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
 		}
 
@@ -1246,9 +1247,10 @@ int xio_send_msg(struct xio_connection *connection,
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_ONE_WAY_REQ;
 
-		connection->tx_queued_msgs++;
-		if (connection->enable_flow_control)
+		if (connection->enable_flow_control) {
+			connection->tx_queued_msgs++;
 			connection->tx_bytes += tx_bytes;
+		}
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
 						 pdata);
@@ -1351,8 +1353,6 @@ int xio_release_response(struct xio_msg *msg)
 			return -1;
 		}
 		connection = task->connection;
-		connection->tx_queued_msgs--;
-		connection->credits_msgs++;
 
 		if (connection->enable_flow_control) {
 			struct xio_vmsg		*vmsg;
@@ -1367,6 +1367,7 @@ int xio_release_response(struct xio_msg *msg)
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
+			connection->tx_queued_msgs--;
 			connection->tx_bytes -= bytes;
 
 			vmsg		= &task->imsg.in;
@@ -1376,7 +1377,14 @@ int xio_release_response(struct xio_msg *msg)
 			bytes		= vmsg->header.iov_len +
 				tbl_length(sgtbl_ops, sgtbl);
 
+			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
+
+			if ((connection->credits_msgs >=
+			     connection->rx_queue_watermark_msgs) ||
+			    (connection->credits_bytes >=
+			     connection->rx_queue_watermark_bytes))
+				xio_send_credits_ack(connection);
 		}
 
 		list_move_tail(&task->tasks_list_entry,
@@ -1384,11 +1392,6 @@ int xio_release_response(struct xio_msg *msg)
 
 		xio_release_response_task(task);
 
-		if ((connection->credits_msgs >=
-		     connection->rx_queue_watermark_msgs) ||
-		    (connection->credits_bytes >=
-		     connection->rx_queue_watermark_bytes))
-			xio_send_credits_ack(connection);
 
 		pmsg = pmsg->next;
 	}
@@ -1417,8 +1420,6 @@ int xio_release_msg(struct xio_msg *msg)
 			return -1;
 		}
 		connection = task->connection;
-		connection->credits_msgs++;
-
 		if (connection->enable_flow_control) {
 			struct xio_vmsg		*vmsg;
 			struct xio_sg_table_ops	*sgtbl_ops;
@@ -1432,7 +1433,14 @@ int xio_release_msg(struct xio_msg *msg)
 			bytes		= vmsg->header.iov_len +
 						tbl_length(sgtbl_ops, sgtbl);
 
+			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
+
+			if ((connection->credits_msgs >=
+			     connection->rx_queue_watermark_msgs) ||
+			    (connection->credits_bytes >=
+			     connection->rx_queue_watermark_bytes))
+				xio_send_credits_ack(connection);
 		}
 
 		list_move_tail(&task->tasks_list_entry,
@@ -1440,12 +1448,6 @@ int xio_release_msg(struct xio_msg *msg)
 
 		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
-
-		if ((connection->credits_msgs >=
-		     connection->rx_queue_watermark_msgs) ||
-		    (connection->credits_bytes >=
-		     connection->rx_queue_watermark_bytes))
-			xio_send_credits_ack(connection);
 
 		pmsg = pmsg->next;
 	}

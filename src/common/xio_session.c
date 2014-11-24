@@ -475,8 +475,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (connection->req_exp_sn == hdr.sn) {
 		connection->req_exp_sn++;
 		connection->req_ack_sn = hdr.sn;
-		connection->peer_credits_msgs += hdr.credits_msgs;
-		connection->peer_credits_bytes += hdr.credits_bytes;
+		if (connection->enable_flow_control) {
+			connection->peer_credits_msgs += hdr.credits_msgs;
+			connection->peer_credits_bytes += hdr.credits_bytes;
+		}
 	} else {
 		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 			  connection->req_exp_sn, hdr.sn);
@@ -579,8 +581,10 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	if (connection->rsp_exp_sn == hdr.sn) {
 		connection->rsp_exp_sn++;
 		connection->rsp_ack_sn = hdr.sn;
-		connection->peer_credits_msgs += hdr.credits_msgs;
-		connection->peer_credits_bytes += hdr.credits_bytes;
+		if (connection->enable_flow_control) {
+			connection->peer_credits_msgs += hdr.credits_msgs;
+			connection->peer_credits_bytes += hdr.credits_bytes;
+		}
 	} else {
 		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
 			  connection->rsp_exp_sn, hdr.sn);
@@ -767,6 +771,9 @@ int xio_on_credits_ack_recv(struct xio_connection *connection,
 			    struct xio_task *task)
 {
 	struct xio_session_hdr	hdr;
+
+	if (connection->enable_flow_control == 0)
+		return 0;
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
