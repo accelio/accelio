@@ -195,6 +195,9 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, req);
+
+		/* better to do disconnect */
+		/*xio_disconnect(tdata->conn);*/
 		xio_assert(0);
 	}
 
@@ -296,6 +299,10 @@ static void *portal_server_cb(void *data)
 
 	/* prepare data for the cuurent thread */
 	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
+	if (tdata->pool == NULL) {
+		retval = -1;
+		goto exit;
+	}
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
@@ -308,7 +315,7 @@ static void *portal_server_cb(void *data)
 	if (server == NULL) {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
-		xio_assert(0);
+		retval = -1;
 		goto cleanup;
 	}
 
@@ -330,8 +337,8 @@ static void *portal_server_cb(void *data)
 cleanup:
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
-
-	pthread_exit(&retval);
+exit:
+	pthread_exit((void *)(unsigned long)retval);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -557,6 +564,8 @@ int main(int argc, char *argv[])
 	uint64_t		cpusmask;
 	int			cpusnr;
 	int			cpu;
+	int			exit_code = 0;
+	void			*thr_exit_code;
 
 
 
@@ -602,8 +611,10 @@ int main(int argc, char *argv[])
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops, url,
 			  NULL, 0, &server_data);
-	if (server == NULL)
+	if (server == NULL) {
+		exit_code = -1;
 		goto cleanup;
+	}
 
 	/* spawn portals */
 	port = test_config.server_port;
@@ -629,8 +640,11 @@ int main(int argc, char *argv[])
 	fprintf(stdout, "exit signaled\n");
 
 	/* join the threads */
-	for (i = 0; i < MAX_THREADS; i++)
-		pthread_join(server_data.tdata[i].thread_id, NULL);
+	for (i = 0; i < MAX_THREADS; i++) {
+		pthread_join(server_data.tdata[i].thread_id, &thr_exit_code);
+		if (((uint64_t)(uintptr_t)thr_exit_code) != 0)
+			exit_code = -1;
+	}
 
 	/* free the server */
 	xio_unbind(server);
@@ -642,6 +656,9 @@ cleanup:
 
 	msg_api_free(&msg_prms);
 
-	return 0;
+	if (exit_code)
+		fprintf(stdout, "exit code %d\n", exit_code);
+
+	return exit_code;
 }
 

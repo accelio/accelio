@@ -100,11 +100,12 @@ struct thread_data {
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	pthread_t		thread_id;
-	uint64_t	disconnect_nr;
+	uint64_t		disconnect_nr;
 	uint64_t		nrecv;
 	uint64_t		nsent;
 	uint16_t		finite_run;
-	uint16_t		padding[3];
+	uint16_t		padding;
+	int			exit_code;
 };
 
 /* private session data */
@@ -215,6 +216,7 @@ static void *worker_thread(void *data)
 	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 	if (tdata->pool == NULL) {
 		fprintf(stderr, "failed to alloc pool\n");
+		tdata->exit_code = -1;
 		return NULL;
 	}
 
@@ -229,8 +231,12 @@ static void *worker_thread(void *data)
 	for (i = 0;  i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(tdata->pool);
-		if (msg == NULL)
+		if (msg == NULL) {
+			/* on error - disconnect */
+			tdata->exit_code = -1;
+			xio_disconnect(tdata->conn);
 			break;
+		}
 
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
@@ -258,7 +264,9 @@ static void *worker_thread(void *data)
 					xio_strerror(xio_errno()));
 			msg_pool_put(tdata->pool, msg);
 			tdata->nsent++;
-			xio_assert(0);
+			/* on error - disconnect */
+			tdata->exit_code = -1;
+			xio_disconnect(tdata->conn);
 		}
 	}
 
@@ -274,7 +282,11 @@ static void *worker_thread(void *data)
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
 
-	fprintf(stdout, "thread exit\n");
+	if (tdata->exit_code)
+		fprintf(stdout, "thread exit - failure\n");
+	else
+		fprintf(stdout, "thread exit - success\n");
+
 	return NULL;
 }
 
@@ -591,6 +603,7 @@ int main(int argc, char *argv[])
 	uint64_t		cpusmask;
 	int			cpusnr;
 	int			cpu;
+	int			exit_code = 0;
 	struct xio_session_params params;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -634,7 +647,8 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		xio_assert(sess_data.session != NULL);
+		exit_code = -1;
+		goto exit;
 	}
 
 	/* spawn threads to handle connection */
@@ -658,15 +672,20 @@ int main(int argc, char *argv[])
 	}
 
 	/* join the threads */
-	for (i = 0; i < MAX_THREADS; i++)
+	for (i = 0; i < MAX_THREADS; i++) {
 		pthread_join(sess_data.tdata[i].thread_id, NULL);
+		if (sess_data.tdata[i].exit_code != 0)
+			exit_code = -1;
+	}
+
 
 	fprintf(stdout, "joined all threads\n");
 
 	/* close the session */
 	xio_session_destroy(sess_data.session);
 
+exit:
 	msg_api_free(&msg_params);
 
-	return 0;
+	return exit_code;
 }
