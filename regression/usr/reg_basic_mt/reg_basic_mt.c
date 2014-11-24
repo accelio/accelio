@@ -67,14 +67,14 @@ struct program_vars {
 
 static void *client_thread(void *data)
 {
-	struct params *params	= data;
+	struct params *params	= (struct params *)data;
 	client_main(params->argc, params->argv);
 	return NULL;
 }
 
 static void *server_thread(void *data)
 {
-	struct params *params	= data;
+	struct params *params	= (struct params *)data;
 	server_main(params->argc, params->argv);
 	return NULL;
 }

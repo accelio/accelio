@@ -95,8 +95,8 @@ struct client_data {
 /*---------------------------------------------------------------------------*/
 static void out_iobuf_obj_init(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= obj;
-	struct thread_data	*tdata	= user_context;
+	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
+	struct thread_data	*tdata	= (struct thread_data *)user_context;
 
 	*iobuf = xio_alloc(tdata->client_data->client_dlen);
 }
@@ -106,8 +106,8 @@ static void out_iobuf_obj_init(void *user_context, void *obj)
 /*---------------------------------------------------------------------------*/
 static void in_iobuf_obj_init(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= obj;
-	struct thread_data	*tdata	= user_context;
+	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
+	struct thread_data	*tdata	= (struct thread_data *)user_context;
 
 	*iobuf = xio_alloc(tdata->client_data->server_dlen);
 }
@@ -117,7 +117,7 @@ static void in_iobuf_obj_init(void *user_context, void *obj)
 /*---------------------------------------------------------------------------*/
 static void iobuf_obj_free(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= obj;
+	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
 
 	xio_free(iobuf);
 }
@@ -127,15 +127,16 @@ static void iobuf_obj_free(void *user_context, void *obj)
 /*---------------------------------------------------------------------------*/
 static void msg_obj_init(void *user_context, void *obj)
 {
-	struct xio_msg		*req	= obj;
+	struct xio_msg		*req	= (struct xio_msg *)obj;
 	struct xio_buf		**out_iobuf;
 	struct xio_buf		**in_iobuf;
 	struct xio_iovec_ex	*sglist;
-	struct thread_data	*tdata	= user_context;
+	struct thread_data	*tdata	= (struct thread_data *)user_context;
 
 	sglist = vmsg_sglist(&req->out);
 	if (tdata->client_data->client_dlen) {
-		out_iobuf = obj_pool_get(tdata->out_iobuf_pool);
+		out_iobuf =
+			(struct xio_buf **)obj_pool_get(tdata->out_iobuf_pool);
 		sglist[0].iov_base	= (*out_iobuf)->addr;
 		sglist[0].iov_len	= (*out_iobuf)->length;
 		sglist[0].mr		= (*out_iobuf)->mr;
@@ -151,7 +152,8 @@ static void msg_obj_init(void *user_context, void *obj)
 
 	sglist = vmsg_sglist(&req->in);
 	if (tdata->client_data->server_dlen > 8000) {
-		in_iobuf = obj_pool_get(tdata->in_iobuf_pool);
+		in_iobuf =
+			(struct xio_buf **)obj_pool_get(tdata->in_iobuf_pool);
 
 		sglist[0].iov_base	= (*in_iobuf)->addr;
 		sglist[0].iov_len	= (*in_iobuf)->length;
@@ -175,7 +177,7 @@ static void msg_obj_init(void *user_context, void *obj)
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	struct xio_msg		*req;
 	cpu_set_t		cpuset;
 	int			i;
@@ -200,7 +202,8 @@ static void *worker_thread(void *data)
 	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	/* get session entry */
-	connection_entry = calloc(1, sizeof(*connection_entry));
+	connection_entry = (struct connection_entry *)
+					calloc(1, sizeof(*connection_entry));
 	connection_entry->tdata	= tdata;
 
 
@@ -239,7 +242,7 @@ static void *worker_thread(void *data)
 	for (i = 0; i < qdepth_per_thread; i++) {
 		if (tdata->client_data->nsent <
 		    tdata->client_data->disconnect_nr) {
-			req = obj_pool_get(tdata->req_pool);
+			req = (struct xio_msg *)obj_pool_get(tdata->req_pool);
 			xio_send_request(connection_entry->connection, req);
 			tdata->client_data->nsent++;
 		}
@@ -276,7 +279,7 @@ static int on_connection_teardown(struct xio_session *session,
 				  struct xio_connection *connection,
 				  void *cb_user_context)
 {
-	struct client_data *client_data = cb_user_context;
+	struct client_data *client_data = (struct client_data *)cb_user_context;
 	struct session_entry *session_entry;
 	struct connection_entry *connection_entry, *tmp_connection_entry;
 	int			found = 0;
@@ -316,7 +319,7 @@ static int on_connection_teardown(struct xio_session *session,
 static int on_session_teardown(struct xio_session *session,
 			       void *cb_user_context)
 {
-	struct client_data *client_data = cb_user_context;
+	struct client_data *client_data = (struct client_data *)cb_user_context;
 	struct session_entry *session_entry;
 
 
@@ -341,7 +344,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct client_data *client_data = cb_user_context;
+	struct client_data *client_data = (struct client_data *)cb_user_context;
 	int			i;
 
 	DEBUG("client session event: %s. session:%p, connection:%p, " \
@@ -377,13 +380,14 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *req,
 			void *cb_user_context)
 {
-	struct connection_entry	*conn_entry	= cb_user_context;
+	struct connection_entry	*conn_entry	=
+				(struct connection_entry *)cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
 	struct xio_iovec_ex	*osglist = vmsg_sglist(&req->out);
 	struct xio_iovec_ex	*isglist = vmsg_sglist(&req->in);
 
-	struct xio_buf	**out_iobuf	= osglist[0].user_context;
-	struct xio_buf	**in_iobuf	= isglist[0].user_context;
+	struct xio_buf	**out_iobuf = (struct xio_buf **)osglist[0].user_context;
+	struct xio_buf	**in_iobuf = (struct xio_buf **)isglist[0].user_context;
 
 	isglist[0].user_context = NULL;
 	osglist[0].user_context = NULL;
@@ -404,7 +408,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct connection_entry	*conn_entry	= cb_user_context;
+	struct connection_entry	*conn_entry	=
+				(struct connection_entry *)cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
 #if  TEST_DISCONNECT
 	struct session_entry	*session_entry	= conn_entry->session_entry;
@@ -434,8 +439,10 @@ static int on_response(struct xio_session *session,
 		}
 	}
 	if (tdata->client_data->nsent >= tdata->client_data->disconnect_nr) {
-		struct xio_buf		**out_iobuf = osglist[0].user_context;
-		struct xio_buf		**in_iobuf = isglist[0].user_context;
+		struct xio_buf **out_iobuf =
+				(struct xio_buf **)osglist[0].user_context;
+		struct xio_buf **in_iobuf =
+				(struct xio_buf **)isglist[0].user_context;
 
 		isglist[0].user_context = NULL;
 		osglist[0].user_context = NULL;
@@ -454,7 +461,7 @@ static int on_response(struct xio_session *session,
 	/* resend the message */
 	if (tdata->client_data->server_dlen &&
 	    isglist[0].user_context) {
-		in_iobuf = isglist[0].user_context;
+		in_iobuf = (struct xio_buf **)isglist[0].user_context;
 
 		isglist[0].iov_base	= (*in_iobuf)->addr;
 		isglist[0].iov_len	= (*in_iobuf)->length;
@@ -522,7 +529,7 @@ int client_main(int argc, char *argv[])
 	memset(&client_data, 0, sizeof(client_data));
 	memset(&params, 0, sizeof(params));
 
-	client_data.tdata = calloc(client_threads_num,
+	client_data.tdata = (struct thread_data *)calloc(client_threads_num,
 				    sizeof(*client_data.tdata));
 	if (!client_data.tdata)
 		return -1;
@@ -538,7 +545,8 @@ int client_main(int argc, char *argv[])
 	TAILQ_INIT(&client_data.sessions_list);
 	pthread_spin_init(&client_data.lock, PTHREAD_PROCESS_PRIVATE);
 
-	session_entry = calloc(1, sizeof(*session_entry));
+	session_entry =
+		(struct session_entry *)calloc(1, sizeof(*session_entry));
 	TAILQ_INIT(&session_entry->conns_list);
 
 	/* create url to connect to */

@@ -72,7 +72,7 @@ struct control_context {
 static int on_new_connection_event(struct xio_connection *connection,
 				   void *conn_prv_data)
 {
-	struct perf_comm *comm = conn_prv_data;
+	struct perf_comm *comm = (struct perf_comm *)conn_prv_data;
 
 	comm->control_ctx->conn = connection;
 
@@ -88,7 +88,7 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
@@ -124,7 +124,7 @@ static int on_message(struct xio_session *session,
 		      int more_in_batch,
 		      void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	if (comm->control_ctx->reply)
 		fprintf(stderr, "message overrun\n");
@@ -143,7 +143,7 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	if (comm->control_ctx->conn == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
@@ -160,7 +160,7 @@ static int on_session_established(struct xio_session *session,
 				  struct xio_new_session_rsp *rsp,
 				  void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
 
@@ -174,7 +174,7 @@ static int on_msg_send_complete(struct xio_session *session,
 				struct xio_msg *rsp,
 				void *conn_user_context)
 {
-	struct perf_comm *comm = conn_user_context;
+	struct perf_comm *comm = (struct perf_comm *)conn_user_context;
 
 	comm->control_ctx->reply  = NULL;
 	if (comm->control_ctx->disconnect)
@@ -202,11 +202,12 @@ struct perf_comm *create_comm_struct(struct perf_parameters *user_param)
 {
 	struct perf_comm *comm;
 
-	comm = calloc(1, sizeof(*comm));
+	comm = (struct perf_comm *)calloc(1, sizeof(*comm));
 	if (comm == NULL)
 		return NULL;
 
-	comm->control_ctx = calloc(1, sizeof(*comm->control_ctx));
+	comm->control_ctx =
+		(struct control_context *)calloc(1, sizeof(*comm->control_ctx));
 	if (comm->control_ctx == NULL) {
 		free(comm);
 		return NULL;

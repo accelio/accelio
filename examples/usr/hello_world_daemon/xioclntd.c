@@ -149,7 +149,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 
 	logit(LOG_INFO, "session event: %s. reason: %s\n",
 	      xio_session_event_str(event_data->event),
@@ -186,7 +187,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	session_data->nrecv++;
@@ -407,7 +409,8 @@ int main(int argc, char *const argv[])
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
 		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base) + 1;
+			strlen((const char *)
+				session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
 		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
 		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
@@ -416,7 +419,8 @@ int main(int argc, char *const argv[])
 			strdup("hello world iovec request");
 
 		session_data.req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+			strlen((const char *)
+				session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
 
 		session_data.req[i].out.data_iov.nents = 1;
 	}

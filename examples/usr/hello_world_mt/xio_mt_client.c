@@ -73,7 +73,7 @@ struct session_data {
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	char			str[128];
 
@@ -97,7 +97,7 @@ static void *worker_thread(void *data)
 		tdata->affinity);
 	tdata->req.out.header.iov_base = strdup(str);
 	tdata->req.out.header.iov_len =
-		strlen(tdata->req.out.header.iov_base) + 1;
+		strlen((const char *)tdata->req.out.header.iov_base) + 1;
 
 	/* send first message */
 	xio_send_request(tdata->conn, &tdata->req);
@@ -141,7 +141,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 	int			i;
 
 	printf("%s. reason: %s\n",
@@ -172,7 +173,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
 	tdata->nrecv++;
 

@@ -130,7 +130,7 @@ static void process_message(struct test_params *test_params,
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < onents; i++)
+for (i = 0; i < onents; i++)
 			data_len += osglist[i].iov_len;
 
 		test_params->stat.txlen = msg->out.header.iov_len + data_len;
@@ -169,7 +169,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -218,7 +218,7 @@ static int on_session_established(struct xio_session *session,
 static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 			    int more_in_batch, void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	test_params->ndelivered++;
 
 	process_message(test_params, msg);
@@ -286,7 +286,7 @@ static int on_msg_send_complete(struct xio_session *session,
 				struct xio_msg *msg,
 				void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	process_message(test_params, msg);
 
 	test_params->ncomp++;
@@ -356,7 +356,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));

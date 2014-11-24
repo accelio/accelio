@@ -107,7 +107,7 @@ static uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 			errno);
 
 	*shmid = shmemid;
-	return buf;
+	return (uint8_t *)buf;
 
 failed_huge_page:
 	*shmid = -1;
@@ -119,7 +119,7 @@ failed_huge_page:
 	if (!buf)
 		return NULL;
 
-	return buf;
+	return (uint8_t *)buf;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -165,7 +165,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 
 	len += max*(in_max_nents + out_max_nents)*sizeof(struct xio_iovec_ex);
 
-	buf = calloc(len, sizeof(uint8_t));
+	buf = (uint8_t *)calloc(len, sizeof(uint8_t));
 	if (!buf) {
 		fprintf(stderr, "Couldn't allocate message pool\n");
 		exit(1);
@@ -207,8 +207,8 @@ static struct msg_pool *msg_pool_alloc(int max,
 	}
 
 
-	data = msg_pool->data;
-	header = msg_pool->header;
+	data = (uint8_t *)msg_pool->data;
+	header = (uint8_t *)msg_pool->header;
 
 	for (i = 0; i < max; i++) {
 		msg_pool->array[i] = (struct xio_msg *)buf;
@@ -225,7 +225,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 		if (out_datalen) {
 			msg->out.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
 			msg->out.pdata_iov.max_nents	= out_max_nents;
-			msg->out.pdata_iov.sglist	= (void *)buf;
+			msg->out.pdata_iov.sglist = (struct xio_iovec_ex *)buf;
 			buf = buf + out_max_nents*sizeof(struct xio_iovec_ex);
 
 			sglist = vmsg_sglist(&msg->out);
@@ -243,7 +243,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 		if (in_datalen) {
 			msg->in.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
 			msg->in.pdata_iov.max_nents	= in_max_nents;
-			msg->in.pdata_iov.sglist	= (void *)buf;
+			msg->in.pdata_iov.sglist = (struct xio_iovec_ex *)buf;
 			buf = buf + in_max_nents*sizeof(struct xio_iovec_ex);
 
 			sglist = vmsg_sglist(&msg->in);
@@ -282,7 +282,7 @@ void msg_pool_delete(struct msg_pool *pool)
 	if (pool) {
 		xio_dereg_mr(&pool->mr);
 		if (pool->data)
-			free_mem_buf(pool->data, pool->shmid);
+			free_mem_buf((uint8_t *)pool->data, pool->shmid);
 		free(pool->header);
 		free(pool);
 	}

@@ -167,7 +167,7 @@ int msg_api_init(struct msg_params *msg_params,
 	msg_params->g_hdr = NULL;
 	msg_params->g_data = NULL;
 	if (hdrlen) {
-		msg_params->g_hdr = memalign(pagesize, hdrlen);
+		msg_params->g_hdr = (uint8_t *)memalign(pagesize, hdrlen);
 		if (!msg_params->g_hdr)
 			goto cleanup;
 		ptr = (is_server) ? rsp_hdr : req_hdr;
@@ -180,7 +180,7 @@ int msg_api_init(struct msg_params *msg_params,
 	}
 	if (datalen) {
 		datalen = ALIGNHUGEPAGE(datalen);
-		msg_params->g_data = alloc_mem_buf(datalen,
+		msg_params->g_data = (uint8_t *)alloc_mem_buf(datalen,
 						   &msg_params->g_shmid);
 		if (!msg_params->g_data)
 			goto cleanup;
@@ -255,7 +255,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 
 	len += max*(in_iovsz + out_iovsz)*sizeof(struct xio_iovec_ex);
 
-	buf = calloc(len, sizeof(uint8_t));
+	buf = (uint8_t *)calloc(len, sizeof(uint8_t));
 	if (!buf) {
 		fprintf(stderr, "Couldn't allocate message pool\n");
 		exit(1);
@@ -282,7 +282,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 		if (in_iovsz) {
 			msg->in.sgl_type	   = XIO_SGL_TYPE_IOV_PTR;
 			msg->in.pdata_iov.max_nents = in_iovsz;
-			msg->in.pdata_iov.sglist   = (void *)buf;
+			msg->in.pdata_iov.sglist   = (struct xio_iovec_ex *)buf;
 			buf = buf + in_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
 			msg->in.sgl_type  = XIO_SGL_TYPE_IOV;
@@ -291,7 +291,7 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 		if (out_iovsz) {
 			msg->out.sgl_type  = XIO_SGL_TYPE_IOV_PTR;
 			msg->out.pdata_iov.max_nents = out_iovsz;
-			msg->out.pdata_iov.sglist  = (void *)buf;
+			msg->out.pdata_iov.sglist  = (struct xio_iovec_ex *)buf;
 			buf = buf + out_iovsz*sizeof(struct xio_iovec_ex);
 		} else {
 			msg->out.sgl_type  = XIO_SGL_TYPE_IOV;

@@ -136,7 +136,8 @@ static struct portals_vec *portals_get(struct raio_server_data *server_data,
 {
 	/* fill portals array and return it. */
 	int			i, j;
-	struct portals_vec	*portals = calloc(1, sizeof(*portals));
+	struct portals_vec *portals =
+			      (struct portals_vec *)calloc(1, sizeof(*portals));
 	if (server_data->last_reaped != -1) {
 		server_data->last_used = server_data->last_reaped;
 		server_data->last_reaped = -1;
@@ -171,7 +172,8 @@ static int on_response_comp(struct xio_session *session,
 			    struct xio_msg *rsp,
 			    void *cb_user_context)
 {
-	struct raio_thread_data		*tdata = cb_user_context;
+	struct raio_thread_data *tdata =
+				     (struct raio_thread_data *)cb_user_context;
 	struct raio_session_data	*session_data, *tmp_session_data;
 	int				i = 0;
 
@@ -217,7 +219,8 @@ static void raio_session_disconnect(struct raio_session_data *session_data)
 static int on_request(struct xio_session *session, struct xio_msg *req,
 		      int more_in_batch, void *cb_user_context)
 {
-	struct raio_thread_data		*tdata = cb_user_context;
+	struct raio_thread_data *tdata =
+				    (struct raio_thread_data *)cb_user_context;
 	struct raio_session_data	*session_data, *tmp_session_data;
 	int				i, disconnect = 0;
 
@@ -261,7 +264,7 @@ static struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct raio_thread_data	*tdata = data;
+	struct raio_thread_data	*tdata = (struct raio_thread_data *)data;
 	cpu_set_t		cpuset;
 	pthread_t		thread;
 	struct xio_server	*server;
@@ -308,14 +311,16 @@ static int on_new_connection(struct xio_session *session,
 			     struct xio_connection *connection,
 			     void *cb_user_context)
 {
-	struct raio_server_data		*server_data = cb_user_context;
+	struct raio_server_data *server_data =
+				     (struct raio_server_data *)cb_user_context;
 	struct raio_session_data	*session_entry;
 	struct raio_connection_data	*connection_entry;
 
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
 		if (session_entry->session == session) {
-			connection_entry = calloc(1, sizeof(*connection_entry));
+			connection_entry = (struct raio_connection_data *)
+					   calloc(1, sizeof(*connection_entry));
 			if (connection_entry == NULL)
 				return -1;
 			connection_entry->connection = connection;
@@ -334,7 +339,8 @@ static int on_connection_teardown(struct xio_session *session,
 				  struct xio_connection *connection,
 				  void *cb_user_context)
 {
-	struct raio_server_data		*server_data = cb_user_context;
+	struct raio_server_data		*server_data =
+				(struct raio_server_data *)cb_user_context;
 	struct raio_session_data	*session_entry;
 	struct raio_connection_data	*connection_entry,
 					*tmp_connection_entry;
@@ -376,7 +382,8 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_user_context)
 {
 	struct raio_session_data *session_data, *tmp_session_data;
-	struct raio_server_data	 *server_data = cb_user_context;
+	struct raio_server_data	 *server_data =
+				(struct raio_server_data *)cb_user_context;
 	int			 i;
 
 
@@ -441,14 +448,16 @@ static int on_new_session(struct xio_session *session,
 			  void *cb_user_context)
 {
 	struct portals_vec *portals;
-	struct raio_server_data *server_data = cb_user_context;
+	struct raio_server_data *server_data = (struct raio_server_data *)
+								cb_user_context;
 	struct raio_session_data *session_data;
 	int i;
 
 	portals = portals_get(server_data, req->uri, req->private_data);
 
 	/* alloc and  and initialize */
-	session_data = calloc(1, sizeof(*session_data));
+	session_data = (struct raio_session_data *)
+				calloc(1, sizeof(*session_data));
 	session_data->session = session;
 	session_data->dd_data = raio_handler_init_session_data(MAX_THREADS);
 	for (i = 0; i < MAX_THREADS; i++) {

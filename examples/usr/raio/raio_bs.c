@@ -103,7 +103,7 @@ struct raio_bs *raio_bs_init(void *ctx, const char *name)
 		goto cleanup;
 	}
 
-	dev = calloc(1, sizeof(*dev)+bst->bs_datasize);
+	dev = (struct raio_bs *)calloc(1, sizeof(*dev)+bst->bs_datasize);
 	if (dev == NULL) {
 		fprintf(stderr, "calloc failed\n");
 		goto cleanup;

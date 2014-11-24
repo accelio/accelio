@@ -112,26 +112,26 @@ struct raio_pool *raio_pool_init(int max, size_t size)
 	if (max < 1)
 		return NULL;
 
-	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
+	buf = (char *)calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
 
 	/* pool */
-	q = (void *)buf;
+	q = (struct raio_pool *)buf;
 	buf = buf + sizeof(struct raio_pool);
 
 	/* stack */
-	q->stack = (void *)buf;
+	q->stack = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* array */
-	q->array = (void *)buf;
+	q->array = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* pool data */
 	elems_alloc_sz = max*size;
 
-	data = calloc(elems_alloc_sz, sizeof(uint8_t));
+	data = (char *)calloc(elems_alloc_sz, sizeof(uint8_t));
 	if (data == NULL) {
 		free(q);
 		return NULL;
@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
 	iocb_pool = raio_pool_init(IODEPTH, sizeof(struct raio_iocb));
 
 	/* allocate array for holding pointers */
-	piocb = calloc(IODEPTH, sizeof(struct raio_iocb *));
+	piocb = (struct raio_iocb **)calloc(IODEPTH, sizeof(struct raio_iocb *));
 
 	printf("reading started ");
 	fflush(stdout);
@@ -401,7 +401,8 @@ int main(int argc, char *argv[])
 				for (i = nqueued; i < IODEPTH; i++) {
 					if ((uint64_t)stbuf.st_size <= offset)
 						break;
-					piocb[i] = raio_pool_get(iocb_pool);
+					piocb[i] = (struct raio_iocb *)
+						       raio_pool_get(iocb_pool);
 					if (piocb[i])  {
 						raio_prep_pread(piocb[i], fd,
 								NULL,

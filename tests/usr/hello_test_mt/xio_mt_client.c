@@ -199,7 +199,7 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
 	struct xio_iovec_ex	*sglist;
@@ -297,7 +297,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+					(struct session_data *)cb_user_context;
 	int		    i;
 
 	printf("session event: %s. reason: %s\n",
@@ -333,7 +334,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex *sglist;
 
 	tdata->nrecv++;
@@ -396,7 +397,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));

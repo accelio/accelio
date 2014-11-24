@@ -126,7 +126,8 @@ static void process_request(struct xio_msg *msg)
 static int on_new_connection_event(struct xio_connection *connection,
 				   void *conn_prv_data)
 {
-	struct ow_test_params	*ow_params = conn_prv_data;
+	struct ow_test_params	*ow_params =
+					(struct ow_test_params *)conn_prv_data;
 	struct xio_msg		*msg;
 	int			i = 0;
 
@@ -171,7 +172,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -206,7 +208,8 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct ow_test_params	*ow_params = cb_user_context;
+	struct ow_test_params	*ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
@@ -245,7 +248,8 @@ static int on_message_delivered(struct xio_session *session,
 				void *cb_user_context)
 {
 	struct xio_msg *new_msg;
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	ow_params->ndelivered++;
 
@@ -292,7 +296,8 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
@@ -308,7 +313,8 @@ static int on_msg_error(struct xio_session *session,
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
-	struct ow_test_params	*ow_params = cb_user_context;
+	struct ow_test_params	*ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	vmsg_sglist_set_nents(&msg->in, 1);
 	if (ow_params->xbuf == NULL)

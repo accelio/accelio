@@ -129,7 +129,8 @@ static struct portals_vec *portals_get(struct server_data *server_data,
 {
 	/* fill portals array and return it. */
 	int			i;
-	struct portals_vec	*portals = calloc(1, sizeof(*portals));
+	struct portals_vec	*portals =
+			(struct portals_vec *)calloc(1, sizeof(*portals));
 	for (i = 0; i < MAX_THREADS; i++) {
 		portals->vec[i] = strdup(server_data->tdata[i].portal);
 		portals->vec_len++;
@@ -176,7 +177,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 		      int more_in_batch, void *cb_prv_data)
 {
 	struct xio_msg		*rsp;
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
 
 	/* process request */
 	process_request(tdata, req);
@@ -212,7 +213,7 @@ static int on_send_response_complete(struct xio_session *session,
 				     struct xio_msg *msg,
 				     void *cb_prv_data)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
 
 	/* can be safely freed */
 	msg_pool_put(tdata->pool, msg);
@@ -229,7 +230,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
@@ -254,7 +255,7 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
@@ -285,7 +286,7 @@ struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	struct xio_server	*server;
 	int			retval = 0;
@@ -348,7 +349,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 	int		   i;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
@@ -366,7 +367,8 @@ static int on_session_event(struct xio_session *session,
 			process_request(&server_data->tdata[i], NULL);
 			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
 		}
-		xio_context_stop_loop(server_data->ctx, 0);
+		xio_context_stop_loop((struct xio_context *)server_data->ctx,
+				      0);
 		break;
 	default:
 		break;
@@ -383,7 +385,7 @@ static int on_new_session(struct xio_session *session,
 			  void *cb_user_context)
 {
 	struct portals_vec *portals;
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
@@ -571,7 +573,8 @@ int main(int argc, char *argv[])
 
 	memset(&server_data, 0, sizeof(server_data));
 
-	server_data.tdata = calloc(MAX_THREADS, sizeof(struct thread_data));
+	server_data.tdata = (struct thread_data *)
+				calloc(MAX_THREADS, sizeof(struct thread_data));
 	if (!server_data.tdata)
 		return -1;
 	server_data.tdata_nr = MAX_THREADS;
@@ -609,8 +612,8 @@ int main(int argc, char *argv[])
 		test_config.server_port);
 
 	/* bind a listener server to a portal/url */
-	server = xio_bind(server_data.ctx, &server_ops, url,
-			  NULL, 0, &server_data);
+	server = xio_bind((struct xio_context *)server_data.ctx, &server_ops,
+			  url, NULL, 0, &server_data);
 	if (server == NULL) {
 		exit_code = -1;
 		goto cleanup;
@@ -634,7 +637,8 @@ int main(int argc, char *argv[])
 			       portal_server_cb, &server_data.tdata[i]);
 	}
 
-	xio_context_run_loop(server_data.ctx, XIO_INFINITE);
+	xio_context_run_loop((struct xio_context *)server_data.ctx,
+			     XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -650,7 +654,7 @@ int main(int argc, char *argv[])
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_context_destroy(server_data.ctx);
+	xio_context_destroy((struct xio_context *)server_data.ctx);
 
 	free(server_data.tdata);
 

@@ -126,7 +126,7 @@ static char **portals_arg_to_urls(char *transport,
 		token = strtok(NULL, delim);
 	}
 	if (n > 0) {
-		vec = calloc(n+1, sizeof(*vec));
+		vec = (char **)calloc(n+1, sizeof(*vec));
 		if (vec == NULL)
 			goto cleanup;
 		for (i = 0; i < n; i++)

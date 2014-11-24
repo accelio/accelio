@@ -127,7 +127,7 @@ static void *statistics_thread_cb(void *data)
 	uint64_t		rtt_end = 0;
 	uint64_t		min_rtt = -1;
 	uint64_t		max_rtt = 0;
-	struct session_data	*sess_data = data;
+	struct session_data	*sess_data = (struct session_data *)data;
 	cpu_set_t		cpuset;
 	unsigned int		i;
 
@@ -191,7 +191,7 @@ static void *statistics_thread_cb(void *data)
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	struct xio_iovec_ex	*sglist;
 	cpu_set_t		cpuset;
 	struct xio_msg		*msg;
@@ -282,7 +282,8 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+					(struct session_data *)cb_user_context;
 	unsigned int	    i;
 
 
@@ -322,7 +323,7 @@ static int on_response(struct xio_session *session,
 			int more_in_batch,
 			void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
 	cycles_t rtt = (get_cycles()-(cycles_t)msg->user_context);
 
@@ -379,7 +380,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
 	msg_pool_put(tdata->pool, msg);
 
@@ -425,7 +426,8 @@ int run_client_test(struct perf_parameters *user_param)
 	threads_iter	= 1;
 	size_log2	= 0;
 
-	tdata = calloc(user_param->threads_num, sizeof(*tdata));
+	tdata = (struct thread_data *)
+			calloc(user_param->threads_num, sizeof(*tdata));
 	if (tdata == NULL) {
 		fprintf(fd, "malloc failed\n");
 		goto cleanup1;

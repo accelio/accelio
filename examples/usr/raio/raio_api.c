@@ -281,7 +281,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct raio_session_data  *session_data = cb_user_context;
+	struct raio_session_data  *session_data =
+				(struct raio_session_data *)cb_user_context;
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_ESTABLISHED_EVENT:
@@ -311,7 +312,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 {
 	struct raio_io_u	*io_u;
 
-	io_u = rsp->user_context;
+	io_u = (struct raio_io_u *)rsp->user_context;
 
 	io_u->rsp = rsp;
 
@@ -321,7 +322,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 	unpack_u32((uint32_t *)&io_u->ses_data->ans.ret,
 	unpack_u32(&io_u->ses_data->ans.data_len,
 	unpack_u32(&io_u->ses_data->ans.command,
-		   io_u->rsp->in.header.iov_base))))));
+		   (const char *)io_u->rsp->in.header.iov_base))))));
 
 	TAILQ_INSERT_TAIL(&io_u->ses_data->io_ctx->io_u_completed_list,
 			  io_u, io_u_list);
@@ -343,11 +344,12 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct raio_session_data  *session_data = cb_user_context;
+	struct raio_session_data  *session_data =
+				(struct raio_session_data *)cb_user_context;
 	uint32_t		  command;
 
 	unpack_u32(&command,
-		   rsp->in.header.iov_base);
+		   (const char *)rsp->in.header.iov_base);
 
 	switch (command) {
 	case RAIO_CMD_IO_SUBMIT:
@@ -430,7 +432,8 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 		    &opt, sizeof(int));
 
 
-	session_data = calloc(1, sizeof(*session_data));
+	session_data = (struct raio_session_data *)
+				calloc(1, sizeof(*session_data));
 	memset(&params, 0, sizeof(params));
 
 	session_data->cmd_req.out.header.iov_base =
@@ -480,7 +483,7 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	}
 
 	retval = unpack_open_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len,
 			&session_data->fd);
 
@@ -551,7 +554,7 @@ __RAIO_PUBLIC int raio_close(int fd)
 	xio_context_run_loop(session_data->ctx, XIO_INFINITE);
 
 	retval = unpack_close_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len);
 	if (retval == -1) {
 		raio_err = errno;
@@ -611,7 +614,7 @@ __RAIO_PUBLIC int raio_fstat(int fd, struct stat64 *stbuf)
 	}
 
 	retval = unpack_fstat_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len,
 			stbuf);
 	if (retval == -1)
@@ -663,7 +666,7 @@ __RAIO_PUBLIC int raio_setup(int fd, int maxevents, raio_context_t *ctxp)
 		return -ECONNRESET;
 
 	retval = unpack_setup_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len);
 
 	if (retval == -1)
@@ -675,10 +678,11 @@ __RAIO_PUBLIC int raio_setup(int fd, int maxevents, raio_context_t *ctxp)
 	if (retval)
 		return -retval;
 
-	session_data->io_ctx = calloc(1, sizeof(*session_data->io_ctx));
+	session_data->io_ctx = (raio_context_t)
+				   calloc(1, sizeof(*session_data->io_ctx));
 
 	ctx = session_data->io_ctx;
-	ctx->io_us_free = calloc(2*session_data->maxevents,
+	ctx->io_us_free = (struct raio_io_u *)calloc(2*session_data->maxevents,
 				 sizeof(struct raio_io_u));
 	ctx->io_u_free_nr = 2*session_data->maxevents;
 
@@ -937,7 +941,7 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 	struct raio_io_u		*io_u;
 
 	for (i = 0; i < nr; i++) {
-		io_u = ptr_from_int64(events[i].handle);
+		io_u = (struct raio_io_u *)ptr_from_int64(events[i].handle);
 		if (io_u == NULL)
 			continue;
 		TAILQ_REMOVE(&ctx->io_u_queued_list, io_u, io_u_list);
@@ -956,7 +960,7 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 			      size_t len, raio_mr_t *mr)
 {
-	*mr = malloc(sizeof(struct raio_mr));
+	*mr = (raio_mr_t)malloc(sizeof(struct raio_mr));
 	if (*mr == NULL) {
 		printf("libraio: malloc failed. %m\n");
 		return -1;

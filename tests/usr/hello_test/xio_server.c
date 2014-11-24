@@ -128,7 +128,7 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_user_context)
 {
 	struct xio_connection_attr	conn_attr;
-	struct test_params		*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -170,7 +170,7 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
@@ -193,7 +193,7 @@ static int on_request(struct xio_session *session,
 		      void *cb_user_context)
 {
 	struct xio_msg	*rsp;
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	/* process request */
 	process_request(req);
@@ -227,7 +227,7 @@ static int on_send_response_complete(struct xio_session *session,
 				     struct xio_msg *msg,
 				     void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	test_params->ncomp++;
 
@@ -252,7 +252,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
@@ -279,7 +279,7 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params	*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 	int			nents = vmsg_sglist_nents(&msg->in);
 	int i;

@@ -129,9 +129,10 @@ struct raio_bs *raio_lookup_bs_dev(int fd, struct raio_io_portal_data *pd)
 void *raio_handler_init_session_data(int portals_nr)
 {
 	struct raio_io_session_data *sd;
-	sd = calloc(1, sizeof(*sd));
+	sd = (struct raio_io_session_data *)calloc(1, sizeof(*sd));
 
-	sd->pd		= calloc(portals_nr, sizeof(*sd->pd));
+	sd->pd	=
+	      (struct raio_io_portal_data *)calloc(portals_nr, sizeof(*sd->pd));
 	sd->portals_nr	= portals_nr;
 
 	return sd;
@@ -143,11 +144,12 @@ void *raio_handler_init_session_data(int portals_nr)
 void *raio_handler_init_portal_data(void *prv_session_data,
 				    int portal_nr, void *ctx)
 {
-	struct raio_io_session_data *sd = prv_session_data;
+	struct raio_io_session_data *sd =
+				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data *pd = &sd->pd[portal_nr];
 	int i;
 
-	pd->ctx = ctx;
+	pd->ctx = (struct xio_context *)ctx;
 	for (i = 0; i < RAIO_CMDS_NR; i++) {
 		pd->rsp[i].out.header.iov_base = pd->rsp_hdr[i];
 		pd->rsp[i].out.header.iov_len  = sizeof(pd->rsp_hdr[i]);
@@ -163,7 +165,8 @@ void *raio_handler_init_portal_data(void *prv_session_data,
 /*---------------------------------------------------------------------------*/
 void raio_handler_free_session_data(void *prv_session_data)
 {
-	struct raio_io_session_data *sd = prv_session_data;
+	struct raio_io_session_data *sd =
+				(struct raio_io_session_data *)prv_session_data;
 	free(sd->pd);
 
 	free(sd);
@@ -174,7 +177,8 @@ void raio_handler_free_session_data(void *prv_session_data)
 /*---------------------------------------------------------------------------*/
 void raio_handler_free_portal_data(void *prv_portal_data)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_bs			*bs_dev, *tmp;
 
 	TAILQ_FOREACH_SAFE(bs_dev, &pd->dev_list, list, tmp) {
@@ -196,8 +200,10 @@ static int raio_handle_open(void *prv_session_data,
 			    char *cmd_data,
 			    struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	const char			*pathname;
 	uint32_t			flags = 0;
 	unsigned			overall_size;
@@ -295,8 +301,10 @@ static int raio_handle_close(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_io_portal_data	*cpd;
 	struct raio_bs			*bs_dev;
 	int				fd;
@@ -371,7 +379,8 @@ static int raio_handle_fstat(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_bs			*bs_dev;
 	int				fd;
 	int				retval = 0;
@@ -441,8 +450,10 @@ static int raio_handle_setup(void *prv_session_data,
 {
 	int				i, j, err = 0;
 	uint32_t			iodepth;
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_io_portal_data	*cpd;
 	struct xio_iovec_ex		*sglist;
 	char				*rsp_hdr;
@@ -464,7 +475,7 @@ static int raio_handle_setup(void *prv_session_data,
 		/* divide remote iodepth between server resources */
 		cpd->iodepth = (iodepth / sd->portals_nr) + 1;
 		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
-		cpd->io_us_free = calloc(cpd->io_u_free_nr,
+		cpd->io_us_free = (struct raio_io_u *)calloc(cpd->io_u_free_nr,
 					 sizeof(struct raio_io_u));
 		cpd->rsp_pool = msg_pool_create(RAIO_CMD_HDR_SZ, MAXBLOCKSIZE,
 						cpd->io_u_free_nr);
@@ -515,7 +526,8 @@ static int raio_handle_destroy(void *prv_session_data,
 			       char *cmd_data,
 			       struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	int				retval = 0;
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
@@ -566,7 +578,8 @@ int raio_reject_request(void *prv_session_data,
 			char *cmd_data,
 			struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_answer		ans = { RAIO_CMD_UNKNOWN, 0, -1, errno };
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
@@ -594,7 +607,7 @@ int raio_reject_request(void *prv_session_data,
 /*---------------------------------------------------------------------------*/
 static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 {
-	struct raio_io_u	*io_u = iocmd->user_context;
+	struct raio_io_u	*io_u = (struct raio_io_u *)iocmd->user_context;
 	struct xio_iovec_ex	*sglist;
 	struct raio_answer	ans = { RAIO_CMD_IO_SUBMIT, 0, 0, 0 };
 
@@ -605,7 +618,7 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 	pack_u32((uint32_t *)&ans.ret,
 	pack_u32(&ans.data_len,
 	pack_u32(&ans.command,
-	io_u->rsp->out.header.iov_base))))));
+	(char *)io_u->rsp->out.header.iov_base))))));
 
 	io_u->rsp->out.header.iov_len = sizeof(struct raio_answer) +
 					2*sizeof(uint32_t);
@@ -643,7 +656,8 @@ static int raio_handle_submit(void *prv_session_data,
 			      char *cmd_data,
 			      struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct xio_iovec_ex		*sglist;
 	struct raio_io_u		*io_u;
 	struct raio_iocb		iocb;
@@ -751,8 +765,9 @@ static int raio_handle_submit_comp(void *prv_session_data,
 				   void *prv_portal_data,
 				   struct xio_msg *rsp)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
-	struct raio_io_u		*io_u = rsp->user_context;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_io_u	*io_u = (struct raio_io_u *)rsp->user_context;
 	struct xio_iovec_ex		*sglist;
 
 	if (io_u) {
@@ -773,7 +788,8 @@ static int raio_handle_destroy_comp(void *prv_session_data,
 				   struct xio_msg *rsp)
 {
 
-	struct raio_io_session_data	*sd = prv_session_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data	*cpd;
 	int				i, j;
 
@@ -801,7 +817,7 @@ static int raio_handle_destroy_comp(void *prv_session_data,
 int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
 			struct xio_msg *req)
 {
-	char			*buffer = req->in.header.iov_base;
+	char			*buffer = (char *)req->in.header.iov_base;
 	char			*cmd_data;
 	struct raio_command	cmd;
 	int			disconnect = 0;
@@ -879,7 +895,7 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 			      void *prv_portal_data,
 			      struct xio_msg *rsp)
 {
-	char			*buffer = rsp->out.header.iov_base;
+	char			*buffer = (char *)rsp->out.header.iov_base;
 	struct raio_command	cmd;
 
 	unpack_u32(&cmd.command, buffer);

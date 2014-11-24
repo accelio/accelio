@@ -202,7 +202,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -262,7 +262,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct test_params	*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	struct xio_iovec_ex	*sglist;
 	static int		chain_messages = CHAIN_MESSAGES;
 	size_t			j;
@@ -364,7 +364,7 @@ static int on_msg_error(struct xio_session *session,
 			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] message %lu failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
