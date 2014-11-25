@@ -2635,7 +2635,7 @@ static int xio_prep_rdma_op(
 		struct xio_task *task,
 		struct xio_rdma_transport *rdma_hndl,
 		enum xio_ib_op_code  xio_ib_op,
-		enum ibv_wc_opcode   opcode,
+		enum ibv_wr_opcode   opcode,
 		struct xio_sge *lsg_list, size_t lsize, size_t *out_lsize,
 		struct xio_sge *rsg_list, size_t rsize, size_t *out_rsize,
 		uint32_t op_size,
