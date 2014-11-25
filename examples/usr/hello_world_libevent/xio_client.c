@@ -68,7 +68,7 @@ static inline void timeout_cb(evutil_socket_t fd, short event, void *arg)
 
 static inline void xio_event_handler(int fd, short event, void *arg)
 {
-	struct xio_poll_params  *poll_params = arg;
+	struct xio_poll_params  *poll_params = (struct xio_poll_params *)arg;
 
 	poll_params->handler(poll_params->fd, XIO_POLLIN, poll_params->data);
 }
@@ -105,7 +105,7 @@ static int on_session_event(struct xio_session *session,
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		xio_connection_destroy(event_data->conn);
+		xio_connection_destroy((struct session_data *)event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
@@ -126,7 +126,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+			(struct session_data *)cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	session_data->nrecv++;
@@ -216,16 +217,17 @@ int main(int argc, char *argv[])
 		/* header */
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
-		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base) + 1;
+		session_data.req[i].out.header.iov_len = 1 +
+			strlen((char *)session_data.req[i].out.header.iov_base);
 		/* iovec[0]*/
 		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
 		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
 
 		session_data.req[i].out.data_iov.sglist[0].iov_base =
 			strdup("hello world iovec request");
-		session_data.req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+		session_data.req[i].out.data_iov.sglist[0].iov_len = 1 + strlen(
+			(const char *)
+			   session_data.req[i].out.data_iov.sglist[0].iov_base);
 		session_data.req[i].out.data_iov.nents = 1;
 	}
 	/* send first message */
