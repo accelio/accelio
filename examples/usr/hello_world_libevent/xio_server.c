@@ -155,7 +155,7 @@ static int on_new_session(struct xio_session *session,
 	if (server_data->connection == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
-		xio_reject(session, EISCONN, NULL, 0);
+		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
 
 	return 0;
 }
