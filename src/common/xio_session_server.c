@@ -141,7 +141,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 		ptr = ptr + len;
 	}
 
-	req.proto = xio_nexus_get_proto(connection->nexus);
+	req.proto = (enum xio_proto)xio_nexus_get_proto(connection->nexus);
 	xio_nexus_get_peer_addr(connection->nexus,
 				&req.src_addr, sizeof(req.src_addr));
 
@@ -184,7 +184,7 @@ cleanup1:
 	kfree(req.uri);
 
 	if (session->ses_ops.on_session_event) {
-		error_event.reason = xio_errno();
+		error_event.reason = (enum xio_status)xio_errno();
 		session->ses_ops.on_session_event(
 				session, &error_event,
 				session->cb_user_context);
@@ -408,7 +408,7 @@ int xio_accept(struct xio_session *session,
 	}
 
 	msg->request	= session->setup_req;
-	msg->type	= XIO_SESSION_SETUP_RSP;
+	msg->type	= (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
@@ -482,7 +482,7 @@ int xio_redirect(struct xio_session *session,
 			  session);
 	}
 	msg->request = session->setup_req;
-	msg->type    = XIO_SESSION_SETUP_RSP;
+	msg->type    = (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
@@ -522,7 +522,7 @@ int xio_reject(struct xio_session *session,
 		  session);
 
 	msg->request = session->setup_req;
-	msg->type    = XIO_SESSION_SETUP_RSP;
+	msg->type    = (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);

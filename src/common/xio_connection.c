@@ -1154,7 +1154,8 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	rsp = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, rsp, pdata);
 
-	rsp->type = (msg->type & ~XIO_REQUEST) | XIO_RESPONSE;
+	rsp->type = (enum xio_msg_type)
+		(((uint)msg->type & ~XIO_REQUEST) | XIO_RESPONSE);
 	rsp->request = msg;
 
 	rsp->flags = XIO_MSG_FLAG_EX_RECEIPT_FIRST;
@@ -1490,7 +1491,8 @@ static void xio_fin_req_timeout(void *data)
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
 	/* connection got disconnection during LAST ACK state - \
@@ -1530,7 +1532,7 @@ int xio_send_fin_req(struct xio_connection *connection)
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
-	msg->type		= XIO_FIN_REQ;
+	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
@@ -1574,7 +1576,7 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
 
-	msg->type		= XIO_FIN_RSP;
+	msg->type		= (enum xio_msg_type)XIO_FIN_RSP;
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
@@ -1616,7 +1618,7 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
-	msg->type		= XIO_FIN_REQ;
+	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
@@ -1628,7 +1630,8 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	TRACE_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_FIN_WAIT_1));
 
 	connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
@@ -1846,7 +1849,8 @@ int xio_query_connection(struct xio_connection *connection,
 		attr->ctx = connection->ctx;
 
 	if (attr_mask & XIO_CONNECTION_ATTR_PROTO)
-		attr->proto = xio_nexus_get_proto(connection->nexus);
+		attr->proto = (enum xio_proto)
+					xio_nexus_get_proto(connection->nexus);
 
 	if (attr_mask & XIO_CONNECTION_ATTR_PEER_ADDR)
 		xio_nexus_get_peer_addr(connection->nexus,
@@ -1876,7 +1880,7 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
-	msg->type		= XIO_CONNECTION_HELLO_REQ;
+	msg->type		= (enum xio_msg_type)XIO_CONNECTION_HELLO_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
@@ -1906,7 +1910,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
 
-	msg->type		= XIO_CONNECTION_HELLO_RSP;
+	msg->type		= (enum xio_msg_type)XIO_CONNECTION_HELLO_RSP;
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
@@ -2061,7 +2065,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 		  "nexus:%p nr:%d, state:%s\n",
 		  session, connection, connection->nexus,
 		  session->connections_nr,
-		 xio_connection_state_str(connection->state));
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state));
 
 	switch (connection->state) {
 	case XIO_CONNECTION_STATE_INIT:
@@ -2073,7 +2078,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 		ERROR_LOG("connection %p : current_state:%s, " \
 			  "invalid destroy state\n",
 			  connection,
-			  xio_connection_state_str(connection->state));
+			  xio_connection_state_str((enum xio_connection_state)
+							connection->state));
 		xio_set_error(EPERM);
 		return -1;
 		break;
@@ -2113,7 +2119,7 @@ int xio_connection_disconnected(struct xio_connection *connection)
 	if (!connection->disable_notify)
 		xio_session_notify_connection_disconnected(
 				connection->session, connection,
-				connection->close_reason);
+				(enum xio_status)connection->close_reason);
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
@@ -2222,7 +2228,8 @@ static void xio_close_time_wait(void *data)
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
 	if (connection->session->state == XIO_SESSION_STATE_REJECTED)
@@ -2255,7 +2262,8 @@ static void xio_handle_last_ack(void *data)
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(XIO_CONNECTION_STATE_CLOSED));
 
 	connection->close_reason = XIO_E_SESSION_DISCONNECTED;
@@ -2308,7 +2316,9 @@ int xio_on_fin_ack_recv(struct xio_connection *connection,
 	task->sender_task = NULL;
 	xio_tasks_pool_put(task);
 
-	transition = xio_connection_next_transit(connection->state, 1 /*ack*/);
+	transition = xio_connection_next_transit((enum xio_connection_state)
+							connection->state,
+						 1 /*ack*/);
 
 	if (!transition->valid) {
 		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
@@ -2325,7 +2335,8 @@ int xio_on_fin_ack_recv(struct xio_connection *connection,
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(transition->next_state));
 
 	connection->state = transition->next_state;
@@ -2359,7 +2370,9 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 	DEBUG_LOG("fin request received. session:%p, connection:%p\n",
 		  connection->session, connection);
 
-	transition = xio_connection_next_transit(connection->state, 0 /*fin*/);
+	transition = xio_connection_next_transit((enum xio_connection_state)
+							connection->state,
+						 0 /*fin*/);
 
 	if (!transition->valid) {
 		ERROR_LOG("invalid transition. session:%p, connection:%p\n",
@@ -2391,12 +2404,15 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 	xio_connection_release_fin(connection, task->omsg);
 	xio_tasks_pool_put(task);
 
-	transition = xio_connection_next_transit(connection->state, 0 /*fin*/);
+	transition = xio_connection_next_transit((enum xio_connection_state)
+							connection->state,
+						 0 /*fin*/);
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
 		  connection,
-		  xio_connection_state_str(connection->state),
+		  xio_connection_state_str((enum xio_connection_state)
+						connection->state),
 		  xio_connection_state_str(transition->next_state));
 
 	connection->state = transition->next_state;
@@ -2414,7 +2430,8 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 		DEBUG_LOG("connection %p state change: current_state:%s, " \
 			  "next_state:%s\n",
 			  connection,
-			  xio_connection_state_str(connection->state),
+			  xio_connection_state_str((enum xio_connection_state)
+							connection->state),
 			  xio_connection_state_str(
 				  XIO_CONNECTION_STATE_LAST_ACK));
 		connection->state = XIO_CONNECTION_STATE_LAST_ACK;
@@ -2577,7 +2594,7 @@ int xio_send_credits_ack(struct xio_connection *connection)
 	msg = xio_msg_list_first(&connection->one_way_msg_pool);
 	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
 
-	msg->type		= XIO_ACK_REQ;
+	msg->type		= (enum xio_msg_type)XIO_ACK_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;

@@ -283,7 +283,7 @@ static inline void xio_transport_notify_observer_error(
 				int reason)
 {
 	union xio_transport_event_data ev_data = {
-		.error.reason = reason
+		.error.reason = (enum xio_status)reason
 	};
 
 	xio_observable_notify_all_observers(&trans_hndl->observable,

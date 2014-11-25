@@ -90,7 +90,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	msg->in.pdata_iov.nents = 0;
 	msg->in.pdata_iov.max_nents = 0;
 
-	msg->type = XIO_SESSION_SETUP_REQ;
+	msg->type = (enum xio_msg_type)XIO_SESSION_SETUP_REQ;
 
 	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;

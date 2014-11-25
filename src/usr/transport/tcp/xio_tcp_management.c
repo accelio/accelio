@@ -75,9 +75,9 @@
 static spinlock_t			mngmt_lock;
 static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
-struct xio_transport			xio_tcp_transport;
-struct xio_tcp_socket_ops		single_sock_ops;
-struct xio_tcp_socket_ops		dual_sock_ops;
+extern struct xio_transport		xio_tcp_transport;
+extern struct xio_tcp_socket_ops	single_sock_ops;
+extern struct xio_tcp_socket_ops	dual_sock_ops;
 
 static int				cdl_fd = -1;
 
@@ -929,7 +929,8 @@ void xio_tcp_handle_pending_conn(int fd,
 		}
 	}
 
-	UNPACK_LVAL(&pending_conn->msg, &pending_conn->msg, sock_type);
+	pending_conn->msg.sock_type = (enum xio_tcp_sock_type)
+				ntohl((uint32_t)pending_conn->msg.sock_type);
 	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, second_port);
 	UNPACK_SVAL(&pending_conn->msg, &pending_conn->msg, pad);
 
@@ -2116,7 +2117,7 @@ static int xio_tcp_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
-	tcp_task->tcp_op = 0x200;
+	tcp_task->tcp_op = (enum xio_tcp_op_code)0x200;
 	xio_tcp_task_init(
 			task,
 			tcp_hndl,

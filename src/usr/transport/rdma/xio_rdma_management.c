@@ -76,7 +76,6 @@ static pthread_rwlock_t			dev_lock;
 static pthread_rwlock_t			cm_lock;
 static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
 static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
-struct xio_transport			xio_rdma_transport;
 
 spinlock_t				dev_list_lock; /* devices list lock */
 LIST_HEAD(dev_list);
@@ -1453,7 +1452,7 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	/*ptr += rdma_hndl->max_sge*sizeof(struct ibv_sge);*/
 	/*****************************************/
 
-	rdma_task->ib_op = 0x200;
+	rdma_task->ib_op = (enum xio_ib_op_code)0x200;
 	xio_rdma_task_init(
 			task,
 			rdma_hndl,
@@ -1746,7 +1745,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 	ptr += max_iovsz*sizeof(struct xio_sge);
 	/*****************************************/
 
-	rdma_task->ib_op = 0x200;
+	rdma_task->ib_op = (enum xio_ib_op_code)0x200;
 
 	xio_rdma_task_init(
 			task,

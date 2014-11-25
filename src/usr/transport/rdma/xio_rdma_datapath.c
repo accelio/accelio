@@ -3320,7 +3320,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len	= req_hdr.ulp_hdr_len;
 
 	if (req_hdr.ulp_hdr_len)
@@ -4031,7 +4031,7 @@ static int xio_rdma_cancel_req_handler(struct xio_rdma_transport *rdma_hndl,
 		event_data.cancel.ulp_msg	   =  ulp_msg;
 		event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
 		event_data.cancel.task		   =  NULL;
-		event_data.cancel.result	   =  0;
+		event_data.cancel.result	   =  (enum xio_status)0;
 
 
 		xio_transport_notify_observer(&rdma_hndl->base,
@@ -4102,7 +4102,7 @@ static int xio_rdma_cancel_rsp_handler(struct xio_rdma_transport *rdma_hndl,
 	event_data.cancel.ulp_msg	   =  ulp_msg;
 	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
 	event_data.cancel.task		   =  task_to_cancel;
-	event_data.cancel.result	   =  cancel_hdr->result;
+	event_data.cancel.result	 =  (enum xio_status)cancel_hdr->result;
 
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_CANCEL_RESPONSE,
@@ -4156,7 +4156,7 @@ static int xio_rdma_on_recv_cancel_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	ulp_hdr		= xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len		= rsp_hdr.ulp_hdr_len;
 	imsg->in.header.iov_base	= ulp_hdr;
 	sge_set_addr(sgtbl_ops, sg, NULL);
@@ -4224,7 +4224,7 @@ static int xio_rdma_on_recv_cancel_req(struct xio_rdma_transport *rdma_hndl,
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
 	/* set header pointers */
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len		= req_hdr.ulp_hdr_len;
 	imsg->in.header.iov_base	= ulp_hdr;
 	sge_set_addr(sgtbl_ops, sg, NULL);

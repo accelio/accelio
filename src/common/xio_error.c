@@ -136,7 +136,7 @@ const char *xio_strerror(int errnum)
 		return strerror(errnum);
 
 	if (errnum >= XIO_E_NOT_SUPPORTED && errnum < XIO_E_LAST_STATUS)
-		return xio_gen_status_str(errnum);
+		return xio_gen_status_str((enum xio_status)errnum);
 
 	return "Unknown error";
 }

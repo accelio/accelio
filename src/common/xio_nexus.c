@@ -2162,7 +2162,8 @@ static int xio_nexus_xmit(struct xio_nexus *nexus)
 
 			ERROR_LOG("transport send failed err:%d\n",
 				  xio_errno());
-			nexus_event_data.msg_error.reason = xio_errno();
+			nexus_event_data.msg_error.reason =
+						(enum xio_status)xio_errno();
 			nexus_event_data.msg_error.direction = XIO_MSG_DIRECTION_OUT;
 			nexus_event_data.msg_error.task	= task;
 

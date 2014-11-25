@@ -273,7 +273,7 @@ void xio_session_notify_teardown(struct xio_session *session, int reason)
 {
 	struct xio_session_event_data  event = {
 		.event = XIO_SESSION_TEARDOWN_EVENT,
-		.reason = reason
+		.reason = (enum xio_status)reason
 	};
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -521,7 +521,8 @@ static int xio_on_req_recv(struct xio_connection *connection,
 
 	/* notify the upper layer */
 	if (task->status) {
-		xio_session_notify_msg_error(connection, msg, task->status,
+		xio_session_notify_msg_error(connection, msg,
+					     (enum xio_status)task->status,
 					     XIO_MSG_DIRECTION_IN);
 		task->status = 0;
 	} else {
@@ -620,7 +621,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 								omsg);
 	}
 
-	omsg->type = task->tlv_type;
+	omsg->type = (enum xio_msg_type)task->tlv_type;
 
 	/* cache the task in io queue */
 	xio_connection_queue_io_task(connection, task);
@@ -647,7 +648,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		}
 
 		omsg->sn	  = msg->sn; /* one way do have response */
-		omsg->receipt_res = hdr.receipt_result;
+		omsg->receipt_res = (enum xio_receipt_result)hdr.receipt_result;
 
 		if (omsg->flags &
 		    XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {
@@ -669,7 +670,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	} else {
 		if (xio_app_receipt_first_request(&hdr)) {
 			if (connection->ses_ops.on_msg_delivered) {
-				omsg->receipt_res = hdr.receipt_result;
+				omsg->receipt_res =
+				    (enum xio_receipt_result)hdr.receipt_result;
 				omsg->sn	  = hdr.serial_num;
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
@@ -704,7 +706,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			omsg->request	= msg;
 			if (task->status) {
 				xio_session_notify_msg_error(
-					connection, omsg, task->status,
+					connection, omsg,
+					(enum xio_status)task->status,
 					XIO_MSG_DIRECTION_IN);
 				task->status = 0;
 			} else {

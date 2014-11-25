@@ -371,7 +371,8 @@ int xio_tcp_send_connect_msg(int fd, struct xio_tcp_connect_msg *msg)
 	uint32_t size = sizeof(struct xio_tcp_connect_msg);
 	void *buf = &smsg;
 
-	PACK_LVAL(msg, &smsg, sock_type);
+	smsg.sock_type = (enum xio_tcp_sock_type)
+				htonl((uint32_t)msg->sock_type);
 	PACK_SVAL(msg, &smsg, second_port);
 	PACK_SVAL(msg, &smsg, pad);
 
@@ -2288,7 +2289,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len	= req_hdr.ulp_hdr_len;
 
 	if (req_hdr.ulp_hdr_len)
@@ -2317,7 +2318,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		tbl_set_nents(sgtbl_ops, sgtbl, 0);
 	}
 
-	tcp_task->tcp_op = req_hdr.opcode;
+	tcp_task->tcp_op = (enum xio_tcp_op_code)req_hdr.opcode;
 
 	tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, req_hdr.ulp_hdr_len +
 			req_hdr.ulp_pad_len + req_hdr.ulp_imm_len);
@@ -2454,7 +2455,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 	task->status = rsp_hdr.status;
 
-	tcp_task->tcp_op = rsp_hdr.opcode;
+	tcp_task->tcp_op = (enum xio_tcp_op_code)rsp_hdr.opcode;
 
 	switch (rsp_hdr.opcode) {
 	case XIO_TCP_SEND:
@@ -2688,7 +2689,7 @@ static int xio_tcp_cancel_req_handler(struct xio_tcp_transport *tcp_hndl,
 	event_data.cancel.ulp_msg	   =  ulp_msg;
 	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
 	event_data.cancel.task		   =  NULL;
-	event_data.cancel.result	   =  0;
+	event_data.cancel.result	   =  (enum xio_status)0;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
 				      XIO_TRANSPORT_CANCEL_REQUEST,
@@ -2753,10 +2754,10 @@ static int xio_tcp_cancel_rsp_handler(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	/* fill notification event */
-	event_data.cancel.ulp_msg	   =  ulp_msg;
-	event_data.cancel.ulp_msg_sz	   =  ulp_msg_sz;
-	event_data.cancel.task		   =  task_to_cancel;
-	event_data.cancel.result	   =  cancel_hdr->result;
+	event_data.cancel.ulp_msg	  = ulp_msg;
+	event_data.cancel.ulp_msg_sz	  = ulp_msg_sz;
+	event_data.cancel.task		  = task_to_cancel;
+	event_data.cancel.result	  = (enum xio_status)cancel_hdr->result;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
 				      XIO_TRANSPORT_CANCEL_RESPONSE,
@@ -2829,7 +2830,7 @@ static int xio_tcp_on_recv_cancel_rsp_header(
 	imsg = &task->imsg;
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len		= rsp_hdr.ulp_hdr_len;
 	imsg->in.header.iov_base	= ulp_hdr;
 
@@ -2902,7 +2903,7 @@ static int xio_tcp_on_recv_cancel_req_header(
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 
 	/* set header pointers */
-	imsg->type = task->tlv_type;
+	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len		= req_hdr.ulp_hdr_len;
 	imsg->in.header.iov_base	= ulp_hdr;
 

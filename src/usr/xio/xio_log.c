@@ -43,7 +43,7 @@
 void xio_vlog(const char *file, unsigned line, const char *function,
 	      unsigned level, const char *fmt, ...);
 
-int			xio_logging_level = XIO_LOG_LEVEL_ERROR;
+enum xio_log_level	xio_logging_level = XIO_LOG_LEVEL_ERROR;
 xio_log_fn		xio_vlog_fn = xio_vlog;
 
 
@@ -108,7 +108,7 @@ void xio_read_logging_level(void)
 
 	level  = atoi(val);
 	if (level >= XIO_LOG_LEVEL_FATAL && level <= XIO_LOG_LEVEL_TRACE)
-		xio_logging_level = level;
+		xio_logging_level = (enum xio_log_level)level;
 }
 
 
