@@ -7,8 +7,10 @@ libtoolize  --force --copy --quiet  \
 
 subdirlist=("src/kernel/xio"				\
 	    "src/kernel/rdma"				\
+	    "src/kernel/tcp"				\
 	    "examples/kernel/hello_world"		\
-	    "examples/kernel/hello_world_mt")
+	    "examples/kernel/hello_world_mt"		\
+	    "tests/kernel/hello_test")
 
 for subdir in ${!subdirlist[*]} ; do
 	#printf "	%s\n" "${subdirlist[$subdir]}"
