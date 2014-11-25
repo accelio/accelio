@@ -396,7 +396,6 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 	} while (!list_empty(&rdma_hndl->rdma_rd_list) &&
 		 rdma_hndl->sqe_avail > num_reqs);
 
-	rdma_hndl->kick_rdma_rd = 0;
 	if (num_reqs) {
 		first_wr = container_of(rdma_hndl->dummy_wr.send_wr.next,
 					struct xio_work_req, send_wr);
@@ -408,9 +407,12 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 			ERROR_LOG("xio_post_send failed\n");
 
 		/* ToDo: error handling */
-	} else if (!list_empty(&rdma_hndl->rdma_rd_list)) {
-		rdma_hndl->kick_rdma_rd = 1;
 	}
+
+	if (list_empty(&rdma_hndl->rdma_rd_list))
+		rdma_hndl->kick_rdma_rd = 0;
+	else
+		rdma_hndl->kick_rdma_rd = 1;
 
 	return 0;
 }
@@ -3388,6 +3390,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	if (!list_empty(&rdma_hndl->rdma_rd_list)) {
 		list_move_tail(&task->tasks_list_entry,
 			       &rdma_hndl->rdma_rd_list);
+		rdma_hndl->kick_rdma_rd = 1;
 		return 0;
 	}
 	if (rdma_hndl->rdma_in_flight) {
