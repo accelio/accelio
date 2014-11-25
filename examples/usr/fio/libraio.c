@@ -56,6 +56,8 @@
 #define __RAIO_PUBLIC
 #endif
 
+#define TRANSPORT_NAME "rdma"
+
 struct libraio_engine_data;
 
 struct libraio_data {
@@ -316,7 +318,8 @@ static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 	servaddr.sin_port = htons(port);
 
 
-	f->fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
+	f->fd = raio_open(TRANSPORT_NAME,
+			  (struct sockaddr *)&servaddr, sizeof(servaddr),
 			  path, flags);
 
 	if (f->fd == -1 && errno == EINVAL &&
@@ -324,7 +327,8 @@ static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 		log_err("libraio open failed with o_direct- file:%s " \
 			"flags:%x %m\n", f->file_name, flags);
 		flags &= ~O_DIRECT;
-		f->fd = raio_open((struct sockaddr *)&servaddr,
+		f->fd = raio_open(TRANSPORT_NAME,
+				  (struct sockaddr *)&servaddr,
 				  sizeof(servaddr),
 				  path, flags);
 	}
