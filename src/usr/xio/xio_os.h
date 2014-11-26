@@ -86,4 +86,146 @@
 
 #include "get_clock.h"
 
+/*---------------------------------------------------------------------------*/
+/*-------------------- Memory related things --------------------------------*/
+/*---------------------------------------------------------------------------*/
+#define PACKED_MEMORY( __Declaration__ ) \
+		__Declaration__ __attribute__((__packed__))
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_memalign(void **memptr, size_t alignment, size_t size){
+	return posix_memalign(memptr, alignment, size);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline void xio_memfree(void *memptr){
+	free(memptr);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline long xio_get_page_size(void)
+{
+	static long page_size = 0;
+
+	if (!page_size) {
+		page_size = sysconf(_SC_PAGESIZE);
+	}
+	return page_size;
+}
+
+/*---------------------------------------------------------------------------*/
+/*------------------- CPU and Clock related things --------------------------*/
+/*---------------------------------------------------------------------------*/
+static inline long xio_get_num_processors(void)
+{
+	static long num_processors = 0;
+
+	if (!num_processors) {
+		num_processors = sysconf(_SC_NPROCESSORS_CONF);
+	}
+	return num_processors;
+}
+
+/*---------------------------------------------------------------------------*/
+static inline long xio_get_current_processor_number(void)
+{
+	return sched_getcpu();
+}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_clock_gettime(struct timespec *ts)
+{
+	return clock_gettime(CLOCK_MONOTONIC, ts);
+}
+
+/*---------------------------------------------------------------------------*/
+/*-------------------- Thread related things --------------------------------*/
+/*---------------------------------------------------------------------------*/
+typedef pthread_once_t thread_once_t;
+#define THREAD_ONCE_INIT     PTHREAD_ONCE_INIT
+#define CALLBACK
+/*---------------------------------------------------------------------------*/
+#define thread_once(once_control, init_routine) \
+		pthread_once(once_control, init_routine)
+/*---------------------------------------------------------------------------*/
+#define reset_thread_once_t(once_control) \
+		((*(once_control)) = THREAD_ONCE_INIT)
+/*---------------------------------------------------------------------------*/
+#define is_reset_thread_once_t(once_control) \
+		((*(once_control)) == THREAD_ONCE_INIT)
+
+/*---------------------------------------------------------------------------*/
+#define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \
+		__sync_bool_compare_and_swap(ptr, oldval, newval)
+
+/*---------------------------------------------------------------------------*/
+#define LIBRARY_INITIALIZER(f) \
+	static void f(void) __attribute__((constructor)); \
+	static void f(void)
+
+/*---------------------------------------------------------------------------*/
+#define LIBRARY_FINALIZER(f) \
+	static void f(void) __attribute__((destructor)); \
+	static void f(void)
+
+/*---------------------------------------------------------------------------*/
+#define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
+#define sum_to_ptr(_ptr, a) ((_ptr) + (a))
+
+
+/*---------------------------------------------------------------------------*/
+/*-------------------- Socket related things --------------------------------*/
+/*---------------------------------------------------------------------------*/
+#define INVALID_SOCKET (-1)
+#define XIO_ESHUTDOWN		ESHUTDOWN
+#define XIO_EINPROGRESS		EINPROGRESS /* connect on non-blocking socket */
+#define XIO_EAGAIN		EAGAIN      /* recv    on non-blocking socket */
+#define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
+#define XIO_ECONNABORTED	ECONNABORTED
+#define XIO_ECONNRESET		ECONNRESET
+
+typedef int SOCKET;
+/*---------------------------------------------------------------------------*/
+static inline int closesocket(SOCKET sock) {return close(sock);}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_get_last_socket_error() {return errno;}
+
+/*---------------------------------------------------------------------------*/
+/* enables or disables the blocking mode for the socket
+   If mode != 0, blocking is enabled;
+   If mode = 0, non-blocking mode is enabled. */
+static inline int xio_set_blocking(SOCKET sock, unsigned long mode)
+{
+	long arg;
+	if ((arg = fcntl(sock, F_GETFL, NULL)) < 0) {
+		return -1;
+	}
+	if (mode) { /* blocking */
+		arg &= (~O_NONBLOCK);
+	}
+	else { /* non blocking */
+		arg |= O_NONBLOCK;
+	}
+	if (fcntl(sock, F_SETFL, arg) < 0) {
+		return -1;
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+static inline SOCKET xio_socket_non_blocking(int domain, int type,
+					      int protocol)
+{
+	return socket(domain, type | SOCK_NONBLOCK, protocol);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline SOCKET xio_accept_non_blocking(SOCKET sockfd,
+					      struct sockaddr *addr,
+					      socklen_t *addrlen)
+{
+	return accept4(sockfd, addr, addrlen, SOCK_NONBLOCK);
+}
+
 #endif /* XIO_OS_H */
