@@ -15,6 +15,9 @@ m4/*
 libtool
 ltmain.sh
 compile
+depcomp
+install-sh
+missing
 config.guess
 config.sub
 xio_mt_client
