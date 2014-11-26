@@ -78,6 +78,9 @@ struct xio_mempool {
 	struct xio_chunks_list pool[ARRAY_SIZE(sizes)];
 };
 
+/* currently not in use - to be supported */
+struct xio_mempool_config g_mempool_config = { 0 };
+
 /*---------------------------------------------------------------------------*/
 /* xio_mempool_destroy							     */
 /*---------------------------------------------------------------------------*/

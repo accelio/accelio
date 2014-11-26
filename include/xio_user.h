@@ -394,7 +394,7 @@ enum xio_mempool_flag {
 
 
 /**
- * create mempool with NO (!) allocators
+ * create mempool with NO (!) slabs
  *
  * @param[in] nodeid	  numa node id. -1 if don't care
  * @param[in] flags	  mask of mempool creation flags
@@ -407,26 +407,34 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 /* for backward compatibility - shall be deprecated in the future */
 
 /**
- * create mempool with NO (!) allocators
+ * create mempool with NO (!) slabs
  *
  * for backward compatibility - shall be deprecated in the future
  */
 #define xio_mempool_create_ex	xio_mempool_create
 
 /**
- * add an allocator to current set (setup only)
+ * add a slab to current set (setup only)
  *
  * @param[in] mpool	  the memory pool
  * @param[in] size	  slab memory size
  * @param[in] min	  initial buffers to allocate
  * @param[in] max	  maximum buffers to allocate
- * @param[in] alloc_quantum_nr	allocation quantum
+ * @param[in] alloc_quantum_nr	growing quantum
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_mempool_add_allocator(struct xio_mempool *mpool,
-			      size_t size, size_t min, size_t max,
-			      size_t alloc_quantum_nr);
+int xio_mempool_add_slab(struct xio_mempool *mpool,
+			 size_t size, size_t min, size_t max,
+			 size_t alloc_quantum_nr);
+
+/**
+ * add a slab to current set (setup only)
+ *
+ * for backward compatibility - shall be deprecated in the future
+ */
+#define xio_mempool_add_allocator xio_mempool_add_slab
+
 
 /**
  * destroy memory pool

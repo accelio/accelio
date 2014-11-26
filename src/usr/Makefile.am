@@ -48,7 +48,7 @@ libxio_includedir = $(includedir)/
 # the list of header files that belong to the library (to be installed later)
 libxio_include_HEADERS = $(top_srcdir)/include/libxio.h  	\
 			 $(top_srcdir)/include/xio_base.h	\
-			 $(top_srcdir)/include/xio_user.h 
+			 $(top_srcdir)/include/xio_user.h
 
 
 libxio_headers = 	./xio/get_clock.h 			\
@@ -58,7 +58,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./xio/xio_tls.h				\
 			./xio/xio_timers_list.h			\
 			./xio/xio_ev_loop.h			\
-			./transport/xio_transport_mempool.h	\
+			./transport/xio_mempool.h		\
 			./transport/xio_usr_transport.h		\
 			$(libxio_rdma_headers)			\
 			./transport/tcp/xio_tcp_transport.h	\
@@ -89,7 +89,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			./linux/list.h				\
 			./linux/printk.h			\
 			./linux/slab.h				\
-			./linux/usr.h				
+			./linux/usr.h
 
 
 
@@ -113,7 +113,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			$(libxio_rdma_sources)		\
 			./transport/tcp/xio_tcp_management.c	\
 			./transport/tcp/xio_tcp_datapath.c	\
-			./transport/xio_transport_mempool.c	\
+			./transport/xio_mempool.c	\
 			./transport/xio_usr_transport.c	\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
@@ -128,8 +128,8 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			../common/xio_nexus_cache.c	\
 			../common/xio_idr.c		\
 			../common/xio_transport.c	\
-			../common/xio_connection.c	
-						
+			../common/xio_connection.c
+
 #libxio_la_LDFLAGS = -shared -rdynamic	 		\
 #		      -lrdmacm -libverbs -lrt -ldl
 
@@ -142,5 +142,5 @@ libxio_la_DEPENDENCIES =  $(top_srcdir)/src/usr/libxio.map
 
 #EXTRA_DIST = 		libxio.map      		\
 #	     		libxio.spec.in
-				
+
 ###############################################################################

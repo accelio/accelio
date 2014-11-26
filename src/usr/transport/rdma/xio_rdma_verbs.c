@@ -47,7 +47,7 @@
 #include "get_clock.h"
 #include "xio_mem.h"
 #include "xio_usr_transport.h"
-#include "xio_transport_mempool.h"
+#include "xio_mempool.h"
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
 #include "xio_task.h"

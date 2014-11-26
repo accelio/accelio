@@ -104,6 +104,13 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			return xio_set_mem_allocator(
 					(struct xio_mem_allocator *)optval);
 		break;
+	case XIO_OPTNAME_CONFIG_MEMPOOL:
+		if (optlen == sizeof(struct xio_mempool_config)) {
+			memcpy(&g_mempool_config,
+			       (struct xio_mempool_config *)optval, optlen);
+			return 0;
+		}
+		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		if (optlen == sizeof(int)) {
 			struct xio_transport *rdma_transport =

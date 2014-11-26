@@ -61,7 +61,7 @@
 #include "xio_rdma_transport.h"
 #endif
 #include "xio_usr_transport.h"
-#include "xio_transport_mempool.h"
+#include "xio_mempool.h"
 #include "xio_tcp_transport.h"
 
 #define PRINT_SIZE(type) \

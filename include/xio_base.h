@@ -953,7 +953,7 @@ enum xio_optname {
 	XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS, /**< maximum rx queued msgs	      */
 	XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES, /**< maximum tx queued bytes	      */
 	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES, /**< maximum rx queued bytes	      */
-
+	XIO_OPTNAME_CONFIG_MEMPOOL,	   /**< configure internal memory pool*/
 
 	XIO_OPTNAME_MAX_INLINE_HEADER,    /**< set/get maximum inline header  */
 					  /**< size			      */
@@ -1081,6 +1081,35 @@ struct xio_mem_allocator {
 	 *  @returns pointer to block or NULL if allocate fails
 	 */
 	void   (*numa_free)(void *ptr, void *user_context);
+};
+
+#define XIO_MAX_SLABS_NR  6
+
+/**
+ *  @struct xio_mempool_config
+ *  @brief tuning parameters for internal Accelio's memory pool
+ *
+ *  Use: xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+ *		     XIO_OPTNAME_CONFIG_MEMPOOL, &mempool_config,
+ *		     sizeof(mempool_config));
+ *
+ */
+ struct xio_mempool_config {
+	/**< number of slabs */
+	ssize_t			    slabs_nr;
+
+	/**< per slab configuration */
+	struct xio_mempool_slab_config {
+		/**< slab's block memory size in bytes */
+		size_t			block_sz;
+
+		/**< initial number of allocated blocks */
+		size_t			init_blocks_nr;
+		/**< growing quantum of block allocations */
+		size_t			grow_blocks_nr;
+		/**< maximum number of allocated blocks */
+		size_t			max_blocks_nr;
+	} slab_cfg[XIO_MAX_SLABS_NR];
 };
 
 /**
