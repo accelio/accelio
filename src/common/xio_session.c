@@ -634,7 +634,6 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			ERROR_LOG("protocol requires first flag to be set. " \
 				  "flags:0x%x\n", hdr.flags);
 
-		connection->tx_queued_msgs--;
 		if (connection->enable_flow_control) {
 			struct xio_sg_table_ops	*sgtbl_ops;
 			void			*sgtbl;
@@ -642,6 +641,8 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			sgtbl		= xio_sg_table_get(&omsg->out);
 			sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(omsg->out.sgl_type);
+
+			connection->tx_queued_msgs--;
 			connection->tx_bytes -=
 				(omsg->out.header.iov_len +
 					 tbl_length(sgtbl_ops, sgtbl));
@@ -830,7 +831,6 @@ static int xio_on_ow_req_send_comp(
 	omsg->flags = task->omsg_flags;
 	xio_clear_flags(&omsg->flags);
 
-	connection->tx_queued_msgs--;
 	if (connection->enable_flow_control) {
 		struct xio_sg_table_ops	*sgtbl_ops;
 		void			*sgtbl;
@@ -838,6 +838,8 @@ static int xio_on_ow_req_send_comp(
 		sgtbl		= xio_sg_table_get(&omsg->out);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(omsg->out.sgl_type);
+
+		connection->tx_queued_msgs--;
 		connection->tx_bytes -=
 			(omsg->out.header.iov_len +
 			 tbl_length(sgtbl_ops, sgtbl));
