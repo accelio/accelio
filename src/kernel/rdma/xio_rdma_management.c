@@ -242,7 +242,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
 
 	/* allocate device wc array */
-	tcq->wc_array = kcalloc(alloc_sz, sizeof(struct ib_wc), GFP_KERNEL);
+	tcq->wc_array = kcalloc(MAX_POLL_WC, sizeof(struct ib_wc), GFP_KERNEL);
 	if (tcq->wc_array == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("wc array allocation failed\n");
@@ -255,7 +255,7 @@ static struct xio_cq *xio_cq_init(struct xio_device *dev,
 	tcq->alloc_sz	= alloc_sz;
 	tcq->cq_depth	= alloc_sz;
 	tcq->cqe_avail	= alloc_sz;
-	tcq->wc_array_len = alloc_sz;
+	tcq->wc_array_len = MAX_POLL_WC;
 	INIT_LIST_HEAD(&tcq->trans_list);
 	INIT_LIST_HEAD(&tcq->cq_list_entry);
 

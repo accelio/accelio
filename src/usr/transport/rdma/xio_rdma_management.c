@@ -329,7 +329,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	}
 	tcq->ctx = ctx;
 
-	tcq->wc_array_len = MAX_CQE_PER_QP;
+	tcq->wc_array_len = MAX_POLL_WC;
 	/* allocate device wc array */
 	tcq->wc_array = (struct ibv_wc *)ucalloc(tcq->wc_array_len,
 						 sizeof(struct ibv_wc));

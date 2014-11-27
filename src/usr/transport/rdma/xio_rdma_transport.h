@@ -60,7 +60,7 @@ extern spinlock_t		dev_list_lock;
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
-#define MAX_CQE_PER_QP			MAX_SEND_WR
+#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define MAX_INLINE_DATA			200
