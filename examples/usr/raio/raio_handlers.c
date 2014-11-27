@@ -330,8 +330,10 @@ static int raio_handle_close(void *prv_session_data,
 	/* close fd only once */
 	if (!bs_dev->is_null) {
 		retval = close(bs_dev->fd);
-		if (!retval)
+		if (retval) {
+			printf("close failed\n");
 			goto reject;
+		}
 	}
 
 	for (i = 0; i < sd->portals_nr; i++) {
