@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <pthread.h>
 
+#include "xio_usr_utils.h"
 #include "get_clock.h"
 
 #ifndef GETCLOCK_DEBUG
@@ -193,7 +194,7 @@ double get_core_freq(void)
 	unsigned long khz = 0.0;
 	int rc;
 
-	cpu = sched_getcpu();
+	cpu = xio_get_cpu();
 	if (cpu < 0) {
 		perror("sched_getcpu");
 		return 0.0;
