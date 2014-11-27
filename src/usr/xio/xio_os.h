@@ -63,7 +63,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
@@ -221,11 +220,10 @@ static inline SOCKET xio_socket_non_blocking(int domain, int type,
 }
 
 /*---------------------------------------------------------------------------*/
-static inline SOCKET xio_accept_non_blocking(SOCKET sockfd,
-					      struct sockaddr *addr,
-					      socklen_t *addrlen)
-{
-	return accept4(sockfd, addr, addrlen, SOCK_NONBLOCK);
-}
+/* NOTE: we aren't using static inline function here; because accept4 requires
+ * defining _GNU_SOURCE and we don't want users to be forced to define it in 
+ * their application */
+#define xio_accept_non_blocking(sockfd, addr, addrlen) \
+	accept4(sockfd, addr, addrlen, SOCK_NONBLOCK)
 
 #endif /* XIO_OS_H */
