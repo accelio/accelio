@@ -227,6 +227,10 @@ static void *worker_thread(void *data)
 	/* connect the session  */
 	tdata->conn = xio_connect(tdata->session, tdata->ctx,
 				  tdata->cid, NULL, tdata);
+	if (tdata->conn == NULL) {
+		tdata->exit_code = -1;
+		goto exit;
+	}
 
 	for (i = 0;  i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
@@ -273,6 +277,7 @@ static void *worker_thread(void *data)
 	/* the default xio supplied main loop */
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
+exit:
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
