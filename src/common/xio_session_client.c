@@ -863,6 +863,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 {
 	struct xio_session	*psession = NULL;
 	struct xio_connection	*connection = NULL, *tmp_connection;
+	struct xio_nexus	*nexus = NULL;
 	int			retval;
 
 	if ((ctx == NULL) || (session == NULL)) {
@@ -890,7 +891,6 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	}
 	if (session->state == XIO_SESSION_STATE_INIT) {
 		char portal[64];
-		struct xio_nexus	*nexus;
 		/* extract portal from uri */
 		if (xio_uri_get_portal(session->uri, portal,
 				       sizeof(portal)) != 0) {
@@ -982,6 +982,12 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	return connection;
 
 cleanup:
+	if (nexus)
+		xio_nexus_close(nexus, &session->observer);
+
+	if (connection)
+		xio_session_free_connection(connection);
+
 	mutex_unlock(&session->lock);
 
 	return NULL;
