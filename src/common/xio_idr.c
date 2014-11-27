@@ -62,7 +62,7 @@ int xio_idr_remove_uobj(struct xio_idr *idr, void *uobj)
 	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
-	if (!idr)
+	if (!idr || !uobj)
 		return -1;
 
 	spin_lock(&idr->lock);
@@ -90,7 +90,7 @@ int xio_idr_lookup_uobj(struct xio_idr *idr, void *uobj)
 	struct xio_idr_entry	*idr_entry = NULL;
 	struct xio_key_int64	key;
 
-	if (!idr)
+	if (!idr || !uobj)
 		return 0;
 
 	spin_lock(&idr->lock);
@@ -110,7 +110,7 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	struct xio_key_int64	key;
 	int			retval = -1;
 
-	if (!idr)
+	if (!idr || !uobj)
 		return -1;
 
 	idr_entry = (struct xio_idr_entry *)
