@@ -961,16 +961,16 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 {
 	switch (vmsg->sgl_type) {
 	case XIO_SGL_TYPE_IOV:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->data_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
 			goto done;
 		}
 	case XIO_SGL_TYPE_IOV_PTR:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->pdata_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
@@ -1014,8 +1014,8 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 {
 	switch (vmsg->sgl_type) {
 	case XIO_SGL_TYPE_IOV:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->data_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
@@ -1023,8 +1023,8 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 			goto done;
 		}
 	case XIO_SGL_TYPE_IOV_PTR:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->pdata_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {

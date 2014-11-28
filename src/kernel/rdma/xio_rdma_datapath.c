@@ -287,6 +287,12 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			rdma_hndl->tx_ready_tasks_num--;
 			rdma_task->txd.send_wr.send_flags &= ~IB_SEND_SIGNALED;
 
+			if (rdma_task->ib_op == XIO_IB_RDMA_WRITE) {
+				if (xio_map_txmad_work_req(rdma_hndl->dev,
+							   curr_wr))
+					ERROR_LOG("DMA map to device failed\n");
+			}
+
 			list_move_tail(&task->tasks_list_entry,
 				       &rdma_hndl->in_flight_list);
 			continue;
@@ -3025,22 +3031,15 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			task->status = XIO_E_NO_USER_BUFS;
 			return -1;
 		}
-		if (rdma_task->req_write_num_sge !=
-		    tbl_nents(sgtbl_ops, sgtbl)) {
-			WARN_LOG("application provided invalid iovec length\n");
-			WARN_LOG("rdma read is ignored\n");
-			task->status = XIO_E_NO_USER_BUFS;
-			return -1;
-		}
-
-		/* user can give change the length */
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			rdma_task->read_sge.mp_sge[i].cache = NULL;
-			sge_set_length(
-				sgtbl_ops, sg,
-				min(
-				  sge_length(sgtbl_ops, sg),
-				  (size_t)rdma_task->req_write_sge[i].length));
+			if (sge_addr(sgtbl_ops, sg) == NULL) {
+				ERROR_LOG("application has provided " \
+					  "null address\n");
+				ERROR_LOG("rdma read is ignored\n");
+				task->status = XIO_E_NO_USER_BUFS;
+				return -1;
+			}
 			llen += sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
