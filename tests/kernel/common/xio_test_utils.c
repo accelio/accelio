@@ -35,12 +35,27 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+#include <linux/kernel.h>
 #include <linux/net.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/ip.h>
+#include <linux/inet.h>
+#include <linux/types.h>
 
 #include "xio_test_utils.h"
+
+#ifndef NIPQUAD
+#define NIPQUAD(addr) \
+        ((unsigned char *)&(addr))[0], \
+        ((unsigned char *)&(addr))[1], \
+        ((unsigned char *)&(addr))[2], \
+        ((unsigned char *)&(addr))[3]
+#endif
+
+#ifndef NIPQUAD_FMT
+#define NIPQUAD_FMT "%u.%u.%u.%u"
+#endif
 
 #ifndef NIP6
 #define NIP6(addr) \

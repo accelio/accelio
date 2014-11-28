@@ -1961,7 +1961,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 				 struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
-	unsigned int		i, vec_size;
+	unsigned int		i, vec_size = 0;
 	int			retval;
 	int			user_assign_flag = 0;
 	size_t			rlen = 0, llen = 0;

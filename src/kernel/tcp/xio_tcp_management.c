@@ -38,7 +38,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-
+#include <linux/interrupt.h>
 #include <linux/tcp.h>
 
 #include "libxio.h"
