@@ -2013,9 +2013,9 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 /*---------------------------------------------------------------------------*/
 /* on_cm_timedwait_exit							     */
 /*---------------------------------------------------------------------------*/
-static void on_cm_timewait_exit(struct rdma_cm_event *ev,
-				struct xio_rdma_transport *rdma_hndl)
+static void on_cm_timewait_exit(void *hndl)
 {
+	struct xio_rdma_transport *rdma_hndl = hndl;
 	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
 
 	xio_rdma_flush_all_tasks(rdma_hndl);
@@ -2114,11 +2114,17 @@ static int xio_handle_cm_event(struct rdma_cm_id *cm_id,
 			       struct rdma_cm_event *ev)
 {
 	struct xio_rdma_transport *rdma_hndl = cm_id->context;
-	int ret = 0;
 
 	TRACE_LOG("cm event %s, hndl:%p\n",
 		  xio_rdma_event_str(ev->event), rdma_hndl);
 
+	/* TODO: Handling these events here from the cm handler context,
+	 * might cause races with the poller thread context.
+	 * 1. Need to handle each of these events using a dedicated
+	 *    event handler from the poller context.
+	 * 2. Need to make sure the events are removed properly before
+	 *    rdma_handler shutdown.
+	 */ 
 	rdma_hndl->handler_nesting++;
 	switch (ev->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -2147,8 +2153,10 @@ static int xio_handle_cm_event(struct rdma_cm_id *cm_id,
 		 * rdma_hndl->handler_nesting > 0. We return one to ensure that
 		 * cma_ib_handler will call
 		 */
-		on_cm_timewait_exit(ev, rdma_hndl);
-		ret = 1;
+		rdma_hndl->ev_data_timewait_exit.handler = on_cm_timewait_exit;
+		rdma_hndl->ev_data_timewait_exit.data    = (void *)rdma_hndl;
+		xio_context_add_event(rdma_hndl->base.ctx,
+				      &rdma_hndl->ev_data_timewait_exit);
 		break;
 
 	case RDMA_CM_EVENT_MULTICAST_JOIN:

@@ -387,6 +387,7 @@ struct xio_rdma_transport {
 	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
 	struct xio_ev_data		event_data;
+	struct xio_ev_data		ev_data_timewait_exit;
 
 	struct list_head		trans_list_entry;
 
