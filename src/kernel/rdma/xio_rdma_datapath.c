@@ -2538,7 +2538,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	 */
 	if ((ulp_imm_len == 0) ||
 	    (!small_zero_copy &&
-	     (tbl_nents(sgtbl_ops, sgtbl) < rdma_hndl->max_sge - 1) &&
+	     (tbl_nents(sgtbl_ops, sgtbl) <= rdma_hndl->max_sge - 1) &&
 	      ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< rdma_hndl->max_inline_buf_sz))) {
 		/*
