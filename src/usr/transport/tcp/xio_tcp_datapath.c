@@ -927,7 +927,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
-		next_tcp_task = next_task ? 
+		next_tcp_task = next_task ?
 			(struct xio_tcp_task *)next_task->dd_data : NULL;
 
 		tcp_task = (struct xio_tcp_task *)task->dd_data;
@@ -3251,7 +3251,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 
 	count = 0;
 	exit = 0;
-	while (task && (&task->tasks_list_entry != &tcp_hndl->rx_list) && 
+	while (task && (&task->tasks_list_entry != &tcp_hndl->rx_list) &&
 	       (count < batch_nr) && !exit) {
 		tcp_task = (struct xio_tcp_task *)task->dd_data;
 

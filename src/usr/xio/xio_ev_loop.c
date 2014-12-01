@@ -315,7 +315,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 		list_for_each_entry_safe(tev, tevn, &loop->events_list,
 					 events_list_entry) {
 			xio_ev_loop_remove_event(loop, tev);
-			tev->event_handler(tev, tev->data);
+			tev->event_handler(tev->data);
 			if (&tev->events_list_entry == last_sched)
 				break;
 		}

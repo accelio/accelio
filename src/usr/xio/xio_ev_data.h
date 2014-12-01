@@ -41,7 +41,7 @@
 
 struct xio_ev_data;
 
-typedef void (*xio_event_handler_t)(struct xio_ev_data *tev, void *data);
+typedef void (*xio_event_handler_t)(void *data);
 
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */

@@ -477,8 +477,7 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_disconnect_handler						     */
 /*---------------------------------------------------------------------------*/
-static void xio_tcp_disconnect_handler(xio_ctx_event_t *tev,
-				       void *xio_tcp_hndl)
+static void xio_tcp_disconnect_handler(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
 						xio_tcp_hndl;
@@ -488,7 +487,7 @@ static void xio_tcp_disconnect_handler(xio_ctx_event_t *tev,
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_flush_tx_handler						     */
 /*---------------------------------------------------------------------------*/
-void xio_tcp_flush_tx_handler(xio_ctx_event_t *tev, void *xio_tcp_hndl)
+void xio_tcp_flush_tx_handler(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
 						xio_tcp_hndl;
@@ -514,7 +513,7 @@ int xio_tcp_dual_sock_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_consume_ctl_rx						     */
 /*---------------------------------------------------------------------------*/
-void xio_tcp_consume_ctl_rx(xio_ctx_event_t *tev, void *xio_tcp_hndl)
+void xio_tcp_consume_ctl_rx(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
 						xio_tcp_hndl;
@@ -548,7 +547,7 @@ void xio_tcp_ctl_ready_ev_handler(int fd, int events, void *user_context)
 	}
 
 	if (events & EPOLLIN)
-		xio_tcp_consume_ctl_rx(NULL, tcp_hndl);
+		xio_tcp_consume_ctl_rx(tcp_hndl);
 
 	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
 		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",

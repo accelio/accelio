@@ -82,8 +82,8 @@ static int xio_rdma_on_recv_cancel_rsp(struct xio_rdma_transport *rdma_hndl,
 static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl);
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 				 struct xio_task *task);
-static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data);
-static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data);
+static void xio_sched_consume_cq(void *data);
+static void xio_sched_poll_cq(void *data);
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_mr_lookup							     */
@@ -556,22 +556,21 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	int				retval;
 
 
+	/* complete in case all flush errors were consumed */
+	if (task && task->dd_data == ptr_from_int64(XIO_BEACON_WRID)) {
+		rdma_hndl = container_of(task,
+					 struct xio_rdma_transport, beacon_task);
+
+		TRACE_LOG("beacon rdma_hndl:%p\n", rdma_hndl);
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+		return;
+	}
 	if (task && task->dd_data) {
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
 
-	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
-		/*
-		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, " \
-			  "wr_id:0x%lx, " \
-			  "err:%s, vendor_err:0x%x\n",
-			   rdma_hndl, rdma_task, task,
-			   wc->wr_id,
-			   ibv_wc_status_str(wc->status),
-			   wc->vendor_err);
-		*/
-	} else  {
+	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
 		if (rdma_hndl)  {
 			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, " \
 				  "rdma_task:%p, task:%p, wr_id:0x%lx, " \
@@ -590,9 +589,6 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 				  wc->wr_id,
 				  ibv_wc_status_str(wc->status),
 				  wc->vendor_err);
-
-		ERROR_LOG("byte_len=%u, immdata=%u, qp_num=0x%x, src_qp=0x%x\n",
-			  wc->byte_len, wc->imm_data, wc->qp_num, wc->src_qp);
 	}
 	if (task && rdma_task)
 		xio_handle_task_error(task);
@@ -1092,7 +1088,7 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
    scheduled event, and call xio_poll_cq_armable(), so that the polling
    cycle resumes normally.
 */
-static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data)
+static void xio_sched_consume_cq(void *data)
 {
 	struct xio_cq *tcq = (struct xio_cq *)data;
 	int err;
@@ -1108,7 +1104,7 @@ static void xio_sched_consume_cq(xio_ctx_event_t *tev, void *data)
 /* Scheduled to poll cq after a completion event has been
    received and acknowledged, if no more completions are found
    the interrupts are re-armed */
-static void xio_sched_poll_cq(xio_ctx_event_t *tev, void *data)
+static void xio_sched_poll_cq(void *data)
 {
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq = (struct xio_cq *)data;

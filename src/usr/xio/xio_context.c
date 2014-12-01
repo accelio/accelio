@@ -363,9 +363,14 @@ void xio_context_destroy(struct xio_context *ctx)
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
 		return;
 	}
-
+	ctx->run_private = 0;
 	xio_observable_notify_all_observers(&ctx->observable,
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+
+	/* allow internally to run the loop for final cleanup */
+	if (ctx->run_private)
+		xio_context_run_loop(ctx, 5000);
+
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	if (ctx->netlink_sock) {
@@ -374,7 +379,6 @@ void xio_context_destroy(struct xio_context *ctx)
 		close(fd);
 		ctx->netlink_sock = NULL;
 	}
-
 	for (i = 0; i < XIO_STAT_LAST; i++)
 		if (ctx->stats.name[i])
 			free(ctx->stats.name[i]);
@@ -638,7 +642,7 @@ int xio_ctx_del_work(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 void xio_ctx_init_event(
 		xio_ctx_event_t *evt,
-		void (*event_handler)(xio_ctx_event_t *tev, void *data),
+		void (*event_handler)(void *data),
 		void *data)
 {
 	xio_ev_loop_init_event(evt, event_handler, data);

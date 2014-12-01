@@ -1181,12 +1181,7 @@ static void xio_on_context_close(struct xio_nexus *nexus,
 	if (nexus->transport->context_shutdown)
 		nexus->transport->context_shutdown(nexus->transport_hndl, ctx);
 
-	/* at that stage the nexus->transport_hndl no longer exist */
-	nexus->transport_hndl = NULL;
-
-	/* close the nexus - listener should be close by unbind */
-	if (!nexus->is_listener)
-		xio_nexus_destroy(nexus);
+	/* at that stage the nexus may no longer exist */
 }
 
 /*---------------------------------------------------------------------------*/

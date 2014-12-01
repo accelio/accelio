@@ -79,6 +79,8 @@ struct xio_context {
 	int				polling_timeout;
 	unsigned int			flags;
 	uint64_t			worker;
+	int				run_private;
+	int				pad;
 	struct xio_statistics		stats;
 	void				*user_context;
 	struct xio_workqueue		*workqueue;
@@ -177,7 +179,7 @@ int xio_ctx_del_work(struct xio_context *ctx,
 /* xio_ctx_init_event							     */
 /*---------------------------------------------------------------------------*/
 void xio_ctx_init_event(xio_ctx_event_t *evt,
-			void (*event_handler)(xio_ctx_event_t *tev, void *data),
+			void (*event_handler)(void *data),
 			void *data);
 
 /*---------------------------------------------------------------------------*/

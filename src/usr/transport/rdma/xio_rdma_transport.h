@@ -75,6 +75,8 @@ extern spinlock_t		dev_list_lock;
 #define HARD_CQ_MOD			64
 #define SEND_TRESHOLD			8
 
+#define XIO_BEACON_WRID			0xfffffffffffffffeULL
+
 #define PAGE_SIZE			page_size
 /* see if a pointer is page aligned. */
 #define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)(ptr)) == 0)
@@ -432,7 +434,11 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
+	struct xio_ev_data		ev_data_close;
+	struct xio_ev_data		ev_data_timewait_exit;
 	xio_delayed_work_handle_t	timewait_timeout_work;
+	struct ibv_send_wr		beacon;
+	struct xio_task			beacon_task;
 };
 
 struct xio_cm_channel {
@@ -491,6 +497,9 @@ static inline void xio_device_get(struct xio_device *dev)
 {
 	kref_get(&dev->kref);
 }
+void xio_rdma_close_cb(struct kref *kref);
+
+int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl);
 
 void xio_device_down(struct kref *kref);
 
