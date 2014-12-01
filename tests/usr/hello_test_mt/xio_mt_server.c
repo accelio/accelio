@@ -649,6 +649,7 @@ int main(int argc, char *argv[])
 		if (((uint64_t)(uintptr_t)thr_exit_code) != 0)
 			exit_code = -1;
 	}
+	fprintf(stdout, "joined all threads\n");
 
 	/* free the server */
 	xio_unbind(server);

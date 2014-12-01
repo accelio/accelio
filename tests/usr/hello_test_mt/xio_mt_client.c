@@ -271,6 +271,7 @@ static void *worker_thread(void *data)
 			/* on error - disconnect */
 			tdata->exit_code = -1;
 			xio_disconnect(tdata->conn);
+			break;
 		}
 	}
 
