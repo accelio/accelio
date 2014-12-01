@@ -38,7 +38,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
 #include "xio_sessions_cache.h"
 #include "xio_nexus_cache.h"

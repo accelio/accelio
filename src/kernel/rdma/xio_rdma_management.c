@@ -43,7 +43,7 @@
 #include <rdma/rdma_cm.h>
 
 #include "libxio.h"
-#include "xio_os.h"
+#include <xio_os.h>
 #include "xio_common.h"
 #include "xio_log.h"
 #include "xio_observer.h"
