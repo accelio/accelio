@@ -280,7 +280,7 @@ static void *worker_thread(void *data)
 
 exit:
 	/* normal exit phase */
-	fprintf(stdout, "exit signaled\n");
+	fprintf(stdout, "thread[%d]: exit signaled\n", tdata->affinity);
 
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
@@ -323,7 +323,8 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
+			if (session_data->tdata[i].exit_code == 0)
+				xio_context_stop_loop(session_data->tdata[i].ctx, 0);
 		break;
 	default:
 		break;
