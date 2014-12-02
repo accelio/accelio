@@ -46,7 +46,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <sys/socket.h>
+#include "xio_predefs.h"
 #include "xio_base.h"
 
 #ifdef __cplusplus
