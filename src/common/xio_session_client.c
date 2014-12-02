@@ -852,6 +852,13 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 	return retval;
 }
 
+static inline void xio_session_refuse_connection(void *conn)
+{
+	struct xio_connection *connection = (struct xio_connection *)conn;
+
+	xio_connection_refused(connection);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_connect								     */
 /*---------------------------------------------------------------------------*/
@@ -932,6 +939,26 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 						session,
 						ctx, connection_idx,
 						connection_user_context);
+		if (session->state == XIO_SESSION_STATE_REFUSED ||
+		    session->state == XIO_SESSION_STATE_REJECTED) {
+			xio_idr_add_uobj(usr_idr, connection, "xio_connection");
+			mutex_unlock(&session->lock);
+			retval = xio_ctx_add_work(
+					connection->ctx,
+					connection,
+					xio_session_refuse_connection,
+					&connection->fin_work);
+			if (retval != 0) {
+				ERROR_LOG("xio_ctx_timer_add failed.\n");
+			}
+			return connection;
+
+		} else if (session->state == XIO_SESSION_STATE_CLOSING ||
+		           session->state == XIO_SESSION_STATE_CLOSED) {
+			DEBUG_LOG("refusing connection %p - session is closing\n",
+				  connection);
+			goto cleanup;
+		}
 	} else if (session->state == XIO_SESSION_STATE_ONLINE ||
 		   session->state == XIO_SESSION_STATE_ACCEPTED) {
 		struct xio_nexus *nexus;
@@ -950,6 +977,7 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 						session, ctx,
 						connection_idx,
 						connection_user_context);
+
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
 				       session->session_id);
 		if (nexus == NULL) {
@@ -968,7 +996,13 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;
 		}
+	} else if (session->state == XIO_SESSION_STATE_REFUSED ||
+		    session->state == XIO_SESSION_STATE_REJECTED ||
+		    session->state == XIO_SESSION_STATE_CLOSING ||
+		    session->state == XIO_SESSION_STATE_CLOSED) {
+		goto cleanup2;
 	}
+
 
 	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 
@@ -988,6 +1022,7 @@ cleanup:
 	if (connection)
 		xio_session_free_connection(connection);
 
+cleanup2:
 	mutex_unlock(&session->lock);
 
 	return NULL;

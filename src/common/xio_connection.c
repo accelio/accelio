@@ -1991,9 +1991,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 		TRACE_LOG("redirected connection is closed\n");
 	} else {
 		spin_lock(&session->connections_list_lock);
-		if (session->connections_nr == 1)
-			session->state = XIO_SESSION_STATE_CLOSING;
-
 		session->connections_nr--;
 		list_del(&connection->connections_list_entry);
 		spin_unlock(&session->connections_list_lock);
@@ -2028,12 +2025,14 @@ static void xio_connection_post_destroy(struct kref *kref)
 			(session->redir_connection == NULL));
 	spin_unlock(&session->connections_list_lock);
 	if (destroy_session) {
+		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
 		retval = xio_ctx_add_work(
 				ctx,
 				session,
 				xio_session_teardown,
 				&session->teardown_work);
+
 	}
 }
 
