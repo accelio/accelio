@@ -183,25 +183,27 @@ static int on_session_event(struct xio_session *session,
 		conn_attr.user_context = cb_user_context;
 		xio_modify_connection(event_data->conn, &conn_attr,
 				      XIO_CONNECTION_ATTR_USER_CTX);
-		test_params->connection = event_data->conn;
-		break;
-	case XIO_SESSION_REJECT_EVENT:
-		xio_disconnect(event_data->conn);
+		if (!test_params->connection)
+			test_params->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		pr_info("last sent:%llu, last comp:%llu, " \
-		       "delta:%llu\n",
-		       test_params->nsent,  test_params->ncomp,
-		       test_params->nsent-test_params->ncomp);
+		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+			pr_info("last sent:%llu, last comp:%llu, " \
+				"delta:%llu\n",
+				test_params->nsent,  test_params->ncomp,
+				test_params->nsent-test_params->ncomp);
+			test_params->connection = NULL;
+		}
 		xio_connection_destroy(event_data->conn);
-		test_params->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		test_params->session = NULL;
 		xio_session_destroy(session);
-		if (atomic_read(&module_state) & 0x80)
-			xio_context_stop_loop(test_params
-					->ctx); /* exit */
+		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+			if (atomic_read(&module_state) & 0x80)
+				xio_context_stop_loop(
+						test_params->ctx); /* exit */
+		}
 		break;
 	default:
 		break;

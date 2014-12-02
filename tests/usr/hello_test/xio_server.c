@@ -141,20 +141,23 @@ static int on_session_event(struct xio_session *session,
 		conn_attr.user_context = cb_user_context;
 		xio_modify_connection(event_data->conn, &conn_attr,
 				      XIO_CONNECTION_ATTR_USER_CTX);
-		test_params->connection = event_data->conn;
+		if (!test_params->connection)
+			test_params->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("last sent:%lu, last comp:%lu, " \
-		       "delta:%lu\n",
-		       test_params->nsent,  test_params->ncomp,
-		       test_params->nsent-test_params->ncomp);
+		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+			printf("last sent:%lu, last comp:%lu, " \
+			       "delta:%lu\n",
+			       test_params->nsent,  test_params->ncomp,
+			       test_params->nsent-test_params->ncomp);
+			test_params->connection = NULL;
+		}
 		xio_connection_destroy(event_data->conn);
-		test_params->connection = NULL;
 		break;
-	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(test_params->ctx, 0);
+		if (event_data->reason != XIO_E_SESSION_REJECTED)
+			xio_context_stop_loop(test_params->ctx, 0);
 		break;
 	default:
 		break;
