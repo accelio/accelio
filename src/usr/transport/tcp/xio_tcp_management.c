@@ -1321,9 +1321,13 @@ void xio_tcp_conn_established_helper(int fd,
 	return;
 
 cleanup:
-	xio_transport_notify_observer_error(&tcp_hndl->base,
-					    so_error ? so_error :
-					    XIO_E_CONNECT_ERROR);
+	if  (so_error == ECONNREFUSED)
+		xio_transport_notify_observer(&tcp_hndl->base,
+					      XIO_TRANSPORT_REFUSED, NULL);
+	else
+		xio_transport_notify_observer_error(&tcp_hndl->base,
+						    so_error ? so_error :
+						    XIO_E_CONNECT_ERROR);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1423,9 +1427,13 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 	return;
 
 cleanup:
-	xio_transport_notify_observer_error(&tcp_hndl->base,
-					    so_error ? so_error :
-					    XIO_E_CONNECT_ERROR);
+	if  (so_error == ECONNREFUSED)
+		xio_transport_notify_observer(&tcp_hndl->base,
+					      XIO_TRANSPORT_REFUSED, NULL);
+	else
+		xio_transport_notify_observer_error(&tcp_hndl->base,
+						    so_error ? so_error :
+						    XIO_E_CONNECT_ERROR);
 }
 
 /*---------------------------------------------------------------------------*/
