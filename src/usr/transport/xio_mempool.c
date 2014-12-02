@@ -522,7 +522,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 {
 	struct xio_mempool	*p;
-	int			i;
+	size_t			i;
 	int			ret;
 
 	if (g_mempool_config.slabs_nr < 1 ||

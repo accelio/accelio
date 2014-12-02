@@ -1096,7 +1096,7 @@ struct xio_mem_allocator {
  */
  struct xio_mempool_config {
 	/**< number of slabs */
-	ssize_t			    slabs_nr;
+	size_t			    slabs_nr;
 
 	/**< per slab configuration */
 	struct xio_mempool_slab_config {
