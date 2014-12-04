@@ -79,7 +79,7 @@ void *malloc_huge_pages(size_t size)
 	real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
 
 	ptr = xio_mmap(real_size);
-	if (ptr == MAP_FAILED) {
+	if (!ptr || ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
 		long page_size = xio_get_page_size();
 		if (page_size < 0) {
