@@ -320,6 +320,11 @@ static void xio_cq_down(struct kref *kref)
 				  tcq->cq_events_that_need_ack);
 		tcq->cq_events_that_need_ack = 0;
 	}
+
+	if (tcq->ctx->run_private)
+		xio_context_stop_loop(tcq->ctx, 0);
+	tcq->ctx->run_private = 0;
+
 	retval = xio_context_del_ev_handler(
 			tcq->ctx,
 			tcq->channel->fd);
@@ -340,11 +345,6 @@ static void xio_cq_down(struct kref *kref)
 	XIO_OBSERVER_DESTROY(&tcq->observer);
 
 	ufree(tcq->wc_array);
-
-	if (tcq->ctx->run_private)
-		xio_context_stop_loop(tcq->ctx, 0);
-	tcq->ctx->run_private = 0;
-
 	ufree(tcq);
 }
 
@@ -364,7 +364,7 @@ static int xio_on_context_event(void *observer, void *sender,
 {
 	struct xio_cq	*cq = (struct xio_cq *)observer;
 
-	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+	if (event == XIO_CONTEXT_EVENT_POST_CLOSE) {
 		TRACE_LOG("context: [close] ctx:%p\n", sender);
 		xio_cq_release(cq);
 	}
@@ -2174,6 +2174,8 @@ static void on_cm_error(struct rdma_cm_event *ev,
 void xio_close_handler(void *hndl)
 {
 	xio_rdma_post_close((struct xio_transport_base *)hndl);
+
+
 }
 
 /*---------------------------------------------------------------------------*/

@@ -371,6 +371,9 @@ void xio_context_destroy(struct xio_context *ctx)
 	if (ctx->run_private)
 		xio_context_run_loop(ctx, 5000);
 
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
+
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	if (ctx->netlink_sock) {

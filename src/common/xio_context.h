@@ -47,7 +47,8 @@
 /* enum									     */
 /*---------------------------------------------------------------------------*/
 enum xio_context_event {
-	XIO_CONTEXT_EVENT_CLOSE
+	XIO_CONTEXT_EVENT_CLOSE,
+	XIO_CONTEXT_EVENT_POST_CLOSE
 };
 
 enum xio_counters {
