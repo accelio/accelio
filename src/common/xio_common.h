@@ -194,13 +194,13 @@ struct xio_sge {
 /*---------------------------------------------------------------------------*/
 /* message headers							     */
 /*---------------------------------------------------------------------------*/
-struct __attribute__((__packed__)) xio_tlv {
+PACKED_MEMORY(struct xio_tlv {
 	uint32_t		magic;
 	uint32_t		type;
 	uint64_t		len;
-};
+});
 
-struct __attribute__((__packed__)) xio_session_hdr {
+PACKED_MEMORY(struct xio_session_hdr {
 	uint32_t		dest_session_id;
 	uint32_t		flags;
 	uint64_t		serial_num;
@@ -210,32 +210,32 @@ struct __attribute__((__packed__)) xio_session_hdr {
 	uint16_t		pad[3];
 	uint32_t		receipt_result;
 	uint64_t		credits_bytes;
-};
+});
 
 /* setup flags */
 #define XIO_CID			1
 
 #define XIO_RECONNECT		(XIO_CID)
 
-struct __attribute__((__packed__)) xio_nexus_setup_req {
+PACKED_MEMORY(struct xio_nexus_setup_req {
 	uint16_t		version;
 	uint16_t		flags;
 	uint32_t		cid;
-};
+});
 
 
-struct __attribute__((__packed__)) xio_nexus_setup_rsp {
+PACKED_MEMORY(struct xio_nexus_setup_rsp {
 	uint32_t		cid;
 	uint32_t		status;
 	uint16_t		version;
 	uint16_t		flags;
-};
+});
 
-struct __attribute__((__packed__)) xio_session_cancel_hdr {
+PACKED_MEMORY(struct xio_session_cancel_hdr {
 	uint32_t		requester_session_id;
 	uint32_t		responder_session_id;
 	uint64_t		sn;
-};
+});
 
 struct xio_msg;
 struct xio_vmsg;
