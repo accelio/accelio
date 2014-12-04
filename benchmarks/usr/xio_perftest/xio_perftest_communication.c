@@ -234,6 +234,7 @@ int establish_connection(struct perf_comm *comm)
 {
 	char				url[256];
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	/* create thread context for the client */
 	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
@@ -262,11 +263,14 @@ int establish_connection(struct perf_comm *comm)
 		/* create url to connect to */
 		comm->control_ctx->session = xio_session_create(&params);
 
+		memset(&cparams, 0, sizeof(cparams));
+		cparams.session			= comm->control_ctx->session;
+		cparams.ctx			= comm->control_ctx->ctx;
+		cparams.conn_user_context	= comm;
+
+
 		/* connect the session  */
-		comm->control_ctx->conn = xio_connect(
-				comm->control_ctx->session,
-				comm->control_ctx->ctx, 0, NULL,
-				comm);
+		comm->control_ctx->conn = xio_connect(&cparams);
 	}
 
 	/* the default xio supplied main loop */

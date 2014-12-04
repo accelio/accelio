@@ -73,9 +73,10 @@ struct session_data {
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = (struct thread_data *)data;
-	cpu_set_t		cpuset;
-	char			str[128];
+	struct thread_data		*tdata = (struct thread_data *)data;
+	struct xio_connection_params	cparams;
+	cpu_set_t			cpuset;
+	char				str[128];
 
 	/* set affinity to thread */
 
@@ -87,9 +88,14 @@ static void *worker_thread(void *data)
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= tdata->session;
+	cparams.ctx			= tdata->ctx;
+	cparams.conn_idx		= tdata->cid;
+	cparams.conn_user_context	= tdata;
+
 	/* connect the session  */
-	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, NULL, tdata);
+	tdata->conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	memset(&tdata->req, 0, sizeof(tdata->req));

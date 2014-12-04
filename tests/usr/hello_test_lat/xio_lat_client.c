@@ -438,14 +438,15 @@ static void print_test_config(
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	int			error;
-	int			retval;
-	char			url[256];
-	struct xio_msg		*msg;
-	/*struct xio_iovec_ex	*sglist; */
-	int			i = 0, opt;
-	struct xio_session_params params;
+	struct xio_session		*session;
+	int				error;
+	int				retval;
+	char				url[256];
+	struct xio_msg			*msg;
+	/*struct xio_iovec_ex		*sglist; */
+	int				i = 0, opt;
+	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -492,7 +493,12 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session		= session;
+	cparams.ctx		= ctx;
+	cparams.conn_idx	= test_config.conn_idx;
+
+	conn = xio_connect(&cparams);
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 

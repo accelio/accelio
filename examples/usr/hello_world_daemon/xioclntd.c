@@ -335,6 +335,7 @@ int main(int argc, char *const argv[])
 	char			*port = NULL;
 	char			*trans = NULL;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	while (1) {
 		c = getopt_long(argc, argv, "a:p:r:hdnV", longopts, NULL);
@@ -398,6 +399,7 @@ int main(int argc, char *const argv[])
 
 	memset(&session_data, 0, sizeof(session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	/* initialize library */
 	xio_init();
@@ -438,12 +440,16 @@ int main(int argc, char *const argv[])
 	params.user_context	= &session_data;
 	params.uri		= url;
 
+
 reconnect:
 	session = xio_session_create(&params);
 
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
+
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* event dispatcher is now running */
 	xio_context_run_loop(session_data.ctx, XIO_INFINITE);

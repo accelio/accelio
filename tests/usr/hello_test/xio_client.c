@@ -691,6 +691,7 @@ int main(int argc, char *argv[])
 	struct xio_session		*session;
 	struct test_params		test_params;
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 	int				error;
 	int				retval;
 	static int			chain_messages = CHAIN_MESSAGES;
@@ -706,6 +707,7 @@ int main(int argc, char *argv[])
 
 	memset(&test_params, 0, sizeof(struct test_params));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	test_params.stat.first_time = 1;
 	test_params.finite_run = test_config.finite_run;
 
@@ -754,10 +756,13 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 
+	cparams.session			= session;
+	cparams.ctx			= test_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &test_params;
+
 	/* connect the session  */
-	test_params.connection = xio_connect(session, test_params.ctx,
-					     test_config.conn_idx,
-					     NULL, &test_params);
+	test_params.connection = xio_connect(&cparams);
 
 	printf("**** starting ...\n");
 

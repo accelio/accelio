@@ -733,6 +733,7 @@ static int xio_client_main(void *data)
 {
 	char				url[256];
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 	int				error;
 	int				retval;
 	static int			chain_messages = CHAIN_MESSAGES;
@@ -742,6 +743,7 @@ static int xio_client_main(void *data)
 	print_test_config(&test_config);
 
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	g_test_params.stat.first_time = 1;
 	g_test_params.finite_run = test_config.finite_run;
 
@@ -783,11 +785,13 @@ static int xio_client_main(void *data)
 		pr_err("session creation failed\n");
 	}
 
+	cparams.session			= g_test_params.session;
+	cparams.ctx			= g_test_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &g_test_params;
+
 	/* connect the session  */
-	g_test_params.connection = xio_connect(g_test_params.session,
-					       g_test_params.ctx,
-					       test_config.conn_idx,
-					       NULL, &g_test_params);
+	g_test_params.connection = xio_connect(&cparams);
 
 	pr_info("**** starting ...\n");
 

@@ -410,6 +410,7 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	int				fd;
 	int				opt;
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 
 	xio_init();
@@ -435,6 +436,7 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	session_data = (struct raio_session_data *)
 				calloc(1, sizeof(*session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	session_data->cmd_req.out.header.iov_base =
 		calloc(MAX_MSG_LEN, sizeof(char));
@@ -458,11 +460,12 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	if (session_data->session == NULL)
 		goto cleanup;
 
+	cparams.session			= session_data->session;
+	cparams.ctx			= session_data->ctx;
+	cparams.conn_user_context	= session_data;
+
 	/* connect the session  */
-	session_data->conn = xio_connect(session_data->session,
-					 session_data->ctx, 0,
-					 NULL,
-					 session_data);
+	session_data->conn = xio_connect(&cparams);
 	if (session_data->conn == NULL)
 		goto cleanup1;
 

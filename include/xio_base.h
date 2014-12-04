@@ -670,27 +670,35 @@ struct xio_connection_attr {
 };
 
 /**
+ * @struct xio_connection_params
+ * @brief connection attributes structure
+ */
+struct xio_connection_params {
+	struct xio_session	*session;	/**< xio session handle       */
+	struct xio_context	*ctx;		/**< xio context handle       */
+	uint32_t		conn_idx;	/**< Connection index greater */
+					        /**< then 0 if 0 - auto count */
+
+	uint32_t		pad;
+	/**< bounded outgoing interface address and/or port - NULL if not     */
+	/**< specified in form:                                               */
+	/**< host:port, host:, host, :port.                                   */
+ 	/**< [host]:port, [host]:, [host]. [ipv6addr]:port, [ipv6addr]:,      */
+	/**< [ipv6addr].                                                      */
+	const char		*out_addr;
+
+	/**< Private data pointer to pass to each connection callback         */
+	void			*conn_user_context;
+};
+
+/**
  * creates connection handle
  *
- * @param[in] session	The xio session handle
- * @param[in] ctx	The xio context handle
- * @param[in] conn_idx  Connection index greater then 0 if 0 - auto count
- * @param[in] out_addr	bounded outgoing interface address and/or port -
- *			NULL if not specified
- *			in form: host:port, host:, host, :port.
- *			[host]:port, [host]:, [host].
- *			[ipv6addr]:port, [ipv6addr]:, [ipv6addr].
- * @param[in] conn_user_context Private data pointer to pass to each
- *				connection callback
+ * @param[in] cparams	The xio connection parameters structure
  *
- * @returns xio session context, or NULL upon error
+ * @returns xio connection, or NULL upon error
  */
-struct xio_connection *xio_connect(
-		struct xio_session  *session,
-		struct xio_context  *ctx,
-		uint32_t conn_idx,
-		const char *out_addr,
-		void *conn_user_context);
+struct xio_connection *xio_connect(struct xio_connection_params  *cparams);
 
 /**
  * teardown an opened connection

@@ -184,6 +184,7 @@ static void *worker_thread(void *data)
 	int			qdepth_per_thread;
 	struct session_entry	*session_entry;
 	struct connection_entry *connection_entry;
+	struct xio_connection_params	cparams;
 
 
 	/* set affinity to thread */
@@ -215,11 +216,14 @@ static void *worker_thread(void *data)
 
 	connection_entry->session_entry = session_entry;
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= session_entry->session;
+	cparams.ctx			= tdata->ctx;
+	cparams.conn_idx		= connection_entry->cid;
+	cparams.conn_user_context	= connection_entry;
+
 	/* connect the session  */
-	connection_entry->connection = xio_connect(session_entry->session,
-						   tdata->ctx,
-						   connection_entry->cid,
-						   NULL, connection_entry);
+	connection_entry->connection = xio_connect(&cparams);
 
 	if (tdata->client_data->client_dlen)
 		tdata->out_iobuf_pool = obj_pool_init(

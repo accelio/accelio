@@ -162,11 +162,12 @@ static struct xio_session_ops ses_ops = {
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	char			url[256];
-	struct session_data	session_data;
-	int			i = 0;
-	struct xio_session_params params;
+	struct xio_session		*session;
+	char				url[256];
+	struct session_data		session_data;
+	int				i = 0;
+	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
@@ -175,6 +176,7 @@ int main(int argc, char *argv[])
 	}
 	memset(&session_data, 0, sizeof(session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	/* initialize library */
 	xio_init();
@@ -196,9 +198,12 @@ int main(int argc, char *argv[])
 
 	session = xio_session_create(&params);
 
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
+
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {

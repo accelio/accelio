@@ -548,6 +548,7 @@ int main(int argc, char *argv[])
 	struct xio_msg		*msg;
 	int			i = 0;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	/* parse the command line */
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -563,6 +564,7 @@ int main(int argc, char *argv[])
 
 	memset(&ow_params, 0, sizeof(ow_params));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	ow_params.rx_stat.first_time = 1;
 	ow_params.tx_stat.first_time = 1;
 	ow_params.finite_run = test_config.finite_run;
@@ -605,8 +607,12 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 	/* connect the session  */
-	ow_params.conn = xio_connect(session, ow_params.ctx,
-				     test_config.conn_idx, NULL, &ow_params);
+	cparams.session			= session;
+	cparams.ctx			= ow_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &ow_params;
+
+	ow_params.conn = xio_connect(&cparams);
 	if (ow_params.conn == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "connection creation failed. " \

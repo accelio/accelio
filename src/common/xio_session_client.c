@@ -862,23 +862,30 @@ static inline void xio_session_refuse_connection(void *conn)
 /*---------------------------------------------------------------------------*/
 /* xio_connect								     */
 /*---------------------------------------------------------------------------*/
-struct xio_connection *xio_connect(struct xio_session  *session,
-				   struct xio_context  *ctx,
-				   uint32_t connection_idx,
-				   const char *out_if,
-				   void *connection_user_context)
+struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 {
+	struct xio_session	*session;
+	struct xio_context	*ctx;
 	struct xio_session	*psession = NULL;
 	struct xio_connection	*connection = NULL, *tmp_connection;
 	struct xio_nexus	*nexus = NULL;
 	int			retval;
 
-	if ((ctx == NULL) || (session == NULL)) {
-		ERROR_LOG("invalid parameters ctx:%p, session:%p\n",
-			  ctx, session);
+	if (cparams == NULL) {
+		ERROR_LOG("invalid parameter\n");
 		xio_set_error(EINVAL);
 		return NULL;
 	}
+
+	if ((cparams->ctx == NULL) || (cparams->session == NULL)) {
+		ERROR_LOG("invalid parameters ctx:%p, session:%p\n",
+			  cparams->ctx, cparams->session);
+		xio_set_error(EINVAL);
+		return NULL;
+	}
+	ctx	= cparams->ctx;
+	session = cparams->session;
+
 	/* lookup for session in cache */
 	psession = xio_sessions_cache_lookup(session->session_id);
 	if (psession == NULL) {
@@ -915,8 +922,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		/* initialize the lead connection */
 		session->lead_connection = xio_session_alloc_connection(
 				session, ctx,
-				connection_idx,
-				connection_user_context);
+				cparams->conn_idx,
+				cparams->conn_user_context);
 		session->lead_connection->nexus = nexus;
 
 		connection  = session->lead_connection;
@@ -927,7 +934,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		session->state = XIO_SESSION_STATE_CONNECT;
 
 		retval = xio_nexus_connect(nexus, portal,
-					   &session->observer, out_if);
+					   &session->observer,
+					   cparams->out_addr);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
 			session->state = XIO_SESSION_STATE_INIT;
@@ -936,9 +944,9 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 	} else if ((session->state == XIO_SESSION_STATE_CONNECT) ||
 		   (session->state == XIO_SESSION_STATE_REDIRECTED)) {
 		connection  = xio_session_alloc_connection(
-						session,
-						ctx, connection_idx,
-						connection_user_context);
+				session, ctx,
+				cparams->conn_idx,
+				cparams->conn_user_context);
 		if (session->state == XIO_SESSION_STATE_REFUSED ||
 		    session->state == XIO_SESSION_STATE_REJECTED) {
 			xio_idr_add_uobj(usr_idr, connection, "xio_connection");
@@ -963,20 +971,20 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 		   session->state == XIO_SESSION_STATE_ACCEPTED) {
 		struct xio_nexus *nexus;
 		char *portal;
-		if (connection_idx == 0) {
+		if (cparams->conn_idx == 0) {
 			portal = session->portals_array[
 					session->last_opened_portal++];
 			if (session->last_opened_portal ==
 			    session->portals_array_len)
 					session->last_opened_portal = 0;
 		} else {
-			int pid = (connection_idx % session->portals_array_len);
+			int pid = (cparams->conn_idx % session->portals_array_len);
 			portal = session->portals_array[pid];
 		}
 		connection  = xio_session_alloc_connection(
-						session, ctx,
-						connection_idx,
-						connection_user_context);
+				session, ctx,
+				cparams->conn_idx,
+				cparams->conn_user_context);
 
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
 				       session->session_id);
@@ -991,7 +999,8 @@ struct xio_connection *xio_connect(struct xio_session  *session,
 			goto cleanup;
 		}
 		retval = xio_nexus_connect(nexus, portal,
-					   &session->observer, out_if);
+					   &session->observer,
+					   cparams->out_addr);
 		if (retval != 0) {
 			ERROR_LOG("connection connect failed\n");
 			goto cleanup;

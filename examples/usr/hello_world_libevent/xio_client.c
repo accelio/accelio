@@ -178,6 +178,7 @@ int main(int argc, char *argv[])
 	struct timeval		tv;
 	struct xio_poll_params  poll_params;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
@@ -207,10 +208,12 @@ int main(int argc, char *argv[])
 	params.uri		= url;
 
 	session = xio_session_create(&params);
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
 
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {

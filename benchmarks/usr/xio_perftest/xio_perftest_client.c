@@ -191,11 +191,12 @@ static void *statistics_thread_cb(void *data)
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = (struct thread_data *)data;
-	struct xio_iovec_ex	*sglist;
-	cpu_set_t		cpuset;
-	struct xio_msg		*msg;
-	unsigned int		i;
+	struct thread_data		*tdata = (struct thread_data *)data;
+	struct xio_connection_params	cparams;
+	struct xio_iovec_ex		*sglist;
+	cpu_set_t			cpuset;
+	struct xio_msg			*msg;
+	unsigned int			i;
 
 	/* set affinity to thread */
 
@@ -211,10 +212,14 @@ static void *worker_thread(void *data)
 	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout,
 					tdata->affinity);
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= tdata->session;
+	cparams.ctx			= tdata->ctx;
+	cparams.conn_idx		= tdata->cid;
+	cparams.conn_user_context	= tdata;
 
 	/* connect the session  */
-	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, NULL, tdata);
+	tdata->conn = xio_connect(&cparams);
 
 	if (tdata->data_len)
 		tdata->xbuf = xio_alloc(tdata->data_len);
