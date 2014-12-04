@@ -35,8 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_PREDEF_H
-#define XIO_PREDEF_H
+#ifndef XIO_PREDEFS_H
+#define XIO_PREDEFS_H
 
 #if defined(_WIN32)
 #include <winsock2.h>
@@ -44,8 +44,6 @@
 #else /* !defined(_WIN32) */
 
 #include <sys/socket.h>
-#include <linux/types.h>
-#include <sys/timex.h>
 
 #endif /* !defined(_WIN32) */
 
