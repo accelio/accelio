@@ -62,6 +62,8 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_THREADS		6
+#define TEST_DISCONNECT		0
+#define DISCONNECT_NR		12000000
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -70,7 +72,9 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
-	int		poll_timeout;
+	uint32_t	poll_timeout;
+	uint32_t	finite_run;
+	uint32_t	pad;
 };
 
 struct portals_vec {
@@ -91,7 +95,9 @@ struct thread_stat_data {
 
 struct  thread_data {
 	struct thread_stat_data	stat;
+	struct server_data	*sdata;
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	struct msg_pool		*pool;
 	void			*loop;
 	struct xio_buf		*xbuf;
@@ -99,13 +105,17 @@ struct  thread_data {
 	int			affinity;
 	int			cnt;
 	pthread_t		thread_id;
+	uint64_t		nsent;
+	uint64_t		ncomp;
 };
 
 /* server private data */
 struct server_data {
 	void			*ctx;
 	int			tdata_nr;
-	int			pad;
+	int			disconnected;
+	pthread_spinlock_t	lock;
+	int			finite_run;
 	struct thread_data	*tdata;
 };
 
@@ -201,7 +211,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 		/*xio_disconnect(tdata->conn);*/
 		xio_assert(0);
 	}
-
+	tdata->nsent++;
 
 	return 0;
 }
@@ -214,9 +224,27 @@ static int on_send_response_complete(struct xio_session *session,
 				     void *cb_prv_data)
 {
 	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
+	struct server_data	*sdata  = tdata->sdata;
+
+	tdata->ncomp++;
 
 	/* can be safely freed */
 	msg_pool_put(tdata->pool, msg);
+
+	if (sdata->finite_run && tdata->ncomp == DISCONNECT_NR) {
+		pthread_spin_lock(&sdata->lock);
+		if (tdata->sdata->disconnected == 0) {
+			int			i;
+
+			sdata->disconnected = 1;
+			pthread_spin_unlock(&sdata->lock);
+
+			for (i = 0; i < sdata->tdata_nr; i++)
+				if (sdata->tdata[i].connection)
+					xio_disconnect(sdata->tdata[i].connection);
+		} else
+			pthread_spin_unlock(&sdata->lock);
+	}
 
 	return 0;
 }
@@ -349,8 +377,13 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct server_data *server_data = (struct server_data *)cb_user_context;
+	struct server_data *sdata;
+	struct thread_data *tdata;
 	int		   i;
+
+	sdata = (struct server_data *)cb_user_context;
+	tdata = (event_data->conn_user_context == sdata) ? NULL :
+		(struct thread_data *)event_data->conn_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -358,16 +391,22 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		if (tdata)
+			tdata->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		if (tdata)
+			tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		for (i = 0; i < server_data->tdata_nr; i++) {
-			process_request(&server_data->tdata[i], NULL);
-			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
+		for (i = 0; i < sdata->tdata_nr; i++) {
+			process_request(&sdata->tdata[i], NULL);
+			xio_context_stop_loop(sdata->tdata[i].ctx, 0);
 		}
-		xio_context_stop_loop((struct xio_context *)server_data->ctx,
+		xio_context_stop_loop((struct xio_context *)sdata->ctx,
 				      0);
 		break;
 	default:
@@ -447,6 +486,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet polling timeout in microseconds " \
 			"(default %d)\n", XIO_DEF_POLL);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -471,12 +514,13 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "timeout",	.has_arg = 0, .val = 't'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:r:n:w:t:svh";
+		static char *short_options = "c:p:r:n:w:t:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -503,6 +547,9 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
 			break;
+		case 'f':
+			test_config->finite_run =
+					(uint32_t)strtol(optarg, NULL, 0);
 		case 't':
 			test_config->poll_timeout =
 				(uint32_t)strtol(optarg, NULL, 0);
@@ -549,6 +596,7 @@ static void print_test_config(
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
 	printf(" Poll Timeout		: %d\n", test_config_p->poll_timeout);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -577,6 +625,7 @@ int main(int argc, char *argv[])
 				calloc(MAX_THREADS, sizeof(struct thread_data));
 	if (!server_data.tdata)
 		return -1;
+
 	server_data.tdata_nr = MAX_THREADS;
 
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -601,9 +650,14 @@ int main(int argc, char *argv[])
 			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
+	pthread_spin_init(&server_data.lock, 0);
+
+
 	/* create thread context for the client */
 	server_data.ctx = xio_context_create(NULL, test_config.poll_timeout,
 					     test_config.cpu);
+
+	server_data.finite_run = test_config.finite_run;
 
 	/* create url to connect to */
 	sprintf(url, "%s://%s:%d",
@@ -629,6 +683,7 @@ int main(int argc, char *argv[])
 				cpu = 0;
 		}
 		server_data.tdata[i].affinity = cpu;
+		server_data.tdata[i].sdata = &server_data;
 		port++;
 		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
 			test_config.transport,
@@ -663,6 +718,8 @@ cleanup:
 
 	if (exit_code)
 		fprintf(stdout, "exit code %d\n", exit_code);
+
+	pthread_spin_destroy(&server_data.lock);
 
 	return exit_code;
 }
