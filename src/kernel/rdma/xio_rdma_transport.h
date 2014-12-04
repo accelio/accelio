@@ -100,7 +100,8 @@ extern struct xio_rdma_options	rdma_options;
 
 #define xio_prefetch(p)		prefetch(p)
 
-#define XIO_FRWR_LI_WRID 0xffffffffffffffffULL
+#define XIO_FRWR_LI_WRID		0xffffffffffffffffULL
+#define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
 /* header flags */
 #define XIO_HEADER_FLAG_NONE		0x00
@@ -284,7 +285,7 @@ struct xio_cq  {
 	u32				cq_depth;     /* current cq depth  */
 	u32				alloc_sz;     /* allocation factor  */
 	u32				cqe_avail;    /* free elements  */
-	atomic_t			refcnt;       /* utilization counter */
+	struct kref			kref;       /* utilization counter */
 	u32				num_delayed_arm;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
@@ -386,7 +387,7 @@ struct xio_rdma_transport {
 	struct xio_mempool		*rdma_mempool;
 	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
-	struct xio_ev_data		event_data;
+	struct xio_ev_data		event_data_close;
 	struct xio_ev_data		ev_data_timewait_exit;
 
 	struct list_head		trans_list_entry;
@@ -485,6 +486,8 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
+	struct ib_send_wr		beacon;
+	struct xio_task			beacon_task;
 };
 
 /*
@@ -546,6 +549,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 
 
 /* xio_rdma_management.c */
+void xio_rdma_close_cb(struct kref *kref);
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 
 /* Should create a xio_memory.h */

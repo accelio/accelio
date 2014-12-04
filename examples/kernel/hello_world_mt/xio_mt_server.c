@@ -208,7 +208,7 @@ int on_session_event(struct xio_session *session,
 		event_data->conn_user_context;
 
 
-	printk("session event: %s. reason: %s\n",
+	printk("server session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
 	       xio_strerror(event_data->reason));
 
@@ -249,7 +249,7 @@ int on_session_event(struct xio_session *session,
 				xio_context_stop_loop(tctx[i]);
 		}
 		if (ctx)
-			xio_context_stop_loop(sdata->ctx);
+			xio_context_stop_loop(ctx);
 		break;
 	default:
 		break;

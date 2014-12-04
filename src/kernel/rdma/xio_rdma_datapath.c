@@ -588,6 +588,18 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 	struct xio_rdma_transport	*rdma_hndl = NULL;
 	int				retval;
 
+	task = (struct xio_task *)ptr_from_int64(wc->wr_id);
+	if (task && task->dd_data == ptr_from_int64(XIO_BEACON_WRID)) {
+		rdma_hndl = container_of(task,
+					 struct xio_rdma_transport,
+					 beacon_task);
+		TRACE_LOG("beacon rdma_hndl:%p\n", rdma_hndl);
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+		return;
+	} else {
+		task = NULL;
+	}
+
 	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
 		task = ptr_from_int64(wc->wr_id);
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
@@ -2625,7 +2637,8 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		if (sge_len < rdma_hndl->max_inline_data)
 			rdma_task->txd.send_wr.send_flags |= IB_SEND_INLINE;
 
-		list_move_tail(&task->tasks_list_entry, &rdma_hndl->tx_ready_list);
+		list_move_tail(&task->tasks_list_entry,
+			       &rdma_hndl->tx_ready_list);
 		rdma_hndl->tx_ready_tasks_num++;
 	}
 

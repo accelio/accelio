@@ -127,6 +127,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	if (cpu_hint < 0)
 		cpu_hint = cpu;
 
+	ctx->run_private = 0;
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
@@ -258,8 +259,17 @@ void xio_context_destroy(struct xio_context *ctx)
 		return;
 	}
 
+	ctx->run_private = 0;
 	xio_observable_notify_all_observers(&ctx->observable,
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+	/* allow internally to run the loop for final cleanup */
+	if (ctx->run_private)
+		xio_context_run_loop(ctx);
+
+	if (ctx->run_private)
+		ERROR_LOG("not all observers finished! run_private=%d\n",
+			  ctx->run_private);
+
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	for (i = 0; i < XIO_STAT_LAST; i++)
@@ -329,7 +339,7 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 	if (retval) {
 		xio_set_error(retval);
 		WARN_LOG("xio_workqueue_del_delayed_work failed. err=%d\n",
-			  retval);
+			 retval);
 	}
 
 	return retval;

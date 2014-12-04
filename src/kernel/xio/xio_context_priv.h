@@ -42,6 +42,9 @@
  * Suspend the current handler run.
  * Note: Not protected against a race. Another thread may reactivate the event.
  */
+/*---------------------------------------------------------------------------*/
+/* xio_context_disable_event	                                             */
+/*---------------------------------------------------------------------------*/
 static inline void xio_context_disable_event(struct xio_ev_data *data)
 {
 	clear_bit(XIO_EV_HANDLER_ENABLED, &data->states);
@@ -54,9 +57,37 @@ static inline void xio_context_disable_event(struct xio_ev_data *data)
  * (When inside the event handler, the event is no longer pending)
  * Note: Not protected against a race. Another thread may reactivate the event.
  */
+/*---------------------------------------------------------------------------*/
+/* xio_context_is_pending_event	                                             */
+/*---------------------------------------------------------------------------*/
 static inline int xio_context_is_pending_event(struct xio_ev_data *data)
 {
 	return test_bit(XIO_EV_HANDLER_PENDING, &data->states);
+}
+
+/*
+ * should be called only from context_shutdown event context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_wait	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_wait(struct xio_context *ctx)
+{
+	ctx->run_private++;
+}
+
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		if (!--ctx->run_private)
+			xio_context_stop_loop(ctx);
+	}
 }
 
 struct xio_mempool *xio_mempool_get(struct xio_context *ctx);

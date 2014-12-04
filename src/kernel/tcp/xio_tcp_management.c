@@ -54,8 +54,8 @@
 #include "xio_ev_data.h"
 #include "xio_workqueue.h"
 #include "xio_ev_loop.h"
-#include "xio_context_priv.h"
 #include "xio_context.h"
+#include "xio_context_priv.h"
 #include "xio_tcp_transport.h"
 #include "xio_sg_table.h"
 
@@ -103,8 +103,8 @@ struct xio_tcp_options			tcp_options = {
 	.tcp_dual_sock			= XIO_OPTVAL_DEF_TCP_DUAL_SOCK,
 };
 
-static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
-			       int force_free);
+static int xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
+			      int force_free);
 
 void xio_tcp_save_orig_callbacks(struct xio_socket *socket)
 {
@@ -347,14 +347,15 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 static void xio_tcp_post_close_handler(void *xio_tcp_hndl)
 {
 	struct xio_tcp_transport *tcp_hndl = xio_tcp_hndl;
-	xio_tcp_post_close(tcp_hndl, 0);
+	xio_context_destroy_resume(tcp_hndl->base.ctx);
+	xio_tcp_post_close(tcp_hndl, 1);
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_post_close							     */
 /*---------------------------------------------------------------------------*/
-static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
-			       int force_free)
+static int xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
+			      int force_free)
 {
 	int event_pending = 0;
 	struct xio_tcp_pending_conn *pconn, *next_pconn;
@@ -390,7 +391,7 @@ static void xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
 		tcp_hndl->disconnect_event.handler = xio_tcp_post_close_handler;
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->disconnect_event);
-		return;
+		return 1;
 	}
 
 free:
@@ -410,6 +411,8 @@ free:
 	tcp_hndl->base.portal_uri = NULL;
 
 	kfree(tcp_hndl);
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -587,7 +590,13 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	tcp_hndl->state = XIO_STATE_DESTROYED;
 	xio_tcp_flush_all_tasks(tcp_hndl);
-	xio_tcp_post_close(tcp_hndl, 1);
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CLOSED,
+				      NULL);
+
+	if (xio_tcp_post_close(tcp_hndl, 0))
+		xio_context_destroy_wait(tcp_hndl->base.ctx);
 
 	return 0;
 }

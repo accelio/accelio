@@ -56,8 +56,8 @@
 #include "xio_ev_data.h"
 #include "xio_workqueue.h"
 #include "xio_ev_loop.h"
-#include "xio_context_priv.h"
 #include "xio_context.h"
+#include "xio_context_priv.h"
 #include "xio_tcp_transport.h"
 #include "xio_sg_table.h"
 
