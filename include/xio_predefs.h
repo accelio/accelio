@@ -41,14 +41,11 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 
-typedef SOCKET socket_t;
-
-
 #else /* !defined(_WIN32) */
 
 #include <sys/socket.h>
-
-typedef int socket_t;
+#include <linux/types.h>
+#include <sys/timex.h>
 
 #endif /* !defined(_WIN32) */
 

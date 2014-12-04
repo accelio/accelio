@@ -56,7 +56,7 @@ void *malloc_huge_pages(size_t size)
 	void	*ptr = NULL;
 
 	if (disable_huge_pages) {
-		long page_size = sysconf(_SC_PAGESIZE);
+		long page_size = xio_get_page_size();
 		if (page_size < 0) {
 			xio_set_error(errno);
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
@@ -64,7 +64,7 @@ void *malloc_huge_pages(size_t size)
 		}
 
 		real_size = ALIGN(size, page_size);
-		retval = posix_memalign(&ptr, page_size, real_size);
+		retval = xio_memalign(&ptr, page_size, real_size);
 		if (retval) {
 			ERROR_LOG("posix_memalign failed sz:%zu. %s\n",
 				  real_size, strerror(retval));
@@ -78,12 +78,10 @@ void *malloc_huge_pages(size_t size)
 	/* (libhugetlbfs is more efficient in this regard) */
 	real_size = ALIGN(size + HUGE_PAGE_SZ, HUGE_PAGE_SZ);
 
-	ptr = mmap(NULL, real_size, PROT_READ | PROT_WRITE,
-		   MAP_PRIVATE | MAP_ANONYMOUS |
-		   MAP_POPULATE | MAP_HUGETLB, -1, 0);
+	ptr = xio_mmap(real_size);
 	if (ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
-		long page_size = sysconf(_SC_PAGESIZE);
+		long page_size = xio_get_page_size();
 		if (page_size < 0) {
 			xio_set_error(errno);
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
@@ -95,7 +93,7 @@ void *malloc_huge_pages(size_t size)
 		DEBUG_LOG("mmap rdma pool sz:%zu failed (errno=%d %m)\n",
 			  real_size, errno);
 		real_size = ALIGN(size + HUGE_PAGE_SZ, page_size);
-		retval = posix_memalign(&ptr, page_size, real_size);
+		retval = xio_memalign(&ptr, page_size, real_size);
 		if (retval) {
 			ERROR_LOG("posix_memalign failed sz:%zu. %s\n",
 				  real_size, strerror(retval));
@@ -109,7 +107,7 @@ void *malloc_huge_pages(size_t size)
 	/* Save real_size since mmunmap() requires a size parameter */
 	*((size_t *)ptr) = real_size;
 	/* Skip the page with metadata */
-	return ptr + HUGE_PAGE_SZ;
+	return sum_to_ptr(ptr, HUGE_PAGE_SZ);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -137,7 +135,7 @@ void free_huge_pages(void *ptr)
 		/* The memory was allocated via mmap()
 		   and must be deallocated via munmap()
 		   */
-		munmap(real_ptr, real_size);
+		xio_munmap(real_ptr, real_size);
 	else
 		/* The memory was allocated via malloc()
 		   and must be deallocated via free()
@@ -152,7 +150,7 @@ void free_huge_pages(void *ptr)
 void *xio_numa_alloc(size_t bytes, int node)
 {
 	size_t real_size = ALIGN((bytes + page_size), page_size);
-	void *p = numa_alloc_onnode(real_size, node);
+	void *p = xio_numa_alloc_onnode(real_size, node);
 	if (!p) {
 		ERROR_LOG("numa_alloc_onnode failed sz:%zu. %m\n",
 			  real_size);
@@ -165,13 +163,13 @@ void *xio_numa_alloc(size_t bytes, int node)
 	*((size_t *)p) = real_size;
 
 	/* Skip the page with metadata */
-	return p + page_size;
+	return sum_to_ptr(p, page_size);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_numa_free	                                                     */
+/* xio_numa_free_ptr	                                                     */
 /*---------------------------------------------------------------------------*/
-void xio_numa_free(void *ptr)
+void xio_numa_free_ptr(void *ptr)
 {
 	void	*real_ptr;
 	size_t	real_size;
@@ -188,5 +186,5 @@ void xio_numa_free(void *ptr)
 		/* The memory was allocated via numa_alloc()
 		   and must be deallocated via numa_free()
 		   */
-		numa_free(real_ptr, real_size);
+		xio_numa_free(real_ptr, real_size);
 }
