@@ -1817,16 +1817,39 @@ int xio_modify_connection(struct xio_connection *connection,
 			  struct xio_connection_attr *attr,
 			  int attr_mask)
 {
+	int		       retval = 0;
+	int		       nexus_modify = 0;
+	struct xio_nexus_attr  nattr;
+	int		       nattr_mask = 0;
+
 	if (!connection || !attr) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid parameters\n");
 		return -1;
 	}
-
-	if (attr_mask & XIO_CONNECTION_ATTR_USER_CTX)
+	if (test_bits(XIO_CONNECTION_ATTR_USER_CTX, &attr_mask))
 		connection->cb_user_context = attr->user_context;
 
-	return 0;
+	memset(&nattr, 0, sizeof(nattr));
+	if (test_bits(XIO_CONNECTION_ATTR_TOS, &attr_mask)) {
+		nattr.tos = attr->tos;
+		set_bits(XIO_NEXUS_ATTR_TOS, &nattr_mask);
+		nexus_modify = 1;
+	}
+
+	if (!nexus_modify)
+		goto exit;
+
+	if (nexus_modify && !connection->nexus) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
+
+	retval = xio_nexus_modify(connection->nexus,
+				  &nattr, nattr_mask);
+
+exit:
+	return retval;
 }
 EXPORT_SYMBOL(xio_modify_connection);
 
@@ -1837,6 +1860,11 @@ int xio_query_connection(struct xio_connection *connection,
 			 struct xio_connection_attr *attr,
 			 int attr_mask)
 {
+	int		       retval = 0;
+	int		       nexus_query = 0;
+	struct xio_nexus_attr  nattr;
+	int		       nattr_mask = 0;
+
 	if (!connection || !attr) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("invalid parameters\n");
@@ -1862,6 +1890,28 @@ int xio_query_connection(struct xio_connection *connection,
 					 &attr->local_addr,
 					 sizeof(attr->local_addr));
 
+
+	memset(&nattr, 0, sizeof(nattr));
+	if (test_bits(XIO_CONNECTION_ATTR_TOS, &attr_mask)) {
+		set_bits(XIO_NEXUS_ATTR_TOS, &nattr_mask);
+		nexus_query = 1;
+	}
+
+	if (!nexus_query)
+		goto exit;
+
+	if (nexus_query && !connection->nexus) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
+
+	retval = xio_nexus_query(connection->nexus,
+				  &nattr, nattr_mask);
+
+	if (test_bits(XIO_CONNECTION_ATTR_TOS, &attr_mask))
+		attr->tos = nattr.tos;
+
+exit:
 	return 0;
 }
 EXPORT_SYMBOL(xio_query_connection);

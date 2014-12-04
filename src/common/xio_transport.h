@@ -68,6 +68,10 @@ enum xio_transport_opt {
 	XIO_TRANSPORT_OPT_MSG_ATTR,
 };
 
+enum xio_transport_attr_mask {
+	XIO_TRANSPORT_ATTR_TOS			= 1 << 0,
+};
+
 /*---------------------------------------------------------------------------*/
 /* unions and structs	                                                     */
 /*---------------------------------------------------------------------------*/
@@ -115,6 +119,16 @@ struct xio_transport_base {
 	enum   xio_proto		proto;
 	struct kref			kref;
 	struct xio_context		*ctx;
+};
+
+struct xio_transport_attr {
+	uint8_t			tos;		/**< type of service RFC 2474 */
+	uint8_t			pad[3];		/**< padding		     */
+};
+
+struct xio_transport_init_attr {
+	uint8_t			tos;		/**< type of service RFC 2474 */
+	uint8_t			pad[3];		/**< padding		     */
 };
 
 struct xio_transport_msg_validators_cls {
@@ -198,7 +212,9 @@ struct xio_transport {
 	/* connection */
 	struct xio_transport_base *(*open)(struct xio_transport *self,
 					   struct xio_context *ctx,
-					   struct xio_observer *observer);
+					   struct xio_observer *observer,
+					   uint32_t trans_attr_mask,
+					   struct xio_transport_init_attr *attr);
 
 	int	(*connect)(struct xio_transport_base *trans_hndl,
 			   const char *portal_uri,
@@ -240,6 +256,14 @@ struct xio_transport {
 	int	(*cancel_rsp)(struct xio_transport_base *trans_hndl,
 			      struct xio_task *task, enum xio_status result,
 			      void *ulp_msg, size_t ulp_msg_len);
+
+	int	(*modify)(struct xio_transport_base *trans_hndl,
+			  struct xio_transport_attr *attr,
+			  int attr_mask);
+
+	int	(*query)(struct xio_transport_base *trans_hndl,
+			 struct xio_transport_attr *attr,
+			 int attr_mask);
 
 	struct list_head transports_list_entry;
 };

@@ -651,7 +651,8 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_USER_CTX		= 1 << 1,
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
 	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
-	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4
+	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4,
+	XIO_CONNECTION_ATTR_TOS			= 1 << 5
 };
 
 /**
@@ -663,7 +664,8 @@ struct xio_connection_attr {
 						/**< pass to connection      */
 						/**< oriented callbacks      */
 	struct xio_context	*ctx;		/**< context data type	     */
-	int			reserved;	/**< padding		     */
+	uint8_t			tos;		/**< type of service RFC 2474 */
+	uint8_t			pad[3];		/**< padding		     */
 	enum xio_proto		proto;	        /**< protocol type           */
 	struct sockaddr_storage	peer_addr;	/**< address of peer	     */
 	struct sockaddr_storage	local_addr;	/**< address of local	     */
@@ -678,8 +680,10 @@ struct xio_connection_params {
 	struct xio_context	*ctx;		/**< xio context handle       */
 	uint32_t		conn_idx;	/**< Connection index greater */
 					        /**< then 0 if 0 - auto count */
+	uint8_t			enable_tos;	/**< explicitly enable tos    */
+	uint8_t			tos;		/**< type of service RFC 2474 */
+	uint16_t		pad;
 
-	uint32_t		pad;
 	/**< bounded outgoing interface address and/or port - NULL if not     */
 	/**< specified in form:                                               */
 	/**< host:port, host:, host, :port.                                   */

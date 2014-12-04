@@ -331,7 +331,10 @@ struct xio_tcp_transport {
 	void				*tmp_rx_buf;
 	void				*tmp_rx_buf_cur;
 	uint32_t			tmp_rx_buf_len;
-	uint32_t			pad2;
+	uint32_t			pad;
+
+	uint32_t			trans_attr_mask;
+	struct xio_transport_attr	trans_attr;
 
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[IOV_MAX];

@@ -123,7 +123,9 @@ static int xio_rdma_get_max_header_size(void)
 /*---------------------------------------------------------------------------*/
 static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 						struct xio_context *ctx,
-						struct xio_observer *observer);
+						struct xio_observer *observer,
+						uint32_t trans_attr_mask,
+						struct xio_transport_init_attr *attr);
 
 static void xio_rdma_close(struct xio_transport_base *transport);
 static int xio_rdma_reject(struct xio_transport_base *transport);
@@ -1890,7 +1892,7 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 	child_hndl = (struct xio_rdma_transport *)xio_rdma_open(
 		parent_hndl->transport,
 		parent_hndl->base.ctx,
-		NULL);
+		NULL, 0, NULL);
 	if (child_hndl == NULL) {
 		ERROR_LOG("failed to open rdma transport\n");
 		retval = rdma_reject(cm_id, NULL, 0);
@@ -2124,7 +2126,7 @@ static int xio_handle_cm_event(struct rdma_cm_id *cm_id,
 	 *    event handler from the poller context.
 	 * 2. Need to make sure the events are removed properly before
 	 *    rdma_handler shutdown.
-	 */ 
+	 */
 	rdma_hndl->handler_nesting++;
 	switch (ev->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -2202,7 +2204,9 @@ static int xio_handle_cm_event(struct rdma_cm_id *cm_id,
 /*---------------------------------------------------------------------------*/
 static struct xio_transport_base *xio_rdma_open(struct xio_transport *transport,
 						struct xio_context *ctx,
-						struct xio_observer *observer)
+						struct xio_observer *observer,
+						uint32_t trans_attr_mask,
+						struct xio_transport_init_attr *attr)
 {
 	struct xio_rdma_transport *rdma_hndl;
 	int			   max_xio_hdr;

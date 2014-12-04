@@ -1752,11 +1752,15 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 /*---------------------------------------------------------------------------*/
 struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 				 const char *portal_uri,
-				 struct xio_observer  *observer, uint32_t oid)
+				 struct xio_observer  *observer, uint32_t oid,
+				 uint32_t attr_mask,
+				 struct xio_nexus_init_attr *init_attr)
+
 {
 	struct xio_transport		*transport;
 	struct xio_nexus		*nexus;
 	char				proto[8];
+	struct xio_transport_init_attr	*ptrans_init_attr = NULL;
 
 
 	/* look for opened nexus */
@@ -1837,8 +1841,19 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 
 	xio_context_reg_observer(ctx, &nexus->ctx_observer);
 
+	if (attr_mask && init_attr) {
+		if (test_bits(XIO_NEXUS_ATTR_TOS, &attr_mask)) {
+			set_bits(XIO_TRANSPORT_ATTR_TOS,
+				 &nexus->trans_attr_mask);
+			nexus->trans_attr.tos = init_attr->tos;
+			ptrans_init_attr = &nexus->trans_attr;
+		}
+	}
+
 	nexus->transport_hndl = transport->open(transport, ctx,
-					       &nexus->trans_observer);
+					        &nexus->trans_observer,
+					        nexus->trans_attr_mask,
+					        ptrans_init_attr);
 	if (nexus->transport_hndl == NULL) {
 		ERROR_LOG("transport open failed\n");
 		goto cleanup;
@@ -1889,7 +1904,9 @@ int xio_nexus_reconnect(struct xio_nexus *nexus)
 	ctx = nexus->transport_hndl->ctx;
 
 	nexus->new_transport_hndl = transport->open(nexus->transport, ctx,
-						   &nexus->trans_observer);
+						   &nexus->trans_observer,
+						   nexus->trans_attr_mask,
+						   &nexus->trans_attr);
 
 	if (nexus->new_transport_hndl == NULL) {
 		ERROR_LOG("transport open failed\n");
@@ -2243,6 +2260,66 @@ int xio_nexus_get_opt(struct xio_nexus *nexus, int optname, void *optval,
 		return nexus->transport->get_opt(nexus->transport_hndl,
 				optname, optval, optlen);
 
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_modify							     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_modify(struct xio_nexus *nexus,
+		     struct xio_nexus_attr *attr, int attr_mask)
+{
+	int			   tattr_mask = 0;
+	struct xio_transport_attr tattr;
+
+	if (!nexus->transport->modify)
+		goto not_supported;
+
+	memset(&tattr, 0, sizeof(tattr));
+	if (test_flag(XIO_NEXUS_ATTR_TOS, &attr_mask)) {
+		tattr_mask |= XIO_TRANSPORT_ATTR_TOS;
+		tattr.tos = attr->tos;
+	}
+	if (tattr_mask == 0)
+		goto not_supported;
+
+	return nexus->transport->modify(nexus->transport_hndl,
+					&tattr, tattr_mask);
+not_supported:
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_query							     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_query(struct xio_nexus *nexus,
+		    struct xio_nexus_attr *attr, int attr_mask)
+{
+	int			   tattr_mask = 0, retval;
+	struct xio_transport_attr tattr;
+
+
+	if (!nexus->transport->modify)
+		goto not_supported;
+
+	memset(&tattr, 0, sizeof(tattr));
+	if (test_flag(XIO_NEXUS_ATTR_TOS, &attr_mask))
+		tattr_mask |= XIO_TRANSPORT_ATTR_TOS;
+
+	if (tattr_mask == 0)
+		goto not_supported;
+
+	retval = nexus->transport->query(nexus->transport_hndl,
+				         &tattr, tattr_mask);
+	if (retval)
+		return -1;
+
+	if (test_flag(XIO_NEXUS_ATTR_TOS, &attr_mask))
+		attr->tos = tattr.tos;
+
+not_supported:
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }

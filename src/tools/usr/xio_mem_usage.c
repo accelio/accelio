@@ -51,9 +51,9 @@
 #include "xio_ev_data.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_session.h"
-#include "xio_nexus.h"
 
 #ifdef HAVE_INFINIBAND_VERBS_H
 #include <infiniband/verbs.h>

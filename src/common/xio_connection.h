@@ -119,6 +119,8 @@ struct xio_connection {
 	uint64_t			peer_credits_bytes;
 	uint64_t			rx_queue_watermark_bytes;
 
+	uint32_t			nexus_attr_mask;
+	struct xio_nexus_init_attr	nexus_attr;
 };
 
 struct xio_connection *xio_connection_create(

@@ -102,7 +102,10 @@ struct xio_rdma_options			rdma_options = {
 static struct xio_transport_base *xio_rdma_open(
 		struct xio_transport	*transport,
 		struct xio_context	*ctx,
-		struct xio_observer	*observer);
+		struct xio_observer	*observer,
+		uint32_t		trans_attr_mask,
+		struct xio_transport_init_attr *attr);
+
 
 static int xio_rdma_reject(struct xio_transport_base *transport);
 static void xio_rdma_close(struct xio_transport_base *transport);
@@ -1834,6 +1837,20 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 {
 	int				retval = 0;
 
+	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &rdma_hndl->trans_attr_mask)) {
+		retval = rdma_set_option(rdma_hndl->cm_id, RDMA_OPTION_ID,
+					 RDMA_OPTION_ID_TOS,
+					 &rdma_hndl->trans_attr.tos,
+					 sizeof rdma_hndl->trans_attr.tos);
+		if (retval) {
+			xio_set_error(errno);
+			ERROR_LOG("set TOS option failed. %m\n");
+		}
+		DEBUG_LOG("set TOS option success. mask:0x%x, tos:0x%x\n",
+			  rdma_hndl->trans_attr_mask,
+			  rdma_hndl->trans_attr.tos);
+	}
+
 	retval = rdma_resolve_route(rdma_hndl->cm_id, ROUTE_RESOLVE_TIMEOUT);
 	if (retval) {
 		xio_set_error(errno);
@@ -1933,7 +1950,8 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	child_hndl = (struct xio_rdma_transport *)xio_rdma_open(
 		parent_hndl->transport,
 		parent_hndl->base.ctx,
-		NULL);
+		NULL,
+		0, NULL);
 	if (child_hndl == NULL) {
 		ERROR_LOG("failed to open rdma transport\n");
 		retval = rdma_reject(ev->id, NULL, 0);
@@ -2378,7 +2396,9 @@ free:
 static struct xio_transport_base *xio_rdma_open(
 		struct xio_transport	*transport,
 		struct xio_context	*ctx,
-		struct xio_observer	*observer)
+		struct xio_observer	*observer,
+		uint32_t		trans_attr_mask,
+		struct xio_transport_init_attr *attr)
 {
 	struct xio_rdma_transport	*rdma_hndl;
 	int				max_xio_hdr;
@@ -2391,6 +2411,10 @@ static struct xio_transport_base *xio_rdma_open(
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
+	}
+	if (attr && trans_attr_mask) {
+		memcpy(&rdma_hndl->trans_attr, attr, sizeof *attr);
+		rdma_hndl->trans_attr_mask = trans_attr_mask;
 	}
 
 	XIO_OBSERVABLE_INIT(&rdma_hndl->base.observable, rdma_hndl);
@@ -2947,6 +2971,68 @@ static int xio_rdma_get_opt(void  *xio_obj,
 	return -1;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_modify						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_transport_modify(struct xio_transport_base *trans_hndl,
+				     struct xio_transport_attr *attr,
+				     int attr_mask)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)trans_hndl;
+	int	ret;
+	int     modified = 0;
+
+	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &attr_mask)) {
+		ret = rdma_set_option(rdma_hndl->cm_id, RDMA_OPTION_ID,
+				      RDMA_OPTION_ID_TOS,
+				      &attr->tos, sizeof attr->tos);
+		if (ret) {
+			ERROR_LOG("set TOS option failed. %m\n");
+			xio_set_error(errno);
+			return -1;
+		}
+		set_bits(XIO_TRANSPORT_ATTR_TOS, &rdma_hndl->trans_attr_mask);
+		rdma_hndl->trans_attr.tos = attr->tos;
+		modified = 1;
+	}
+
+	if (modified)
+		return 0;
+
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_transport_query						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_transport_query(struct xio_transport_base *trans_hndl,
+				    struct xio_transport_attr *attr,
+				    int attr_mask)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)trans_hndl;
+	int     queried = 0;
+
+	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &attr_mask)) {
+		if (test_bits(XIO_TRANSPORT_ATTR_TOS,
+			      &rdma_hndl->trans_attr_mask)) {
+			attr->tos = rdma_hndl->trans_attr.tos;
+			queried = 1;
+		}
+		else
+			goto not_supported;
+	}
+
+	if (queried)
+		return 0;
+
+not_supported:
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+
 /*
  * To dynamically control C-states, open the file /dev/cpu_dma_latency and
  * write the maximum allowable latency to it. This will prevent C-states with
@@ -3246,6 +3332,8 @@ struct xio_transport xio_rdma_transport = {
 	.cancel_rsp		= xio_rdma_cancel_rsp,
 	.get_pools_setup_ops	= xio_rdma_get_pools_ops,
 	.set_pools_cls		= xio_rdma_set_pools_cls,
+	.modify			= xio_rdma_transport_modify,
+	.query			= xio_rdma_transport_query,
 
 	.validators_cls.is_valid_in_req  = xio_rdma_is_valid_in_req,
 	.validators_cls.is_valid_out_msg = xio_rdma_is_valid_out_msg,

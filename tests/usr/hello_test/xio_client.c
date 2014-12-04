@@ -65,6 +65,7 @@
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
 #define	CHAIN_MESSAGES		0
+#define	SET_TOS			1
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
@@ -761,6 +762,10 @@ int main(int argc, char *argv[])
 	cparams.conn_idx		= test_config.conn_idx;
 	cparams.conn_user_context	= &test_params;
 
+#if SET_TOS
+	cparams.enable_tos		= 1;
+	cparams.tos			= 0x58;
+#endif
 	/* connect the session  */
 	test_params.connection = xio_connect(&cparams);
 

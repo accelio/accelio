@@ -52,10 +52,9 @@
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_session.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_server.h"
-#include "xio_nexus.h"
-
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
@@ -321,7 +320,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 
 	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
 
-	server->listener = xio_nexus_open(ctx, uri, NULL, 0);
+	server->listener = xio_nexus_open(ctx, uri, NULL, 0, 0, NULL);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;

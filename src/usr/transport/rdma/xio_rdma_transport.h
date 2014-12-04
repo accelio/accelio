@@ -427,7 +427,7 @@ struct xio_rdma_transport {
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad2[2];
+	uint16_t			pad1[2];
 
 	/* too big to be on stack - use as temporaries */
 	union {
@@ -439,6 +439,8 @@ struct xio_rdma_transport {
 	xio_delayed_work_handle_t	timewait_timeout_work;
 	struct ibv_send_wr		beacon;
 	struct xio_task			beacon_task;
+	uint32_t			trans_attr_mask;
+	struct xio_transport_attr	trans_attr;
 };
 
 struct xio_cm_channel {

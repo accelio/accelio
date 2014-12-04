@@ -176,7 +176,9 @@ int xio_session_accept_connections(struct xio_session *session)
 			}
 			nexus = xio_nexus_open(connection->ctx, portal,
 					       &session->observer,
-					       session->session_id);
+					       session->session_id,
+					       connection->nexus_attr_mask,
+					       &connection->nexus_attr);
 
 			if (nexus == NULL) {
 				ERROR_LOG("failed to open connection to %s\n",
@@ -219,7 +221,10 @@ int xio_session_redirect_connection(struct xio_session *session)
 	if (session->last_opened_service == session->services_array_len)
 		session->last_opened_service = 0;
 
-	nexus = xio_nexus_open(session->lead_connection->ctx, service, NULL, 0);
+	nexus = xio_nexus_open(session->lead_connection->ctx, service,
+			       NULL, 0,
+			       session->lead_connection->nexus_attr_mask,
+			       &session->lead_connection->nexus_attr);
 	if (nexus == NULL) {
 		ERROR_LOG("failed to open connection to %s\n",
 			  service);
@@ -870,6 +875,9 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	struct xio_connection	*connection = NULL, *tmp_connection;
 	struct xio_nexus	*nexus = NULL;
 	int			retval;
+	int			attr_mask = 0;
+	struct			xio_nexus_init_attr *pattr = NULL;
+	struct			xio_nexus_init_attr  attr;
 
 	if (cparams == NULL) {
 		ERROR_LOG("invalid parameter\n");
@@ -885,6 +893,11 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	}
 	ctx	= cparams->ctx;
 	session = cparams->session;
+	if (cparams->enable_tos) {
+		attr.tos	= cparams->tos;
+		attr_mask	= XIO_NEXUS_ATTR_TOS;
+		pattr		= &attr;
+	}
 
 	/* lookup for session in cache */
 	psession = xio_sessions_cache_lookup(session->session_id);
@@ -914,7 +927,8 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 			goto cleanup;
 		}
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
-				       session->session_id);
+				       session->session_id,
+				       attr_mask, pattr);
 		if (nexus == NULL) {
 			ERROR_LOG("failed to create connection\n");
 			goto cleanup;
@@ -987,7 +1001,8 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 				cparams->conn_user_context);
 
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
-				       session->session_id);
+				       session->session_id,
+				       attr_mask, pattr);
 		if (nexus == NULL) {
 			ERROR_LOG("failed to open connection\n");
 			goto cleanup;
@@ -1014,6 +1029,11 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 
 
 	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
+
+	if (cparams->enable_tos) {
+		connection->nexus_attr_mask = attr_mask;
+		connection->nexus_attr	    = attr;
+	}
 
 	mutex_unlock(&session->lock);
 

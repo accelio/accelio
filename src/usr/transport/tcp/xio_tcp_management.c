@@ -1631,7 +1631,9 @@ exit:
 static struct xio_transport_base *xio_tcp_open(
 		struct xio_transport	*transport,
 		struct xio_context	*ctx,
-		struct xio_observer	*observer)
+		struct xio_observer	*observer,
+		uint32_t		trans_attr_mask,
+		struct xio_transport_init_attr *attr)
 {
 	struct xio_tcp_transport	*tcp_hndl;
 
@@ -1640,6 +1642,11 @@ static struct xio_transport_base *xio_tcp_open(
 		ERROR_LOG("failed. to create tcp transport%m\n");
 		return NULL;
 	}
+	if (attr && trans_attr_mask) {
+		memcpy(&tcp_hndl->trans_attr, attr, sizeof *attr);
+		tcp_hndl->trans_attr_mask = trans_attr_mask;
+	}
+
 	return (struct xio_transport_base *)tcp_hndl;
 }
 
