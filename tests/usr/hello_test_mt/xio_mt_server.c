@@ -550,6 +550,7 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 		case 'f':
 			test_config->finite_run =
 					(uint32_t)strtol(optarg, NULL, 0);
+			break;
 		case 't':
 			test_config->poll_timeout =
 				(uint32_t)strtol(optarg, NULL, 0);
