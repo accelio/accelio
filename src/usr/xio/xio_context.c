@@ -365,14 +365,19 @@ void xio_context_destroy(struct xio_context *ctx)
 	}
 	ctx->run_private = 0;
 	xio_observable_notify_all_observers(&ctx->observable,
-					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+			XIO_CONTEXT_EVENT_CLOSE, NULL);
 
 	/* allow internally to run the loop for final cleanup */
 	if (ctx->run_private)
-		xio_context_run_loop(ctx, 5000);
+		xio_context_run_loop(ctx, XIO_INFINITE);
 
 	xio_observable_notify_all_observers(&ctx->observable,
-					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
+					    XIO_CONTEXT_EVENT_POST_CLOSE,
+					    NULL);
+
+
+	if (!xio_observable_is_empty(&ctx->observable))
+		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
 
 	xio_observable_unreg_all_observers(&ctx->observable);
 

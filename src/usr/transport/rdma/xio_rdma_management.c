@@ -315,6 +315,8 @@ static void xio_cq_down(struct kref *kref)
 	list_del(&tcq->cq_list_entry);
 	pthread_rwlock_unlock(&tcq->dev->cq_lock);
 
+	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
+
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
 
@@ -323,10 +325,6 @@ static void xio_cq_down(struct kref *kref)
 				  tcq->cq_events_that_need_ack);
 		tcq->cq_events_that_need_ack = 0;
 	}
-
-	if (tcq->ctx->run_private)
-		xio_context_stop_loop(tcq->ctx, 0);
-	tcq->ctx->run_private = 0;
 
 	retval = xio_context_del_ev_handler(
 			tcq->ctx,
@@ -2284,7 +2282,7 @@ static void xio_cma_handler(int fd, int events, void *user_context)
 {
 	struct rdma_event_channel	*p_cm_channel =
 		(struct rdma_event_channel *)(user_context);
-	struct rdma_cm_event		*ev;
+	struct rdma_cm_event		*ev, lev;
 	struct xio_rdma_transport	*rdma_hndl;
 	int				retval;
 
@@ -2302,16 +2300,13 @@ static void xio_cma_handler(int fd, int events, void *user_context)
 
 		rdma_hndl = (struct xio_rdma_transport *)ev->id->context;
 
-		/* reconnect needs to ack the event before
-		 * destroying the cm id */
-		rdma_hndl->ev_to_ack = ev;
-		xio_handle_cm_event(ev, rdma_hndl);
+		lev = *ev;
 
-		/* reconnect ack-ed before destroying the old id */
-		if (rdma_hndl->ev_to_ack) {
-			rdma_ack_cm_event(rdma_hndl->ev_to_ack);
-			rdma_hndl->ev_to_ack = NULL;
-		}
+		/* ack the event */
+		rdma_ack_cm_event(ev);
+
+		/* and handle it */
+		xio_handle_cm_event(&lev, rdma_hndl);
 	} while (1);
 }
 
@@ -2500,12 +2495,20 @@ void xio_rdma_close_cb(struct kref *kref)
 					kref, struct xio_transport_base, kref);
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;
+	struct xio_cq *tcq = rdma_hndl->tcq;
 
 	xio_transport_notify_observer(
 				transport,
 				XIO_TRANSPORT_CLOSED,
 				NULL);
+
 	xio_rdma_post_close((struct xio_transport_base *)rdma_hndl);
+
+	if (tcq && list_empty(&tcq->trans_list)) {
+		if (tcq->ctx->run_private)
+			xio_context_stop_loop(tcq->ctx, 0);
+		tcq->ctx->run_private = 0;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2518,11 +2521,14 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 	int	retval;
 
 	/* now it is zero */
-	DEBUG_LOG("xio_rmda_close: [close] handle:%p, qp:%p\n",
-		  rdma_hndl, rdma_hndl->qp);
+	DEBUG_LOG("xio_rmda_close: [close] handle:%p, qp:%p state:%s\n",
+		  rdma_hndl, rdma_hndl->qp,
+		  xio_transport_state_str(rdma_hndl->state));
 
 
 	switch (rdma_hndl->state) {
+	case XIO_STATE_CLOSED:
+		break;
 	case XIO_STATE_LISTEN:
 		rdma_hndl->state = XIO_STATE_CLOSED;
 		kref_put(&transport->kref, xio_rdma_close_cb);
