@@ -315,10 +315,10 @@ static void xio_cq_down(struct kref *kref)
 	list_del(&tcq->cq_list_entry);
 	pthread_rwlock_unlock(&tcq->dev->cq_lock);
 
-	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
-
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
+
+	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
 
 	if (tcq->cq_events_that_need_ack != 0) {
 		ibv_ack_cq_events(tcq->cq,
@@ -1793,11 +1793,6 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 
 	xio_rdma_phantom_pool_destroy(rdma_hndl);
 
-	if (rdma_hndl->ev_to_ack) {
-		rdma_ack_cm_event(rdma_hndl->ev_to_ack);
-		rdma_hndl->ev_to_ack = NULL;
-	}
-
 	xio_qp_release(rdma_hndl);
 
 	if (rdma_hndl->cm_id) {
@@ -2076,7 +2071,8 @@ static void on_cm_timewait_exit(void *trans_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_disoconnect							     */
 /*---------------------------------------------------------------------------*/
-int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl)
+int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl,
+			int send_beacon)
 {
 	struct ibv_send_wr	*bad_wr;
 	int			retval;
@@ -2087,6 +2083,8 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl)
 			  rdma_hndl);
 		return -1;
 	}
+	if (!send_beacon)
+		return 0;
 
 	/* post an indication that all flush errors were consumed */
 	retval = ibv_post_send(rdma_hndl->qp, &rdma_hndl->beacon, &bad_wr);
@@ -2113,10 +2111,19 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
-		retval = xio_rdma_disconnect(rdma_hndl);
+		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
-			DEBUG_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
+	} else if (rdma_hndl->state == XIO_STATE_CLOSED) {
+		/* coming here from
+		 * context_shutdown/rdma_close,
+		 *		 * don't go to disconnect
+		 *		 state */
+		retval = xio_rdma_disconnect(rdma_hndl, 1);
+		if (retval)
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
+					"err=%d\n", rdma_hndl, retval);
 	}
 
 	rdma_hndl->timewait = 0;
@@ -2527,37 +2534,36 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 
 
 	switch (rdma_hndl->state) {
-	case XIO_STATE_CLOSED:
-		break;
 	case XIO_STATE_LISTEN:
 		rdma_hndl->state = XIO_STATE_CLOSED;
-		kref_put(&transport->kref, xio_rdma_close_cb);
 		break;
 	case XIO_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 
 		rdma_hndl->state = XIO_STATE_CLOSED;
-		retval = xio_rdma_disconnect(rdma_hndl);
+
+		transport->ctx->run_private = 1;
+		retval = xio_rdma_disconnect(rdma_hndl, 0);
 		if (retval)
 			DEBUG_LOG("handle:%p rdma_disconnect failed, " \
 				  "%m\n", rdma_hndl);
 
-		transport->ctx->run_private = 1;
-		kref_put(&transport->kref, xio_rdma_close_cb);
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
 		transport->ctx->run_private = 1;
-		kref_put(&transport->kref, xio_rdma_close_cb);
+		break;
+	case XIO_STATE_CLOSED:
+		return;
 		break;
 	default:
 		transport->ctx->run_private = 1;
 		rdma_hndl->state = XIO_STATE_CLOSED;
-		kref_put(&transport->kref, xio_rdma_close_cb);
 		break;
 	}
 
+	kref_put(&transport->kref, xio_rdma_close_cb);
 }
 
 /*---------------------------------------------------------------------------*/

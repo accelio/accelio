@@ -419,7 +419,6 @@ struct xio_rdma_transport {
 
 	struct xio_rdma_setup_msg	setup_rsp;
 
-	struct rdma_cm_event		*ev_to_ack; /* for reconnect */
 	/* for reconnect */
 	struct xio_rkey_tbl		*rkey_tbl;
 	struct xio_rkey_tbl		*peer_rkey_tbl;
@@ -500,8 +499,6 @@ static inline void xio_device_get(struct xio_device *dev)
 	kref_get(&dev->kref);
 }
 void xio_rdma_close_cb(struct kref *kref);
-
-int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl);
 
 void xio_device_down(struct kref *kref);
 
