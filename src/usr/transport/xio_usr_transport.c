@@ -167,3 +167,42 @@ struct xio_mempool *xio_transport_mempool_get(
 	}
 	return (struct xio_mempool *)ctx->mempool;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_state_str						     */
+/*---------------------------------------------------------------------------*/
+char *xio_transport_state_str(enum xio_transport_state state)
+{
+	switch (state) {
+	case XIO_STATE_INIT:
+		return "INIT";
+		break;
+	case XIO_STATE_LISTEN:
+		return "LISTEN";
+		break;
+	case XIO_STATE_CONNECTING:
+		return "CONNECTING";
+		break;
+	case XIO_STATE_CONNECTED:
+		return "CONNECTED";
+		break;
+	case XIO_STATE_DISCONNECTED:
+		return "DISCONNECTED";
+		break;
+	case XIO_STATE_RECONNECT:
+		return "RECONNECT";
+		break;
+	case XIO_STATE_CLOSED:
+		return "CLOSED";
+		break;
+	case XIO_STATE_DESTROYED:
+		return "DESTROYED";
+		break;
+	default:
+		return "UNKNOWN";
+		break;
+	}
+
+	return NULL;
+};
+

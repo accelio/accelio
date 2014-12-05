@@ -140,4 +140,6 @@ struct xio_mempool *xio_transport_mempool_get(
 		struct xio_context *ctx,
 		int reg_mr);
 
+char *xio_transport_state_str(enum xio_transport_state state);
+
 #endif  /* XIO_COMMON_TRANSPORT_H */
