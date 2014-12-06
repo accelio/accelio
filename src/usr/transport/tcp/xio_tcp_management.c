@@ -469,6 +469,11 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	tcp_hndl->state = XIO_STATE_DESTROYED;
 	xio_tcp_flush_all_tasks(tcp_hndl);
+
+	xio_transport_notify_observer(&tcp_hndl->base,
+				      XIO_TRANSPORT_CLOSED,
+				      NULL);
+
 	xio_tcp_post_close(tcp_hndl);
 
 	return 0;
