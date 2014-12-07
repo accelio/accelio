@@ -208,7 +208,7 @@ static inline void xio_cq_release(struct xio_cq *tcq)
 static int xio_on_context_event(void *observer, void *sender,
 				int event, void *event_data)
 {
-	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+	if (event == XIO_CONTEXT_EVENT_POST_CLOSE) {
 		TRACE_LOG("context: [close] ctx:%p\n", sender);
 		xio_cq_release((struct xio_cq *)observer);
 	}

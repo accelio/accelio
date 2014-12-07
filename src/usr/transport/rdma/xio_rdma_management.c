@@ -366,7 +366,7 @@ static int xio_on_context_event(void *observer, void *sender,
 {
 	struct xio_cq	*cq = (struct xio_cq *)observer;
 
-	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+	if (event == XIO_CONTEXT_EVENT_POST_CLOSE) {
 		TRACE_LOG("context: [close] ctx:%p\n", sender);
 		xio_cq_release(cq);
 	}
