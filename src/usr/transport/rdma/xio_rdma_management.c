@@ -59,6 +59,7 @@
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_rdma_transport.h"
+#include "xio_context_priv.h"
 
 
 
@@ -826,8 +827,13 @@ static inline void xio_cm_channel_release(struct xio_cm_channel *channel)
 static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)trans_hndl;
 
 	DEBUG_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
+	if (rdma_hndl->tcq)
+		xio_context_destroy_wait(ctx);
+
 	xio_rdma_close(trans_hndl);
 
 	return 0;
@@ -1778,6 +1784,7 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 {
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)trans_base;
+	struct xio_cq		  *tcq= rdma_hndl->tcq;
 
 	if (rdma_hndl->handler_nesting) {
 		rdma_hndl->state = XIO_STATE_DESTROYED;
@@ -1802,6 +1809,9 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	}
 
 	xio_cm_channel_release(rdma_hndl->cm_channel);
+
+	 if (tcq && list_empty(&tcq->trans_list))
+		 xio_context_destroy_resume(tcq->ctx);
 
 	if (rdma_hndl->rkey_tbl) {
 		ufree(rdma_hndl->rkey_tbl);
@@ -2502,7 +2512,6 @@ void xio_rdma_close_cb(struct kref *kref)
 					kref, struct xio_transport_base, kref);
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport;
-	struct xio_cq *tcq = rdma_hndl->tcq;
 
 	xio_transport_notify_observer(
 				transport,
@@ -2510,12 +2519,6 @@ void xio_rdma_close_cb(struct kref *kref)
 				NULL);
 
 	xio_rdma_post_close((struct xio_transport_base *)rdma_hndl);
-
-	if (tcq && list_empty(&tcq->trans_list)) {
-		if (tcq->ctx->run_private)
-			xio_context_stop_loop(tcq->ctx, 0);
-		tcq->ctx->run_private = 0;
-	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2543,7 +2546,6 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 
 		rdma_hndl->state = XIO_STATE_CLOSED;
 
-		transport->ctx->run_private = 1;
 		retval = xio_rdma_disconnect(rdma_hndl, 0);
 		if (retval)
 			DEBUG_LOG("handle:%p rdma_disconnect failed, " \
@@ -2552,13 +2554,11 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
-		transport->ctx->run_private = 1;
 		break;
 	case XIO_STATE_CLOSED:
 		return;
 		break;
 	default:
-		transport->ctx->run_private = 1;
 		rdma_hndl->state = XIO_STATE_CLOSED;
 		break;
 	}
