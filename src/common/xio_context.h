@@ -215,7 +215,7 @@ int xio_context_modify_ev_handler(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 static inline void xio_context_destroy_wait(struct xio_context *ctx)
 {
-	ctx->run_private = 1;
+	ctx->run_private++;
 }
 
 /*
@@ -227,8 +227,8 @@ static inline void xio_context_destroy_wait(struct xio_context *ctx)
 static inline void xio_context_destroy_resume(struct xio_context *ctx)
 {
 	if (ctx->run_private) {
-		xio_context_stop_loop(ctx);
-		ctx->run_private = 0;
+		if (!--ctx->run_private)
+			xio_context_stop_loop(ctx);
 	}
 }
 

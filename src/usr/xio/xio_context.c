@@ -242,6 +242,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 		return NULL;
 	}
 	ctx->ev_loop		= xio_ev_loop_create();
+	ctx->run_private	= 0;
 
 	ctx->cpuid		= cpu;
 	ctx->nodeid		= numa_node_of_cpu(cpu);
