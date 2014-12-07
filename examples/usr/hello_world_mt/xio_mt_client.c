@@ -161,7 +161,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
+			xio_context_stop_loop(session_data->tdata[i].ctx);
 		break;
 	default:
 		break;

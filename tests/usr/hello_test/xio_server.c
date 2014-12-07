@@ -157,7 +157,7 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
 		if (event_data->reason != XIO_E_SESSION_REJECTED)
-			xio_context_stop_loop(test_params->ctx, 0);
+			xio_context_stop_loop(test_params->ctx);
 		break;
 	default:
 		break;

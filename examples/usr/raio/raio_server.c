@@ -421,8 +421,8 @@ static int on_session_event(struct xio_session *session,
 		xio_session_destroy(session);
 		if (server_data->finite_run) {
 			for (i = 0; i < MAX_THREADS; i++)
-				xio_context_stop_loop(server_data->tdata[i].ctx, 0);
-			xio_context_stop_loop(server_data->ctx, 0);
+				xio_context_stop_loop(server_data->tdata[i].ctx);
+			xio_context_stop_loop(server_data->ctx);
 		}
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:

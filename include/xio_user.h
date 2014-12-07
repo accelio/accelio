@@ -274,10 +274,8 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
  * stops context's running event loop
  *
  * @param[in] ctx		Pointer to the xio context handle
- * @param[in] is_self_thread	lighter stop if called from within event loop
- *				callbacks
  */
-void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread);
+void xio_context_stop_loop(struct xio_context *ctx);
 
 /**
  * attempts to read at least min_nr events and up to nr events

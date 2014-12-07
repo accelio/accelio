@@ -549,8 +549,8 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		on_session_teardown(session, cb_user_context);
 		for (i = 0; i < server_data->threads_num; i++)
-			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
-		xio_context_stop_loop(server_data->ctx, 0);
+			xio_context_stop_loop(server_data->tdata[i].ctx);
+		xio_context_stop_loop(server_data->ctx);
 		break;
 	default:
 		break;

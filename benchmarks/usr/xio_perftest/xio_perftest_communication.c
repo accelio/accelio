@@ -76,7 +76,7 @@ static int on_new_connection_event(struct xio_connection *connection,
 
 	comm->control_ctx->conn = connection;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }
@@ -106,7 +106,7 @@ static int on_session_event(struct xio_session *session,
 		comm->control_ctx->conn = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+		xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 		xio_session_destroy(session);
 		break;
 	default:
@@ -131,7 +131,7 @@ static int on_message(struct xio_session *session,
 
 	comm->control_ctx->reply = msg;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }
@@ -162,7 +162,7 @@ static int on_session_established(struct xio_session *session,
 {
 	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }

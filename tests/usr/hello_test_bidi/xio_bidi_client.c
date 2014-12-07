@@ -200,7 +200,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ctx, 0);  /* exit */
+		xio_context_stop_loop(ctx);  /* exit */
 		if (pool) {
 			msg_pool_free(pool);
 			pool = NULL;

@@ -234,7 +234,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ow_params->ctx, 0);  /* exit */
+		xio_context_stop_loop(ow_params->ctx);  /* exit */
 		break;
 	default:
 		break;

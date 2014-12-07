@@ -446,7 +446,7 @@ int run_server_test(struct perf_parameters *user_param)
 
 cleanup:
 	for (i = 0; i < user_param->threads_num; i++)
-		xio_context_stop_loop(server_data.tdata[i].ctx, 0);
+		xio_context_stop_loop(server_data.tdata[i].ctx);
 
 	destroy_comm_struct(server_data.comm);
 
@@ -455,7 +455,7 @@ cleanup:
 		pthread_join(server_data.tdata[i].thread_id, NULL);
 
 	if (server_data.running)
-		xio_context_stop_loop(server_data.ctx, 0);
+		xio_context_stop_loop(server_data.ctx);
 
 	pthread_join(server_data.thread_id, NULL);
 

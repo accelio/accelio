@@ -585,9 +585,9 @@ EXPORT_SYMBOL(xio_context_run_loop);
 /*---------------------------------------------------------------------------*/
 /* xio_context_stop_loop						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread)
+inline void xio_context_stop_loop(struct xio_context *ctx)
 {
-	xio_ev_loop_stop(ctx->ev_loop, is_self_thread);
+	xio_ev_loop_stop(ctx->ev_loop);
 }
 EXPORT_SYMBOL(xio_context_stop_loop);
 

@@ -404,10 +404,9 @@ static int on_session_event(struct xio_session *session,
 		xio_session_destroy(session);
 		for (i = 0; i < sdata->tdata_nr; i++) {
 			process_request(&sdata->tdata[i], NULL);
-			xio_context_stop_loop(sdata->tdata[i].ctx, 0);
+			xio_context_stop_loop(sdata->tdata[i].ctx);
 		}
-		xio_context_stop_loop((struct xio_context *)sdata->ctx,
-				      0);
+		xio_context_stop_loop((struct xio_context *)sdata->ctx);
 		break;
 	default:
 		break;

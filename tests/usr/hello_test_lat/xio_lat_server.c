@@ -131,7 +131,7 @@ static int on_session_event(struct xio_session *session,
 		process_request(NULL);
 		xio_session_destroy(session);
 		if (test_config.finite_run)
-			xio_context_stop_loop(ctx, 0); /* exit */
+			xio_context_stop_loop(ctx); /* exit */
 		break;
 	default:
 		break;

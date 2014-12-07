@@ -58,9 +58,10 @@ static inline void xio_context_destroy_wait(struct xio_context *ctx)
 static inline void xio_context_destroy_resume(struct xio_context *ctx)
 {
 	if (ctx->run_private) {
-		xio_context_stop_loop(ctx, 0);
+		xio_context_stop_loop(ctx);
 		ctx->run_private = 0;
 	}
 }
+
 
 #endif /* XIO_CONTEXT_PRIV_H_ */

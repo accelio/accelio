@@ -53,10 +53,10 @@
 /*---------------------------------------------------------------------------*/
 struct xio_ev_loop {
 	int				efd;
+	int				in_dispatch;
 	int				stop_loop;
 	int				wakeup_event;
 	int				wakeup_armed;
-	int				pad;
 	int				deleted_events_nr;
 	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 	struct list_head		poll_events_list;
@@ -341,6 +341,7 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 
 	if (timeout != -1)
 		start_cycle = get_cycles();
+
 retry:
 	work_remains = xio_ev_loop_exec_scheduled(loop);
 	tmout = work_remains ? 0 : timeout;
@@ -360,6 +361,8 @@ retry:
 			goto retry;
 		}
 	} else if (nevent > 0) {
+		/* save the epoll modify in "stop" while dispatching handlers */
+		loop->in_dispatch = 1;
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
 			if (likely(tev != NULL)) {
@@ -395,6 +398,7 @@ retry:
 				}
 			}
 		}
+		loop->in_dispatch = 0;
 	} else {
 		/* timed out */
 		if (tmout || timeout == 0)
@@ -450,7 +454,7 @@ int xio_ev_loop_run(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_stop							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
+inline void xio_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
@@ -462,7 +466,7 @@ inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 			   armed for wakeup from blocking) */
 	loop->stop_loop = 1;
 
-	if (is_self_thread || loop->wakeup_armed == 1)
+	if (loop->in_dispatch || loop->wakeup_armed == 1)
 		return; /* wakeup is still armed, probably left loop in previous
 			   cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;

@@ -170,7 +170,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -231,7 +231,7 @@ static void signal_handler(int sig)
 	if (session_data.conn)
 		xio_disconnect(session_data.conn);
 	else
-		xio_context_stop_loop(session_data.ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data.ctx);  /* exit */
 }
 
 

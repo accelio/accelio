@@ -229,7 +229,7 @@ static int xio_device_thread_init(void)
 /*---------------------------------------------------------------------------*/
 static void xio_device_thread_stop(void)
 {
-	xio_ev_loop_stop(dev_tdata.async_loop, 0);
+	xio_ev_loop_stop(dev_tdata.async_loop);
 
 	pthread_join(dev_tdata.dev_thread, NULL);
 }

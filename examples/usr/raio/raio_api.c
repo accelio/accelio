@@ -293,7 +293,7 @@ static int on_session_event(struct xio_session *session,
 		session_data->disconnected = 1;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx);  /* exit */
 		break;
 	default:
 		printf("libraio: unexpected session event: %s. reason: %s\n",
@@ -332,7 +332,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 	if (io_u->ses_data->min_nr != 0) {
 		if (io_u->ses_data->io_ctx->io_u_completed_nr >=
 		    io_u->ses_data->min_nr)
-			xio_context_stop_loop(io_u->ses_data->ctx, 0);
+			xio_context_stop_loop(io_u->ses_data->ctx);
 	}
 }
 
@@ -362,7 +362,7 @@ static int on_response(struct xio_session *session,
 	case RAIO_CMD_IO_DESTROY:
 		/* break the loop */
 		session_data->cmd_rsp = rsp;
-		xio_context_stop_loop(session_data->ctx, 0);
+		xio_context_stop_loop(session_data->ctx);
 		break;
 	default:
 		printf("libraio: unknown answer %d\n", command);
