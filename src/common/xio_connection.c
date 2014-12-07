@@ -1907,6 +1907,8 @@ int xio_query_connection(struct xio_connection *connection,
 
 	retval = xio_nexus_query(connection->nexus,
 				  &nattr, nattr_mask);
+	if (retval != 0)
+		return -1;
 
 	if (test_bits(XIO_CONNECTION_ATTR_TOS, &attr_mask))
 		attr->tos = nattr.tos;
