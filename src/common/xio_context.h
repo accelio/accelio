@@ -47,8 +47,7 @@
 /* enum									     */
 /*---------------------------------------------------------------------------*/
 enum xio_context_event {
-	XIO_CONTEXT_EVENT_CLOSE,
-	XIO_CONTEXT_EVENT_POST_CLOSE
+	XIO_CONTEXT_EVENT_CLOSE
 };
 
 enum xio_counters {
@@ -207,6 +206,31 @@ int xio_context_is_loop_stopping(struct xio_context *ctx);
 /*---------------------------------------------------------------------------*/
 int xio_context_modify_ev_handler(struct xio_context *ctx,
 				  int fd, int events);
+
+/*
+ * should be called only from context_shutdown event context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_wait	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_wait(struct xio_context *ctx)
+{
+	ctx->run_private = 1;
+}
+
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		xio_context_stop_loop(ctx);
+		ctx->run_private = 0;
+	}
+}
 
 #endif /*XIO_CONTEXT_H */
 

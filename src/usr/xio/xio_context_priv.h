@@ -38,30 +38,5 @@
 #ifndef XIO_CONTEXT_PRIV_H_
 #define XIO_CONTEXT_PRIV_H_
 
-/*
- * should be called only from context_shutdown event context
- */
-/*---------------------------------------------------------------------------*/
-/* xio_context_destroy_wait	                                             */
-/*---------------------------------------------------------------------------*/
-static inline void xio_context_destroy_wait(struct xio_context *ctx)
-{
-	ctx->run_private = 1;
-}
-
-/*
- * should be called only from loop context
- */
-/*---------------------------------------------------------------------------*/
-/* xio_context_destroy_resume	                                             */
-/*---------------------------------------------------------------------------*/
-static inline void xio_context_destroy_resume(struct xio_context *ctx)
-{
-	if (ctx->run_private) {
-		xio_context_stop_loop(ctx);
-		ctx->run_private = 0;
-	}
-}
-
 
 #endif /* XIO_CONTEXT_PRIV_H_ */

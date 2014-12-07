@@ -371,10 +371,9 @@ void xio_context_destroy(struct xio_context *ctx)
 	if (ctx->run_private)
 		xio_context_run_loop(ctx, XIO_INFINITE);
 
-	xio_observable_notify_all_observers(&ctx->observable,
-					    XIO_CONTEXT_EVENT_POST_CLOSE,
-					    NULL);
-
+	if (ctx->run_private)
+		ERROR_LOG("not all observers finished! run_private=%d\n",
+			  ctx->run_private);
 
 	if (!xio_observable_is_empty(&ctx->observable))
 		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
