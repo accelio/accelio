@@ -2453,6 +2453,7 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 		  connection->session, connection);
 
 	xio_connection_release_fin(connection, task->omsg);
+	task->sender_task = NULL;
 	xio_tasks_pool_put(task);
 
 	transition = xio_connection_next_transit((enum xio_connection_state)
