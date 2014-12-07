@@ -495,6 +495,10 @@ void xio_ev_loop_destroy(void **loop_hndl)
 		xio_ev_loop_remove_event(loop, tev);
 	}
 
+	/* free deleted event handlers */
+	while (loop->deleted_events_nr)
+		ufree(loop->deleted_events[--loop->deleted_events_nr]);
+
 	xio_ev_loop_del(loop, loop->wakeup_event);
 
 	close(loop->efd);
