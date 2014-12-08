@@ -1,7 +1,7 @@
 # this is example file: examples/hello_world/Makefile.am
 
 # additional include pathes necessary to compile the C programs
-AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@
+AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
 
 ###############################################################################
 # THE PROGRAMS TO BUILD
