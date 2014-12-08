@@ -7,7 +7,7 @@ else
     libxio_rdma_ldflags =
 endif
 
-AM_CFLAGS = -I$(top_srcdir)/include @AM_CFLAGS@
+AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
 
 AM_LDFLAGS = -lxio -libverbs $(libxio_rdma_ldflags) -lpthread \
 	     -L$(top_builddir)/src/usr/

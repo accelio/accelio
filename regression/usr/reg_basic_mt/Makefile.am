@@ -7,7 +7,7 @@ else
     libxio_rdma_ldflags =
 endif
 
-AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/regression/usr/common/ @AM_CFLAGS@
+AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include -I$(top_srcdir)/regression/usr/common/ @AM_CFLAGS@
 
 AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lrt -lpthread \
 	     -L$(top_builddir)/src/usr/
