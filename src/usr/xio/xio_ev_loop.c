@@ -339,6 +339,9 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	int			wait_time = timeout;
 	cycles_t		start_cycle  = 0;
 
+	loop->stop_loop = 0;
+	loop->wakeup_armed = 0;
+
 	if (timeout != -1)
 		start_cycle = get_cycles();
 
