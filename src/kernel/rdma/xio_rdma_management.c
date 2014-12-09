@@ -1753,6 +1753,14 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 {
 	int retval = 0;
 
+	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &rdma_hndl->trans_attr_mask)) {
+		rdma_set_service_type(rdma_hndl->cm_id,
+				      rdma_hndl->trans_attr.tos);
+		DEBUG_LOG("set TOS option success. mask:0x%x, tos:0x%x\n",
+			  rdma_hndl->trans_attr_mask,
+			  rdma_hndl->trans_attr.tos);
+	}
+
 	retval = rdma_resolve_route(rdma_hndl->cm_id, ROUTE_RESOLVE_TIMEOUT);
 	if (retval) {
 		xio_set_error(retval);
@@ -2230,6 +2238,10 @@ static struct xio_transport_base *xio_rdma_open(
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed.\n");
 		return NULL;
+	}
+	if (attr && trans_attr_mask) {
+		memcpy(&rdma_hndl->trans_attr, attr, sizeof *attr);
+		rdma_hndl->trans_attr_mask = trans_attr_mask;
 	}
 
 	rdma_hndl->rdma_mempool = xio_mempool_get(ctx);

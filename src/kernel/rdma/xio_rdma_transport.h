@@ -488,6 +488,8 @@ struct xio_rdma_transport {
 	};
 	struct ib_send_wr		beacon;
 	struct xio_task			beacon_task;
+	uint32_t			trans_attr_mask;
+	struct xio_transport_attr	trans_attr;
 };
 
 /*
