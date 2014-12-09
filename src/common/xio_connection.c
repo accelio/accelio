@@ -2051,6 +2051,9 @@ static void xio_connection_post_destroy(struct kref *kref)
 	} else {
 		spin_lock(&session->connections_list_lock);
 		session->connections_nr--;
+		destroy_session = ((session->connections_nr == 0) &&
+				(session->lead_connection == NULL) &&
+				(session->redir_connection == NULL));
 		list_del(&connection->connections_list_entry);
 		spin_unlock(&session->connections_list_lock);
 		retval = xio_connection_close(connection);
@@ -2078,11 +2081,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 	}
 
 	/* last chance to teardown */
-	spin_lock(&session->connections_list_lock);
-	destroy_session = ((session->connections_nr == 0) &&
-			(session->lead_connection == NULL) &&
-			(session->redir_connection == NULL));
-	spin_unlock(&session->connections_list_lock);
 	if (destroy_session) {
 		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
