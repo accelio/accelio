@@ -17,7 +17,7 @@ export LD_LIBRARY_PATH=../../../src/usr/
 server_ip=$1
 port=$2
 #running indefinitely
-finite_run="1"
+finite_run="0"
 
 if [ -z "$3" ]
 then
