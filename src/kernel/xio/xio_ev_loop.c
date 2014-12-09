@@ -380,9 +380,6 @@ retry_dont_wait:
 		xio_append_ordered(first, last, loop);
 		node = loop->first;
 		while (node) {
-			if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
-				goto stopped;
-
 			tev = llist_entry(node, struct xio_ev_data, ev_llist);
 			node = llist_next(node);
 			loop->first = node;
@@ -397,15 +394,17 @@ retry_dont_wait:
 			clear_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 		}
 		loop->last = NULL;
+		if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
+			goto stopped;
 	}
 
 	/* All events were processed prepare to wait */
 
-	/* "race point" */
-	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
-
 	if (unlikely(test_bit(XIO_EV_LOOP_STOP, &loop->states)))
 		goto stopped;
+
+	/* "race point" */
+	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
 
 	/* if a new entry was added while we were at "race point"
 	 * an event was added and loop was resumed,
@@ -420,6 +419,7 @@ retry_dont_wait:
 		goto retry_dont_wait; /* add_event will not call wake up */
 
 stopped:
+	clear_bit(XIO_EV_LOOP_WAKE, &loop->states);
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
 		complete(&loop->complete);
 	clear_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
