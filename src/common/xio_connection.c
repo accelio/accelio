@@ -2016,6 +2016,7 @@ static void xio_connection_post_destroy(struct kref *kref)
 	int			destroy_session = 0;
 	int			state;
 	int			close_reason;
+	struct xio_connection	*tmp_connection = NULL;
 
 	struct xio_connection *connection = container_of(kref,
 							 struct xio_connection,
@@ -2038,26 +2039,28 @@ static void xio_connection_post_destroy(struct kref *kref)
 	}
 
 	/* leading connection */
+	spin_lock(&session->connections_list_lock);
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == connection->nexus) {
-		retval = xio_connection_close(session->lead_connection);
+		tmp_connection = session->lead_connection;
 		session->lead_connection = NULL;
 		TRACE_LOG("lead connection is closed\n");
 	} else if (session->redir_connection &&
 		   session->redir_connection->nexus == connection->nexus) {
-		retval = xio_connection_close(session->redir_connection);
+		tmp_connection = session->redir_connection;
 		session->redir_connection = NULL;
 		TRACE_LOG("redirected connection is closed\n");
 	} else {
-		spin_lock(&session->connections_list_lock);
 		session->connections_nr--;
-		destroy_session = ((session->connections_nr == 0) &&
-				(session->lead_connection == NULL) &&
-				(session->redir_connection == NULL));
 		list_del(&connection->connections_list_entry);
-		spin_unlock(&session->connections_list_lock);
-		retval = xio_connection_close(connection);
+		tmp_connection = connection;
 	}
+	destroy_session = ((session->connections_nr == 0) &&
+			(session->lead_connection == NULL) &&
+			(session->redir_connection == NULL));
+	spin_unlock(&session->connections_list_lock);
+	retval = xio_connection_close(tmp_connection);
+
 	if (retval != 0) {
 		ERROR_LOG("failed to close connection");
 		return;
