@@ -382,7 +382,7 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 
 	if (list_empty(&rdma_hndl->rdma_rd_list) ||
 	    rdma_hndl->sqe_avail == 0)
-		return 0;
+		goto exit;
 
 	do {
 		task = list_first_entry(
@@ -425,6 +425,7 @@ static int xio_xmit_rdma_rd(struct xio_rdma_transport *rdma_hndl)
 
 		/* ToDo: error handling */
 	}
+exit:
 	if (list_empty(&rdma_hndl->rdma_rd_list))
 		rdma_hndl->kick_rdma_rd = 0;
 	else
