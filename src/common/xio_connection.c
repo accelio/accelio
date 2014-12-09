@@ -331,7 +331,7 @@ int xio_connection_send(struct xio_connection *connection,
 
 	/* flow control test */
 	if (!is_control && connection->enable_flow_control) {
-		if (connection->peer_credits_bytes == 0)
+		if (connection->peer_credits_msgs == 0)
 			return -EAGAIN;
 
 		sgtbl	  = xio_sg_table_get(&msg->out);
