@@ -76,14 +76,14 @@ void xio_set_error(int errnum);
  * extended message flags
  */
 enum xio_msg_flags_ex {
-	/* [0x01 - 0x99] - reserved for application usage */
-	/* [0x100 - 0x200] - reserved for library usage */
-	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = 0x100, /**< immediate receipt  */
-	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = 0x101, /**< read receipt first */
-	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = 0x102, /**< read receipt last  */
+	/* [below 1<<10 - reserved for application usage] */
+	/* [above 1<<10 - reserved for library usage] */
+	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = (1 << 10), /**< immediate receipt  */
+	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = (1 << 11), /**< read receipt first */
+	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = (1 << 12), /**< read receipt last  */
 };
 
-#define xio_clear_flags(flag) \
+#define xio_clear_ex_flags(flag) \
 	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
 			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))

@@ -171,13 +171,13 @@ enum xio_msg_direction {
  * @brief message level specific flags
  */
 enum xio_msg_flags {
-	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = 0x1, /**< request read receipt    */
-	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = 0x2, /**< zero copy for transfers */
-	XIO_MSG_FLAG_IMM_SEND_COMP	  = 0x4, /**< request an immediate    */
-						 /**< send completion         */
-	XIO_MSG_FLAG_LAST_IN_BATCH	  = 0x8, /**< last in batch	      */
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = (1<<0), /**< request read receipt    */
+	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = (1<<1), /**< zero copy for transfers */
+	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1<<2), /**< request an immediate    */
+						    /**< send completion         */
+	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1<<3), /**< last in batch	      */
 
-	/* [0x100 - 0x200] - reserved for library usage */
+	/* [1<<10 and above - reserved for library usage] */
 };
 
 /**

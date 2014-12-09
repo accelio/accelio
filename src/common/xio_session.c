@@ -573,7 +573,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	omsg->next	= NULL;
 
-	xio_clear_flags(&omsg->flags);
+	xio_clear_ex_flags(&omsg->flags);
 
 	task->connection = connection;
 	task->session = connection->session;
@@ -721,7 +721,7 @@ static int xio_on_rsp_send_comp(
 		/* send completion notification only to responder to
 		 * release responses
 		 */
-		xio_clear_flags(&task->omsg->flags);
+		xio_clear_ex_flags(&task->omsg->flags);
 		if (connection->ses_ops.on_msg_send_complete) {
 			connection->ses_ops.on_msg_send_complete(
 					connection->session, task->omsg,
@@ -796,7 +796,7 @@ static int xio_on_ow_req_send_comp(
 
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
-	xio_clear_flags(&omsg->flags);
+	xio_clear_ex_flags(&omsg->flags);
 
 	if (connection->enable_flow_control) {
 		struct xio_sg_table_ops	*sgtbl_ops;
