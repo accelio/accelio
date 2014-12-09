@@ -652,7 +652,6 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
 	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
 	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4,
-	XIO_CONNECTION_ATTR_TOS			= 1 << 5
 };
 
 /**
