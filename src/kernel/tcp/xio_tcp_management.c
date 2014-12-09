@@ -363,9 +363,6 @@ static int xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
 	TRACE_LOG("tcp transport: [post close] handle:%p, force_free=%d\n",
 		  tcp_hndl, force_free);
 
-	xio_observable_unreg_all_observers(&tcp_hndl->base.observable);
-	XIO_OBSERVABLE_DESTROY(&tcp_hndl->base.observable);
-
 	if (force_free)
 		goto free;
 
@@ -397,6 +394,9 @@ static int xio_tcp_post_close(struct xio_tcp_transport *tcp_hndl,
 free:
 	TRACE_LOG("tcp transport: [post close - free] handle:%p\n",
 		  tcp_hndl);
+
+	xio_observable_unreg_all_observers(&tcp_hndl->base.observable);
+	XIO_OBSERVABLE_DESTROY(&tcp_hndl->base.observable);
 
 	list_for_each_entry_safe(pconn, next_pconn,
 				 &tcp_hndl->pending_conns,
