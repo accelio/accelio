@@ -47,6 +47,14 @@ struct xio_nexus;
 
 struct xio_session;
 
+struct xio_nexus_query_params {
+	struct xio_context	*ctx;
+	const char		*portal_uri;
+	int			tos_enabled;
+	uint8_t			tos;
+	uint8_t			reserved[3];
+};
+
 /*---------------------------------------------------------------------------*/
 /* nexus_cache_construct						     */
 /*---------------------------------------------------------------------------*/
@@ -62,9 +70,7 @@ int xio_nexus_cache_remove(
 struct xio_nexus *xio_nexus_cache_lookup(
 		int nexus_id);
 
-struct xio_nexus *xio_nexus_cache_find(
-		struct xio_context *ctx,
-		const char *portal_uri);
+struct xio_nexus *xio_nexus_cache_find(struct xio_nexus_query_params *query);
 
 
 #endif /*XIO_NEXUS_CACHE_H */

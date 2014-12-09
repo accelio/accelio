@@ -1761,10 +1761,22 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	struct xio_nexus		*nexus;
 	char				proto[8];
 	struct xio_transport_init_attr	*ptrans_init_attr = NULL;
+	struct xio_nexus_query_params	query;
 
 
 	/* look for opened nexus */
-	nexus = xio_nexus_cache_find(ctx, portal_uri);
+	query.ctx = ctx;
+	query.portal_uri = portal_uri;
+	query.tos = 0;
+	query.tos_enabled = 0;
+	if (attr_mask && init_attr) {
+		if (test_bits(XIO_NEXUS_ATTR_TOS, &attr_mask)) {
+			query.tos = init_attr->tos;
+			query.tos_enabled = 1;
+		}
+	}
+
+	nexus = xio_nexus_cache_find(&query);
 	if (nexus != NULL &&
 	    (nexus->state == XIO_NEXUS_STATE_CONNECTED ||
 	     nexus->state == XIO_NEXUS_STATE_CONNECTING ||
