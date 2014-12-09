@@ -418,39 +418,6 @@ void xio_session_notify_connection_error(struct xio_session *session,
 				session, &event,
 				session->cb_user_context);
 }
-/*---------------------------------------------------------------------------*/
-/* xio_session_pre_teardown						     */
-/*---------------------------------------------------------------------------*/
-static void xio_session_pre_teardown(struct xio_session *session)
-{
-	int i;
-
-	/* unregister session from context */
-	xio_sessions_cache_remove(session->session_id);
-	for (i = 0; i < session->services_array_len; i++)
-		kfree(session->services_array[i]);
-	for (i = 0; i < session->portals_array_len; i++)
-		kfree(session->portals_array[i]);
-	kfree(session->services_array);
-	kfree(session->portals_array);
-	kfree(session->hs_private_data);
-	kfree(session->uri);
-	session->state = XIO_SESSION_STATE_CLOSED;
-	XIO_OBSERVER_DESTROY(&session->observer);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_session_post_teardown						     */
-/*---------------------------------------------------------------------------*/
-void xio_session_post_teardown(struct xio_session *session)
-{
-	if (session->state == XIO_SESSION_STATE_CLOSED) {
-		TRACE_LOG("session %p released\n", session);
-		mutex_destroy(&session->lock);
-		kfree(session);
-	}
-}
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_req_recv				                             */
@@ -1455,6 +1422,8 @@ EXPORT_SYMBOL(xio_session_create);
 int xio_session_destroy(struct xio_session *session)
 {
 	int found;
+	int i;
+
 
 	if (session == NULL)
 		return 0;
@@ -1476,10 +1445,22 @@ int xio_session_destroy(struct xio_session *session)
 	}
 
 	TRACE_LOG("session destroy:%p\n", session);
-	session->state = XIO_SESSION_STATE_CLOSING;
-	xio_session_pre_teardown(session);
-	if (!session->in_notify)
-		xio_session_post_teardown(session);
+
+	session->state = XIO_SESSION_STATE_CLOSED;
+
+	/* unregister session from context */
+	xio_sessions_cache_remove(session->session_id);
+	for (i = 0; i < session->services_array_len; i++)
+		kfree(session->services_array[i]);
+	for (i = 0; i < session->portals_array_len; i++)
+		kfree(session->portals_array[i]);
+	kfree(session->services_array);
+	kfree(session->portals_array);
+	kfree(session->hs_private_data);
+	kfree(session->uri);
+	XIO_OBSERVER_DESTROY(&session->observer);
+	mutex_destroy(&session->lock);
+	kfree(session);
 
 	return 0;
 }

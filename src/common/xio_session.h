@@ -111,11 +111,10 @@ struct xio_session {
 	uint16_t			services_array_len;
 	uint16_t			last_opened_portal;
 	uint16_t			last_opened_service;
-	uint16_t			in_notify;
-	uint16_t			pad1;
 
 	uint32_t			teardown_reason;
 	uint32_t			reject_reason;
+	uint32_t			pad1;
 	struct mutex                    lock;	   /* lock open connection */
 	spinlock_t                      connections_list_lock;
 	int				disable_teardown;
