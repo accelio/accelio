@@ -63,7 +63,7 @@ static int xio_tcp_send_work(int fd, void **buf, uint32_t *len, int block)
 	int retval;
 
 	while (*len) {
-		retval = send(fd, *buf, *len, MSG_NOSIGNAL);
+		retval = send(fd, (const char *)*buf, *len, MSG_NOSIGNAL);
 		if (retval < 0) {
 			if (errno != EAGAIN) {
 				xio_set_error(errno);
@@ -81,7 +81,7 @@ static int xio_tcp_send_work(int fd, void **buf, uint32_t *len, int block)
 			}
 		} else {
 			*len -= retval;
-			*buf += retval;
+			inc_ptr(*buf, retval);
 		}
 	}
 
@@ -129,8 +129,9 @@ static int xio_tcp_sendmsg_work(int fd,
 				} else {
 					xio_send->msg.msg_iov[i].iov_len -=
 							(retval - tmp_bytes);
-					xio_send->msg.msg_iov[i].iov_base +=
-							(retval - tmp_bytes);
+					inc_ptr(
+					      xio_send->msg.msg_iov[i].iov_base,
+					      retval - tmp_bytes);
 					xio_send->msg.msg_iov =
 						&xio_send->msg.msg_iov[i];
 					xio_send->msg.msg_iovlen -= i;

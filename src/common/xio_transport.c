@@ -132,10 +132,8 @@ EXPORT_SYMBOL(xio_transport_flush_task_list);
 int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
 				struct xio_task *task, int *is_assigned)
 {
-	union xio_transport_event_data event_data = {
-			.assign_in_buf.task	   = task,
-			.assign_in_buf.is_assigned = 0
-	};
+	union xio_transport_event_data event_data = {};
+	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(trans_hndl,
 				      XIO_TRANSPORT_ASSIGN_IN_BUF,

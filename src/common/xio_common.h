@@ -275,7 +275,7 @@ int		xio_uri_get_portal(const char *uri, char *portal,
 int		xio_uri_get_resource(const char *uri, char *resource,
 				     int resource_len);
 
-char		*xio_uri_get_resource_ptr(const char *uri);
+const char		*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 

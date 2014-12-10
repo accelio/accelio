@@ -37,6 +37,7 @@
  */
 
 #include <xio_predefs.h>
+#include <xio_env.h>
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
@@ -71,8 +72,8 @@
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 static spinlock_t			mngmt_lock;
-static pthread_once_t			ctor_key_once = PTHREAD_ONCE_INIT;
-static pthread_once_t			dtor_key_once = PTHREAD_ONCE_INIT;
+static thread_once_t			ctor_key_once = THREAD_ONCE_INIT;
+static thread_once_t			dtor_key_once = THREAD_ONCE_INIT;
 extern struct xio_transport		xio_tcp_transport;
 extern struct xio_tcp_socket_ops	single_sock_ops;
 extern struct xio_tcp_socket_ops	dual_sock_ops;
@@ -81,15 +82,16 @@ static int				cdl_fd = -1;
 
 /* tcp options */
 struct xio_tcp_options			tcp_options = {
-	.enable_mem_pool		= XIO_OPTVAL_DEF_ENABLE_MEM_POOL,
-	.enable_dma_latency		= XIO_OPTVAL_DEF_TCP_ENABLE_DMA_LATENCY,
-	.enable_mr_check		= XIO_OPTVAL_DEF_ENABLE_MR_CHECK,
-	.max_in_iovsz			= XIO_OPTVAL_DEF_TCP_MAX_IN_IOVSZ,
-	.max_out_iovsz			= XIO_OPTVAL_DEF_TCP_MAX_OUT_IOVSZ,
-	.tcp_no_delay			= XIO_OPTVAL_DEF_TCP_NO_DELAY,
-	.tcp_so_sndbuf			= XIO_OPTVAL_DEF_TCP_SO_SNDBUF,
-	.tcp_so_rcvbuf			= XIO_OPTVAL_DEF_TCP_SO_RCVBUF,
-	.tcp_dual_sock			= XIO_OPTVAL_DEF_TCP_DUAL_SOCK,
+	XIO_OPTVAL_DEF_ENABLE_MEM_POOL,		/*enable_mem_pool*/
+	XIO_OPTVAL_DEF_TCP_ENABLE_DMA_LATENCY,	/*enable_dma_latency*/
+	XIO_OPTVAL_DEF_ENABLE_MR_CHECK,		/*enable_mr_check*/
+	XIO_OPTVAL_DEF_TCP_MAX_IN_IOVSZ,	/*max_in_iovsz*/
+	XIO_OPTVAL_DEF_TCP_MAX_OUT_IOVSZ,	/*max_out_iovsz*/
+	XIO_OPTVAL_DEF_TCP_NO_DELAY,		/*tcp_no_delay*/
+	XIO_OPTVAL_DEF_TCP_SO_SNDBUF,		/*tcp_so_sndbuf*/
+	XIO_OPTVAL_DEF_TCP_SO_RCVBUF,		/*tcp_so_rcvbuf*/
+	XIO_OPTVAL_DEF_TCP_DUAL_SOCK,		/*tcp_dual_sock*/
+	0					/*pad*/
 };
 
 /*---------------------------------------------------------------------------*/
@@ -543,16 +545,16 @@ void xio_tcp_ctl_ready_ev_handler(int fd, int events, void *user_context)
 	struct xio_tcp_transport	*tcp_hndl = (struct xio_tcp_transport *)
 							user_context;
 
-	if (events & EPOLLOUT) {
+	if (events & XIO_POLLOUT) {
 		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
 					      XIO_POLLIN | XIO_POLLRDHUP);
 		xio_tcp_xmit(tcp_hndl);
 	}
 
-	if (events & EPOLLIN)
+	if (events & XIO_POLLIN)
 		xio_tcp_consume_ctl_rx(tcp_hndl);
 
-	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
+	if (events & (XIO_POLLHUP | XIO_POLLRDHUP | XIO_POLLERR)) {
 		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
 			  events, fd);
 		xio_tcp_disconnect_helper(tcp_hndl);
@@ -570,13 +572,13 @@ void xio_tcp_data_ready_ev_handler(int fd, int events, void *user_context)
 							user_context;
 	int retval = 0, count = 0;
 
-	if (events & EPOLLOUT) {
+	if (events & XIO_POLLOUT) {
 		xio_context_modify_ev_handler(tcp_hndl->base.ctx, fd,
 					      XIO_POLLIN | XIO_POLLRDHUP);
 		xio_tcp_xmit(tcp_hndl);
 	}
 
-	if (events & EPOLLIN) {
+	if (events & XIO_POLLIN) {
 		do {
 			retval = tcp_hndl->sock.ops->rx_data_handler(
 							tcp_hndl, RX_BATCH);
@@ -584,7 +586,7 @@ void xio_tcp_data_ready_ev_handler(int fd, int events, void *user_context)
 		} while (retval > 0 && count <  RX_POLL_NR_MAX);
 	}
 
-	if (events & (EPOLLHUP | EPOLLRDHUP | EPOLLERR)) {
+	if (events & (XIO_POLLHUP | XIO_POLLRDHUP | XIO_POLLERR)) {
 		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
 			  events, fd);
 		xio_tcp_disconnect_helper(tcp_hndl);
@@ -681,7 +683,7 @@ int xio_tcp_socket_create(void)
 {
 	int sock_fd, retval, optval = 1;
 
-	sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	sock_fd = xio_socket_non_blocking(AF_INET, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
 		xio_set_error(errno);
 		ERROR_LOG("create socket failed. (errno=%d %m)\n", errno);
@@ -691,7 +693,7 @@ int xio_tcp_socket_create(void)
 	retval = setsockopt(sock_fd,
 			    SOL_SOCKET,
 			    SO_REUSEADDR,
-			    &optval,
+			    (char*)&optval,
 			    sizeof(optval));
 	if (retval) {
 		xio_set_error(errno);
@@ -912,13 +914,14 @@ void xio_tcp_handle_pending_conn(int fd,
 
 
 	buf = &pending_conn->msg;
-	buf += sizeof(struct xio_tcp_connect_msg) -
-			pending_conn->waiting_for_bytes;
+	inc_ptr(buf, sizeof(struct xio_tcp_connect_msg) -
+			pending_conn->waiting_for_bytes);
 	while (pending_conn->waiting_for_bytes) {
-		retval = recv(fd, buf, pending_conn->waiting_for_bytes, 0);
+		retval =
+		       recv(fd, (char*)buf, pending_conn->waiting_for_bytes, 0);
 		if (retval > 0) {
 			pending_conn->waiting_for_bytes -= retval;
-			buf += retval;
+			inc_ptr(buf, retval);
 		} else if (retval == 0) {
 			ERROR_LOG("got EOF while establishing connection\n");
 			goto cleanup1;
@@ -1100,8 +1103,8 @@ void xio_tcp_pending_conn_ev_handler(int fd, int events, void *user_context)
 						user_context;
 
 	xio_tcp_handle_pending_conn(fd, tcp_hndl,
-				    events &
-				    (EPOLLHUP | EPOLLRDHUP | EPOLLERR));
+				events &
+				(XIO_POLLHUP | XIO_POLLRDHUP | XIO_POLLERR));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1127,10 +1130,9 @@ void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
 	pending_conn->waiting_for_bytes = sizeof(struct xio_tcp_connect_msg);
 
 	/* "accept" the connection */
-	retval = accept4(parent_hndl->sock.cfd,
+	retval = xio_accept_non_blocking(parent_hndl->sock.cfd,
 			 (struct sockaddr *)&pending_conn->sa.sa_stor,
-			 &len,
-			 SOCK_NONBLOCK);
+			 &len);
 	if (retval < 0) {
 		xio_set_error(errno);
 		ERROR_LOG("tcp accept failed. (errno=%d %m)\n", errno);
@@ -1161,10 +1163,10 @@ void xio_tcp_listener_ev_handler(int fd, int events, void *user_context)
 	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
 						user_context;
 
-	if (events & EPOLLIN)
+	if (events & XIO_POLLIN)
 		xio_tcp_new_connection(tcp_hndl);
 
-	if ((events & (EPOLLHUP | EPOLLERR))) {
+	if ((events & (XIO_POLLHUP | XIO_POLLERR))) {
 		DEBUG_LOG("epoll returned with error events=%d for fd=%d\n",
 			  events, fd);
 		xio_tcp_disconnect_helper(tcp_hndl);
@@ -1280,7 +1282,7 @@ void xio_tcp_conn_established_helper(int fd,
 	retval = getsockopt(tcp_hndl->sock.cfd,
 			    SOL_SOCKET,
 			    SO_ERROR,
-			    &so_error,
+			    (char*)&so_error,
 			    &len);
 	if (retval) {
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
@@ -1346,8 +1348,8 @@ void xio_tcp_single_conn_established_ev_handler(int fd,
 	msg.second_port = 0;
 	msg.pad = 0;
 	xio_tcp_conn_established_helper(fd, tcp_hndl, &msg,
-					events &
-					(EPOLLERR | EPOLLHUP | EPOLLRDHUP));
+				events &
+				(XIO_POLLERR | XIO_POLLHUP | XIO_POLLRDHUP));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1363,8 +1365,8 @@ void xio_tcp_cfd_conn_established_ev_handler(int fd,
 	msg.second_port = tcp_hndl->sock.port_dfd;
 	msg.pad = 0;
 	xio_tcp_conn_established_helper(fd, tcp_hndl, &msg,
-					events &
-					(EPOLLERR | EPOLLHUP | EPOLLRDHUP));
+				events &
+				(XIO_POLLERR | XIO_POLLHUP | XIO_POLLRDHUP));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1392,13 +1394,14 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 	retval = getsockopt(tcp_hndl->sock.dfd,
 			    SOL_SOCKET,
 			    SO_ERROR,
-			    &so_error,
+			    (char*)&so_error,
 			    &so_error_len);
 	if (retval) {
 		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
 		so_error = errno;
 	}
-	if (so_error || (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))) {
+	if (so_error ||
+		(events & (XIO_POLLERR | XIO_POLLHUP | XIO_POLLRDHUP))) {
 		DEBUG_LOG("fd=%d connection establishment failed\n",
 			  tcp_hndl->sock.dfd);
 		DEBUG_LOG("so_error=%d, epoll_events=%d\n", so_error, events);
@@ -1705,11 +1708,21 @@ static void xio_tcp_init(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_init_msvc							     */
+/* This function is required for MSVC compilation under Windows */
+/*---------------------------------------------------------------------------*/
+int CALLBACK xio_tcp_init_msvc(thread_once_t *a, void *b, void**c)
+{
+	xio_tcp_init();
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_transport_init						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_transport_init(struct xio_transport *transport)
 {
-	pthread_once(&ctor_key_once, xio_tcp_init);
+	thread_once(&ctor_key_once, xio_tcp_init);
 
 	return 0;
 }
@@ -1726,6 +1739,16 @@ static void xio_tcp_release(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_release_msvc							     */
+/* This function is required for MSVC compilation under Windows */
+/*---------------------------------------------------------------------------*/
+int CALLBACK xio_tcp_release_msvc(thread_once_t *a, void *b, void**c)
+{
+	xio_tcp_release();
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_transport_constructor					     */
 /*---------------------------------------------------------------------------*/
 void xio_tcp_transport_constructor(void)
@@ -1737,8 +1760,8 @@ void xio_tcp_transport_constructor(void)
 /*---------------------------------------------------------------------------*/
 void xio_tcp_transport_destructor(void)
 {
-	ctor_key_once = PTHREAD_ONCE_INIT;
-	dtor_key_once = PTHREAD_ONCE_INIT;
+	reset_thread_once_t(&ctor_key_once);
+	reset_thread_once_t(&dtor_key_once);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1746,10 +1769,10 @@ void xio_tcp_transport_destructor(void)
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_transport_release(struct xio_transport *transport)
 {
-	if (ctor_key_once == PTHREAD_ONCE_INIT)
+	if (is_reset_thread_once_t(&ctor_key_once))
 		return;
 
-	pthread_once(&dtor_key_once, xio_tcp_release);
+	thread_once(&dtor_key_once, xio_tcp_release);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1760,8 +1783,8 @@ static void xio_tcp_rxd_init(struct xio_tcp_work_req *rxd,
 {
 	rxd->msg_iov[0].iov_base = buf;
 	rxd->msg_iov[0].iov_len	= sizeof(struct xio_tlv);
-	rxd->msg_iov[1].iov_base = rxd->msg_iov[0].iov_base +
-				   rxd->msg_iov[0].iov_len;
+	rxd->msg_iov[1].iov_base = sum_to_ptr(rxd->msg_iov[0].iov_base,
+					      rxd->msg_iov[0].iov_len);
 	rxd->msg_iov[1].iov_len	= size - sizeof(struct xio_tlv);
 	rxd->msg_len = 2;
 
@@ -1947,7 +1970,7 @@ static int xio_tcp_initial_pool_slab_init_task(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
-	void *buf = tcp_slab->data_pool + tid*tcp_slab->buf_size;
+	void *buf = sum_to_ptr(tcp_slab->data_pool, tid*tcp_slab->buf_size);
 	char *ptr;
 
 	XIO_TO_TCP_TASK(task, tcp_task);
@@ -2102,7 +2125,7 @@ static int xio_tcp_primary_pool_slab_init_task(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
-	void *buf = tcp_slab->data_pool + tid*tcp_slab->buf_size;
+	void *buf = sum_to_ptr(tcp_slab->data_pool, tid*tcp_slab->buf_size);
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 				     tcp_options.max_in_iovsz) + 1;
 	char *ptr;
