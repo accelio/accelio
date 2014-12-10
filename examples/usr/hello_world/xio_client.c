@@ -43,9 +43,9 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define TEST_DISCONNECT		0
 #define DISCONNECT_NR		2000000
 
+int test_disconnect;
 
 /* private session data */
 struct session_data {
@@ -64,7 +64,6 @@ struct session_data {
 static void process_response(struct session_data *session_data,
 			     struct xio_msg *rsp)
 {
-
 	if (++session_data->cnt == PRINT_COUNTER) {
 		struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
 		int			inents = vmsg_sglist_nents(&rsp->in);
@@ -127,14 +126,15 @@ static int on_response(struct xio_session *session,
 	/* acknowledge xio that response is no longer needed */
 	xio_release_response(rsp);
 
-#if  TEST_DISCONNECT
-	if (session_data->nrecv == DISCONNECT_NR) {
-		xio_disconnect(session_data->conn);
-		return 0;
+	if (test_disconnect) {
+		if (session_data->nrecv == DISCONNECT_NR) {
+			xio_disconnect(session_data->conn);
+			return 0;
+		}
+		if (session_data->nsent == DISCONNECT_NR)
+			return 0;
 	}
-	if (session_data->nsent == DISCONNECT_NR)
-		return 0;
-#endif
+
 
 	session_data->req[i].in.header.iov_base	  = NULL;
 	session_data->req[i].in.header.iov_len	  = 0;
@@ -170,8 +170,8 @@ int main(int argc, char *argv[])
 	struct xio_connection_params	cparams;
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\
+				<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 	memset(&session_data, 0, sizeof(session_data));
@@ -190,6 +190,11 @@ int main(int argc, char *argv[])
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+
+	if (argc > 4)
+		test_disconnect = 1;
+	else
+		test_disconnect = 0;
 
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
@@ -226,7 +231,8 @@ int main(int argc, char *argv[])
 
 		session_data.req[i].out.data_iov.sglist[0].iov_len =
 			strlen((const char *)
-				session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+			  session_data.req[i].out.data_iov.sglist[0].iov_base)
+			   + 1;
 
 		session_data.req[i].out.data_iov.nents = 1;
 	}
