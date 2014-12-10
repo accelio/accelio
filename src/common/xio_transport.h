@@ -306,9 +306,8 @@ static inline void xio_transport_notify_observer_error(
 				struct xio_transport_base *trans_hndl,
 				int reason)
 {
-	union xio_transport_event_data ev_data = {
-		.error.reason = (enum xio_status)reason
-	};
+	union xio_transport_event_data ev_data = {};
+	ev_data.error.reason = (enum xio_status)reason;
 
 	xio_observable_notify_all_observers(&trans_hndl->observable,
 					    XIO_TRANSPORT_ERROR,

@@ -71,17 +71,9 @@
 #include <sys/syscall.h>
 #include <sys/resource.h>
 #include <arpa/inet.h>
-#include <linux/types.h>
-#include <linux/list.h>
+#include <sys/epoll.h>
+#include <linux/tcp.h>
 #include <linux/mman.h>
-#include <linux/printk.h>
-#include <linux/atomic.h>
-#include <linux/kref.h>
-#include <linux/usr.h>
-#include <linux/netlink.h>
-#include <linux/debugfs.h>
-#include <linux/kernel.h>
-#include <linux/jiffies.h>
 
 
 /*---------------------------------------------------------------------------*/
@@ -248,6 +240,18 @@ static inline socket_t xio_socket_non_blocking(int domain, int type,
  * their application */
 #define xio_accept_non_blocking(sockfd, addr, addrlen) \
 	accept4(sockfd, addr, addrlen, SOCK_NONBLOCK)
+
+
+#include <linux/types.h>
+#include <linux/list.h>
+#include <linux/printk.h>
+#include <linux/atomic.h>
+#include <linux/kref.h>
+#include <linux/usr.h>
+#include <linux/netlink.h>
+#include <linux/debugfs.h>
+#include <linux/kernel.h>
+#include <linux/jiffies.h>
 
 
 

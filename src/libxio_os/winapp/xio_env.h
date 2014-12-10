@@ -48,8 +48,10 @@
 
 #include <io.h>
 #include <stdint.h>
-
+#include <errno.h>
 #include <BaseTsd.h>
+
+#include <xio_base.h>
 #include "list.h"
 
 
@@ -59,6 +61,12 @@ typedef unsigned __int32 uint32_t;
 typedef int64_t __s64;
 
 #define inline __inline
+
+
+#define __func__		__FUNCTION__
+#define __builtin_expect(x,y)	(x) /* kickoff likely/unlikely in MSVC */
+#define likely(x)		__builtin_expect(!!(x), 1)
+#define unlikely(x)		__builtin_expect(!!(x), 0)
 
 
 /*---------------------------------------------------------------------------*/
@@ -528,9 +536,6 @@ ssize_t inline sendmsg(int sd, struct msghdr *msg, int flags)
 /*---------------------------------------------------------------------------*/
 /*-------------------- IO & miscelenious things -----------------------------*/
 /*---------------------------------------------------------------------------*/
-
-#define __func__ __FUNCTION__
-#define __builtin_expect(x,y) (x) /* kickoff likely/unlikely in MSVC */
 
 /*---------------------------------------------------------------------------*/
 static inline char *

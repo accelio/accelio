@@ -128,7 +128,7 @@ struct xio_tcp_options {
 
 #define XIO_TCP_REQ_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_tcp_req_hdr {
+PACKED_MEMORY(struct xio_tcp_req_hdr{
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
@@ -145,11 +145,11 @@ struct __attribute__((__packed__)) xio_tcp_req_hdr {
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 	uint32_t		remain_data_len;/* remaining data length */
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
-};
+});
 
 #define XIO_TCP_RSP_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_tcp_rsp_hdr {
+PACKED_MEMORY(struct xio_tcp_rsp_hdr {
 	uint8_t			version;	/* response version     */
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
@@ -166,25 +166,25 @@ struct __attribute__((__packed__)) xio_tcp_rsp_hdr {
 
 	uint32_t		remain_data_len;/* remaining data length */
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
-};
+});
 
-struct __attribute__((__packed__)) xio_tcp_connect_msg {
+PACKED_MEMORY(struct xio_tcp_connect_msg {
 	enum xio_tcp_sock_type	sock_type;
 	uint16_t		second_port;
 	uint16_t		pad;
-};
+});
 
-struct __attribute__((__packed__)) xio_tcp_setup_msg {
+PACKED_MEMORY(struct xio_tcp_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
-};
+});
 
-struct __attribute__((__packed__)) xio_tcp_cancel_hdr {
+PACKED_MEMORY(struct xio_tcp_cancel_hdr {
 	uint16_t		hdr_len;	 /* req header length	*/
 	uint16_t		sn;		 /* msg serial number	*/
 	uint32_t		result;
-};
+});
 
 struct xio_tcp_work_req {
 	struct iovec			*msg_iov;

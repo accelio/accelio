@@ -36,9 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <linux/tcp.h>
-#include <sys/epoll.h>
-#include <sys/socket.h>
+#include <xio_predefs.h>
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
