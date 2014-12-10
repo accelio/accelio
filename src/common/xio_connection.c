@@ -2147,6 +2147,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 	 * users may call this function at any stage
 	 **/
 	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->fin_delayed_work);
+	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->fin_timeout_work);
 
 	kref_put(&connection->kref, xio_connection_post_destroy);
