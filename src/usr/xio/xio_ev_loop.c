@@ -369,6 +369,22 @@ retry:
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
 			if (likely(tev != NULL)) {
+				int out_events = 0;
+				if (events[i].events & EPOLLIN)
+					out_events |= XIO_POLLIN;
+				if (events[i].events & EPOLLOUT)
+					out_events |= XIO_POLLOUT;
+				if (events[i].events & EPOLLRDHUP)
+					out_events |= XIO_POLLRDHUP;
+				if (events[i].events & EPOLLET)
+					out_events |= XIO_POLLET;
+				if (events[i].events & EPOLLONESHOT)
+					out_events |= XIO_ONESHOT;
+				if (events[i].events & EPOLLHUP)
+					out_events |= XIO_POLLHUP;
+				if (events[i].events & EPOLLERR)
+					out_events |= XIO_POLLERR;
+
 				/* look for deleted event handlers */
 				if (unlikely(loop->deleted_events_nr)) {
 					for (j = 0; j < loop->deleted_events_nr;
@@ -385,7 +401,7 @@ retry:
 					}
 				}
 				/* (fd != loop->wakeup_event) */
-				tev->handler(tev->fd, events[i].events,
+				tev->handler(tev->fd, out_events,
 						tev->data);
 			} else {
 				/* wakeup event auto-removed from epoll
