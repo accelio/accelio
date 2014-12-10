@@ -65,13 +65,13 @@ struct xio_mbuf {
 			((mbuf)->curr = ((mbuf)->tlv.head))
 
 #define xio_mbuf_set_val_start(mbuf)		 \
-			((mbuf)->curr = ((mbuf)->tlv.head + XIO_TLV_LEN))
+			((mbuf)->curr = ((char*)(mbuf)->tlv.head + XIO_TLV_LEN))
 
 #define xio_mbuf_set_session_hdr(mbuf)	 \
 			((mbuf)->curr = ((mbuf)->tlv.head + XIO_TLV_LEN))
 
 #define xio_mbuf_set_trans_hdr(mbuf)		\
-			((mbuf)->curr = ((mbuf)->tlv.head + \
+			((mbuf)->curr = sum_to_ptr((mbuf)->tlv.head, \
 				XIO_TLV_LEN + XIO_SESSION_HDR_LEN))
 
 #define xio_mbuf_tlv_head(mbuf)		((mbuf)->tlv.head)
@@ -82,8 +82,10 @@ struct xio_mbuf {
 
 #define xio_mbuf_data_length(mbuf)	((mbuf)->buf.datalen)
 
-#define xio_mbuf_tlv_len(mbuf)		((mbuf)->curr - (mbuf)->tlv.head)
-#define xio_mbuf_tlv_payload_len(mbuf)	((mbuf)->curr - (mbuf)->tlv.val)
+#define xio_mbuf_tlv_len(mbuf)		\
+			((char*)(mbuf)->curr - (char*)(mbuf)->tlv.head)
+#define xio_mbuf_tlv_payload_len(mbuf)	\
+			((char*)(mbuf)->curr - (char*)(mbuf)->tlv.val)
 
 #define xio_mbuf_reset(mbuf)			\
 			((mbuf)->curr = (mbuf)->buf.head)
@@ -94,9 +96,9 @@ struct xio_mbuf {
 #define xio_mbuf_get_curr_ptr(mbuf)	((mbuf)->curr)
 
 #define xio_mbuf_get_curr_offset(mbuf)	\
-			((mbuf)->curr - (mbuf)->buf.head)
+			((char*)(mbuf)->curr - (char*)(mbuf)->buf.head)
 
-#define xio_mbuf_inc(mbuf, len)	((mbuf)->curr = ((mbuf)->curr + (len)))
+#define xio_mbuf_inc(mbuf, len)	((mbuf)->curr = ((char*)(mbuf)->curr + (len)))
 #define xio_mbuf_dec(mbuf, len)	((mbuf)->curr = ((mbuf)->curr - (len)))
 
 #define xio_mbuf_push(mbuf)		((mbuf)->marker = (mbuf)->curr)
