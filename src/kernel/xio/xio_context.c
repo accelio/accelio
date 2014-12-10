@@ -342,9 +342,13 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 		return 0;
 
 	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
-	if (retval) {
+	if (retval == -1) {
 		xio_set_error(retval);
-		WARN_LOG("xio_workqueue_del_delayed_work failed. err=%d\n",
+		DEBUG_LOG(" WARN workqueue_del_delayed_work failed. err=%d\n",
+			 retval);
+	} else if (retval) {
+		xio_set_error(retval);
+		WARN_LOG("workqueue_del_delayed_work failed. err=%d\n",
 			 retval);
 	}
 
