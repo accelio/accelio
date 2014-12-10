@@ -344,7 +344,7 @@ int xio_connection_send(struct xio_connection *connection,
 		/* message does not fit into remote queue */
 		if (connection->session->peer_rcv_queue_depth_bytes < tx_bytes) {
 				ERROR_LOG("message length %zd is bigger then peer " \
-				  "receive queue size %lu\n", tx_bytes,
+				  "receive queue size %llu\n", tx_bytes,
 				  connection->session->peer_rcv_queue_depth_bytes);
 			return -XIO_E_PEER_QUEUE_SIZE_MISMATCH;
 		}
