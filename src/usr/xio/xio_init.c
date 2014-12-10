@@ -54,16 +54,26 @@ struct xio_idr  *usr_idr = NULL;
 #ifdef HAVE_INFINIBAND_VERBS_H
 extern struct xio_transport xio_rdma_transport;
 #endif
-extern struct xio_transport xio_tcp_transport;
 
-static struct xio_transport  *transport_tbl[] = {
+struct xio_transport * xio_rdma_get_transport_func_list();
+struct xio_transport *  xio_tcp_get_transport_func_list();
+
+
+typedef struct xio_transport * (*get_transport_func_list_t)();
+
+static get_transport_func_list_t  transport_func_list_tbl[] = {
 #ifdef HAVE_INFINIBAND_VERBS_H
-	&xio_rdma_transport,
+	xio_rdma_get_transport_func_list,
 #endif
-	&xio_tcp_transport
+	xio_tcp_get_transport_func_list
 };
 
-#define  transport_tbl_sz (sizeof(transport_tbl) / sizeof(transport_tbl[0]))
+#define  transport_tbl_sz (sizeof(transport_func_list_tbl) \
+	/ sizeof(transport_func_list_tbl[0]))
+
+
+static struct xio_transport  *transport_tbl[transport_tbl_sz];
+
 
 static volatile int32_t	ini_refcnt; /*= 0 */
 static DEFINE_MUTEX(ini_mutex);
@@ -96,6 +106,9 @@ static void xio_dtor(void)
 static void xio_ctor(void)
 {
 	size_t i;
+	for (i = 0; i < transport_tbl_sz; i++)
+		if (!transport_tbl[i])
+			transport_tbl[i] = transport_func_list_tbl[i]();
 
 	page_size = sysconf(_SC_PAGESIZE);
 	if (page_size < 0)

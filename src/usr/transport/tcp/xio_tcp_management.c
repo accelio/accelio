@@ -2013,14 +2013,20 @@ static void xio_tcp_initial_pool_get_params(
 			      3*sizeof(struct iovec);
 }
 
-static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
-	.pool_get_params	= xio_tcp_initial_pool_get_params,
-	.slab_pre_create	= xio_tcp_initial_pool_slab_pre_create,
-	.slab_destroy		= xio_tcp_initial_pool_slab_destroy,
-	.slab_init_task		= xio_tcp_initial_pool_slab_init_task,
-	.pool_post_create	= xio_tcp_initial_pool_post_create
+static struct xio_tasks_pool_ops initial_tasks_pool_ops;
+/*---------------------------------------------------------------------------*/
+static void init_initial_tasks_pool_ops() {
+	initial_tasks_pool_ops.pool_get_params =
+		xio_tcp_initial_pool_get_params;
+	initial_tasks_pool_ops.slab_pre_create =
+		xio_tcp_initial_pool_slab_pre_create;
+	initial_tasks_pool_ops.slab_destroy =
+		xio_tcp_initial_pool_slab_destroy;
+	initial_tasks_pool_ops.slab_init_task =
+		xio_tcp_initial_pool_slab_init_task;
+	initial_tasks_pool_ops.pool_post_create =
+		xio_tcp_initial_pool_post_create;
 };
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_primary_pool_slab_pre_create				     */
@@ -2242,13 +2248,20 @@ static void xio_tcp_primary_pool_get_params(
 			 4 * max_iovsz * sizeof(struct xio_sge);
 }
 
-static struct xio_tasks_pool_ops   primary_tasks_pool_ops = {
-	.pool_get_params	= xio_tcp_primary_pool_get_params,
-	.slab_pre_create	= xio_tcp_primary_pool_slab_pre_create,
-	.slab_destroy		= xio_tcp_primary_pool_slab_destroy,
-	.slab_init_task		= xio_tcp_primary_pool_slab_init_task,
-	.pool_post_create	= xio_tcp_primary_pool_post_create,
-	.task_pre_put		= xio_tcp_task_pre_put,
+static struct xio_tasks_pool_ops   primary_tasks_pool_ops;
+/*---------------------------------------------------------------------------*/
+static void init_primary_tasks_pool_ops() {
+	primary_tasks_pool_ops.pool_get_params =
+		xio_tcp_primary_pool_get_params;
+	primary_tasks_pool_ops.slab_pre_create =
+		xio_tcp_primary_pool_slab_pre_create;
+	primary_tasks_pool_ops.slab_destroy =
+		xio_tcp_primary_pool_slab_destroy;
+	primary_tasks_pool_ops.slab_init_task =
+		xio_tcp_primary_pool_slab_init_task;
+	primary_tasks_pool_ops.pool_post_create =
+		xio_tcp_primary_pool_post_create;
+	primary_tasks_pool_ops.task_pre_put = xio_tcp_task_pre_put;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -2514,58 +2527,81 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
-struct xio_tcp_socket_ops single_sock_ops = {
-	.open			= xio_tcp_single_sock_create,
-	.add_ev_handlers	= xio_tcp_single_sock_add_ev_handlers,
-	.del_ev_handlers	= xio_tcp_single_sock_del_ev_handlers,
-	.connect		= xio_tcp_single_sock_connect,
-	.set_txd		= xio_tcp_single_sock_set_txd,
-	.set_rxd		= xio_tcp_single_sock_set_rxd,
-	.rx_ctl_work		= xio_tcp_recvmsg_work,
-	.rx_ctl_handler		= xio_tcp_single_sock_rx_ctl_handler,
-	.rx_data_handler	= xio_tcp_rx_data_handler,
-	.shutdown		= xio_tcp_single_sock_shutdown,
-	.close			= xio_tcp_single_sock_close,
+struct xio_tcp_socket_ops single_sock_ops;
+/*---------------------------------------------------------------------------*/
+static void init_single_sock_ops() {
+	single_sock_ops.open = xio_tcp_single_sock_create;
+	single_sock_ops.add_ev_handlers = xio_tcp_single_sock_add_ev_handlers;
+	single_sock_ops.del_ev_handlers = xio_tcp_single_sock_del_ev_handlers;
+	single_sock_ops.connect = xio_tcp_single_sock_connect;
+	single_sock_ops.set_txd = xio_tcp_single_sock_set_txd;
+	single_sock_ops.set_rxd = xio_tcp_single_sock_set_rxd;
+	single_sock_ops.rx_ctl_work = xio_tcp_recvmsg_work;
+	single_sock_ops.rx_ctl_handler = xio_tcp_single_sock_rx_ctl_handler;
+	single_sock_ops.rx_data_handler = xio_tcp_rx_data_handler;
+	single_sock_ops.shutdown = xio_tcp_single_sock_shutdown;
+	single_sock_ops.close = xio_tcp_single_sock_close;
 };
 
-struct xio_tcp_socket_ops dual_sock_ops = {
-	.open			= xio_tcp_dual_sock_create,
-	.add_ev_handlers	= xio_tcp_dual_sock_add_ev_handlers,
-	.del_ev_handlers	= xio_tcp_dual_sock_del_ev_handlers,
-	.connect		= xio_tcp_dual_sock_connect,
-	.set_txd		= xio_tcp_dual_sock_set_txd,
-	.set_rxd		= xio_tcp_dual_sock_set_rxd,
-	.rx_ctl_work		= xio_tcp_recv_ctl_work,
-	.rx_ctl_handler		= xio_tcp_dual_sock_rx_ctl_handler,
-	.rx_data_handler	= xio_tcp_rx_data_handler,
-	.shutdown		= xio_tcp_dual_sock_shutdown,
-	.close			= xio_tcp_dual_sock_close,
+struct xio_tcp_socket_ops dual_sock_ops;
+/*---------------------------------------------------------------------------*/
+static void init_dual_sock_ops() {
+	dual_sock_ops.open = xio_tcp_dual_sock_create;
+	dual_sock_ops.add_ev_handlers = xio_tcp_dual_sock_add_ev_handlers;
+	dual_sock_ops.del_ev_handlers = xio_tcp_dual_sock_del_ev_handlers;
+	dual_sock_ops.connect = xio_tcp_dual_sock_connect;
+	dual_sock_ops.set_txd = xio_tcp_dual_sock_set_txd;
+	dual_sock_ops.set_rxd = xio_tcp_dual_sock_set_rxd;
+	dual_sock_ops.rx_ctl_work = xio_tcp_recv_ctl_work;
+	dual_sock_ops.rx_ctl_handler = xio_tcp_dual_sock_rx_ctl_handler;
+	dual_sock_ops.rx_data_handler = xio_tcp_rx_data_handler;
+	dual_sock_ops.shutdown = xio_tcp_dual_sock_shutdown;
+	dual_sock_ops.close = xio_tcp_dual_sock_close;
 };
 
-struct xio_transport xio_tcp_transport = {
-	.name			= "tcp",
-	.ctor			= xio_tcp_transport_constructor,
-	.dtor			= xio_tcp_transport_destructor,
-	.init			= xio_tcp_transport_init,
-	.release		= xio_tcp_transport_release,
-	.context_shutdown	= xio_tcp_context_shutdown,
-	.open			= xio_tcp_open,
-	.connect		= xio_tcp_connect,
-	.listen			= xio_tcp_listen,
-	.accept			= xio_tcp_accept,
-	.reject			= xio_tcp_reject,
-	.close			= xio_tcp_close,
-	.dup2			= xio_tcp_dup2,
-/*	.update_task		= xio_tcp_update_task,*/
-	.send			= xio_tcp_send,
-	.poll			= xio_tcp_poll,
-	.set_opt		= xio_tcp_set_opt,
-	.get_opt		= xio_tcp_get_opt,
-	.cancel_req		= xio_tcp_cancel_req,
-	.cancel_rsp		= xio_tcp_cancel_rsp,
-	.get_pools_setup_ops	= xio_tcp_get_pools_ops,
-	.set_pools_cls		= xio_tcp_set_pools_cls,
+struct xio_transport xio_tcp_transport;
+/*---------------------------------------------------------------------------*/
+static void init_xio_tcp_transport() {
+	xio_tcp_transport.name = "tcp";
+	xio_tcp_transport.ctor = xio_tcp_transport_constructor;
+	xio_tcp_transport.dtor = xio_tcp_transport_destructor;
+	xio_tcp_transport.init = xio_tcp_transport_init;
+	xio_tcp_transport.release = xio_tcp_transport_release;
+	xio_tcp_transport.context_shutdown = xio_tcp_context_shutdown;
+	xio_tcp_transport.open = xio_tcp_open;
+	xio_tcp_transport.connect = xio_tcp_connect;
+	xio_tcp_transport.listen = xio_tcp_listen;
+	xio_tcp_transport.accept = xio_tcp_accept;
+	xio_tcp_transport.reject = xio_tcp_reject;
+	xio_tcp_transport.close = xio_tcp_close;
+	xio_tcp_transport.dup2 = xio_tcp_dup2;
+	/*	.update_task		= xio_tcp_update_task;*/
+	xio_tcp_transport.send = xio_tcp_send;
+	xio_tcp_transport.poll = xio_tcp_poll;
+	xio_tcp_transport.set_opt = xio_tcp_set_opt;
+	xio_tcp_transport.get_opt = xio_tcp_get_opt;
+	xio_tcp_transport.cancel_req = xio_tcp_cancel_req;
+	xio_tcp_transport.cancel_rsp = xio_tcp_cancel_rsp;
+	xio_tcp_transport.get_pools_setup_ops = xio_tcp_get_pools_ops;
+	xio_tcp_transport.set_pools_cls = xio_tcp_set_pools_cls;
 
-	.validators_cls.is_valid_in_req  = xio_tcp_is_valid_in_req,
-	.validators_cls.is_valid_out_msg = xio_tcp_is_valid_out_msg,
-};
+	xio_tcp_transport.validators_cls.is_valid_in_req = xio_tcp_is_valid_in_req;
+	xio_tcp_transport.validators_cls.is_valid_out_msg = xio_tcp_is_valid_out_msg;
+}
+
+/*---------------------------------------------------------------------------*/
+static void init_static_structs() {
+	init_initial_tasks_pool_ops();
+	init_primary_tasks_pool_ops();
+	init_single_sock_ops();
+	init_dual_sock_ops();
+	init_xio_tcp_transport();
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_get_transport_func_list						     */
+/*---------------------------------------------------------------------------*/
+struct xio_transport *  xio_tcp_get_transport_func_list() {
+	init_static_structs();
+	return &xio_tcp_transport;
+}

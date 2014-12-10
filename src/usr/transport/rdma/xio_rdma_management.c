@@ -3345,3 +3345,9 @@ struct xio_transport xio_rdma_transport = {
 	.validators_cls.is_valid_out_msg = xio_rdma_is_valid_out_msg,
 };
 
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_get_transport_func_list						     */
+/*---------------------------------------------------------------------------*/
+struct xio_transport *  xio_rdma_get_transport_func_list() {
+	return &xio_rdma_transport;
+}
