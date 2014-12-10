@@ -340,8 +340,18 @@ int xio_connection_send(struct xio_connection *connection,
 
 		tx_bytes  = msg->out.header.iov_len +
 			tbl_length(sgtbl_ops, sgtbl);
+
+		/* message does not fit into remote queue */
+		if (connection->session->peer_rcv_queue_depth_bytes < tx_bytes) {
+				ERROR_LOG("message length %zd is bigger then peer " \
+				  "receive queue size %lu\n", tx_bytes,
+				  connection->session->peer_rcv_queue_depth_bytes);
+			return -XIO_E_PEER_QUEUE_SIZE_MISMATCH;
+		}
+
 		if (connection->peer_credits_bytes < tx_bytes)
 			return -EAGAIN;
+
 	}
 
 
@@ -550,7 +560,7 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 /* xio_connection_notify_req_msgs_flush					     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_notify_req_msgs_flush(struct xio_connection
-						 *connection)
+						 *connection, int status)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
@@ -558,7 +568,7 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
 		xio_session_notify_msg_error(connection, pmsg,
-					     XIO_E_MSG_FLUSHED,
+					     status,
 					     XIO_MSG_DIRECTION_OUT);
 	}
 }
@@ -567,7 +577,7 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 /* xio_connection_notify_rsp_msgs_flush					     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
-						 *connection)
+						 *connection, int status)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
@@ -600,9 +610,9 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 /*---------------------------------------------------------------------------*/
 int xio_connection_notify_msgs_flush(struct xio_connection *connection)
 {
-	xio_connection_notify_req_msgs_flush(connection);
+	xio_connection_notify_req_msgs_flush(connection, XIO_E_MSG_FLUSHED);
 
-	xio_connection_notify_rsp_msgs_flush(connection);
+	xio_connection_notify_rsp_msgs_flush(connection, XIO_E_MSG_FLUSHED);
 
 	connection->is_flushed = 1;
 
@@ -751,10 +761,12 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 /* xio_connection_xmit_inl						     */
 /*---------------------------------------------------------------------------*/
-static inline int xio_connection_xmit_inl(struct xio_connection *connection,
-					  struct xio_msg_list *msgq,
-					  struct xio_msg_list *in_flight_msgq,
-					  int *retry_cnt)
+static inline int xio_connection_xmit_inl(
+		struct xio_connection *connection,
+		struct xio_msg_list *msgq,
+		struct xio_msg_list *in_flight_msgq,
+		void (*flush_msgq)(struct xio_connection *, int),
+		int *retry_cnt)
 {
 	int retval = 0;
 
@@ -771,6 +783,12 @@ static inline int xio_connection_xmit_inl(struct xio_connection *connection,
 				/* while error drain the messages */
 				*retry_cnt = 0;
 				return 0;
+			} else if (retval == -XIO_E_PEER_QUEUE_SIZE_MISMATCH) {
+				/* message larger then remote receive
+				 * queue - flush all messages */
+				(*flush_msgq)(connection, -retval);
+				(*retry_cnt)++;
+				return 1;
 			} else  {
 				xio_msg_list_remove(msgq, msg, pdata);
 				return -1;
@@ -801,23 +819,31 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 	struct xio_msg_list *msgq1, *in_flight_msgq1;
 	struct xio_msg_list *msgq2, *in_flight_msgq2;
+	void (*flush_msgq1)(struct xio_connection *, int );
+	void (*flush_msgq2)(struct xio_connection *, int);
+
 
 	if (connection->send_req_toggle == 0) {
 		msgq1		= &connection->reqs_msgq;
 		in_flight_msgq1	= &connection->in_flight_reqs_msgq;
+		flush_msgq1	= &xio_connection_notify_req_msgs_flush;
 		msgq2		= &connection->rsps_msgq;
 		in_flight_msgq2	= &connection->in_flight_rsps_msgq;
+		flush_msgq2	= &xio_connection_notify_rsp_msgs_flush;
 	} else {
 		msgq1		= &connection->rsps_msgq;
 		in_flight_msgq1	= &connection->in_flight_rsps_msgq;
+		flush_msgq1	= &xio_connection_notify_rsp_msgs_flush;
 		msgq2		= &connection->reqs_msgq;
 		in_flight_msgq2	= &connection->in_flight_reqs_msgq;
+		flush_msgq2	= &xio_connection_notify_req_msgs_flush;
 	}
 
 
 	while (retry_cnt < 2) {
 		retval = xio_connection_xmit_inl(connection,
 						 msgq1, in_flight_msgq1,
+						 flush_msgq1,
 						 &retry_cnt);
 		if (retval < 0) {
 			connection->send_req_toggle =
@@ -826,6 +852,7 @@ static int xio_connection_xmit(struct xio_connection *connection)
 		}
 		retval = xio_connection_xmit_inl(connection,
 						 msgq2, in_flight_msgq2,
+						 flush_msgq2,
 						 &retry_cnt);
 		if (retval < 0)
 			break;
@@ -894,7 +921,7 @@ int xio_connection_restart(struct xio_connection *connection)
 		return retval;
 
 	/* Notify user on responses */
-	xio_connection_notify_rsp_msgs_flush(connection);
+	xio_connection_notify_rsp_msgs_flush(connection, XIO_E_MSG_FLUSHED);
 
 	/* restart transmission */
 	retval = xio_connection_xmit(connection);
@@ -2441,7 +2468,7 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 		return -1;
 	}
 	/* flush all pending requests */
-	xio_connection_notify_req_msgs_flush(connection);
+	xio_connection_notify_req_msgs_flush(connection, XIO_E_MSG_FLUSHED);
 
 	if (transition->send_flags & SEND_ACK)
 		xio_send_fin_ack(connection, task);
