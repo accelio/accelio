@@ -560,7 +560,8 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 /* xio_connection_notify_req_msgs_flush					     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_notify_req_msgs_flush(struct xio_connection
-						 *connection, int status)
+						 *connection,
+						 enum xio_status status)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
@@ -577,7 +578,8 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 /* xio_connection_notify_rsp_msgs_flush					     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
-						 *connection, int status)
+						 *connection,
+						 enum xio_status status)
 {
 	struct xio_msg		*pmsg, *tmp_pmsg;
 
@@ -600,7 +602,7 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 		if (!IS_APPLICATION_MSG(pmsg))
 			continue;
 		xio_session_notify_msg_error(connection, pmsg,
-					     XIO_E_MSG_FLUSHED,
+					     status,
 					     XIO_MSG_DIRECTION_OUT);
 	}
 }
@@ -765,7 +767,7 @@ static inline int xio_connection_xmit_inl(
 		struct xio_connection *connection,
 		struct xio_msg_list *msgq,
 		struct xio_msg_list *in_flight_msgq,
-		void (*flush_msgq)(struct xio_connection *, int),
+		void (*flush_msgq)(struct xio_connection *, enum xio_status),
 		int *retry_cnt)
 {
 	int retval = 0;
@@ -786,7 +788,8 @@ static inline int xio_connection_xmit_inl(
 			} else if (retval == -XIO_E_PEER_QUEUE_SIZE_MISMATCH) {
 				/* message larger then remote receive
 				 * queue - flush all messages */
-				(*flush_msgq)(connection, -retval);
+				(*flush_msgq)(connection,
+					      (enum xio_status)-retval);
 				(*retry_cnt)++;
 				return 1;
 			} else  {
@@ -819,8 +822,8 @@ static int xio_connection_xmit(struct xio_connection *connection)
 
 	struct xio_msg_list *msgq1, *in_flight_msgq1;
 	struct xio_msg_list *msgq2, *in_flight_msgq2;
-	void (*flush_msgq1)(struct xio_connection *, int );
-	void (*flush_msgq2)(struct xio_connection *, int);
+	void (*flush_msgq1)(struct xio_connection *, enum xio_status);
+	void (*flush_msgq2)(struct xio_connection *, enum xio_status);
 
 
 	if (connection->send_req_toggle == 0) {
