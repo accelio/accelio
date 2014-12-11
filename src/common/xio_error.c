@@ -124,6 +124,8 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "User object not found";
 	case XIO_E_PEER_QUEUE_SIZE_MISMATCH:
 		return "Peer receive queue is smaller then message size";
+	case XIO_E_RSP_BUF_SIZE_MISMATCH:
+		return "Response buffer is smaller then actual response";
 	default:
 		return "Unknown error";
 	};
