@@ -48,3 +48,8 @@ version.c
 doc
 Doxyfile
 .dirstamp
+*.o.cmd
+*.ko.cmd
+*.ko.unsigned.cmd
+*.ko.unsigned
+*.ko
