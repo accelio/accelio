@@ -366,8 +366,14 @@ static int on_msg_error(struct xio_session *session,
 {
 	struct test_params *test_params = (struct test_params *)cb_user_context;
 
-	printf("**** [%p] message %lu failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	if (direction == XIO_MSG_DIRECTION_OUT) {
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->sn, xio_strerror(error));
+	} else {
+		xio_release_response(msg);
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->request->sn, xio_strerror(error));
+	}
 
 	msg_pool_put(test_params->pool, msg);
 
