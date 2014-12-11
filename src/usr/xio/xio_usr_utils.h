@@ -38,6 +38,4 @@
 #ifndef XIO_USR_UTILS_H
 #define XIO_USR_UTILS_H
 
-unsigned xio_get_cpu(void);
-
 #endif /* XIO_USR_UTILS_H */

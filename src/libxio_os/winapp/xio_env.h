@@ -145,6 +145,10 @@ static const INIT_ONCE INIT_ONCE_RESET_VALUE = INIT_ONCE_STATIC_INIT;
 	memcpy(once_control, &INIT_ONCE_RESET_VALUE, sizeof(INIT_ONCE))
 #define is_reset_thread_once_t(once_control) \
 	(0 == memcmp(once_control, &INIT_ONCE_RESET_VALUE, sizeof(INIT_ONCE)))
+#define  xio_sync_fetch_and_add32(ptr, value) \
+		(InterlockedAddAcquire((volatile LONG *)(ptr), (value)) - (value))
+#define  xio_sync_fetch_and_add64(ptr, value) \
+		(InterlockedAddAcquire64((volatile LONG64 *)(ptr), (value)) - (value))
 
 /* TODO: perhaps protect the type cast */
 #define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \

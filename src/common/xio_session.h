@@ -134,7 +134,7 @@ void xio_session_write_header(
 static inline uint64_t xio_session_get_sn(
 		struct xio_session *session)
 {
-	return __sync_fetch_and_add(&session->trans_sn, 1);
+	return xio_sync_fetch_and_add64(&session->trans_sn, 1);
 }
 
 struct xio_session *xio_find_session(

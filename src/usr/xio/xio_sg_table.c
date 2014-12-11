@@ -128,7 +128,7 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 				break;
 			}
 			dlen	-= slen;
-			daddr	+= slen;
+			inc_ptr(daddr, slen);
 			saddr	= sge_addr(stbl_ops, ssge);
 			slen	= sge_length(stbl_ops, ssge);
 		} else if (dlen < slen) {
@@ -140,7 +140,7 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 			if (d == dnents)
 				break;
 			slen	-= dlen;
-			saddr	+= dlen;
+			inc_ptr(saddr, dlen);
 			daddr	= sge_addr(dtbl_ops, dsge);
 			dlen	= sge_length(dtbl_ops, dsge);
 		} else {

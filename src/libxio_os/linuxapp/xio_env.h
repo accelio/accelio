@@ -60,6 +60,7 @@
 #include <limits.h>
 #include <sched.h>
 #include <numa.h>
+#include <dlfcn.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -74,6 +75,7 @@
 #include <sys/epoll.h>
 #include <linux/tcp.h>
 #include <linux/mman.h>
+#include <get_clock.h>
 
 
 /*---------------------------------------------------------------------------*/
@@ -151,6 +153,129 @@ static inline int xio_clock_gettime(struct timespec *ts)
 	return clock_gettime(CLOCK_MONOTONIC, ts);
 }
 
+struct getcpu_cache {
+	unsigned long blob[128 / sizeof(long)];
+};
+
+typedef long (*vgetcpu_fn)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
+static vgetcpu_fn vgetcpu;
+
+static inline int init_vgetcpu(void)
+{
+	void *vdso;
+
+	dlerror();
+	vdso = dlopen("linux-vdso.so.1", RTLD_LAZY);
+	if (vdso == NULL)
+		return -1;
+	vgetcpu = (vgetcpu_fn)dlsym(vdso, "__vdso_getcpu");
+	dlclose(vdso);
+	return vgetcpu == NULL ? -1 : 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_cpu								     */
+/*---------------------------------------------------------------------------*/
+static inline unsigned xio_get_cpu()
+{
+	static int first = 1;
+	unsigned cpu;
+
+	if (!first && vgetcpu) {
+		vgetcpu(&cpu, NULL, NULL);
+		return cpu;
+	}
+	if (!first)
+		return sched_getcpu();
+
+	first = 0;
+	if (init_vgetcpu() < 0) {
+		vgetcpu = NULL;
+		return sched_getcpu();
+	}
+	vgetcpu(&cpu, NULL, NULL) ;
+	return cpu;
+}
+
+
+/*
+#define CACHE_LINE_FILE	\
+	"/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size"
+
+static inline int arch_cache_line_size(void)
+{
+	char size[32];
+	int fd, ret;
+
+	fd = open(CACHE_LINE_FILE, O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	ret = read(fd, size, sizeof(size));
+
+	close(fd);
+
+	if (ret <= 0)
+		return -1;
+	else
+		return atoi(size);
+}
+
+*/
+
+
+#define XIO_HZ_DIR   "/var/tmp/accelio.d"
+#define XIO_HZ_FILE  XIO_HZ_DIR "/hz"
+
+
+/*---------------------------------------------------------------------------*
+ * xio_get_cpu_mhz							     *
+ *									     *
+ * since this operation may take time cache it on a cookie,		     *
+ * and use the cookie if exist						     *
+ *									     *
+ *---------------------------------------------------------------------------*/
+static inline double xio_get_cpu_mhz(void)
+{
+	char	size[32]= { 0 };
+	double	hz = 0;
+	int	fd;
+	ssize_t ret;
+
+	fd = open(XIO_HZ_FILE, O_RDONLY);
+	if (fd < 0)
+		goto try_create;
+
+	ret = read(fd, size, sizeof(size));
+
+	close(fd);
+
+	if (ret > 0)
+		return atof(size);
+
+try_create:
+	hz = get_cpu_mhz(0);
+
+	ret = mkdir(XIO_HZ_DIR, 0777);
+	if (ret < 0)
+		goto exit;
+
+	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_SYNC, 0644);
+	if (fd < 0)
+		goto exit;
+
+	sprintf(size,"%f", hz);
+	ret = write(fd, size, sizeof(size));
+	if (ret < 0)
+		goto close_and_exit;
+
+close_and_exit:
+	close(fd);
+exit:
+	return hz;
+}
+
+
 /*---------------------------------------------------------------------------*/
 /*-------------------- Thread related things --------------------------------*/
 /*---------------------------------------------------------------------------*/
@@ -171,6 +296,10 @@ typedef pthread_once_t		thread_once_t;
 /*---------------------------------------------------------------------------*/
 #define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \
 		__sync_bool_compare_and_swap(ptr, oldval, newval)
+#define  xio_sync_fetch_and_add32(ptr, value) \
+	__sync_fetch_and_add((ptr), (value))
+#define  xio_sync_fetch_and_add64(ptr, value) \
+	__sync_fetch_and_add((ptr), (value))
 
 /*---------------------------------------------------------------------------*/
 #define LIBRARY_INITIALIZER(f) \

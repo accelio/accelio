@@ -68,7 +68,7 @@ struct xio_mbuf {
 			((mbuf)->curr = ((char*)(mbuf)->tlv.head + XIO_TLV_LEN))
 
 #define xio_mbuf_set_session_hdr(mbuf)	 \
-			((mbuf)->curr = ((mbuf)->tlv.head + XIO_TLV_LEN))
+			((mbuf)->curr = sum_to_ptr((mbuf)->tlv.head, XIO_TLV_LEN))
 
 #define xio_mbuf_set_trans_hdr(mbuf)		\
 			((mbuf)->curr = sum_to_ptr((mbuf)->tlv.head, \

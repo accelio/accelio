@@ -80,7 +80,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 
 	/* fill the message */
 	msg = (struct xio_msg *)buf;
-	buf = buf + sizeof(*msg);
+	buf = sum_to_ptr(buf, sizeof(*msg));
 	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
 	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
@@ -677,10 +677,9 @@ int xio_on_client_nexus_established(struct xio_session *session,
 	int				retval = 0;
 	struct xio_connection		*connection;
 	struct xio_msg			*msg;
-	struct xio_session_event_data	ev_data = {
-		.event	=	XIO_SESSION_ERROR_EVENT,
-		.reason =	XIO_E_SESSION_REFUSED
-	};
+	struct xio_session_event_data	ev_data = {};
+	ev_data.event = XIO_SESSION_ERROR_EVENT;
+	ev_data.reason = XIO_E_SESSION_REFUSED;
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:

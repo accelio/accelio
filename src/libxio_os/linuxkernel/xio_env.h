@@ -50,4 +50,26 @@
 #define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
 #define sum_to_ptr(_ptr, a) ((_ptr) + (a))
 
+/*---------------------------------------------------------------------------*/
+/*-------------------- Threads related things --------------------------------*/
+/*---------------------------------------------------------------------------*/
+#define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \
+		__sync_bool_compare_and_swap(ptr, oldval, newval)
+#define  xio_sync_fetch_and_add32(ptr, value) \
+	__sync_fetch_and_add((ptr), (value))
+#define  xio_sync_fetch_and_add64(ptr, value) \
+	__sync_fetch_and_add((ptr), (value))
+
+/*---------------------------------------------------------------------------*/
+/*-------------------- Socket related things --------------------------------*/
+/*---------------------------------------------------------------------------*/
+#define INVALID_SOCKET (-1)
+#define XIO_ESHUTDOWN		ESHUTDOWN
+#define XIO_EINPROGRESS		EINPROGRESS /* connect on non-blocking socket */
+#define XIO_EAGAIN		EAGAIN      /* recv    on non-blocking socket */
+#define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
+#define XIO_ECONNABORTED	ECONNABORTED
+#define XIO_ECONNRESET		ECONNRESET
+
+
 #endif /* XIO_ENV_H */
