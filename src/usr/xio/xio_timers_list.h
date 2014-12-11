@@ -88,7 +88,7 @@ static inline uint64_t xio_timers_list_ns_current_get(void)
 	uint64_t	ns_monotonic;
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	xio_clock_gettime(&ts);
 
 	ns_monotonic = (ts.tv_sec*XIO_NS_IN_SEC) + (uint64_t)ts.tv_nsec;
 

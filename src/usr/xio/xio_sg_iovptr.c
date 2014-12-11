@@ -39,6 +39,7 @@
 
 /* sg represents xio_sg_iovptr; */
 #include "libxio.h"
+#include <xio_env.h>
 #include "xio_sg_table.h"
 
 

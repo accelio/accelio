@@ -542,6 +542,23 @@ ssize_t inline sendmsg(int sd, struct msghdr *msg, int flags)
 /*---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------*/
+static inline void xio_env_cleanup() {
+	WSACleanup();
+}
+
+/*---------------------------------------------------------------------------*/
+static inline void xio_env_startup() {
+	WSADATA wsaData;
+	/* IMPORTANT: Don't call WSAStartup from DllMain because according to
+	documentation it can lead to deadlock */
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+	{
+		fprintf(stderr, "FATAL ERROR: WSAStartup has failed\n");
+		abort();
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 static inline char *
 strndup(char const *s, size_t n)
 {

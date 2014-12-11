@@ -370,6 +370,17 @@ static inline socket_t xio_socket_non_blocking(int domain, int type,
 #define xio_accept_non_blocking(sockfd, addr, addrlen) \
 	accept4(sockfd, addr, addrlen, SOCK_NONBLOCK)
 
+/*---------------------------------------------------------------------------*/
+static inline void xio_env_cleanup() {
+	/* nothing to do */
+}
+
+/*---------------------------------------------------------------------------*/
+static inline void xio_env_startup() {
+	/* nothing to do */
+}
+
+
 
 #include <linux/types.h>
 #include <linux/list.h>
