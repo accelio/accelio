@@ -15,15 +15,13 @@ fi
 server_ip=$1
 port=$2
 trans="rdma"
-if [ $# -eq 3 ]; then
+if [ ! -z "$3" ]; then
 	trans=$3
 fi
 
-if [ -z "$4" ]
+finite_run=0 #running indefinitely
+if [ ! -z "$4" ]
 then
-	#running indefinitely
-	finite_run="0"
-else
 	finite_run=$4
 fi
 

@@ -44,7 +44,7 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define DISCONNECT_NR		2000000
+#define DISCONNECT_NR		(2*PRINT_COUNTER)
 
 int test_disconnect;
 
@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 
 	if (argc > 4)
-		test_disconnect = 1;
+		test_disconnect = atoi(argv[4]);
 	else
 		test_disconnect = 0;
 
