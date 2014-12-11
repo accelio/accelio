@@ -2600,11 +2600,13 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 			DEBUG_LOG("partial completion of request due " \
 				  "to missing, response buffer\n");
 
+			rdma_task->ib_op = XIO_IB_SEND;
+
 			/* the client did not provide buffer for response */
 			retval = xio_rdma_prep_rsp_header(rdma_hndl, task,
 							  ulp_hdr_len, 0, 0,
-							  XIO_E_PARTIAL_MSG);
-			goto cleanup;
+							  XIO_E_RSP_BUF_SIZE_MISMATCH);
+			tbl_set_nents(sgtbl_ops, sgtbl, 0);
 		}
 	}
 
