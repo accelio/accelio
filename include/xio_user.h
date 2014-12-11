@@ -173,13 +173,13 @@ struct xio_msg {
  * @brief accelio's event dispatcher event types
  */
 enum xio_ev_loop_events {
-	XIO_POLLIN			= 0x001,
-	XIO_POLLOUT			= 0x002,
-	XIO_POLLET			= 0x004,  /**< edge-triggered poll */
-	XIO_ONESHOT			= 0x008,
-	XIO_POLLRDHUP			= 0x010,
-	XIO_POLLHUP                     = 0x020,
-	XIO_POLLERR                     = 0x040,
+	XIO_POLLIN			= (1<<0),
+	XIO_POLLOUT			= (1<<1),
+	XIO_POLLET			= (1<<2),  /**< edge-triggered poll */
+	XIO_ONESHOT			= (1<<3),
+	XIO_POLLRDHUP			= (1<<4),
+	XIO_POLLHUP                     = (1<<5),
+	XIO_POLLERR                     = (1<<6),
 };
 
 /**

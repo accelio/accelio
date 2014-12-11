@@ -64,6 +64,55 @@ struct xio_ev_loop {
 };
 
 /*---------------------------------------------------------------------------*/
+/* epoll_to_xio_poll_events                                                  */
+/*---------------------------------------------------------------------------*/
+static inline uint32_t epoll_to_xio_poll_events(uint32_t epoll_events)
+{
+	uint32_t xio_events = 0;
+	if (epoll_events & EPOLLIN)
+		xio_events |= XIO_POLLIN;
+	if (epoll_events & EPOLLOUT)
+		xio_events |= XIO_POLLOUT;
+	if (epoll_events & EPOLLRDHUP)
+		xio_events |= XIO_POLLRDHUP;
+	if (epoll_events & EPOLLET)
+		xio_events |= XIO_POLLET;
+	if (epoll_events & EPOLLONESHOT)
+		xio_events |= XIO_ONESHOT;
+	if (epoll_events & EPOLLHUP)
+		xio_events |= XIO_POLLHUP;
+	if (epoll_events & EPOLLERR)
+		xio_events |= XIO_POLLERR;
+
+
+	return xio_events;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_to_epoll_poll_events                                                  */
+/*---------------------------------------------------------------------------*/
+static inline uint32_t xio_to_epoll_poll_events(uint32_t xio_events)
+{
+	uint32_t epoll_events = 0;
+	if (xio_events & XIO_POLLIN)
+		epoll_events |= EPOLLIN;
+	if (xio_events & XIO_POLLOUT)
+		epoll_events |= EPOLLOUT;
+	if (xio_events & XIO_POLLRDHUP)
+		epoll_events |= EPOLLRDHUP;
+	if (xio_events & XIO_POLLET)
+		epoll_events |= EPOLLET;
+	if (xio_events & XIO_ONESHOT)
+		epoll_events |= EPOLLONESHOT;
+	if (xio_events & XIO_POLLHUP)
+		epoll_events |= EPOLLHUP;
+	if (xio_events & XIO_POLLERR)
+		epoll_events |= EPOLLERR;
+
+	return epoll_events;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_event_add                                                           */
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_add(void *loop_hndl, int fd, int events,
@@ -75,21 +124,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 	int			err;
 
 	memset(&ev, 0, sizeof(ev));
-	if (events & XIO_POLLIN)
-		ev.events |= EPOLLIN;
-	if (events & XIO_POLLOUT)
-		ev.events |= EPOLLOUT;
-	if (events & XIO_POLLRDHUP)
-		ev.events |= EPOLLRDHUP;
-	/* default is edge triggered */
-	if (events & XIO_POLLET)
-		ev.events |= EPOLLET;
-	if (events & XIO_ONESHOT)
-		ev.events |= EPOLLONESHOT;
-	if (events & XIO_POLLHUP)
-		ev.events |= EPOLLHUP;
-	if (events & XIO_POLLERR)
-		ev.events |= EPOLLERR;
+	ev.events = xio_to_epoll_poll_events(events);
 
 
 	if (fd != loop->wakeup_event) {
@@ -191,24 +226,8 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	}
 
 	memset(&ev, 0, sizeof(ev));
-	if (events & XIO_POLLIN)
-		ev.events |= EPOLLIN;
-	if (events & XIO_POLLOUT)
-		ev.events |= EPOLLOUT;
-	if (events & XIO_POLLRDHUP)
-		ev.events |= EPOLLRDHUP;
-	/* default is edge triggered */
-	if (events & XIO_POLLET)
-		ev.events |= EPOLLET;
-	if (events & XIO_ONESHOT)
-		ev.events |= EPOLLONESHOT;
-	if (events & XIO_POLLHUP)
-		ev.events |= EPOLLHUP;
-	if (events & XIO_POLLERR)
-		ev.events |= EPOLLERR;
-
-
-	ev.data.ptr = tev;
+	ev.events	= xio_to_epoll_poll_events(events);
+	ev.data.ptr	= tev;
 
 	retval = epoll_ctl(loop->efd, EPOLL_CTL_MOD, fd, &ev);
 	if (retval != 0) {
@@ -335,6 +354,8 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 	return work_remains;
 }
 
+
+
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_run_helper                                                    */
 /*---------------------------------------------------------------------------*/
@@ -347,6 +368,7 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	int			work_remains;
 	int			tmout;
 	int			wait_time = timeout;
+	uint32_t		out_events;
 	cycles_t		start_cycle  = 0;
 
 	loop->stop_loop = 0;
@@ -394,8 +416,10 @@ retry:
 						continue;
 					}
 				}
+				out_events =
+					epoll_to_xio_poll_events(events[i].events);
 				/* (fd != loop->wakeup_event) */
-				tev->handler(tev->fd, events[i].events,
+				tev->handler(tev->fd, out_events,
 						tev->data);
 			} else {
 				/* wakeup event auto-removed from epoll
