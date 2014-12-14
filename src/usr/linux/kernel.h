@@ -96,6 +96,17 @@ static inline void spin_lock_init(spinlock_t* spinlock)
 	__sync_lock_release(spinlock);
 }
 
+static inline int spin_lock_init2(spinlock_t *lock, int pshared)
+{
+	return pthread_spin_init(lock, pshared);
+}
+
+static inline int spin_lock_destroy(spinlock_t *spinlock)
+{
+	return pthread_spin_destroy(spinlock);
+}
+
+
 static inline void spin_lock(spinlock_t* spinlock)
 {
 	int i;

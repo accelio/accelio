@@ -3,7 +3,7 @@
 
 /*
 based on https ://raw.githubusercontent.com/sgminer-dev/sgminer/master/elist.h
-with minor enhancements by Avner BenHanoch
+with several enhancements by Avner BenHanoch
 */
 
 #ifdef _MSC_VER
@@ -195,9 +195,8 @@ static __inline void list_splice_init(struct list_head *list,
 #define list_entry(ptr, type, member) \
 	((type)((char *)(ptr)-(unsigned long)(&((type)0)->member)))
 #else
-#define list_entry(ptr, ptrtype, member) \
-	(reinterpret_cast<ptrtype>((char *)(ptr) - \
-	(char *)(&(reinterpret_cast<ptrtype>(1)->member)) + 1))
+#define list_entry(ptr, type, member) \
+	container_of(ptr, type, member)
 #endif
 
 /**
@@ -209,7 +208,7 @@ static __inline void list_splice_init(struct list_head *list,
 * Note, that list is expected to be not empty.
 */
 #define list_first_entry(ptr, type, member) \
-	list_entry((ptr)->next, type *, member)
+	list_entry((ptr)->next, type, member)
 
 /**
 * list_first_entry_or_null - get the first element from a list

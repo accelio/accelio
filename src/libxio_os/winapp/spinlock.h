@@ -18,6 +18,7 @@ struct spinlock {
 };
 typedef struct spinlock spinlock_t;
 
+#define PTHREAD_PROCESS_PRIVATE       0
 
 static __inline int spin_lock_init(spinlock_t *spinlock)
 {
@@ -25,6 +26,12 @@ static __inline int spin_lock_init(spinlock_t *spinlock)
 	spinlock->exchange = SEED_VAL;
 	spinlock->compare = 0;
 	return 0;
+}
+
+static __inline int spin_lock_init2(spinlock_t *lock, int pshared)
+{
+	(void *)pshared;
+	return spin_lock_init(lock);
 }
 
 static __inline int spin_lock_destroy(spinlock_t *spinlock)
