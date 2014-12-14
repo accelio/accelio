@@ -44,8 +44,9 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define TEST_DISCONNECT		0
 #define DISCONNECT_NR		2000000
+
+int test_disconnect;
 
 /* server private data */
 struct server_data {
@@ -181,12 +182,12 @@ static int on_request(struct xio_session *session,
 	xio_send_response(&server_data->rsp[i]);
 	server_data->nsent++;
 
-#if  TEST_DISCONNECT
-	if (server_data->nsent == DISCONNECT_NR) {
-		xio_disconnect(server_data->connection);
-		return 0;
+	if (test_disconnect) {
+		if (server_data->nsent == DISCONNECT_NR) {
+			xio_disconnect(server_data->connection);
+			return 0;
+		}
 	}
-#endif
 	return 0;
 }
 
@@ -211,9 +212,9 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			i;
 
-	if (argc < 2) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+	if (argc < 3) {
+		printf("Usage: %s <host> <port> <transport:optional>\
+				<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 
@@ -239,6 +240,12 @@ int main(int argc, char *argv[])
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+
+	if (argc > 4)
+		test_disconnect = atoi(argv[4]);
+	else
+		test_disconnect = 0;
+
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
 			  url, NULL, 0, &server_data);
