@@ -35,16 +35,20 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
 #include <rdma/ib_cm.h>
 
 #include "libxio.h"
 #include "xio_common.h"
+#include "xio_log.h"
 #include "xio_observer.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_transport.h"
 #include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
@@ -54,8 +58,8 @@
 /*---------------------------------------------------------------------------*/
 int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			 struct xio_sge *rsg_list, size_t rsize,
-			 int max_sge,
 			 int op_size,
+			 int max_sge,
 			 int *tasks_used)
 {
 	struct sg_table *sgtbl;
@@ -118,6 +122,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			tot_len += llen;
 			if (l == lsize)
 				break;
+			liov++;
 			k++;
 			if (k == max_sge - 1) {
 				/* reached last index */
@@ -130,6 +135,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			llen	= liov->length;
 		} else {
 			l++;
+			liov++;
 			r++;
 			tot_len	+= llen;
 			if ((l == lsize) || (r == rsize))

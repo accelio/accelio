@@ -78,7 +78,8 @@ static struct portals_vec *portals_get(struct server_data *server_data,
 {
 	/* fill portals array and return it. */
 	int			i;
-	struct portals_vec	*portals = calloc(1, sizeof(*portals));
+	struct portals_vec	*portals = (struct portals_vec *)
+						calloc(1, sizeof(*portals));
 	for (i = 0; i < MAX_THREADS; i++) {
 		portals->vec[i] = strdup(server_data->tdata[i].portal);
 		portals->vec_len++;
@@ -122,7 +123,7 @@ static int on_request(struct xio_session *session,
 		      int more_in_batch,
 		      void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
@@ -160,7 +161,7 @@ static struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	struct xio_server	*server;
 	char			str[128];
@@ -190,7 +191,8 @@ static void *portal_server_cb(void *data)
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		tdata->rsp[i].out.header.iov_base = strdup(str);
 		tdata->rsp[i].out.header.iov_len =
-			strlen(tdata->rsp[i].out.header.iov_base) + 1;
+			strlen((const char *)
+				tdata->rsp[i].out.header.iov_base) + 1;
 	}
 
 	/* the default xio supplied main loop */
@@ -220,13 +222,13 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 	struct thread_data *tdata;
 	int		   i;
 
 
 	tdata = (event_data->conn_user_context == server_data) ?
-		NULL : event_data->conn_user_context;
+		NULL : (struct thread_data *)event_data->conn_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -246,8 +248,8 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
-		xio_context_stop_loop(server_data->ctx, 0);
+			xio_context_stop_loop(server_data->tdata[i].ctx);
+		xio_context_stop_loop(server_data->ctx);
 		break;
 	default:
 		break;
@@ -264,7 +266,7 @@ static int on_new_session(struct xio_session *session,
 			  void *cb_user_context)
 {
 	struct portals_vec *portals;
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 
 	portals = portals_get(server_data, req->uri, req->private_data);
 
@@ -304,7 +306,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	server_data = calloc(1, sizeof(*server_data));
+	server_data = (struct server_data *)calloc(1, sizeof(*server_data));
 	if (!server_data)
 		return -1;
 

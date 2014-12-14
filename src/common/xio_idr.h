@@ -38,19 +38,20 @@
 #ifndef XIO_IDR_H
 #define XIO_IDR_H
 
+struct xio_idr;
 
 /*---------------------------------------------------------------------------*/
 /* user object cache							     */
 /*---------------------------------------------------------------------------*/
-void xio_idr_create(void);
+ struct xio_idr *xio_idr_create(void);
 
-int xio_idr_add_uobj(void *uobj);
+int xio_idr_add_uobj(struct xio_idr *cache, void *uobj, const char *obj_name);
 
-int xio_idr_remove_uobj(void *uobj);
+int xio_idr_remove_uobj(struct xio_idr *cache, void *uobj);
 
-int xio_idr_lookup_uobj(void *uobj);
+int xio_idr_lookup_uobj(struct xio_idr *cache, void *uobj);
 
-void xio_idr_destroy(void);
+void xio_idr_destroy(struct xio_idr *cache);
 
 
 #endif /*XIO_IDR_H */

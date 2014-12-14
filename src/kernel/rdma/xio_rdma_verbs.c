@@ -35,19 +35,20 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE); EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/rdma_cm.h>
 
 #include "libxio.h"
-#include "xio_common.h"
 #include "xio_observer.h"
-#include "xio_context.h"
-#include "xio_task.h"
-#include "xio_transport.h"
-#include "xio_protocol.h"
+#include "xio_log.h"
+#include "xio_common.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
+#include "xio_task.h"
+#include "xio_mempool.h"
+#include "xio_transport.h"
 #include "xio_rdma_transport.h"
 
 
@@ -88,9 +89,10 @@ const char *xio_ib_wc_status_str(enum ib_wc_status status)
 	XX(IB_WC_FATAL_ERR);
 	XX(IB_WC_RESP_TIMEOUT_ERR);
 	XX(IB_WC_GENERAL_ERR);
+	break;
 	default: return "IB_WC_STATUS_UNKNOWN";
 	}
-};
+}
 
 /*---------------------------------------------------------------------------*/
 /* ibv_wc_opcode_str							     */
@@ -108,6 +110,7 @@ const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode)
 	/* recv-side); inbound completion */
 	XX(IB_WC_RECV);
 	XX(IB_WC_RECV_RDMA_WITH_IMM);
+	break;
 	default: return "IB_WC_OPCODE_UNKNOWN";
 	}
 }
@@ -131,6 +134,7 @@ const char *xio_rdma_event_str(enum rdma_cm_event_type event)
 	XX(RDMA_CM_EVENT_MULTICAST_ERROR);
 	XX(RDMA_CM_EVENT_ADDR_CHANGE);
 	XX(RDMA_CM_EVENT_TIMEWAIT_EXIT);
+	break;
 	default: return "RDMA_CM_UNKNOWN";
 	}
 }

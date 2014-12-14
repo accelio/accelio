@@ -35,10 +35,21 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <sys/hashtable.h>
+#include "libxio.h"
+#include <xio_os.h>
+#include "xio_log.h"
+#include "xio_common.h"
 #include "xio_hash.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_observer.h"
+#include "xio_workqueue.h"
+#include "xio_ev_data.h"
+#include "xio_context.h"
+#include "xio_transport.h"
+#include "xio_transport.h"
 #include "xio_nexus.h"
 #include "xio_nexus_cache.h"
 
@@ -124,25 +135,34 @@ int xio_nexus_cache_add(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_cache_find				                             */
 /*---------------------------------------------------------------------------*/
-struct xio_nexus *xio_nexus_cache_find(
-		struct xio_context *ctx,
-		const char *portal_uri)
+struct xio_nexus *xio_nexus_cache_find(struct xio_nexus_query_params *query)
 {
 	struct xio_nexus *nexus;
+	int		  tos_enabled;
 
 	spin_lock(&cs_lock);
 	HT_FOREACH(nexus, &nexus_cache, nexus_htbl) {
 		if (nexus->transport_hndl->portal_uri) {
-			if (
-		(strcmp(nexus->transport_hndl->portal_uri, portal_uri) == 0) &&
-		(nexus->transport_hndl->ctx == ctx)) {
-				spin_unlock(&cs_lock);
-				return nexus;
-			}
+			if ((strcmp(nexus->transport_hndl->portal_uri,
+				query->portal_uri) != 0) ||
+			    (nexus->transport_hndl->ctx != query->ctx))
+				continue;
+
+			tos_enabled = test_bits(XIO_NEXUS_ATTR_TOS,
+					        &nexus->trans_attr_mask);
+			if (tos_enabled != query->tos_enabled)
+				continue;
+			if (tos_enabled && nexus->trans_attr.tos != query->tos)
+				continue;
+			/* match found */
+			goto found;
 		}
 	}
+	nexus = NULL;
+
+found:
 	spin_unlock(&cs_lock);
-	return  NULL;
+	return  nexus;
 }
 
 /*---------------------------------------------------------------------------*/

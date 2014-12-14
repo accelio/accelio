@@ -2,9 +2,12 @@
 #define _LINUX_JIFFIES_H
 
 #include <linux/kernel.h>
+#include <xio_os.h>
+/*
 #include <linux/types.h>
 #include <time.h>
 #include <sys/timex.h>
+*/
 
 /*
  *	These inlines deal with timer wrapping correctly. You are

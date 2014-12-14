@@ -32,7 +32,7 @@
  * Author: Michael S. Tsirkin <mst@mellanox.co.il>
  */
 
-/* #define _DEBUG_ 1 */
+/* #define DEBUG 1 */
 /* #define DEBUG_DATA 1 */
 /* #define GET_CPU_MHZ_FROM_PROC 1 */
 
@@ -42,11 +42,16 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <pthread.h>
+
 #include "get_clock.h"
 
-#ifndef _DEBUG_
-#define _DEBUG_ 0
+#ifndef GETCLOCK_DEBUG
+#define _DEBUG 0
+#else
+#define _DEBUG 1
 #endif
+
 #ifndef DEBUG_DATA
 #define DEBUG_DATA 0
 #endif
@@ -111,17 +116,17 @@ static double sample_get_cpu_mhz(void)
 	b = (MEASUREMENTS * sxy - sx * sy) / (MEASUREMENTS * sxx - sx * sx);
 	a = (sy - b * sx) / MEASUREMENTS;
 
-	if (_DEBUG_)
+	if (_DEBUG)
 		fprintf(stderr, "a = %g\n", a);
-	if (_DEBUG_)
+	if (_DEBUG)
 		fprintf(stderr, "b = %g\n", b);
-	if (_DEBUG_)
+	if (_DEBUG)
 		fprintf(stderr, "a / b = %g\n", a / b);
 	r_2 = (MEASUREMENTS * sxy - sx * sy) * (MEASUREMENTS * sxy - sx * sy) /
 		(MEASUREMENTS * sxx - sx * sx) /
 		(MEASUREMENTS * syy - sy * sy);
 
-	if (_DEBUG_)
+	if (_DEBUG)
 		fprintf(stderr, "r^2 = %g\n", r_2);
 	if (r_2 < 0.9) {
 		fprintf(stderr, "Correlation coefficient r^2: %g < 0.9\n", r_2);
@@ -179,10 +184,59 @@ exit:
 	return mhz;
 }
 
+double get_core_freq(void)
+{
+	int cpu;
+
+	FILE *f;
+	char buf[256];
+	unsigned long khz = 0.0;
+	int rc;
+
+	cpu = sched_getcpu();
+	if (cpu < 0) {
+		perror("sched_getcpu");
+		return 0.0;
+	}
+
+	sprintf(buf,
+		"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_max_freq",
+		cpu);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		/* perror("cpufreq not supported"); */
+		return 0.0;
+	}
+
+	while (fgets(buf, sizeof(buf), f)) {
+		rc = sscanf(buf, "%lu", &khz);
+		if (rc != 1) {
+			fclose(f);
+			/* perror("Can't read cpufreq"); */
+			return 0;
+		}
+		fclose(f);
+		/* value in KHz */
+		return khz / 1000.0;
+	}
+
+	/* NOT FOUND */
+	fprintf(stderr, "Empty cpufreq\n");
+	fclose(f);
+
+	return 0.0;
+}
 
 double get_cpu_mhz(int no_cpu_freq_fail)
 {
-	double sample, proc, delta;
+	double freq, sample, proc, delta;
+
+	freq = get_core_freq();
+	/* even with core freq cycles are at maximum */
+	if (freq)
+		return freq;
+
 	sample = sample_get_cpu_mhz();
 	proc = proc_get_cpu_mhz(no_cpu_freq_fail);
 

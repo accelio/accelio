@@ -16,6 +16,8 @@ export LD_LIBRARY_PATH=../../../src/usr/
 
 server_ip=$1
 port=$2
+#running indefinitely
+finite_run="0"
 
 if [ -z "$3" ]
 then
@@ -31,6 +33,6 @@ else
 	trans=$4
 fi
 
-./xio_mt_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} ${server_ip} -t 0
+./xio_mt_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} -f ${finite_run} ${server_ip} 
 
 

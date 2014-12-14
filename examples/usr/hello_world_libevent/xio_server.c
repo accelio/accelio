@@ -112,7 +112,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data =
+		(struct server_data *)cb_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -129,7 +130,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(server_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(server_data->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -145,7 +146,8 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data =
+		(struct server_data *)cb_user_context;
 
 	/* automatically accept the request */
 	printf("new session event. session:%p\n", session);
@@ -153,7 +155,7 @@ static int on_new_session(struct xio_session *session,
 	if (server_data->connection == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
-		xio_reject(session, EISCONN, NULL, 0);
+		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -166,7 +168,8 @@ static int on_request(struct xio_session *session,
 		      int more_in_batch,
 		      void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data =
+		(struct server_data *)cb_user_context;
 	int i = req->sn % QUEUE_DEPTH;
 
 	/* process request */
@@ -223,7 +226,8 @@ int main(int argc, char *argv[])
 		server_data.rsp[i].out.header.iov_base =
 			strdup("hello world header response");
 		server_data.rsp[i].out.header.iov_len =
-			strlen(server_data.rsp[i].out.header.iov_base) + 1;
+			strlen((const char *)
+			       server_data.rsp[i].out.header.iov_base) + 1;
 	}
 
 	/* create thread context for the client */

@@ -68,7 +68,7 @@ static inline void timeout_cb(evutil_socket_t fd, short event, void *arg)
 
 static inline void xio_event_handler(int fd, short event, void *arg)
 {
-	struct xio_poll_params  *poll_params = arg;
+	struct xio_poll_params  *poll_params = (struct xio_poll_params *)arg;
 
 	poll_params->handler(poll_params->fd, XIO_POLLIN, poll_params->data);
 }
@@ -97,7 +97,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+		(struct session_data *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -126,7 +127,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+			(struct session_data *)cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	session_data->nrecv++;
@@ -176,6 +178,7 @@ int main(int argc, char *argv[])
 	struct timeval		tv;
 	struct xio_poll_params  poll_params;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>\n",
@@ -205,10 +208,12 @@ int main(int argc, char *argv[])
 	params.uri		= url;
 
 	session = xio_session_create(&params);
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
 
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -216,16 +221,17 @@ int main(int argc, char *argv[])
 		/* header */
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
-		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base) + 1;
+		session_data.req[i].out.header.iov_len = 1 +
+			strlen((char *)session_data.req[i].out.header.iov_base);
 		/* iovec[0]*/
 		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
 		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
 
 		session_data.req[i].out.data_iov.sglist[0].iov_base =
 			strdup("hello world iovec request");
-		session_data.req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+		session_data.req[i].out.data_iov.sglist[0].iov_len = 1 + strlen(
+			(const char *)
+			   session_data.req[i].out.data_iov.sglist[0].iov_base);
 		session_data.req[i].out.data_iov.nents = 1;
 	}
 	/* send first message */

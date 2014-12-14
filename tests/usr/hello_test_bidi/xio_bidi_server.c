@@ -161,7 +161,7 @@ static void process_response(struct xio_msg *rsp)
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt;
+	static unsigned int cnt;
 
 	if (req == NULL) {
 		cnt = 0;
@@ -258,7 +258,7 @@ static int on_session_event(struct xio_session *session,
 		process_request(NULL);
 		xio_session_destroy(session);
 		if (test_config.finite_run)
-			xio_context_stop_loop(ctx, 0);  /* exit */
+			xio_context_stop_loop(ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -281,7 +281,7 @@ static int on_new_session(struct xio_session *session,
 	if (conn == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
-		xio_reject(session, EISCONN, NULL, 0);
+		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -301,7 +301,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp	= msg_pool_get(pool);
 
 	rsp->request		= req;
-	rsp->more_in_batch	= 0;
 
 	/* fill response */
 	msg_write(&msg_params, rsp,
@@ -341,7 +340,6 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 	sglist[0].mr = NULL;
 
 	rsp->sn = 0;
-	rsp->more_in_batch = 0;
 
 	do {
 		/* recycle the message and fill new request */
@@ -403,9 +401,11 @@ static int on_send_response_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_private_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	switch (msg->type) {
 	case XIO_MSG_TYPE_REQ:

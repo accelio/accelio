@@ -126,7 +126,7 @@ static char **portals_arg_to_urls(char *transport,
 		token = strtok(NULL, delim);
 	}
 	if (n > 0) {
-		vec = calloc(n+1, sizeof(*vec));
+		vec = (char **)calloc(n+1, sizeof(*vec));
 		if (vec == NULL)
 			goto cleanup;
 		for (i = 0; i < n; i++)
@@ -266,7 +266,7 @@ void destroy_perf_params(struct perf_parameters *user_param)
 	}
 
 	if (user_param->portals_arr) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < user_param->portals_arr_len; i++)
 			free(user_param->portals_arr[i]);
 		free(user_param->portals_arr);
@@ -364,7 +364,7 @@ int parse_cmdline(struct perf_parameters *user_param,
 			}
 			user_param->threads_num = (uint32_t)l;
 			max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-			if (user_param->threads_num > max_cpus) {
+			if ((int)user_param->threads_num > max_cpus) {
 				fprintf(stderr, "more threads then cpus\n");
 				goto invalid_cmdline;
 			}

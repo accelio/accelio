@@ -35,20 +35,26 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
-#include "xio_common.h"
+#include <sys/hashtable.h>
+#include <xio_os.h>
 #include "libxio.h"
-#include "xio_protocol.h"
+#include "xio_log.h"
+#include "xio_common.h"
 #include "xio_observer.h"
+#include "xio_hash.h"
 #include "xio_transport.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_idr.h"
+#include "xio_msg_list.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
 #include "xio_context.h"
-#include "xio_nexus.h"
 #include "xio_session.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_server.h"
-#include "xio_idr.h"
-
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
@@ -58,7 +64,7 @@ static void xio_server_destroy(struct kref *kref);
 /* xio_server_reg_observer						     */
 /*---------------------------------------------------------------------------*/
 int xio_server_reg_observer(struct xio_server *server,
-			     struct xio_observer *observer)
+			    struct xio_observer *observer)
 {
 	kref_get(&server->kref);
 	xio_observable_reg_observer(&server->nexus_observable, observer);
@@ -70,7 +76,7 @@ int xio_server_reg_observer(struct xio_server *server,
 /* xio_server_unreg_observer		                                     */
 /*---------------------------------------------------------------------------*/
 void xio_server_unreg_observer(struct xio_server *server,
-				struct xio_observer *observer)
+			       struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&server->nexus_observable, observer);
 	kref_put(&server->kref, xio_server_destroy);
@@ -156,8 +162,8 @@ static int xio_on_new_message(struct xio_server *server,
 		}
 		connection = connection1;
 
-		xio_idr_add_uobj(session);
-		xio_idr_add_uobj(connection);
+		xio_idr_add_uobj(usr_idr, session, "xio_session");
+		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 
@@ -202,7 +208,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
-		xio_idr_add_uobj(connection);
+		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 	} else {
 		ERROR_LOG("server unexpected message\n");
 		return -1;
@@ -232,8 +238,8 @@ cleanup:
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data)
 {
-	struct xio_server	*server = observer;
-	struct xio_nexus	*nexus	= notifier;
+	struct xio_server	*server = (struct xio_server *)observer;
+	struct xio_nexus	*nexus	= (struct xio_nexus *)notifier;
 	int			retval  = 0;
 
 	switch (event) {
@@ -242,12 +248,14 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 		TRACE_LOG("server: [notification] - new message. " \
 			  "server:%p, nexus:%p\n", observer, notifier);
 
-		xio_on_new_message(server, nexus, event, event_data);
+		xio_on_new_message(server, nexus, event,
+				   (union xio_nexus_event_data *)event_data);
 		break;
 	case XIO_NEXUS_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("server: [notification] - new connection. " \
 			  "server:%p, nexus:%p\n", observer, notifier);
-		xio_on_new_nexus(server, nexus, event_data);
+		xio_on_new_nexus(server, nexus,
+				 (union xio_nexus_event_data *)event_data);
 		break;
 
 	case XIO_NEXUS_EVENT_DISCONNECTED:
@@ -292,7 +300,8 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	TRACE_LOG("bind to %s\n", uri);
 
 	/* create the server */
-	server = kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
+	server = (struct xio_server *)
+			kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
 	if (server == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -311,7 +320,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 
 	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
 
-	server->listener = xio_nexus_open(ctx, uri, NULL, 0);
+	server->listener = xio_nexus_open(ctx, uri, NULL, 0, 0, NULL);
 	if (server->listener == NULL) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
@@ -323,7 +332,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 		goto cleanup1;
 	}
 	xio_nexus_set_server(server->listener, server);
-	xio_idr_add_uobj(server);
+	xio_idr_add_uobj(usr_idr, server, "xio_server");
 
 	return server;
 
@@ -335,6 +344,7 @@ cleanup:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_bind);
 
 /*---------------------------------------------------------------------------*/
 /* xio_server_destroy							     */
@@ -342,7 +352,7 @@ cleanup:
 static void xio_server_destroy(struct kref *kref)
 {
 	struct xio_server *server = container_of(kref,
-						 struct xio_server,kref);
+						 struct xio_server, kref);
 
 	DEBUG_LOG("xio_server_destroy - server:%p\n", server);
 	xio_observable_unreg_all_observers(&server->nexus_observable);
@@ -367,9 +377,9 @@ int xio_unbind(struct xio_server *server)
 	if (server == NULL)
 		return -1;
 
-	found = xio_idr_lookup_uobj(server);
+	found = xio_idr_lookup_uobj(usr_idr, server);
 	if (found) {
-		xio_idr_remove_uobj(server);
+		xio_idr_remove_uobj(usr_idr, server);
 	} else {
 		ERROR_LOG("server not found:%p\n", server);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
@@ -383,5 +393,6 @@ int xio_unbind(struct xio_server *server)
 
 	return retval;
 }
+EXPORT_SYMBOL(xio_unbind);
 
 

@@ -38,7 +38,6 @@
 #ifndef XIO_PROTOCOL_H
 #define XIO_PROTOCOL_H
 
-#include "xio_common.h"
 
 union generic_16bit {
 	uint8_t b[2];
@@ -413,7 +412,7 @@ static inline size_t xio_write_string(const char *b, size_t maxlength,
 {
 	size_t length = 0;
 	/* Copy string into buffer, ensuring not to exceed the buffer size */
-	int i;
+	unsigned int i;
 
 	for (i = 2; i < maxlength - 1 || (b[i] == '\0'); i++)
 		buffer[bindex+i] = b[i];
@@ -441,7 +440,7 @@ static inline size_t xio_read_string(char *b, size_t maxlength,
 				     int bindex, const uint8_t *buffer)
 {
 	uint16_t	length = 0;
-	int		i;
+	unsigned int	i;
 
 	/* Read length from first field */
 	xio_read_uint16(&length, bindex, buffer);

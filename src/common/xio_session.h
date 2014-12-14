@@ -38,10 +38,6 @@
 #ifndef XIO_SESSION_H
 #define XIO_SESSION_H
 
-#include "xio_hash.h"
-#include "xio_context.h"
-#include "sys/hashtable.h"
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations			                                     */
 /*---------------------------------------------------------------------------*/
@@ -73,7 +69,15 @@ struct xio_session {
 	uint32_t			session_id;
 	uint32_t			peer_session_id;
 	uint32_t			connections_nr;
-	uint32_t			pad;
+	uint16_t			snd_queue_depth_msgs;
+	uint16_t			rcv_queue_depth_msgs;
+	uint16_t			peer_snd_queue_depth_msgs;
+	uint16_t			peer_rcv_queue_depth_msgs;
+	uint16_t			pad[2];
+	uint64_t			snd_queue_depth_bytes;
+	uint64_t			rcv_queue_depth_bytes;
+	uint64_t			peer_snd_queue_depth_bytes;
+	uint64_t			peer_rcv_queue_depth_bytes;
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
@@ -107,11 +111,10 @@ struct xio_session {
 	uint16_t			services_array_len;
 	uint16_t			last_opened_portal;
 	uint16_t			last_opened_service;
-	uint16_t			in_notify;
-	uint16_t			pad1;
 
 	uint32_t			teardown_reason;
 	uint32_t			reject_reason;
+	uint32_t			pad1;
 	struct mutex                    lock;	   /* lock open connection */
 	spinlock_t                      connections_list_lock;
 	int				disable_teardown;
@@ -172,11 +175,7 @@ int xio_session_reconnect(
 static inline int xio_session_is_valid_in_req(struct xio_session *session,
 					      struct xio_msg *msg)
 {
-	if (session->validators_cls->is_valid_in_req)
-		return session->validators_cls->is_valid_in_req(msg);
-
-	xio_set_error(XIO_E_NOT_SUPPORTED);
-	return -1;
+	return session->validators_cls->is_valid_in_req(msg);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -185,11 +184,7 @@ static inline int xio_session_is_valid_in_req(struct xio_session *session,
 static inline int xio_session_is_valid_out_msg(struct xio_session *session,
 					       struct xio_msg *msg)
 {
-//	if (session->validators_cls->is_valid_out_msg)
-		return session->validators_cls->is_valid_out_msg(msg);
-
-	xio_set_error(XIO_E_NOT_SUPPORTED);
-	return -1;
+	return session->validators_cls->is_valid_out_msg(msg);
 }
 
 int xio_session_notify_cancel(struct xio_connection *connection,
@@ -226,7 +221,8 @@ void xio_session_notify_connection_teardown(
 					struct xio_connection *connection);
 
 int xio_session_notify_msg_error(struct xio_connection *connection,
-				 struct xio_msg *msg, enum xio_status result);
+				 struct xio_msg *msg, enum xio_status result,
+				 enum xio_msg_direction direction);
 
 void xio_session_notify_teardown(struct xio_session *session, int reason);
 

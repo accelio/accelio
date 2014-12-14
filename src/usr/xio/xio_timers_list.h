@@ -38,8 +38,6 @@
 #ifndef XIO_TIMERS_LIST_H
 #define XIO_TIMERS_LIST_H
 
-#include "xio_os.h"
-#include "xio_workqueue_priv.h"
 
 #define XIO_MS_IN_SEC   1000ULL
 #define XIO_US_IN_SEC   1000000ULL

@@ -65,6 +65,7 @@
 
 static char		*file_path;
 static char		*server_addr;
+static char		*transport;
 static uint16_t		server_port;
 static int		block_size;
 static int		loops;
@@ -111,26 +112,26 @@ struct raio_pool *raio_pool_init(int max, size_t size)
 	if (max < 1)
 		return NULL;
 
-	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
+	buf = (char *)calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
 
 	/* pool */
-	q = (void *)buf;
+	q = (struct raio_pool *)buf;
 	buf = buf + sizeof(struct raio_pool);
 
 	/* stack */
-	q->stack = (void *)buf;
+	q->stack = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* array */
-	q->array = (void *)buf;
+	q->array = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* pool data */
 	elems_alloc_sz = max*size;
 
-	data = calloc(elems_alloc_sz, sizeof(uint8_t));
+	data = (char *)calloc(elems_alloc_sz, sizeof(uint8_t));
 	if (data == NULL) {
 		free(q);
 		return NULL;
@@ -157,19 +158,19 @@ void raio_pool_free(struct raio_pool *q)
 /*---------------------------------------------------------------------------*/
 /* usage                                                                     */
 /*---------------------------------------------------------------------------*/
-static void usage(const char *argv0)
-{
+static void usage(const char *app) {
 	printf("Usage:\n");
-	printf("  %s [OPTIONS]\traio file reader\n", argv0);
-	printf("\n");
+	printf("\t%s [OPTIONS] - raio simple file client\n", basename((char *)app));
 	printf("options:\n");
-	printf("%s -a <server_addr> -p <port> -f <file_path>  " \
-	       "-b <block_size> -l <loops>\n",
-	      argv0);
-
+	printf("\t--addr, -a <addr>       : server ip address\n");
+	printf("\t--port, -p <port>       : server port\n");
+	printf("\t--file-path, -f <path>  : file path\n");
+	printf("\t--block-size, -b <size> : block size in bytes\n");
+	printf("\t--loops, -l <num>       : num of run loops\n");
+	printf("\t--transport, -t <name>  : rdma,tcp (default: rdma)\n");
+	printf("\t--help, -h              : print this message and exit\n");
 	exit(0);
 }
-
 static void free_cmdline_params(void)
 {
 	if (file_path) {
@@ -179,6 +180,10 @@ static void free_cmdline_params(void)
 	if (server_addr) {
 		free(server_addr);
 		server_addr = NULL;
+	}
+	if (transport) {
+		free(transport);
+		transport = NULL;
 	}
 }
 
@@ -190,6 +195,7 @@ int parse_cmdline(int argc, char **argv)
 	static struct option const long_options[] = {
 		{ .name = "addr",	.has_arg = 1, .val = 'a'},
 		{ .name = "port",	.has_arg = 1, .val = 'p'},
+		{ .name = "transport",	.has_arg = 1, .val = 't'},
 		{ .name = "file-path",	.has_arg = 1, .val = 'f'},
 		{ .name = "block-size",	.has_arg = 1, .val = 'b'},
 		{ .name = "loops",	.has_arg = 1, .val = 'l'},
@@ -200,11 +206,12 @@ int parse_cmdline(int argc, char **argv)
 	opterr = 0;
 	server_addr = NULL;
 	file_path = NULL;
+	transport = NULL;
 
 	while (1) {
 		int c;
 
-		static char *short_options = "a:p:f:b:l:h";
+		static char *short_options = "a:p:t:f:b:l:h";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -221,6 +228,12 @@ int parse_cmdline(int argc, char **argv)
 		case 'p':
 			server_port =
 				(uint16_t)strtol(optarg, NULL, 0);
+			break;
+		case 't':
+			if (transport == NULL)
+				transport = strdup(optarg);
+			if (transport == NULL)
+				goto cleanup;
 			break;
 		case 'f':
 			if (file_path == NULL)
@@ -292,6 +305,7 @@ int main(int argc, char *argv[])
 #endif
 
 	file_path = NULL;
+	transport = NULL;
 	server_addr = NULL;
 	server_port = 0;
 	block_size = 0;
@@ -301,10 +315,19 @@ int main(int argc, char *argv[])
 	if ((server_addr == NULL) || (server_port == 0) ||
 	    (loops == 0) || (file_path == NULL) || (block_size == 0)) {
 		fprintf(stderr, " invalid command or flag.\n");
-			fprintf(stderr,
-				" please check command line and run again.\n\n");
-			usage(argv[0]);
+		fprintf(stderr,
+			" please check command line and run again.\n\n");
+		usage(argv[0]);
 	}
+	if (transport == NULL)
+		transport = strdup("rdma");
+	else if (strcmp(transport, "rdma") && strcmp(transport, "tcp")) {
+		fprintf(stderr, " invalid transport\n");
+		fprintf(stderr,
+			" please check command line and run again.\n\n");
+		usage(argv[0]);
+	}
+
 	/* get clock cycles */
 	mhz = get_cpu_mhz(0);
 
@@ -320,11 +343,11 @@ int main(int argc, char *argv[])
 #endif
 
 	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
-	fd = raio_open((struct sockaddr *)&servaddr, sizeof(servaddr),
+	fd = raio_open(transport, (struct sockaddr *)&servaddr, sizeof(servaddr),
 		       file_path, flags);
 	if (fd == -1) {
-		fprintf(stderr, "raio_open failed - file:%s:%d/%s " \
-			"flags:%x %m\n", server_addr, server_port,
+		fprintf(stderr, "raio_open failed %s://%s:%d/%s flags:%x %m\n",
+			transport, server_addr, server_port,
 			file_path, flags);
 		return -1;
 	}
@@ -354,7 +377,7 @@ int main(int argc, char *argv[])
 	iocb_pool = raio_pool_init(IODEPTH, sizeof(struct raio_iocb));
 
 	/* allocate array for holding pointers */
-	piocb = calloc(IODEPTH, sizeof(struct raio_iocb *));
+	piocb = (struct raio_iocb **)calloc(IODEPTH, sizeof(struct raio_iocb *));
 
 	printf("reading started ");
 	fflush(stdout);
@@ -376,9 +399,10 @@ int main(int argc, char *argv[])
 		do {
 			if (tot_submitted < tot_num) {
 				for (i = nqueued; i < IODEPTH; i++) {
-					if (stbuf.st_size < offset)
+					if ((uint64_t)stbuf.st_size <= offset)
 						break;
-					piocb[i] = raio_pool_get(iocb_pool);
+					piocb[i] = (struct raio_iocb *)
+						       raio_pool_get(iocb_pool);
 					if (piocb[i])  {
 						raio_prep_pread(piocb[i], fd,
 								NULL,
@@ -492,6 +516,7 @@ close_file:
 	free_cmdline_params();
 
 	printf("good bye\n");
-	return fd;
+
+	return 0;
 }
 

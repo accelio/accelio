@@ -35,19 +35,24 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include "xio_os.h"
+#include <sys/hashtable.h>
+#include <xio_os.h>
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
 #include "xio_observer.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
-#include "xio_context.h"
 #include "xio_transport.h"
 #include "xio_sessions_cache.h"
 #include "xio_hash.h"
-#include "xio_session.h"
+#include "xio_msg_list.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
 #include "xio_nexus.h"
+#include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
 
@@ -77,13 +82,29 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	connection->session->setup_req = msg;
 
 	/* read the header */
-	ptr = msg->in.header.iov_base;
+	ptr = (uint8_t *)msg->in.header.iov_base;
 
 	memset(&req, 0, sizeof(req));
 
 	/* session id */
 	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
 	ptr  = ptr + len;
+
+	/* queue depth bytes */
+	len = xio_read_uint64(&session->peer_snd_queue_depth_bytes, 0, ptr);
+	ptr = ptr + len;
+
+	len = xio_read_uint64(&session->peer_rcv_queue_depth_bytes, 0, ptr);
+	ptr = ptr + len;
+
+	/* queue depth msgs */
+	len = xio_read_uint16((uint16_t *)&session->peer_snd_queue_depth_msgs,
+			      0, ptr);
+	ptr = ptr + len;
+
+	len = xio_read_uint16((uint16_t *)&session->peer_rcv_queue_depth_msgs,
+			      0, ptr);
+	ptr = ptr + len;
 
 	/* uri length */
 	len = xio_read_uint16(&req.uri_len, 0, ptr);
@@ -94,7 +115,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	ptr = ptr + len;
 
 	if (req.uri_len) {
-		req.uri = kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
+		req.uri = (char *)kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
 		if (req.uri == NULL) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("uri allocation failed. len:%d\n",
@@ -115,12 +136,12 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 				  req.private_data_len);
 			goto cleanup2;
 		}
-		len = xio_read_array(req.private_data, req.private_data_len,
+		len = xio_read_array((uint8_t *)req.private_data, req.private_data_len,
 				     0, ptr);
 		ptr = ptr + len;
 	}
 
-	req.proto = xio_nexus_get_proto(connection->nexus);
+	req.proto = (enum xio_proto)xio_nexus_get_proto(connection->nexus);
 	xio_nexus_get_peer_addr(connection->nexus,
 				&req.src_addr, sizeof(req.src_addr));
 
@@ -163,7 +184,7 @@ cleanup1:
 	kfree(req.uri);
 
 	if (session->ses_ops.on_session_event) {
-		error_event.reason = xio_errno();
+		error_event.reason = (enum xio_status)xio_errno();
 		session->ses_ops.on_session_event(
 				session, &error_event,
 				session->cb_user_context);
@@ -171,26 +192,6 @@ cleanup1:
 	return 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_req_recv			                     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_req_recv(struct xio_connection *connection,
-				     struct xio_task *task)
-{
-	xio_session_notify_new_connection(task->session, connection);
-
-	xio_connection_send_hello_rsp(connection, task);
-
-	connection->session->state = XIO_SESSION_STATE_ONLINE;
-	connection->session->disable_teardown = 0;
-
-	TRACE_LOG("session state is now ONLINE. session:%p\n",
-		  connection->session);
-
-	xio_connection_set_state(connection, XIO_CONNECTION_STATE_ONLINE);
-
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
@@ -209,7 +210,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 
 
 	/* calculate length */
-	tot_len = 3*sizeof(uint16_t) + sizeof(uint32_t);
+	tot_len = 5*sizeof(uint16_t) + sizeof(uint32_t) + 2*sizeof(uint64_t);
 	for (i = 0; i < portals_array_len; i++)
 		tot_len += strlen(portals_array[i]) + sizeof(uint16_t);
 	tot_len += user_context_len;
@@ -221,7 +222,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	}
 
 	/* allocate message */
-	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
+	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
 	if (buf == NULL) {
 		ERROR_LOG("message allocation failed\n");
@@ -235,7 +236,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	msg->out.header.iov_len = 0;
 
 
-	ptr = msg->out.header.iov_base;
+	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
@@ -247,6 +248,24 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	/* action */
 	len = xio_write_uint16(action, 0, ptr);
 	ptr  = ptr + len;
+
+	if (action == XIO_ACTION_ACCEPT) {
+		/* tx queue depth bytes */
+		len = xio_write_uint64(session->snd_queue_depth_bytes, 0, ptr);
+		ptr  = ptr + len;
+
+		/* rx queue depth bytes */
+		len = xio_write_uint64(session->rcv_queue_depth_bytes, 0, ptr);
+		ptr  = ptr + len;
+
+		/* tx queue depth msgs */
+		len = xio_write_uint16(session->snd_queue_depth_msgs, 0, ptr);
+		ptr  = ptr + len;
+
+		/* rx queue depth msgs */
+		len = xio_write_uint16(session->rcv_queue_depth_msgs, 0, ptr);
+		ptr  = ptr + len;
+	}
 
 	/* portals_array_len */
 	len = xio_write_uint16(portals_array_len, 0, ptr);
@@ -269,7 +288,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	}
 
 	if (user_context_len) {
-		len = xio_write_array(user_context,
+		len = xio_write_array((const uint8_t *)user_context,
 				      user_context_len,
 				      0, ptr);
 		ptr  = ptr + len;
@@ -311,7 +330,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	}
 
 	/* allocate message */
-	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
+	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
 	if (buf == NULL) {
 		ERROR_LOG("message allocation failed\n");
@@ -325,7 +344,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	msg->out.header.iov_len = 0;
 
 
-	ptr = msg->out.header.iov_base;
+	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
@@ -348,7 +367,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	ptr  = ptr + len;
 
 	if (user_context_len) {
-		len = xio_write_array(user_context,
+		len = xio_write_array((const uint8_t *)user_context,
 				      user_context_len,
 				      0, ptr);
 		ptr  = ptr + len;
@@ -389,18 +408,10 @@ int xio_accept(struct xio_session *session,
 	}
 
 	msg->request	= session->setup_req;
-	msg->type	= XIO_SESSION_SETUP_RSP;
+	msg->type	= (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
-
-
-	retval = xio_connection_send(task->connection, msg);
-	if (retval && retval != -EAGAIN) {
-		ERROR_LOG("failed to send message. errno:%d\n", -retval);
-		xio_set_error(-retval);
-		return -1;
-	}
 
 	if (portals_array_len != 0) {
 		/* server side state is changed to ACCEPT, will be move to
@@ -412,14 +423,30 @@ int xio_accept(struct xio_session *session,
 		TRACE_LOG("session state is now ACCEPT. session:%p\n",
 			  session);
 	} else {
+		/* initialize credits */
+		task->connection->peer_credits_msgs =
+					session->peer_rcv_queue_depth_msgs;
+		task->connection->credits_msgs	= 0;
+		task->connection->peer_credits_bytes =
+					session->peer_rcv_queue_depth_bytes;
+		task->connection->credits_bytes	= 0;
+
+
 		/* server side state is changed to ONLINE, immediately  */
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state changed to ONLINE. session:%p\n",
 			  session);
 	}
+	retval = xio_connection_send(task->connection, msg);
+	if (retval && retval != -EAGAIN) {
+		ERROR_LOG("failed to send message. errno:%d\n", -retval);
+		xio_set_error(-retval);
+		return -1;
+	}
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_accept);
 
 /*---------------------------------------------------------------------------*/
 /* xio_redirect								     */
@@ -455,7 +482,7 @@ int xio_redirect(struct xio_session *session,
 			  session);
 	}
 	msg->request = session->setup_req;
-	msg->type    = XIO_SESSION_SETUP_RSP;
+	msg->type    = (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
@@ -469,6 +496,7 @@ int xio_redirect(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_redirect);
 
 /*---------------------------------------------------------------------------*/
 /* xio_reject								     */
@@ -494,7 +522,7 @@ int xio_reject(struct xio_session *session,
 		  session);
 
 	msg->request = session->setup_req;
-	msg->type    = XIO_SESSION_SETUP_RSP;
+	msg->type    = (enum xio_msg_type)XIO_SESSION_SETUP_RSP;
 
 	task = container_of(msg->request,
 			    struct xio_task, imsg);
@@ -510,6 +538,7 @@ int xio_reject(struct xio_session *session,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_reject);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_rsp_send_comp			                             */
@@ -533,25 +562,13 @@ int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 	case XIO_SESSION_STATE_ACCEPTED:
 	case XIO_SESSION_STATE_REJECTED:
 	case XIO_SESSION_STATE_REDIRECTED:
-		xio_disconnect(connection);
+		xio_disconnect_initial_connection(connection);
 		break;
 	default:
 		/* try to transmit now */
 		xio_connection_xmit_msgs(connection);
 		break;
 	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_rsp_send_comp				     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
-					  struct xio_task *task)
-{
-	xio_connection_release_hello(connection, task->omsg);
-	xio_tasks_pool_put(task);
 
 	return 0;
 }
@@ -570,11 +587,13 @@ int xio_on_server_nexus_established(struct xio_session *session,
 /* xio_server_on_nexus_event						     */
 /*---------------------------------------------------------------------------*/
 int xio_server_on_nexus_event(void *observer, void *sender, int event,
-			      void *event_data)
+			      void *_event_data)
 {
-	struct xio_session	*session = observer;
-	struct xio_nexus	*nexus	= sender;
+	struct xio_session	*session = (struct xio_session *)observer;
+	struct xio_nexus	*nexus	= (struct xio_nexus *)sender;
 	int			retval  = 0;
+	union xio_nexus_event_data *event_data = (union xio_nexus_event_data *)
+							_event_data;
 
 
 	switch (event) {

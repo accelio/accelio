@@ -235,7 +235,7 @@ static void xio_module_down(void *data)
 	if (!server_data->connection)
 		goto destroy_session;
 
-	xio_connection_destroy(server_data->connection);
+	xio_disconnect(server_data->connection);
 	return;
 
 destroy_session:

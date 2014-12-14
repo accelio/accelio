@@ -35,7 +35,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include "libxio.h"
+#include <xio_os.h>
+#include "xio_log.h"
+#include "xio_common.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
@@ -55,6 +60,7 @@ int xio_reg_transport(struct xio_transport *transport)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_reg_transport);
 
 /*---------------------------------------------------------------------------*/
 /* xio_unreg_transport						     */
@@ -63,6 +69,7 @@ void xio_unreg_transport(struct xio_transport *transport)
 {
 	list_del(&transport->transports_list_entry);
 }
+EXPORT_SYMBOL(xio_unreg_transport);
 
 /*---------------------------------------------------------------------------*/
 /* xio_get_transport							     */
@@ -104,8 +111,10 @@ int xio_transport_flush_task_list(struct list_head *list)
 
 	list_for_each_entry_safe(ptask, next_ptask, list,
 				 tasks_list_entry) {
+		/*
 		TRACE_LOG("flushing task %p type 0x%x\n",
 			  ptask, ptask->tlv_type);
+		*/
 		if (ptask->sender_task) {
 			xio_tasks_pool_put(ptask->sender_task);
 			ptask->sender_task = NULL;
@@ -115,17 +124,16 @@ int xio_transport_flush_task_list(struct list_head *list)
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_transport_flush_task_list);
 
 /*---------------------------------------------------------------------------*/
-/* xio_transport_notify_assign_in_buf					     */
+/* xio_transport_assign_in_buf						     */
 /*---------------------------------------------------------------------------*/
 int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
 				struct xio_task *task, int *is_assigned)
 {
-	union xio_transport_event_data event_data = {
-			.assign_in_buf.task	   = task,
-			.assign_in_buf.is_assigned = 0
-	};
+	union xio_transport_event_data event_data = {};
+	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(trans_hndl,
 				      XIO_TRANSPORT_ASSIGN_IN_BUF,
@@ -134,3 +142,5 @@ int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
 	*is_assigned = event_data.assign_in_buf.is_assigned;
 	return 0;
 }
+EXPORT_SYMBOL(xio_transport_assign_in_buf);
+

@@ -38,11 +38,6 @@
 #ifndef XIO_NEXUS_H
 #define XIO_NEXUS_H
 
-#include "xio_hash.h"
-#include "xio_context.h"
-#include "xio_transport.h"
-#include "sys/hashtable.h"
-#include "xio_server.h"
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -86,6 +81,10 @@ enum xio_nexus_state {
 	XIO_NEXUS_STATE_ERROR
 };
 
+enum xio_nexus_attr_mask {
+	XIO_NEXUS_ATTR_TOS			= 1 << 0
+};
+
 /*---------------------------------------------------------------------------*/
 /* structs	                                                             */
 /*---------------------------------------------------------------------------*/
@@ -103,13 +102,14 @@ union xio_nexus_event_data {
 	struct {
 		struct xio_task		*task;
 		enum xio_status		reason;
-		int			pad;
+		enum xio_msg_direction	direction;
 	} msg_error;
 	struct {
 		struct xio_nexus	*child_nexus;
 	} new_nexus;
 	struct {
 		enum xio_status		reason;
+		enum xio_msg_direction	direction;
 	} error;
 	struct {
 		struct xio_task		*task;
@@ -120,6 +120,15 @@ union xio_nexus_event_data {
 	} cancel;
 };
 
+struct xio_nexus_attr {
+	uint8_t			tos;	 /**< type of service RFC 2474 */
+	uint8_t			pad[3];
+};
+
+struct xio_nexus_init_attr {
+	uint8_t			tos;	 /**< type of service RFC 2474 */
+	uint8_t			pad[3];
+};
 
 /**
  * Connection data type
@@ -157,6 +166,8 @@ struct xio_nexus {
 	struct xio_transport_base	*new_transport_hndl;
 	char				*portal_uri;
 	char				*out_if_addr;
+	uint32_t			trans_attr_mask;
+	struct xio_transport_init_attr	trans_attr;
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };
@@ -172,7 +183,9 @@ void xio_nexus_close(struct xio_nexus *nexus, struct xio_observer *observer);
 struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 				 const char *portal_uri,
 				 struct xio_observer *observer,
-				 uint32_t oid);
+				 uint32_t oid,
+				 uint32_t attr_mask,
+				 struct xio_nexus_init_attr *init_attr);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_connect							     */
@@ -246,13 +259,8 @@ int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_nexus_set_server(struct xio_nexus *nexus,
-					struct xio_server *server)
-{
-	nexus->server = server;
-	if (server)
-		xio_server_reg_observer(server, &nexus->srv_observer);
-}
+inline void xio_nexus_set_server(struct xio_nexus *nexus,
+				 struct xio_server *server);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_reg_observer						     */
@@ -350,6 +358,21 @@ static inline void xio_nexus_state_set(struct xio_nexus *nexus,
 /* xio_nexus_update_task						     */
 /*---------------------------------------------------------------------------*/
 int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task);
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_modify							     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_modify(struct xio_nexus *nexus,
+		     struct xio_nexus_attr *attr,
+		     int attr_mask);
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_query							     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_query(struct xio_nexus *nexus,
+		    struct xio_nexus_attr *attr,
+		    int attr_mask);
+
 
 #endif /*XIO_NEXUS_H */
 

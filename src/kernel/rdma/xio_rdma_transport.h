@@ -35,10 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef  XIO_RDMA_TRANSPORT_H
-#define  XIO_RDMA_TRANSPORT_H
+#ifndef XIO_RDMA_TRANSPORT_H
+#define XIO_RDMA_TRANSPORT_H
 
-#include "xio_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -59,7 +58,7 @@ extern struct xio_rdma_options	rdma_options;
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR)
+#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_SEND_WR)
 
 #define DEF_DATA_ALIGNMENT		0
@@ -101,7 +100,8 @@ extern struct xio_rdma_options	rdma_options;
 
 #define xio_prefetch(p)		prefetch(p)
 
-#define XIO_FRWR_LI_WRID 0xffffffffffffffffULL
+#define XIO_FRWR_LI_WRID		0xffffffffffffffffULL
+#define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
 /* header flags */
 #define XIO_HEADER_FLAG_NONE		0x00
@@ -113,6 +113,7 @@ extern struct xio_rdma_options	rdma_options;
 enum xio_transport_state {
 	XIO_STATE_INIT,
 	XIO_STATE_LISTEN,
+	XIO_STATE_CONNECTING,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
 	XIO_STATE_RECONNECT,
@@ -135,15 +136,13 @@ struct xio_rdma_transport;
 struct xio_rdma_options {
 	int	enable_mem_pool;
 	int	enable_dma_latency;
-	int	rdma_buf_threshold;
-	int	rdma_buf_attr_rdonly;
 	int	max_in_iovsz;
 	int	max_out_iovsz;
 };
 
 #define XIO_REQ_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_req_hdr {
+struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
@@ -168,7 +167,7 @@ struct __attribute__((__packed__)) xio_req_hdr {
 
 #define XIO_RSP_HEADER_VERSION	1
 
-struct __attribute__((__packed__)) xio_rsp_hdr {
+struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint8_t			version;	/* response version     */
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
@@ -230,7 +229,6 @@ struct xio_work_req {
 
 struct xio_rdma_task {
 	struct xio_rdma_transport	*rdma_hndl;
-	//struct xio_data_buffer sdb;
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */
@@ -251,8 +249,8 @@ struct xio_rdma_task {
 	u32				write_num_sge;
 	u32				recv_num_sge;
 	u32				pad0;
-	struct xio_rdma_mem_desc	read_sge;
-	struct xio_rdma_mem_desc	write_sge;
+	struct xio_mem_desc		read_sge;
+	struct xio_mem_desc		write_sge;
 
 	/* What this side got from the peer for RDMA R/W */
 	u32				req_read_num_sge;
@@ -271,9 +269,8 @@ struct xio_rdma_task {
 
 	unsigned int			phantom_idx;
 	enum xio_ib_op_code		ib_op;
-	unsigned int			more_in_batch;
 	u16				sn;
-	u16				pad[1];
+	u16				pad[5];
 
 };
 
@@ -288,7 +285,7 @@ struct xio_cq  {
 	u32				cq_depth;     /* current cq depth  */
 	u32				alloc_sz;     /* allocation factor  */
 	u32				cqe_avail;    /* free elements  */
-	atomic_t			refcnt;       /* utilization counter */
+	struct kref			kref;       /* utilization counter */
 	u32				num_delayed_arm;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
@@ -335,10 +332,10 @@ struct xio_fastreg_ops {
 	int	(*alloc_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
 	void	(*free_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
 	int	(*reg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
-				struct xio_rdma_mem_desc *desc,
+				struct xio_mem_desc *desc,
 				enum dma_data_direction cmd_dir);
 	void	(*unreg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
-				  struct xio_rdma_mem_desc *desc,
+				  struct xio_mem_desc *desc,
 				  enum dma_data_direction cmd_dir);
 };
 
@@ -387,10 +384,11 @@ struct xio_rdma_transport {
 	struct xio_cq			*tcq;
 	struct xio_device		*dev;
 	struct ib_qp			*qp;
-	struct xio_rdma_mempool		*rdma_mempool;
+	struct xio_mempool		*rdma_mempool;
 	struct xio_tasks_pool		*phantom_tasks_pool;
 	union xio_fastreg		fastreg;
-	struct xio_ev_data		event_data;
+	struct xio_ev_data		event_data_close;
+	struct xio_ev_data		ev_data_timewait_exit;
 
 	struct list_head		trans_list_entry;
 
@@ -409,7 +407,7 @@ struct xio_rdma_transport {
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
 	uint16_t			sim_peer_credits;  /* simulates the peer
-							    * credits managment
+							    * credits management
 							    * to control nop
 							    * sends
 							    */
@@ -425,7 +423,7 @@ struct xio_rdma_transport {
 	enum xio_transport_state	state;
 
 	/* tx parameters */
-	size_t				max_send_buf_sz;
+	size_t				max_inline_buf_sz;
 	int				kick_rdma_rd;
 	int				reqs_in_flight_nr;
 	int				rsps_in_flight_nr;
@@ -488,6 +486,10 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
+	struct ib_send_wr		beacon;
+	struct xio_task			beacon_task;
+	uint32_t			trans_attr_mask;
+	struct xio_transport_attr	trans_attr;
 };
 
 /*
@@ -549,6 +551,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 
 
 /* xio_rdma_management.c */
+void xio_rdma_close_cb(struct kref *kref);
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 
 /* Should create a xio_memory.h */
@@ -564,19 +567,19 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 		       struct xio_work_req *xd,
 		       enum dma_data_direction direction);
 
-void xio_reset_desc(struct xio_rdma_mem_desc *desc);
+void xio_reset_desc(struct xio_mem_desc *desc);
 
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
-		    struct xio_rdma_mem_desc *desc,
+		    struct xio_mem_desc *desc,
 		    enum dma_data_direction direction);
 
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
-		 struct xio_rdma_mem_desc *desc,
+		 struct xio_mem_desc *desc,
 		 enum dma_data_direction direction);
 
 int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 		   struct xio_rdma_transport *rdma_nhndl,
-		   struct xio_rdma_mem_desc *desc,
+		   struct xio_mem_desc *desc,
 		   enum dma_data_direction direction);
 
 void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len);

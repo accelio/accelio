@@ -137,15 +137,18 @@ static void process_response(struct xio_msg *rsp)
 
 		double txbw = (1.0*pps*txlen/ONE_MB);
 		double rxbw = (1.0*pps*rxlen/ONE_MB);
+		double lat = (1000000.0/pps);
 
-		printf("transactions per second: %lu, bandwidth: " \
+		printf("transactions per second: %lu, lat: %.2f us, bandwidth: " \
 		       "TX %.2f MB/s, RX: %.2f MB/s, length: TX: %zd B, RX: %zd B\n",
-		       pps, txbw, rxbw, txlen, rxlen);
+		       pps, lat, txbw, rxbw, txlen, rxlen);
 		get_time(timeb, 40);
+		/*
 		printf("**** [%s] - message [%lu] %s - %s\n",
 		       timeb, (rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base,
 		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
+		*/
 		cnt = 0;
 		start_time = get_cpu_usecs();
 	}
@@ -167,7 +170,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ctx, 0);  /* exit */
+		xio_context_stop_loop(ctx);  /* exit */
 		if (pool) {
 			msg_pool_free(pool);
 			pool = NULL;
@@ -199,7 +202,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct xio_iovec_ex	*sglist;
+	/*struct xio_iovec_ex	*sglist; */
 
 	process_response(msg);
 
@@ -220,15 +223,16 @@ static int on_response(struct xio_session *session,
 	/* reset message */
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len = 0;
-	sglist = vmsg_sglist(&msg->in);
-	vmsg_sglist_set_nents(&msg->in, 1);
+	vmsg_sglist_set_nents(&msg->in, 0);
 
+	/*
+	sglist = vmsg_sglist(&msg->in);
 	sglist[0].iov_base = NULL;
 	sglist[0].iov_len  = ONE_MB;
 	sglist[0].mr = NULL;
-
+	vmsg_sglist_set_nents(&msg->in, 1);
+	*/
 	msg->sn = 0;
-	msg->more_in_batch = 0;
 
 	do {
 		/* recycle the message and fill new request */
@@ -254,9 +258,11 @@ static int on_response(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_private_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
@@ -432,14 +438,15 @@ static void print_test_config(
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	int			error;
-	int			retval;
-	char			url[256];
-	struct xio_msg		*msg;
-	struct xio_iovec_ex	*sglist;
-	int			i = 0;
-	struct xio_session_params params;
+	struct xio_session		*session;
+	int				error;
+	int				retval;
+	char				url[256];
+	struct xio_msg			*msg;
+	/*struct xio_iovec_ex		*sglist; */
+	int				i = 0, opt;
+	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -449,6 +456,12 @@ int main(int argc, char *argv[])
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
+
+	/* disable nagle algorithm for tcp */
+	opt = 1;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_TCP, XIO_OPTNAME_TCP_NO_DELAY,
+		    &opt, sizeof(int));
 
 	ctx = xio_context_create(NULL, POLLING_TIMEOUT, test_config.cpu);
 	if (ctx == NULL) {
@@ -480,7 +493,12 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session		= session;
+	cparams.ctx		= ctx;
+	cparams.conn_idx	= test_config.conn_idx;
+
+	conn = xio_connect(&cparams);
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 
@@ -494,14 +512,15 @@ int main(int argc, char *argv[])
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
 		msg->in.header.iov_len = 0;
+		vmsg_sglist_set_nents(&msg->in, 0);
+
+		/*
 		sglist = vmsg_sglist(&msg->in);
-		vmsg_sglist_set_nents(&msg->in, 1);
-
-
 		sglist[0].iov_base = NULL;
 		sglist[0].iov_len  = ONE_MB;
 		sglist[0].mr = NULL;
-
+		vmsg_sglist_set_nents(&msg->in, 1);
+		*/
 
 		/* recycle the message and fill new request */
 		msg_write(&msg_params, msg,
@@ -530,6 +549,7 @@ int main(int argc, char *argv[])
 		error = xio_errno();
 		fprintf(stderr, "running event loop failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
+		xio_context_destroy(ctx);
 		xio_assert(retval == 0);
 	}
 

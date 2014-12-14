@@ -78,7 +78,7 @@ uint8_t *alloc_mem_buf(size_t pool_size, int *shmid)
 	}
 
 	/* get pointer to allocated memory */
-	buf = shmat(shmemid, NULL, 0);
+	buf = (uint8_t *)shmat(shmemid, NULL, 0);
 
 	if (buf == (void *)-1) {
 		fprintf(stderr, "shmat failure (errno=%d %m)\n", errno);
@@ -105,7 +105,7 @@ failed_huge_page:
 	if (pagesz < 0)
 		return NULL;
 
-	buf = memalign(pagesz, pool_size);
+	buf = (uint8_t *)memalign(pagesz, pool_size);
 	if (!buf)
 		return NULL;
 
@@ -143,7 +143,7 @@ struct msg_pool *msg_pool_alloc(int max)
 	len = sizeof(struct msg_pool)+
 		max*(2*sizeof(struct xio_msg *)+sizeof(struct xio_msg));
 
-	buf = calloc(len, sizeof(uint8_t));
+	buf = (uint8_t *)calloc(len, sizeof(uint8_t));
 	if (!buf) {
 		fprintf(stderr, "Couldn't allocate message pool\n");
 		exit(1);
@@ -207,7 +207,7 @@ struct perf_buf *xio_buf_alloc(size_t size)
 {
 	struct perf_buf * pbuf;
 
-	pbuf = calloc(1, sizeof(*pbuf));
+	pbuf = (struct perf_buf *)calloc(1, sizeof(*pbuf));
 
 	pbuf->addr = alloc_mem_buf(ALIGNHUGEPAGE(size) , &pbuf->shmid);
 	pbuf->length = size;
@@ -223,7 +223,7 @@ void  xio_buf_free(struct perf_buf *pbuf)
 		xio_dereg_mr(&pbuf->mr);
 
 	if (pbuf->addr)
-		free_mem_buf(pbuf->addr, pbuf->shmid);
+		free_mem_buf((uint8_t *)pbuf->addr, pbuf->shmid);
 
 	free(pbuf);
 }

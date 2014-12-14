@@ -37,7 +37,8 @@
  */
 
 
-#include "xio_os.h"
+#include <xio_os.h>
+#include "libxio.h"
 #include "xio_log.h"
 #include "xio_sg_table.h"
 
@@ -48,13 +49,14 @@ extern struct  xio_sg_table_ops sgtbl_ops_sg;
 void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type)
 {
 	static void *vec[XIO_SGL_TYPE_LAST] = {
-		[XIO_SGL_TYPE_IOV]		= (void *) &sgtbl_ops_iov,
-		[XIO_SGL_TYPE_IOV_PTR]		= (void *) &sgtbl_ops_iovptr,
-		[XIO_SGL_TYPE_SCATTERLIST]	= (void *) &sgtbl_ops_sg
+		[XIO_SGL_TYPE_IOV]		= (void *)&sgtbl_ops_iov,
+		[XIO_SGL_TYPE_IOV_PTR]		= (void *)&sgtbl_ops_iovptr,
+		[XIO_SGL_TYPE_SCATTERLIST]	= (void *)&sgtbl_ops_sg
 	};
 
 	return vec[sgl_type];
 }
+EXPORT_SYMBOL(xio_sg_table_ops_get);
 
 /*---------------------------------------------------------------------------*/
 /* tbl_clone								     */
@@ -66,8 +68,12 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	void	*ssge;
 	int	i;
 
-	if (tbl_max_nents(dtbl_ops, dtbl) < tbl_max_nents(stbl_ops, stbl))
+	if (tbl_max_nents(dtbl_ops, dtbl) < tbl_nents(stbl_ops, stbl)) {
+		ERROR_LOG("dest max nents is %d while src nents is %d\n",
+			  tbl_max_nents(dtbl_ops, dtbl),
+			  tbl_nents(stbl_ops, stbl));
 		return -1;
+	}
 
 	tbl_set_nents(dtbl_ops, dtbl,
 		      tbl_nents(stbl_ops, stbl));
@@ -83,6 +89,7 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 
 	return 0;
 }
+EXPORT_SYMBOL(tbl_clone);
 
 /*---------------------------------------------------------------------------*/
 /* tbl_copy								     */
@@ -108,9 +115,6 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 			  dnents, snents);
 		return 0;
 	}
-
-
-	tbl_set_nents(dtbl_ops, dtbl, snents);
 
 	while (1) {
 		if (slen < dlen) {
@@ -169,5 +173,5 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 
 	return 0;
 }
-
+EXPORT_SYMBOL(tbl_copy);
 

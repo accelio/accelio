@@ -35,28 +35,26 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
 
 
 void xio_vlog(const char *file, unsigned line, const char *function,
-		     unsigned level, const char *fmt, ...);
+	      unsigned level, const char *fmt, ...);
 
-int			xio_logging_level = XIO_LOG_LEVEL_ERROR;
+enum xio_log_level	xio_logging_level = XIO_LOG_LEVEL_ERROR;
 xio_log_fn		xio_vlog_fn = xio_vlog;
 
 
 
 #define LOG_TIME_FMT "%04d/%02d/%02d-%02d:%02d:%02d.%05ld"
-#define LOG_TIME_ARG(t, usec) t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, \
-			      t.tm_hour, t.tm_min, t.tm_sec, usec
 
 /*---------------------------------------------------------------------------*/
 /* xio_vlog								     */
 /*---------------------------------------------------------------------------*/
 void xio_vlog(const char *file, unsigned line, const char *function,
-		unsigned level, const char *fmt, ...)
+	      unsigned level, const char *fmt, ...)
 {
 	va_list			args;
 	const char		*short_file;
@@ -88,7 +86,9 @@ void xio_vlog(const char *file, unsigned line, const char *function,
 	*/
 	fprintf(stderr,
 		"["LOG_TIME_FMT"] %-28s [%-5s] - %s",
-		LOG_TIME_ARG(t, tv.tv_usec), buf2,
+		t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+		t.tm_hour, t.tm_min, t.tm_sec, tv.tv_usec,
+		buf2,
 		level_str[level], buf);
 
 
@@ -108,7 +108,7 @@ void xio_read_logging_level(void)
 
 	level  = atoi(val);
 	if (level >= XIO_LOG_LEVEL_FATAL && level <= XIO_LOG_LEVEL_TRACE)
-		xio_logging_level = level;
+		xio_logging_level = (enum xio_log_level)level;
 }
 
 

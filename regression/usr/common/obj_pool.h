@@ -108,26 +108,26 @@ static inline struct obj_pool *obj_pool_init(int max, size_t size,
 	if (max < 1)
 		return NULL;
 
-	buf = calloc(pool_alloc_sz, sizeof(uint8_t));
+	buf = (char *)calloc(pool_alloc_sz, sizeof(uint8_t));
 	if (buf == NULL)
 		return NULL;
 
 	/* pool */
-	q = (void *)buf;
+	q = (struct obj_pool *)buf;
 	buf = buf + sizeof(struct obj_pool);
 
 	/* stack */
-	q->stack = (void *)buf;
+	q->stack = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* array */
-	q->array = (void *)buf;
+	q->array = (void **)buf;
 	buf = buf + max*sizeof(void *);
 
 	/* pool data */
 	elems_alloc_sz = max*size;
 
-	data = calloc(elems_alloc_sz, sizeof(uint8_t));
+	data = (char *)calloc(elems_alloc_sz, sizeof(uint8_t));
 	if (data == NULL) {
 		free(q);
 		return NULL;

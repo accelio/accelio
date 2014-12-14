@@ -74,6 +74,16 @@ static inline cycles_t get_cycles()
 	return ret;
 }
 
+#elif defined (WIN32)
+#include <Windows.h>
+
+typedef LONGLONG cycles_t;
+static __inline cycles_t get_cycles()
+{
+	LARGE_INTEGER performanceCount;
+	return QueryPerformanceCounter(&performanceCount) ? performanceCount.QuadPart : 0;
+}
+
 #else
 #warning get_cycles not implemented for this architecture: attempt asm/timex.h
 #include <linux/timex.h>

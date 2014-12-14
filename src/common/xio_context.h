@@ -38,8 +38,6 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
-#include "xio_workqueue.h"
-#include "xio_ev_data.h"
 
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
@@ -49,7 +47,8 @@
 /* enum									     */
 /*---------------------------------------------------------------------------*/
 enum xio_context_event {
-	XIO_CONTEXT_EVENT_CLOSE
+	XIO_CONTEXT_EVENT_CLOSE,
+	XIO_CONTEXT_EVENT_POST_CLOSE
 };
 
 enum xio_counters {
@@ -75,11 +74,14 @@ struct xio_statistics {
 
 struct xio_context {
 	void				*ev_loop;
+	void				*mempool;
 	int				cpuid;
 	int				nodeid;
 	int				polling_timeout;
 	unsigned int			flags;
 	uint64_t			worker;
+	int				run_private;
+	int				pad;
 	struct xio_statistics		stats;
 	void				*user_context;
 	struct xio_workqueue		*workqueue;
@@ -178,7 +180,7 @@ int xio_ctx_del_work(struct xio_context *ctx,
 /* xio_ctx_init_event							     */
 /*---------------------------------------------------------------------------*/
 void xio_ctx_init_event(xio_ctx_event_t *evt,
-			void (*event_handler)(xio_ctx_event_t *tev, void *data),
+			void (*event_handler)(void *data),
 			void *data);
 
 /*---------------------------------------------------------------------------*/
@@ -205,6 +207,31 @@ int xio_context_is_loop_stopping(struct xio_context *ctx);
 /*---------------------------------------------------------------------------*/
 int xio_context_modify_ev_handler(struct xio_context *ctx,
 				  int fd, int events);
+
+/*
+ * should be called only from context_shutdown event context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_wait	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_wait(struct xio_context *ctx)
+{
+	ctx->run_private++;
+}
+
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		if (!--ctx->run_private)
+			xio_context_stop_loop(ctx);
+	}
+}
 
 #endif /*XIO_CONTEXT_H */
 

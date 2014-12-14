@@ -54,52 +54,74 @@
 #include "raio_utils.h"
 #include "raio_bs.h"
 #include "libraio.h"
-#include "msg_pool.h"
+#include "raio_msg_pool.h"
 
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros				                             */
 /*---------------------------------------------------------------------------*/
-#define MAXBLOCKSIZE	(128*1024)
-#define BS_IODEPTH	128
-#define NULL_BS_DEV_SIZE (1ULL << 32)
-#define EXTRA_MSGS	100
+#define MAXBLOCKSIZE		(128*1024)
+#define EXTRA_MSGS		512
+
+#define RAIO_CMD_HDR_SZ		512
+#define RAIO_CMD_IDX(id)	((id) - RAIO_CMD_OPEN)
+#define RAIO_CMDS_NR		(RAIO_CMD_LAST - RAIO_CMD_OPEN)
+
+
+#ifndef TAILQ_FOREACH_SAFE
+#define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
+	for ((var) = ((head)->tqh_first);				\
+	     (var) != NULL && ((next) = TAILQ_NEXT((var), field), 1);	\
+			(var) = (next))
+#endif
 
 /*---------------------------------------------------------------------------*/
-/* data structres				                             */
+/* data structures				                             */
 /*---------------------------------------------------------------------------*/
 struct raio_io_u {
 	struct raio_event		ev_data;
 	struct xio_msg			*rsp;
+	void				*buf;
 	struct raio_io_cmd		iocmd;
 
 	TAILQ_ENTRY(raio_io_u)		io_u_list;
 };
 
 struct raio_io_portal_data {
-	struct raio_bs			*bs_dev;
+	TAILQ_HEAD(, raio_bs)		dev_list;
+	int				ndevs;
 	int				iodepth;
 	int				io_nr;
 	int				io_u_free_nr;
-	int				pad;
 	struct raio_io_u		*io_us_free;
-	struct xio_msg			rsp;
-	struct xio_msg			close_rsp;
-	struct msg_pool			*rsp_pool;
-	struct xio_context		*ctx;
-	char				rsp_hdr[512];
 
 	TAILQ_HEAD(, raio_io_u)		io_u_free_list;
+	struct msg_pool			*rsp_pool;
+
+	struct xio_msg			rsp[RAIO_CMDS_NR];
+	char				rsp_hdr[RAIO_CMDS_NR][RAIO_CMD_HDR_SZ];
+
+	struct xio_context		*ctx;
 };
 
 struct raio_io_session_data {
-	int				fd;
-	int				is_null;
 	int				portals_nr;
 	int				pad;
-	uint64_t			fsize;
-
 	struct raio_io_portal_data	*pd;
 };
+
+/*---------------------------------------------------------------------------*/
+/* raio_lookup_bs_dev							     */
+/*---------------------------------------------------------------------------*/
+struct raio_bs *raio_lookup_bs_dev(int fd, struct raio_io_portal_data *pd)
+{
+	struct raio_bs      *bs_dev;
+
+	TAILQ_FOREACH(bs_dev, &pd->dev_list, list) {
+		if (bs_dev->fd == fd)
+			return bs_dev;
+	}
+	return NULL;
+}
 
 /*---------------------------------------------------------------------------*/
 /* raio_handler_init_session_data				             */
@@ -107,12 +129,11 @@ struct raio_io_session_data {
 void *raio_handler_init_session_data(int portals_nr)
 {
 	struct raio_io_session_data *sd;
-	sd = calloc(1, sizeof(*sd));
+	sd = (struct raio_io_session_data *)calloc(1, sizeof(*sd));
 
-	sd->pd		= calloc(portals_nr, sizeof(*sd->pd));
+	sd->pd	=
+	      (struct raio_io_portal_data *)calloc(portals_nr, sizeof(*sd->pd));
 	sd->portals_nr	= portals_nr;
-
-	sd->fd = -1;
 
 	return sd;
 }
@@ -123,12 +144,18 @@ void *raio_handler_init_session_data(int portals_nr)
 void *raio_handler_init_portal_data(void *prv_session_data,
 				    int portal_nr, void *ctx)
 {
-	struct raio_io_session_data *sd = prv_session_data;
+	struct raio_io_session_data *sd =
+				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data *pd = &sd->pd[portal_nr];
+	int i;
 
-	pd->ctx = ctx;
-	pd->rsp.out.header.iov_base = pd->rsp_hdr;
-	pd->rsp.out.header.iov_len  = sizeof(pd->rsp_hdr);
+	pd->ctx = (struct xio_context *)ctx;
+	for (i = 0; i < RAIO_CMDS_NR; i++) {
+		pd->rsp[i].out.header.iov_base = pd->rsp_hdr[i];
+		pd->rsp[i].out.header.iov_len  = sizeof(pd->rsp_hdr[i]);
+	}
+	pd->ndevs = 0;
+	TAILQ_INIT(&pd->dev_list);
 
 	return pd;
 }
@@ -138,10 +165,9 @@ void *raio_handler_init_portal_data(void *prv_session_data,
 /*---------------------------------------------------------------------------*/
 void raio_handler_free_session_data(void *prv_session_data)
 {
-	struct raio_io_session_data *sd = prv_session_data;
+	struct raio_io_session_data *sd =
+				(struct raio_io_session_data *)prv_session_data;
 	free(sd->pd);
-	if (sd->fd != -1 && !sd->is_null)
-		close(sd->fd);
 
 	free(sd);
 }
@@ -151,6 +177,18 @@ void raio_handler_free_session_data(void *prv_session_data)
 /*---------------------------------------------------------------------------*/
 void raio_handler_free_portal_data(void *prv_portal_data)
 {
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_bs			*bs_dev, *tmp;
+
+	TAILQ_FOREACH_SAFE(bs_dev, &pd->dev_list, list, tmp) {
+		TAILQ_REMOVE(&pd->dev_list, bs_dev, list);
+		if (!bs_dev->is_null) {
+			close(bs_dev->fd);
+			raio_bs_close(bs_dev);
+			raio_bs_exit(bs_dev);
+		}
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -162,14 +200,20 @@ static int raio_handle_open(void *prv_session_data,
 			    char *cmd_data,
 			    struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
-	const char	*pathname;
-	uint32_t	flags = 0;
-	unsigned	overall_size;
-	int		fd;
-	int		retval;
-	struct stat64	stbuf;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	const char			*pathname;
+	uint32_t			flags = 0;
+	unsigned			overall_size;
+	int				fd = 0;
+	int				i, is_null = 0;
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
+
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_OPEN)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_OPEN)];
 
 
 	overall_size = sizeof(fd);
@@ -189,29 +233,31 @@ static int raio_handle_open(void *prv_session_data,
 		fd = open(pathname, flags);
 		if (fd == -1)
 			goto reject;
-
 	} else {
-		sd->is_null = 1;
+		is_null = 1;
 		fd = 0;
 	}
 
-	/* get file size */
-	if (sd->is_null) {
-		sd->fsize = NULL_BS_DEV_SIZE;
-	} else {
-		retval = fstat64(fd, &stbuf);
-		if (retval == 0) {
-			if (S_ISBLK(stbuf.st_mode)) {
-				retval = ioctl(fd, BLKGETSIZE64,
-					       &stbuf.st_size);
-				if (retval < 0)
-					fprintf(stderr,
-						"Cannot get size, %m\n");
-			}
-			sd->fsize = stbuf.st_size;
-		}
-	}
+	for (i = 0; i < sd->portals_nr; i++) {
+		struct raio_bs			*bs_dev;
+		struct raio_io_portal_data	*cpd;
 
+		cpd = &sd->pd[i];
+		if (is_null) {
+			bs_dev = raio_bs_init(cpd->ctx, "null");
+			bs_dev->is_null = 1;
+		} else {
+			bs_dev = raio_bs_init(cpd->ctx, "aio");
+			bs_dev->is_null = 0;
+		}
+
+		errno = -raio_bs_open(bs_dev, fd);
+		if (errno)
+			break;
+
+		TAILQ_INSERT_TAIL(&cpd->dev_list, bs_dev, list);
+		cpd->ndevs++;
+	}
 
 reject:
 	if (fd == -1) {
@@ -221,7 +267,7 @@ reject:
 			 pack_u32((uint32_t *)&ans.ret,
 			 pack_u32(&ans.data_len,
 			 pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 		fprintf(stderr, "open %s failed %m\n", pathname);
 	 } else {
 		 unsigned overall_size = sizeof(fd);
@@ -232,17 +278,17 @@ reject:
 			  pack_u32((uint32_t *)&ans.ret,
 			  pack_u32(&ans.data_len,
 			  pack_u32(&ans.command,
-			  pd->rsp_hdr)))));
+			  rsp_hdr)))));
 	 }
 
-	pd->rsp.out.header.iov_len = (sizeof(struct raio_answer) +
-				     overall_size);
+	rsp->out.header.iov_len = (sizeof(struct raio_answer) +
+				   overall_size);
 
-	pd->rsp.request = req;
-	sd->fd		= fd;
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
+	/* coverity[leaked_handle] - 'fd' is not leaked */
 	return 0;
 }
 
@@ -255,10 +301,20 @@ static int raio_handle_close(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_io_portal_data	*cpd;
+	struct raio_bs			*bs_dev;
 	int				fd;
-	int				retval = 0;
+	int				i, retval = 0;
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
+
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_CLOSE)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_CLOSE)];
+
 
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data);
@@ -266,13 +322,28 @@ static int raio_handle_close(void *prv_session_data,
 	if (sizeof(fd) != cmd->data_len) {
 		retval = -1;
 		errno = EINVAL;
-		printf("open request rejected\n");
+		printf("close request rejected\n");
 		goto reject;
 	}
 
-	if (!sd->is_null && sd->fd == fd) {
-		retval = close(sd->fd);
-		sd->fd = -1;
+	bs_dev = raio_lookup_bs_dev(fd, pd);
+	/* close fd only once */
+	if (!bs_dev->is_null) {
+		retval = close(bs_dev->fd);
+		if (retval) {
+			printf("close failed\n");
+			goto reject;
+		}
+	}
+
+	for (i = 0; i < sd->portals_nr; i++) {
+		cpd = &sd->pd[i];
+		bs_dev = raio_lookup_bs_dev(fd, cpd);
+		TAILQ_REMOVE(&cpd->dev_list, bs_dev, list);
+		if (!bs_dev->is_null) {
+			raio_bs_close(bs_dev);
+			raio_bs_exit(bs_dev);
+		}
 	}
 
 reject:
@@ -282,23 +353,21 @@ reject:
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 	} else {
 		struct raio_answer ans = { RAIO_CMD_CLOSE, 0, 0, 0 };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 	 }
 
-	pd->close_rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->close_rsp.out.header.iov_base = pd->rsp_hdr;
-	pd->close_rsp.out.data_iov.nents = 0;
+	rsp->out.header.iov_len = sizeof(struct raio_answer);
 
-	pd->close_rsp.request = req;
+	rsp->request = req;
 
-	xio_send_response(&pd->close_rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -312,13 +381,17 @@ static int raio_handle_fstat(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
-	int				fd = -1;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_bs			*bs_dev;
+	int				fd;
 	int				retval = 0;
-	struct stat64			stbuf;
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
 
-	memset(&stbuf, 0 , sizeof(stbuf));
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_FSTAT)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_FSTAT)];
+
 
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data);
@@ -326,24 +399,17 @@ static int raio_handle_fstat(void *prv_session_data,
 	if (sizeof(fd) != cmd->data_len) {
 		retval = -1;
 		errno = EINVAL;
-		printf("open request rejected\n");
+		printf("fstat request rejected\n");
 		goto reject;
 	}
 
-	if (sd->is_null) {
-		stbuf.st_size = NULL_BS_DEV_SIZE;
-		sd->fsize = stbuf.st_size;
-	} else {
-		retval = fstat64(fd, &stbuf);
-		if (retval == 0) {
-			if (S_ISBLK(stbuf.st_mode)) {
-				retval = ioctl(fd, BLKGETSIZE64,
-					       &stbuf.st_size);
-				if (retval < 0)
-					fprintf(stderr, "Cannot get size %m\n");
-			}
-			sd->fsize = stbuf.st_size;
-		}
+	bs_dev = raio_lookup_bs_dev(fd, pd);
+	if (!bs_dev) {
+		printf("%s: Ambiguous device file descriptor %d\n",
+		       __func__, fd);
+		retval = -1;
+		errno = ENODEV;
+		goto reject;
 	}
 
 reject:
@@ -353,24 +419,24 @@ reject:
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			  pd->rsp_hdr))));
+			 rsp_hdr))));
 	} else {
 		struct raio_answer ans = {RAIO_CMD_FSTAT,
 					  STAT_BLOCK_SIZE, 0, 0};
-		pack_stat64(&stbuf,
+		pack_stat64(&bs_dev->stbuf,
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr)))));
+			 rsp_hdr)))));
 	}
 
-	pd->rsp.out.header.iov_len = sizeof(struct raio_answer) +
-				     STAT_BLOCK_SIZE;
+	rsp->out.header.iov_len = sizeof(struct raio_answer) +
+				  STAT_BLOCK_SIZE;
 
-	pd->rsp.request = req;
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -384,71 +450,71 @@ static int raio_handle_setup(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	int				fd, i, j;
+	int				i, j, err = 0;
 	uint32_t			iodepth;
-	struct raio_io_session_data	*sd = prv_session_data;
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_io_portal_data	*cpd;
+	struct xio_iovec_ex		*sglist;
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
 
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_SETUP)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_SETUP)];
 
-	if (3*sizeof(int) != cmd->data_len) {
-		errno = EINVAL;
+	if (sizeof(int) != cmd->data_len) {
+		err = EINVAL;
 		printf("io setup request rejected\n");
 		goto reject;
 	}
 
-	unpack_u32(&iodepth,
-		   unpack_u32((uint32_t *)&fd,
-		   cmd_data));
+	unpack_u32(&iodepth, cmd_data);
 
 	for (i = 0; i < sd->portals_nr; i++) {
 		cpd = &sd->pd[i];
-		cpd->iodepth = iodepth;
+		/* divide remote iodepth between server resources */
+		cpd->iodepth = (iodepth / sd->portals_nr) + 1;
 		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
-		cpd->io_us_free = calloc(cpd->io_u_free_nr,
+		cpd->io_us_free = (struct raio_io_u *)calloc(cpd->io_u_free_nr,
 					 sizeof(struct raio_io_u));
-		cpd->rsp_pool = msg_pool_alloc(cpd->io_u_free_nr, 0, 1);
+		cpd->rsp_pool = msg_pool_create(RAIO_CMD_HDR_SZ, MAXBLOCKSIZE,
+						cpd->io_u_free_nr);
 		TAILQ_INIT(&cpd->io_u_free_list);
 
 		/* register each io_u in the free list */
 		for (j = 0; j < cpd->io_u_free_nr; j++) {
 			cpd->io_us_free[j].rsp = msg_pool_get(cpd->rsp_pool);
+			sglist = vmsg_sglist(&cpd->io_us_free[j].rsp->out);
+			cpd->io_us_free[j].buf = sglist[0].iov_base;
 			TAILQ_INSERT_TAIL(&cpd->io_u_free_list,
 					  &cpd->io_us_free[j],
 					  io_u_list);
 		}
-
-		if (sd->is_null)
-			cpd->bs_dev = raio_bs_init(cpd->ctx, "null");
-		else
-			cpd->bs_dev = raio_bs_init(cpd->ctx, "aio");
-
-		errno = -raio_bs_open(cpd->bs_dev, fd);
-		if (errno)
-			break;
 	}
 
 reject:
-	if (errno) {
-		struct raio_answer ans = { RAIO_CMD_IO_SETUP, 0, -1, errno };
+	if (err) {
+		struct raio_answer ans = { RAIO_CMD_IO_SETUP, 0, -1, err };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 	} else {
 		struct raio_answer ans = { RAIO_CMD_IO_SETUP, 0, 0, 0 };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			pd->rsp_hdr))));
+			 rsp_hdr))));
 	 }
 
-	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.request = req;
+	rsp->out.header.iov_len = sizeof(struct raio_answer);
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -462,17 +528,20 @@ static int raio_handle_destroy(void *prv_session_data,
 			       char *cmd_data,
 			       struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
-	int				fd;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	int				retval = 0;
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
 
-	unpack_u32((uint32_t *)&fd,
-		    cmd_data);
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_DESTROY)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_DESTROY)];
 
-	if (sizeof(fd) != cmd->data_len) {
+
+	if (0 != cmd->data_len) {
 		retval = -1;
 		errno = EINVAL;
-		printf("open request rejected\n");
+		printf("destroy request rejected\n");
 		goto reject;
 	}
 
@@ -483,22 +552,21 @@ reject:
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 	} else {
 		struct raio_answer ans = { RAIO_CMD_IO_DESTROY, 0, 0, 0 };
 		pack_u32((uint32_t *)&ans.ret_errno,
 		pack_u32((uint32_t *)&ans.ret,
 		pack_u32(&ans.data_len,
 		pack_u32(&ans.command,
-			 pd->rsp_hdr))));
+			 rsp_hdr))));
 	}
 
-	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.out.data_iov.nents = 0;
+	rsp->out.header.iov_len = sizeof(struct raio_answer);
 
-	pd->rsp.request = req;
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -512,20 +580,26 @@ int raio_reject_request(void *prv_session_data,
 			char *cmd_data,
 			struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_answer		ans = { RAIO_CMD_UNKNOWN, 0, -1, errno };
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
 
-	struct raio_answer ans = { RAIO_CMD_UNKNOWN, 0, -1, errno };
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_REJECT)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_REJECT)];
+
 	pack_u32((uint32_t *)&ans.ret_errno,
 	pack_u32((uint32_t *)&ans.ret,
 	pack_u32(&ans.data_len,
 	pack_u32(&ans.command,
-		 pd->rsp_hdr))));
+		 rsp_hdr))));
 
-	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.out.data_iov.nents = 0;
-	pd->rsp.request = req;
+	rsp->out.header.iov_len = sizeof(struct raio_answer);
+	vmsg_sglist_set_nents(&rsp->out, 0);
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -535,9 +609,10 @@ int raio_reject_request(void *prv_session_data,
 /*---------------------------------------------------------------------------*/
 static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 {
-	struct raio_io_u	*io_u = iocmd->user_context;
+	struct raio_io_u	*io_u = (struct raio_io_u *)iocmd->user_context;
 	struct xio_iovec_ex	*sglist;
 	struct raio_answer	ans = { RAIO_CMD_IO_SUBMIT, 0, 0, 0 };
+
 
 	pack_u32((uint32_t *)&iocmd->res2,
 	pack_u32((uint32_t *)&iocmd->res,
@@ -545,16 +620,18 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 	pack_u32((uint32_t *)&ans.ret,
 	pack_u32(&ans.data_len,
 	pack_u32(&ans.command,
-	io_u->rsp->out.header.iov_base))))));
+	(char *)io_u->rsp->out.header.iov_base))))));
 
 	io_u->rsp->out.header.iov_len = sizeof(struct raio_answer) +
 					2*sizeof(uint32_t);
 
 	sglist = vmsg_sglist(&io_u->rsp->out);
 	if (io_u->iocmd.op == RAIO_CMD_PREAD) {
-		if (iocmd->res != iocmd->bcount) {
-			if (iocmd->res < iocmd->bcount) {
+		if (iocmd->res != (int)iocmd->bcount) {
+			if (iocmd->res < (int)iocmd->bcount) {
 				sglist[0].iov_len = iocmd->res;
+				if (iocmd->res == 0)
+					vmsg_sglist_set_nents(&io_u->rsp->out, 0);
 			} else {
 				vmsg_sglist_set_nents(&io_u->rsp->out, 0);
 				sglist[0].iov_len = iocmd->res;
@@ -581,16 +658,22 @@ static int raio_handle_submit(void *prv_session_data,
 			      char *cmd_data,
 			      struct xio_msg *req)
 {
-	struct raio_io_portal_data	*pd = prv_portal_data;
-	struct raio_io_session_data	*sd = prv_session_data;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
 	struct xio_iovec_ex		*sglist;
 	struct raio_io_u		*io_u;
 	struct raio_iocb		iocb;
+	struct raio_bs			*bs_dev;
 	struct raio_answer		ans;
 	int				retval;
 	uint32_t			is_last_in_batch;
 	uint32_t			msg_sz = SUBMIT_BLOCK_SIZE +
 						 sizeof(uint32_t);
+	char				*rsp_hdr;
+	struct xio_msg			*rsp;
+
+	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_SUBMIT)][0];
+	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_SUBMIT)];
 
 	io_u = TAILQ_FIRST(&pd->io_u_free_list);
 	if (!io_u) {
@@ -628,7 +711,13 @@ static int raio_handle_submit(void *prv_session_data,
 		io_u->iocmd.buf		= sglist[0].iov_base;
 		io_u->iocmd.mr		= sglist[0].mr;
 	}
-	io_u->iocmd.fsize		= sd->fsize;
+	bs_dev = raio_lookup_bs_dev(io_u->iocmd.fd, pd);
+	if (!bs_dev) {
+		printf("Ambiguous device file descriptor %d\n", io_u->iocmd.fd);
+		retval = ENODEV;
+		goto reject;
+	}
+	io_u->iocmd.fsize		= bs_dev->stbuf.st_size;
 	io_u->iocmd.offset		= iocb.u.c.offset;
 	io_u->iocmd.is_last_in_batch    = is_last_in_batch;
 	io_u->iocmd.res			= 0;
@@ -642,7 +731,7 @@ static int raio_handle_submit(void *prv_session_data,
 
 
 	/* issues request to bs */
-	retval = -raio_bs_cmd_submit(pd->bs_dev, &io_u->iocmd);
+	retval = -raio_bs_cmd_submit(bs_dev, &io_u->iocmd);
 	if (retval)
 		goto reject;
 
@@ -650,7 +739,7 @@ static int raio_handle_submit(void *prv_session_data,
 reject:
 	TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
 	pd->io_u_free_nr++;
-	msg_reset(&pd->rsp);
+	msg_reset(rsp);
 
 	ans.command	= RAIO_CMD_IO_SUBMIT;
 	ans.data_len	= 0;
@@ -661,12 +750,12 @@ reject:
 	pack_u32((uint32_t *)&ans.ret,
 	pack_u32(&ans.data_len,
 	pack_u32(&ans.command,
-		 pd->rsp_hdr))));
+		 rsp_hdr))));
 
-	pd->rsp.out.header.iov_len = sizeof(struct raio_answer);
-	pd->rsp.request = req;
+	rsp->out.header.iov_len = sizeof(struct raio_answer);
+	rsp->request = req;
 
-	xio_send_response(&pd->rsp);
+	xio_send_response(rsp);
 
 	return 0;
 }
@@ -678,10 +767,14 @@ static int raio_handle_submit_comp(void *prv_session_data,
 				   void *prv_portal_data,
 				   struct xio_msg *rsp)
 {
-	struct raio_io_portal_data *pd = prv_portal_data;
-	struct raio_io_u	   *io_u = rsp->user_context;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_io_u	*io_u = (struct raio_io_u *)rsp->user_context;
+	struct xio_iovec_ex		*sglist;
 
 	if (io_u) {
+		sglist = vmsg_sglist(&rsp->out);
+		sglist[0].iov_base = io_u->buf;
 		TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
 		pd->io_u_free_nr++;
 	}
@@ -690,42 +783,43 @@ static int raio_handle_submit_comp(void *prv_session_data,
 }
 
 /*---------------------------------------------------------------------------*/
-/* raio_handle_close_comp				                     */
+/* raio_handle_destroy_comp				                     */
 /*---------------------------------------------------------------------------*/
-static int raio_handle_close_comp(void *prv_session_data,
-				  void *prv_portal_data,
-				  struct xio_msg *rsp)
+static int raio_handle_destroy_comp(void *prv_session_data,
+				   void *prv_portal_data,
+				   struct xio_msg *rsp)
 {
-	struct raio_io_portal_data *pd = prv_portal_data;
-	int			    j;
 
-	if (pd->bs_dev) {
-		raio_bs_close(pd->bs_dev);
-		raio_bs_exit(pd->bs_dev);
-		pd->bs_dev = NULL;
+	struct raio_io_session_data	*sd =
+				(struct raio_io_session_data *)prv_session_data;
+	struct raio_io_portal_data	*cpd;
+	int				i, j;
+
+	for (i = 0; i < sd->portals_nr; i++) {
+		cpd = &sd->pd[i];
+		/* unregister each io_u in the free list */
+		for (j = 0; j < cpd->io_u_free_nr; j++) {
+			TAILQ_REMOVE(&cpd->io_u_free_list,
+					&cpd->io_us_free[j],
+					io_u_list);
+			msg_pool_put(cpd->rsp_pool, cpd->io_us_free[j].rsp);
+			cpd->io_us_free[j].buf = NULL;
+		}
+		cpd->io_u_free_nr = 0;
+		free(cpd->io_us_free);
+		msg_pool_delete(cpd->rsp_pool);
 	}
-	if (pd->io_us_free) {
-		for (j = 0; j < pd->iodepth; j++)
-			msg_pool_put(pd->rsp_pool, pd->io_us_free[j].rsp);
-	}
-
-	TAILQ_INIT(&pd->io_u_free_list);
-
-	free(pd->io_us_free);
-	pd->io_us_free = NULL;
-	pd->io_u_free_nr = 0;
-	msg_pool_free(pd->rsp_pool);
-	pd->rsp_pool = NULL;
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* raio_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
 int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
 			struct xio_msg *req)
 {
-	char			*buffer = req->in.header.iov_base;
+	char			*buffer = (char *)req->in.header.iov_base;
 	char			*cmd_data;
 	struct raio_command	cmd;
 	int			disconnect = 0;
@@ -762,7 +856,6 @@ int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
 				  prv_portal_data,
 				  &cmd, cmd_data,
 				  req);
-		disconnect = 1;
 		break;
 	case RAIO_CMD_FSTAT:
 		raio_handle_fstat(prv_session_data,
@@ -804,7 +897,7 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 			      void *prv_portal_data,
 			      struct xio_msg *rsp)
 {
-	char			*buffer = rsp->out.header.iov_base;
+	char			*buffer = (char *)rsp->out.header.iov_base;
 	struct raio_command	cmd;
 
 	unpack_u32(&cmd.command, buffer);
@@ -815,13 +908,13 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 					prv_portal_data,
 					rsp);
 		break;
-	case RAIO_CMD_CLOSE:
-		raio_handle_close_comp(prv_session_data,
-				       prv_portal_data,
-				       rsp);
-		break;
-	case RAIO_CMD_UNKNOWN:
 	case RAIO_CMD_IO_DESTROY:
+		raio_handle_destroy_comp(prv_session_data,
+					 prv_portal_data,
+					 rsp);
+		break;
+	case RAIO_CMD_CLOSE:
+	case RAIO_CMD_UNKNOWN:
 	case RAIO_CMD_OPEN:
 	case RAIO_CMD_FSTAT:
 	case RAIO_CMD_IO_SETUP:

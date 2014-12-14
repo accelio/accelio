@@ -36,9 +36,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_observer.h"
 #include "xio_transport.h"
@@ -65,8 +68,8 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 	struct xio_msg *msg;
 	struct xio_vmsg *vmsg;
 
-	if (q->params.start_nr < 0  || q->params.max_nr < 0 ||
-	    q->params.alloc_nr < 0) {
+	if ((int)q->params.start_nr < 0  || (int)q->params.max_nr < 0 ||
+	    (int)q->params.alloc_nr < 0) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
@@ -202,6 +205,7 @@ cleanup:
 
 	return -1;
 }
+EXPORT_SYMBOL(xio_tasks_pool_alloc_slab);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_create						     */
@@ -244,6 +248,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 	return q;
 }
+EXPORT_SYMBOL(xio_tasks_pool_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_destroy						     */
@@ -253,7 +258,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 	struct xio_tasks_slab	*pslab, *next_pslab;
 	struct xio_task *task;
 	struct xio_msg *msg;
-	int i;
+	unsigned int i;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {
@@ -291,6 +296,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 
 	kfree(q);
 }
+EXPORT_SYMBOL(xio_tasks_pool_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_remap							     */
@@ -298,7 +304,8 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 {
 	struct xio_tasks_slab	*pslab, *next_pslab;
-	int			i, retval;
+	unsigned int		i;
+	int			retval;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {

@@ -146,7 +146,7 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 	int i = 0;
 
 	nsubmit = info->iodepth - info->npending; /* max allowed to submit */
-	if (nsubmit > info->nwaiting)
+	if (nsubmit > (int)info->nwaiting)
 		nsubmit = info->nwaiting;
 
 	if (!nsubmit)
@@ -172,7 +172,7 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 	}
 	if (nsuccess < nsubmit) {
 		for (i = nsubmit-1; i >= nsuccess; i--) {
-			cmd = info->iocb_arr[i].data;
+			cmd = (struct raio_io_cmd *)info->iocb_arr[i].data;
 			TAILQ_INSERT_HEAD(&info->cmd_wait_list, cmd, raio_list);
 		}
 	}
@@ -193,7 +193,7 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 /*---------------------------------------------------------------------------*/
 static void raio_aio_complete_one(struct io_event *ep)
 {
-	struct raio_io_cmd *cmd = ep->data;
+	struct raio_io_cmd *cmd = (struct raio_io_cmd *)ep->data;
 	const char *op = (cmd->op == RAIO_CMD_PREAD) ? "read" : "write";
 
 	if (ep->res2 != 0)
@@ -228,7 +228,7 @@ static void raio_aio_complete_one(struct io_event *ep)
 /*---------------------------------------------------------------------------*/
 static void raio_aio_get_events(struct raio_bs_aio_info *info)
 {
-	int		i;
+	unsigned int	i;
 	int		ret;
 	uint32_t	nevents = ARRAY_SIZE(info->io_evts);
 
@@ -259,7 +259,7 @@ retry_getevts:
 /*---------------------------------------------------------------------------*/
 static void raio_aio_get_completions(int fd, int events, void *data)
 {
-	struct raio_bs_aio_info	*info = data;
+	struct raio_bs_aio_info	*info = (struct raio_bs_aio_info *)data;
 	int			ret;
 	eventfd_t		val;
 
@@ -280,8 +280,8 @@ retry_read:
 /*---------------------------------------------------------------------------*/
 static int raio_bs_aio_init(struct raio_bs *dev)
 {
-	int			i;
-	struct raio_bs_aio_info	*dev_info = dev->dd;
+	unsigned int		i;
+	struct raio_bs_aio_info	*dev_info = (struct raio_bs_aio_info *)dev->dd;
 
 	dev_info->dev  = dev;
 
@@ -298,7 +298,7 @@ static int raio_bs_aio_init(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 {
-	struct raio_bs_aio_info *info = dev->dd;
+	struct raio_bs_aio_info *info = (struct raio_bs_aio_info *)dev->dd;
 	int ret, afd;
 
 	info->iodepth = AIO_MAX_IODEPTH;
@@ -317,13 +317,27 @@ static int raio_bs_aio_open(struct raio_bs *dev, int fd)
 		goto close_ctx;
 	}
 
-	ret = xio_context_add_ev_handler(dev->ctx,
+	ret = xio_context_add_ev_handler((struct xio_context *)dev->ctx,
 					 afd,
 					 XIO_POLLIN,
 					 raio_aio_get_completions, info);
 	if (ret)
 		goto close_eventfd;
 	info->evt_fd = afd;
+
+	ret = fstat64(fd, &dev->stbuf);
+	if (ret == 0) {
+		if (S_ISBLK(dev->stbuf.st_mode)) {
+			ret = ioctl(fd, BLKGETSIZE64, &dev->stbuf.st_size);
+			if (ret < 0) {
+				fprintf(stderr, "Cannot get size, %m\n");
+				goto close_eventfd;
+			}
+		}
+	} else {
+		fprintf(stderr, "Cannot stat file, %m\n");
+		goto close_eventfd;
+	}
 
 	return 0;
 
@@ -347,7 +361,7 @@ static inline void raio_bs_aio_close(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 static void raio_bs_aio_process_events(struct raio_bs *dev)
 {
-	struct raio_bs_aio_info	*info = dev->dd;
+	struct raio_bs_aio_info	*info = (struct raio_bs_aio_info *)dev->dd;
 
 	if (info->npending)
 		raio_aio_get_events(info);
@@ -358,7 +372,7 @@ static void raio_bs_aio_process_events(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 static int raio_bs_aio_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd)
 {
-	struct raio_bs_aio_info	*info = dev->dd;
+	struct raio_bs_aio_info	*info = (struct raio_bs_aio_info *)dev->dd;
 
 	TAILQ_INSERT_TAIL(&info->cmd_wait_list, cmd, raio_list);
 	if (!info->nwaiting)
@@ -380,9 +394,10 @@ static int raio_bs_aio_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd)
 /*---------------------------------------------------------------------------*/
 static void raio_bs_aio_exit(struct raio_bs *dev)
 {
-	struct raio_bs_aio_info *info = dev->dd;
+	struct raio_bs_aio_info *info = (struct raio_bs_aio_info *)dev->dd;
 
-	xio_context_del_ev_handler(dev->ctx, info->evt_fd);
+	xio_context_del_ev_handler((struct xio_context *)dev->ctx,
+				   info->evt_fd);
 	close(info->evt_fd);
 	io_destroy(info->ctx);
 }

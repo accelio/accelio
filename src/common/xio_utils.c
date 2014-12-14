@@ -35,8 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_protocol.h"
 
@@ -47,7 +48,7 @@
 int xio_uri_get_proto(const char *uri, char *proto, int proto_len)
 {
 	char *start = (char *)uri;
-	char *end;
+	const char *end;
 	char *p;
 	int  i;
 
@@ -71,10 +72,10 @@ int xio_uri_get_proto(const char *uri, char *proto, int proto_len)
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_resource_ptr						     */
 /*---------------------------------------------------------------------------*/
-char *xio_uri_get_resource_ptr(const char *uri)
+const char *xio_uri_get_resource_ptr(const char *uri)
 {
-	char *start;
-	char *p1, *p2 = NULL;
+	const char *start;
+	const char *p1, *p2 = NULL;
 
 
 	start = strstr(uri, "://");
@@ -105,8 +106,8 @@ char *xio_uri_get_resource_ptr(const char *uri)
 /*---------------------------------------------------------------------------*/
 int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 {
-	char *res = xio_uri_get_resource_ptr(uri);
-	int len = (res == NULL) ? strlen(uri) : (res - uri);
+	const char *res = xio_uri_get_resource_ptr(uri);
+	int len = (res == NULL) ? strlen(uri) : (size_t)(res - uri);
 	if (len < portal_len) {
 		strncpy(portal, uri, len);
 		portal[len] = 0;
@@ -121,7 +122,7 @@ int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 /*---------------------------------------------------------------------------*/
 int xio_uri_get_resource(const char *uri, char *resource, int resource_len)
 {
-	char *res = xio_uri_get_resource_ptr(uri);
+	const char *res = xio_uri_get_resource_ptr(uri);
 	if (res != NULL) {
 		int  len = strlen(res);
 		if (len < resource_len) {
@@ -144,8 +145,9 @@ size_t xio_write_tlv(uint32_t type, uint64_t len, uint8_t *buffer)
 	tlv->type	= htonl(type);
 	tlv->len	= htonll(len);
 
-	return sizeof(struct xio_tlv) + len;
+	return sizeof(struct xio_tlv) + (size_t)len;
 }
+EXPORT_SYMBOL(xio_write_tlv);
 
 /*---------------------------------------------------------------------------*/
 /* xio_read_tlv								     */
@@ -163,8 +165,9 @@ size_t xio_read_tlv(uint32_t *type, uint64_t *len, void **value,
 	*len	= ntohll(tlv->len);
 	*value =  buffer + sizeof(struct xio_tlv);
 
-	return sizeof(struct xio_tlv) + *len;
+	return sizeof(struct xio_tlv) + (size_t)*len;
 }
+EXPORT_SYMBOL(xio_read_tlv);
 
 #ifndef SETIOV
 #define SETIOV(_iov, _addr, _len)	((_iov)->iov_base = \
@@ -197,6 +200,7 @@ size_t memclonev(struct xio_iovec *dst, int dsize,
 
 	return sz;
 }
+EXPORT_SYMBOL(memclonev);
 
 /*---------------------------------------------------------------------------*/
 /* memclonev_ex								     */
@@ -297,7 +301,7 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 	void		*saddr	= src[0].iov_base;
 	size_t		dlen	= dst[0].iov_len;
 	size_t		slen	= src[0].iov_len;
-	size_t		d	= 0,
+	int		d	= 0,
 			s	= 0,
 			dst_len = 0;
 
@@ -319,7 +323,7 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 				break;
 			}
 			dlen	-= slen;
-			daddr	+= slen;
+			inc_ptr(daddr, slen);
 			saddr	= src[s].iov_base;
 			slen	= src[s].iov_len;
 		} else if (dlen < slen) {
@@ -331,7 +335,7 @@ size_t memcpyv(struct xio_iovec *dst, int dsize,
 			if (d == dsize)
 				break;
 			slen	-= dlen;
-			saddr	+= dlen;
+			inc_ptr(saddr, dlen);
 			daddr	= dst[d].iov_base;
 			dlen	= dst[d].iov_len;
 
@@ -380,7 +384,7 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 	void		*saddr	= src[0].iov_base;
 	size_t		dlen	= dst[0].iov_len;
 	size_t		slen	= src[0].iov_len;
-	size_t		d	= 0,
+	int		d	= 0,
 			s	= 0,
 			dst_len = 0;
 
@@ -402,7 +406,7 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 				break;
 			}
 			dlen	-= slen;
-			daddr	+= slen;
+			inc_ptr(daddr, slen);
 			saddr	= src[s].iov_base;
 			slen	= src[s].iov_len;
 		} else if (dlen < slen) {
@@ -414,7 +418,7 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 			if (d == dsize)
 				break;
 			slen	-= dlen;
-			saddr	+= dlen;
+			inc_ptr(saddr, dlen);
 			daddr	= dst[d].iov_base;
 			dlen	= dst[d].iov_len;
 

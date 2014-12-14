@@ -49,7 +49,7 @@ static inline void xio_sgve_set_buf(struct xio_iovec_ex *sg, const void *buf,
 {
 	sg->iov_base	= (void *)buf;
 	sg->iov_len	= buflen;
-	sg->mr		= mr;
+	sg->mr		= (struct xio_mr *)mr;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -98,7 +98,7 @@ static inline void *xio_sgve_mr(struct xio_iovec_ex *sg)
 /*---------------------------------------------------------------------------*/
 static inline void xio_sgve_set_mr(struct xio_iovec_ex *sg, void *mr)
 {
-	sg->mr = mr;
+	sg->mr = (struct xio_mr *)mr;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -199,22 +199,22 @@ static size_t xio_sgv_length(struct xio_sg_iov *sgv)
 /* sgtbl_ops_iov							     */
 /*---------------------------------------------------------------------------*/
 struct xio_sg_table_ops sgtbl_ops_iov = {
-	.sge_set_buf		= (void *)xio_sgve_set_buf,
-	.sge_addr		= (void *)xio_sgve_addr,
-	.sge_set_addr		= (void *)xio_sgve_set_addr,
-	.sge_mr			= (void *)xio_sgve_mr,
-	.sge_set_mr		= (void *)xio_sgve_set_mr,
-	.sge_length		= (void *)xio_sgve_length,
-	.sge_set_length		= (void *)xio_sgve_set_length,
-	.sge_first		= (void *)xio_sgve_first,
-	.sge_last		= (void *)xio_sgve_last,
-	.sge_next		= (void *)xio_sgve_next,
-	.tbl_empty		= (void *)xio_sgv_empty,
-	.tbl_nents		= (void *)xio_sgv_nents,
-	.tbl_sglist		= (void *)xio_sgv_sglist,
-	.tbl_set_nents		= (void *)xio_sgv_set_nents,
-	.tbl_max_nents		= (void *)xio_sgv_max_nents,
-	.tbl_set_max_nents	= (void *)xio_sgv_set_max_nents,
-	.tbl_length		= (void *)xio_sgv_length,
+	.sge_set_buf		= (sge_set_buf_fn)xio_sgve_set_buf,
+	.sge_addr		= (sge_addr_fn)xio_sgve_addr,
+	.sge_set_addr		= (sge_set_addr_fn)xio_sgve_set_addr,
+	.sge_mr			= (sge_mr_fn)xio_sgve_mr,
+	.sge_set_mr		= (sge_set_mr_fn)xio_sgve_set_mr,
+	.sge_length		= (sge_length_fn)xio_sgve_length,
+	.sge_set_length		= (sge_set_length_fn)xio_sgve_set_length,
+	.sge_first		= (sge_first_fn)xio_sgve_first,
+	.sge_last		= (sge_last_fn)xio_sgve_last,
+	.sge_next		= (sge_next_fn)xio_sgve_next,
+	.tbl_empty		= (tbl_empty_fn)xio_sgv_empty,
+	.tbl_nents		= (tbl_nents_fn)xio_sgv_nents,
+	.tbl_sglist		= (tbl_sglist_fn)xio_sgv_sglist,
+	.tbl_set_nents		= (tbl_set_nents_fn)xio_sgv_set_nents,
+	.tbl_max_nents		= (tbl_max_nents_fn)xio_sgv_max_nents,
+	.tbl_set_max_nents	= (tbl_set_max_nents_fn)xio_sgv_set_max_nents,
+	.tbl_length		= (tbl_length_fn)xio_sgv_length,
 };
 

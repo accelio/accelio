@@ -93,14 +93,13 @@ static int on_request(struct xio_session *session,
 			void *cb_prv_data)
 {
 	struct xio_msg		*rsp;
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
 
 	/* alloc transaction */
 	rsp	= msg_pool_get(tdata->pool);
 
 	/* fill response */
 	rsp->request		= req;
-	rsp->more_in_batch	= more_in_batch;
 	rsp->in.header.iov_len	= 0;
 	rsp->out.header.iov_len = 0;
 	vmsg_sglist_set_nents(&rsp->in, 0);
@@ -125,7 +124,7 @@ static int on_send_response_complete(struct xio_session *session,
 			struct xio_msg *msg,
 			void *cb_prv_data)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
 
 	/* can be safely freed */
 	msg_pool_put(tdata->pool, msg);
@@ -137,10 +136,12 @@ static int on_send_response_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-		enum xio_status error, struct xio_msg  *msg,
-		void *cb_prv_data)
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 
 	msg_pool_put(tdata->pool, msg);
 
@@ -152,7 +153,7 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	if (!tdata->in_xbuf) {
@@ -188,7 +189,7 @@ static struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	struct xio_server	*server;
 	int			retval = 0;
@@ -270,7 +271,7 @@ static int on_new_session(struct xio_session *session,
 			struct xio_new_session_req *req,
 			void *cb_user_context)
 {
-	struct server_data  *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 
 	/* automatic accept the request */
 	xio_accept(session,
@@ -299,7 +300,7 @@ static struct xio_session_ops server_ops = {
 static void *balancer_server_cb(void *data)
 {
 	struct xio_server	*server;	/* server portal */
-	struct server_data	*server_data = data;
+	struct server_data	*server_data = (struct server_data *)data;
 	char			url[256];
 	int			retval = 0;
 
@@ -353,11 +354,12 @@ int run_server_test(struct perf_parameters *user_param)
 {
 	struct server_data	server_data;
 	struct perf_command	command;
-	int			i, len, retval;
-	int			max_cpus;
+	unsigned int		i;
+	int			len, retval;
+	unsigned int		max_cpus;
 	uint64_t		cpusmask;
 	int			cpusnr;
-	int			cpu;
+	unsigned int		cpu;
 
 	xio_init();
 
@@ -375,8 +377,8 @@ int run_server_test(struct perf_parameters *user_param)
 	server_data.my_test_param.data_len	= 0;
 
 
-	server_data.tdata = calloc(user_param->threads_num,
-				   sizeof(*server_data.tdata));
+	server_data.tdata = (struct thread_data *)
+		calloc(user_param->threads_num, sizeof(*server_data.tdata));
 
 	/* spawn portals */
 	for (i = 0, cpu = 0; i < user_param->threads_num; i++, cpu++) {
@@ -444,7 +446,7 @@ int run_server_test(struct perf_parameters *user_param)
 
 cleanup:
 	for (i = 0; i < user_param->threads_num; i++)
-		xio_context_stop_loop(server_data.tdata[i].ctx, 0);
+		xio_context_stop_loop(server_data.tdata[i].ctx);
 
 	destroy_comm_struct(server_data.comm);
 
@@ -453,7 +455,7 @@ cleanup:
 		pthread_join(server_data.tdata[i].thread_id, NULL);
 
 	if (server_data.running)
-		xio_context_stop_loop(server_data.ctx, 0);
+		xio_context_stop_loop(server_data.ctx);
 
 	pthread_join(server_data.thread_id, NULL);
 

@@ -35,32 +35,28 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 
-#include <libxio.h>
-#include "xio_ev_loop.h"
+#include <xio_os.h>
+#include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "get_clock.h"
+#include "xio_ev_data.h"
+#include "xio_ev_loop.h"
 
 #define MAX_DELETED_EVENTS	1024
-
-extern double                    g_mhz;
 
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */
 /*---------------------------------------------------------------------------*/
 struct xio_ev_loop {
 	int				efd;
+	int				in_dispatch;
 	int				stop_loop;
 	int				wakeup_event;
 	int				wakeup_armed;
-	int				pad;
 	int				deleted_events_nr;
 	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 	struct list_head		poll_events_list;
@@ -68,31 +64,71 @@ struct xio_ev_loop {
 };
 
 /*---------------------------------------------------------------------------*/
+/* epoll_to_xio_poll_events                                                  */
+/*---------------------------------------------------------------------------*/
+static inline uint32_t epoll_to_xio_poll_events(uint32_t epoll_events)
+{
+	uint32_t xio_events = 0;
+	if (epoll_events & EPOLLIN)
+		xio_events |= XIO_POLLIN;
+	if (epoll_events & EPOLLOUT)
+		xio_events |= XIO_POLLOUT;
+	if (epoll_events & EPOLLRDHUP)
+		xio_events |= XIO_POLLRDHUP;
+	if (epoll_events & EPOLLET)
+		xio_events |= XIO_POLLET;
+	if (epoll_events & EPOLLONESHOT)
+		xio_events |= XIO_ONESHOT;
+	if (epoll_events & EPOLLHUP)
+		xio_events |= XIO_POLLHUP;
+	if (epoll_events & EPOLLERR)
+		xio_events |= XIO_POLLERR;
+
+
+	return xio_events;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_to_epoll_poll_events                                                  */
+/*---------------------------------------------------------------------------*/
+static inline uint32_t xio_to_epoll_poll_events(uint32_t xio_events)
+{
+	uint32_t epoll_events = 0;
+	if (xio_events & XIO_POLLIN)
+		epoll_events |= EPOLLIN;
+	if (xio_events & XIO_POLLOUT)
+		epoll_events |= EPOLLOUT;
+	if (xio_events & XIO_POLLRDHUP)
+		epoll_events |= EPOLLRDHUP;
+	if (xio_events & XIO_POLLET)
+		epoll_events |= EPOLLET;
+	if (xio_events & XIO_ONESHOT)
+		epoll_events |= EPOLLONESHOT;
+	if (xio_events & XIO_POLLHUP)
+		epoll_events |= EPOLLHUP;
+	if (xio_events & XIO_POLLERR)
+		epoll_events |= EPOLLERR;
+
+	return epoll_events;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_event_add                                                           */
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 		    xio_ev_handler_t handler, void *data)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct epoll_event	ev;
 	struct xio_ev_data	*tev = NULL;
 	int			err;
 
 	memset(&ev, 0, sizeof(ev));
-	if (events & XIO_POLLIN)
-		ev.events |= EPOLLIN;
-	if (events & XIO_POLLOUT)
-		ev.events |= EPOLLOUT;
-	if (events & XIO_POLLRDHUP)
-		ev.events |= EPOLLRDHUP;
-	/* default is edge triggered */
-	if (events & XIO_POLLET)
-		ev.events |= EPOLLET;
-	if (events & XIO_ONESHOT)
-		ev.events |= EPOLLONESHOT;
+	ev.events = xio_to_epoll_poll_events(events);
+
 
 	if (fd != loop->wakeup_event) {
-		tev = ucalloc(1, sizeof(*tev));
+		tev = (struct xio_ev_data *)ucalloc(1, sizeof(*tev));
 		if (!tev) {
 			xio_set_error(errno);
 			ERROR_LOG("calloc failed, %m\n");
@@ -126,7 +162,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 /*---------------------------------------------------------------------------*/
 static struct xio_ev_data *xio_event_lookup(void *loop_hndl, int fd)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct xio_ev_data	*tev;
 
 	list_for_each_entry(tev, &loop->poll_events_list, events_list_entry) {
@@ -141,7 +177,7 @@ static struct xio_ev_data *xio_event_lookup(void *loop_hndl, int fd)
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_del(void *loop_hndl, int fd)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct xio_ev_data	*tev;
 	int ret;
 
@@ -175,7 +211,7 @@ int xio_ev_loop_del(void *loop_hndl, int fd)
 /*---------------------------------------------------------------------------*/
 int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct epoll_event	ev;
 	struct xio_ev_data	*tev = NULL;
 	int			retval;
@@ -190,19 +226,8 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	}
 
 	memset(&ev, 0, sizeof(ev));
-	if (events & XIO_POLLIN)
-		ev.events |= EPOLLIN;
-	if (events & XIO_POLLOUT)
-		ev.events |= EPOLLOUT;
-	if (events & XIO_POLLRDHUP)
-		ev.events |= EPOLLRDHUP;
-	/* default is edge triggered */
-	if (events & XIO_POLLET)
-		ev.events |= EPOLLET;
-	if (events & XIO_ONESHOT)
-		ev.events |= EPOLLONESHOT;
-
-	ev.data.ptr = tev;
+	ev.events	= xio_to_epoll_poll_events(events);
+	ev.data.ptr	= tev;
 
 	retval = epoll_ctl(loop->efd, EPOLL_CTL_MOD, fd, &ev);
 	if (retval != 0) {
@@ -222,7 +247,7 @@ void *xio_ev_loop_create()
 	int			retval;
 	eventfd_t		val = 1;
 
-	loop = ucalloc(1, sizeof(struct xio_ev_loop));
+	loop = (struct xio_ev_loop *)ucalloc(1, sizeof(struct xio_ev_loop));
 	if (loop == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
@@ -284,7 +309,7 @@ void xio_ev_loop_init_event(struct xio_ev_data *evt,
 /*---------------------------------------------------------------------------*/
 void xio_ev_loop_add_event(void *_loop, struct xio_ev_data *evt)
 {
-	struct xio_ev_loop *loop = _loop;
+	struct xio_ev_loop *loop = (struct xio_ev_loop *)_loop;
 
 	if (!evt->scheduled) {
 		evt->scheduled = 1;
@@ -319,7 +344,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 		list_for_each_entry_safe(tev, tevn, &loop->events_list,
 					 events_list_entry) {
 			xio_ev_loop_remove_event(loop, tev);
-			tev->event_handler(tev, tev->data);
+			tev->event_handler(tev->data);
 			if (&tev->events_list_entry == last_sched)
 				break;
 		}
@@ -329,22 +354,29 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 	return work_remains;
 }
 
+
+
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_run_helper                                                    */
 /*---------------------------------------------------------------------------*/
 static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	int			nevent = 0, i, j, found = 0;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
 	int			work_remains;
 	int			tmout;
 	int			wait_time = timeout;
+	uint32_t		out_events;
 	cycles_t		start_cycle  = 0;
+
+	loop->stop_loop = 0;
+	loop->wakeup_armed = 0;
 
 	if (timeout != -1)
 		start_cycle = get_cycles();
+
 retry:
 	work_remains = xio_ev_loop_exec_scheduled(loop);
 	tmout = work_remains ? 0 : timeout;
@@ -364,6 +396,8 @@ retry:
 			goto retry;
 		}
 	} else if (nevent > 0) {
+		/* save the epoll modify in "stop" while dispatching handlers */
+		loop->in_dispatch = 1;
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
 			if (likely(tev != NULL)) {
@@ -372,7 +406,7 @@ retry:
 					for (j = 0; j < loop->deleted_events_nr;
 							j++) {
 						if (loop->deleted_events[j] ==
-								tev) {
+						    tev) {
 							found = 1;
 							break;
 						}
@@ -382,8 +416,10 @@ retry:
 						continue;
 					}
 				}
+				out_events =
+					epoll_to_xio_poll_events(events[i].events);
 				/* (fd != loop->wakeup_event) */
-				tev->handler(tev->fd, events[i].events,
+				tev->handler(tev->fd, out_events,
 						tev->data);
 			} else {
 				/* wakeup event auto-removed from epoll
@@ -391,7 +427,7 @@ retry:
 				 * */
 
 				/* check wakeup is armed to prevent false
-				 * wakeups
+				 * wake ups
 				 * */
 				if (loop->wakeup_armed == 1) {
 					loop->wakeup_armed = 0;
@@ -399,6 +435,7 @@ retry:
 				}
 			}
 		}
+		loop->in_dispatch = 0;
 	} else {
 		/* timed out */
 		if (tmout || timeout == 0)
@@ -454,9 +491,9 @@ int xio_ev_loop_run(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_stop							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
+inline void xio_ev_loop_stop(void *loop_hndl)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
 	if (loop == NULL)
 		return;
@@ -466,7 +503,7 @@ inline void xio_ev_loop_stop(void *loop_hndl, int is_self_thread)
 			   armed for wakeup from blocking) */
 	loop->stop_loop = 1;
 
-	if (is_self_thread || loop->wakeup_armed == 1)
+	if (loop->in_dispatch || loop->wakeup_armed == 1)
 		return; /* wakeup is still armed, probably left loop in previous
 			   cycle due to other reasons (timeout, events) */
 	loop->wakeup_armed = 1;
@@ -495,6 +532,10 @@ void xio_ev_loop_destroy(void **loop_hndl)
 		xio_ev_loop_remove_event(loop, tev);
 	}
 
+	/* free deleted event handlers */
+	while (loop->deleted_events_nr)
+		ufree(loop->deleted_events[--loop->deleted_events_nr]);
+
 	xio_ev_loop_del(loop, loop->wakeup_event);
 
 	close(loop->efd);
@@ -512,7 +553,7 @@ void xio_ev_loop_destroy(void **loop_hndl)
 /*---------------------------------------------------------------------------*/
 static void xio_ev_loop_handler(int fd, int events, void *data)
 {
-	struct xio_ev_loop	*loop = data;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)data;
 
 	loop->stop_loop = 1;
 	xio_ev_loop_run_helper(loop, 0);
@@ -524,7 +565,7 @@ static void xio_ev_loop_handler(int fd, int events, void *data)
 int xio_ev_loop_get_poll_params(void *loop_hndl,
 				struct xio_poll_params *poll_params)
 {
-	struct xio_ev_loop	*loop = loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
 	if (!loop_hndl || !poll_params) {
 		xio_set_error(EINVAL);

@@ -93,8 +93,8 @@ struct ow_test_params {
 	struct ow_test_stat	rx_stat;
 	struct ow_test_stat	tx_stat;
 	struct msg_params	msg_params;
-	int			nsent;
-	int			ndelivered;
+	unsigned int		nsent;
+	unsigned int		ndelivered;
 	uint16_t		finite_run;
 	uint16_t		padding[3];
 	uint64_t		disconnect_nr;
@@ -222,7 +222,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -233,7 +234,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ow_params->ctx, 0);  /* exit */
+		xio_context_stop_loop(ow_params->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -261,7 +262,8 @@ static int on_message_delivered(struct xio_session *session,
 				int more_in_batch,
 				void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 	struct xio_msg *new_msg;
 
 	process_tx_message(ow_params, msg);
@@ -321,7 +323,8 @@ static int on_server_message(struct xio_session *session,
 			     int more_in_batch,
 			     void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	/* server send message */
 
@@ -338,10 +341,13 @@ static int on_server_message(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct ow_test_params *ow_params = cb_user_context;
+	struct ow_test_params *ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
@@ -357,7 +363,8 @@ static int on_msg_error(struct xio_session *session,
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
-	struct ow_test_params	*ow_params = cb_user_context;
+	struct ow_test_params	*ow_params =
+				(struct ow_test_params *)cb_user_context;
 
 	vmsg_sglist_set_nents(&msg->in, 1);
 	if (ow_params->xbuf == NULL)
@@ -541,6 +548,7 @@ int main(int argc, char *argv[])
 	struct xio_msg		*msg;
 	int			i = 0;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	/* parse the command line */
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -556,6 +564,7 @@ int main(int argc, char *argv[])
 
 	memset(&ow_params, 0, sizeof(ow_params));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	ow_params.rx_stat.first_time = 1;
 	ow_params.tx_stat.first_time = 1;
 	ow_params.finite_run = test_config.finite_run;
@@ -598,8 +607,12 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 	/* connect the session  */
-	ow_params.conn = xio_connect(session, ow_params.ctx,
-				     test_config.conn_idx, NULL, &ow_params);
+	cparams.session			= session;
+	cparams.ctx			= ow_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &ow_params;
+
+	ow_params.conn = xio_connect(&cparams);
 	if (ow_params.conn == NULL) {
 		error = xio_errno();
 		fprintf(stderr, "connection creation failed. " \

@@ -35,17 +35,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
-#include "xio_observer.h"
+#include "xio_log.h"
 #include "xio_common.h"
-#include "xio_context.h"
+#include "xio_observer.h"
 #include "get_clock.h"
+#include "xio_ev_data.h"
 #include "xio_ev_loop.h"
 #include "xio_idr.h"
+#include "xio_workqueue.h"
+#include "xio_timers_list.h"
+#include "xio_context.h"
+#include "xio_usr_utils.h"
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_add_observer						     */
+/* xio_context_reg_observer						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_reg_observer(struct xio_context *ctx,
 			     struct xio_observer *observer)
@@ -54,15 +59,17 @@ int xio_context_reg_observer(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_context_reg_observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_remove_observer		                                     */
+/* xio_context_unreg_observer		                                     */
 /*---------------------------------------------------------------------------*/
 void xio_context_unreg_observer(struct xio_context *ctx,
 				struct xio_observer *observer)
 {
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
+EXPORT_SYMBOL(xio_context_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_stats_handler							     */
@@ -149,7 +156,6 @@ static void xio_stats_handler(int fd, int events, void *data)
 	ret = sendmsg(fd, &msg, 0);
 	if (ret <= 0)
 		return;
-
 }
 
 /*---------------------------------------------------------------------------*/
@@ -186,16 +192,16 @@ static int xio_pin_to_cpu(int cpu)
 /*---------------------------------------------------------------------------*/
 static int xio_pin_to_node(int cpu)
 {
-  int node = numa_node_of_cpu(cpu);
-  /* pin to node */
-  int ret = numa_run_on_node(node);
-  if (ret)
+	int node = numa_node_of_cpu(cpu);
+	/* pin to node */
+	int ret = numa_run_on_node(node);
+	if (ret)
+		return -1;
+
+	/* is numa_run_on_node() guaranteed to take effect immediately? */
+	sched_yield();
+
 	return -1;
-
-  /* is numa_run_on_node() guaranteed to take effect immediately? */
-  sched_yield();
-
-  return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -213,7 +219,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	xio_read_logging_level();
 
 	if (cpu_hint == -1) {
-		cpu = sched_getcpu();
+		cpu = xio_get_cpu();
 		if (cpu == -1) {
 			xio_set_error(errno);
 			return NULL;
@@ -229,13 +235,14 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 
 	/* allocate new context */
-	ctx = ucalloc(1, sizeof(struct xio_context));
+	ctx = (struct xio_context *)ucalloc(1, sizeof(struct xio_context));
 	if (ctx == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
 		return NULL;
 	}
 	ctx->ev_loop		= xio_ev_loop_create();
+	ctx->run_private	= 0;
 
 	ctx->cpuid		= cpu;
 	ctx->nodeid		= numa_node_of_cpu(cpu);
@@ -258,7 +265,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	/* only root can bind netlink socket */
 	if (geteuid() != 0) {
 		DEBUG_LOG("statistics monitoring disabled. " \
-			  "not priviliged user\n");
+			  "not privileged user\n");
 		goto exit;
 	}
 
@@ -275,7 +282,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	/* Listen to both UC and MC
 	 * By default the monitoring program send MC request but if
 	 * a thread starts after the monitor program than it will miss
-	 * the request for the format. When the monitoring progarm receives
+	 * the request for the format. When the monitoring program receives
 	 * statistics from a thread that it doesn't have its format it will
 	 * send a UC request directly to it
 	 *
@@ -314,7 +321,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	xio_ev_loop_add(ctx->ev_loop, fd, XIO_POLLIN,
 			xio_stats_handler, ctx);
 
-	ctx->stats.hertz = get_cpu_mhz(0) * 1000000.0 + 0.5;
+	ctx->stats.hertz = g_mhz * 1000000.0 + 0.5;
 	/* Init default counters' name */
 	ctx->stats.name[XIO_STAT_TX_MSG] = strdup("TX_MSG");
 	ctx->stats.name[XIO_STAT_RX_MSG] = strdup("RX_MSG");
@@ -326,7 +333,7 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->netlink_sock = (void *)(unsigned long) fd;
 
 exit:
-	xio_idr_add_uobj(ctx);
+	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
 cleanup2:
@@ -335,6 +342,7 @@ cleanup1:
 	ufree(ctx);
 	return NULL;
 }
+EXPORT_SYMBOL(xio_context_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
@@ -348,17 +356,32 @@ void xio_context_destroy(struct xio_context *ctx)
 		return;
 
 
-	found = xio_idr_lookup_uobj(ctx);
+	found = xio_idr_lookup_uobj(usr_idr, ctx);
 	if (found) {
-		xio_idr_remove_uobj(ctx);
+		xio_idr_remove_uobj(usr_idr, ctx);
 	} else {
 		ERROR_LOG("context not found:%p\n", ctx);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
-		return ;
+		return;
 	}
-
+	ctx->run_private = 0;
 	xio_observable_notify_all_observers(&ctx->observable,
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+
+	/* allow internally to run the loop for final cleanup */
+	if (ctx->run_private)
+		xio_context_run_loop(ctx, XIO_INFINITE);
+
+	if (ctx->run_private)
+		ERROR_LOG("not all observers finished! run_private=%d\n",
+			  ctx->run_private);
+
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
+
+	if (!xio_observable_is_empty(&ctx->observable))
+		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
+
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	if (ctx->netlink_sock) {
@@ -367,18 +390,23 @@ void xio_context_destroy(struct xio_context *ctx)
 		close(fd);
 		ctx->netlink_sock = NULL;
 	}
-
 	for (i = 0; i < XIO_STAT_LAST; i++)
 		if (ctx->stats.name[i])
 			free(ctx->stats.name[i]);
 
 	xio_workqueue_destroy(ctx->workqueue);
 
+	if (ctx->mempool) {
+		xio_mempool_destroy((struct xio_mempool *)ctx->mempool);
+		ctx->mempool = NULL;
+	}
+
 	xio_ev_loop_destroy(&ctx->ev_loop);
 
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 	ufree(ctx);
 }
+EXPORT_SYMBOL(xio_context_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_delayed_work						     */
@@ -389,6 +417,10 @@ int xio_ctx_add_delayed_work(struct xio_context *ctx,
 			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
+
+	/* test if delayed work is pending */
+	if (xio_is_delayed_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_add_delayed_work(ctx->workqueue,
 						msec_duration, data,
@@ -408,6 +440,10 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 			     xio_ctx_delayed_work_t *work)
 {
 	int retval;
+
+	/* test if delayed work is pending */
+	if (!xio_is_delayed_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
 	if (retval) {
@@ -475,6 +511,7 @@ int xio_modify_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_context							     */
@@ -494,6 +531,7 @@ int xio_query_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_get_poll_params						     */
@@ -515,6 +553,7 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 	return xio_ev_loop_add(ctx->ev_loop,
 			       fd, events, handler, data);
 }
+EXPORT_SYMBOL(xio_context_add_ev_handler);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_modify_ev_handler					     */
@@ -544,14 +583,16 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms)
 	else
 		return	xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
 }
+EXPORT_SYMBOL(xio_context_run_loop);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_stop_loop						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_context_stop_loop(struct xio_context *ctx, int is_self_thread)
+inline void xio_context_stop_loop(struct xio_context *ctx)
 {
-	xio_ev_loop_stop(ctx->ev_loop, is_self_thread);
+	xio_ev_loop_stop(ctx->ev_loop);
 }
+EXPORT_SYMBOL(xio_context_stop_loop);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_is_loop_stopping						     */
@@ -570,6 +611,10 @@ int xio_ctx_add_work(struct xio_context *ctx,
 		     xio_ctx_work_t *work)
 {
 	int retval;
+
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_add_work(ctx->workqueue,
 					data, function, work);
@@ -590,6 +635,10 @@ int xio_ctx_del_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if work is pending */
+	if (!xio_is_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_del_work(ctx->workqueue, work);
 	if (retval) {
 		xio_set_error(errno);
@@ -604,7 +653,7 @@ int xio_ctx_del_work(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 void xio_ctx_init_event(
 		xio_ctx_event_t *evt,
-		void (*event_handler)(xio_ctx_event_t *tev, void *data),
+		void (*event_handler)(void *data),
 		void *data)
 {
 	xio_ev_loop_init_event(evt, event_handler, data);

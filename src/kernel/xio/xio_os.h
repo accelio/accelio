@@ -57,6 +57,8 @@
 #endif
 #include <linux/debugfs.h>
 
+#include <xio_env.h>
+
 /* /usr/include/bits/types.h: *__STD_TYPE __U32_TYPE __socklen_t; */
 typedef u32 __socklen_t;
 /*
@@ -96,7 +98,7 @@ static inline void sg_unmark_end(struct scatterlist *sg)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) && !(defined RHEL_MAJOR && RHEL_MAJOR >= 7)
 /**
  * llist_reverse_order - reverse order of a llist chain
  * @head:       first item of the list to be reversed
@@ -119,6 +121,19 @@ static inline struct llist_node *llist_reverse_order(struct llist_node *head)
 }
 #endif
 
+/**
+ * list_first_entry_or_null - get the first element from a list
+ * @ptr:        the list head to take the element from.
+ * @type:       the type of the struct this is embedded in.
+ * @member:     the name of the list_struct within the struct.
+ *
+ * Note that if the list is empty, it returns NULL.
+ */
+#ifndef list_first_entry_or_null /* defined from 3.10 */
+#define list_first_entry_or_null(ptr, type, member) \
+		(!list_empty(ptr) ? list_first_entry(ptr, type, member) : NULL)
+#endif
+
 static inline char *strerror(int errnum)
 {
 	static char buf[64];
@@ -126,6 +141,5 @@ static inline char *strerror(int errnum)
 	return buf;
 };
 
-#define PRIu64 "llu"
 
 #endif /* XIO_OS_H */

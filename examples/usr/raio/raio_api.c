@@ -53,7 +53,7 @@
 #include "raio_buffer.h"
 #include "raio_utils.h"
 #include "libraio.h"
-#include "msg_pool.h"
+#include "raio_msg_pool.h"
 
 /*---------------------------------------------------------------------------*/
 /* preprocessor defines							     */
@@ -281,9 +281,11 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct raio_session_data  *session_data = cb_user_context;
+	struct raio_session_data  *session_data =
+				(struct raio_session_data *)cb_user_context;
 
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_ESTABLISHED_EVENT:
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
@@ -291,7 +293,7 @@ static int on_session_event(struct xio_session *session,
 		session_data->disconnected = 1;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx);  /* exit */
 		break;
 	default:
 		printf("libraio: unexpected session event: %s. reason: %s\n",
@@ -310,7 +312,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 {
 	struct raio_io_u	*io_u;
 
-	io_u = rsp->user_context;
+	io_u = (struct raio_io_u *)rsp->user_context;
 
 	io_u->rsp = rsp;
 
@@ -320,7 +322,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 	unpack_u32((uint32_t *)&io_u->ses_data->ans.ret,
 	unpack_u32(&io_u->ses_data->ans.data_len,
 	unpack_u32(&io_u->ses_data->ans.command,
-		   io_u->rsp->in.header.iov_base))))));
+		   (const char *)io_u->rsp->in.header.iov_base))))));
 
 	TAILQ_INSERT_TAIL(&io_u->ses_data->io_ctx->io_u_completed_list,
 			  io_u, io_u_list);
@@ -330,7 +332,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 	if (io_u->ses_data->min_nr != 0) {
 		if (io_u->ses_data->io_ctx->io_u_completed_nr >=
 		    io_u->ses_data->min_nr)
-			xio_context_stop_loop(io_u->ses_data->ctx, 0);
+			xio_context_stop_loop(io_u->ses_data->ctx);
 	}
 }
 
@@ -342,11 +344,12 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct raio_session_data  *session_data = cb_user_context;
+	struct raio_session_data  *session_data =
+				(struct raio_session_data *)cb_user_context;
 	uint32_t		  command;
 
 	unpack_u32(&command,
-		   rsp->in.header.iov_base);
+		   (const char *)rsp->in.header.iov_base);
 
 	switch (command) {
 	case RAIO_CMD_IO_SUBMIT:
@@ -359,12 +362,26 @@ static int on_response(struct xio_session *session,
 	case RAIO_CMD_IO_DESTROY:
 		/* break the loop */
 		session_data->cmd_rsp = rsp;
-		xio_context_stop_loop(session_data->ctx, 0);
+		xio_context_stop_loop(session_data->ctx);
 		break;
 	default:
 		printf("libraio: unknown answer %d\n", command);
 		break;
 	};
+	return 0;
+}
+/*---------------------------------------------------------------------------*/
+/* on_msg_error								     */
+/*---------------------------------------------------------------------------*/
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
+{
+	printf("**** [%p] message %lu failed. reason: %s\n",
+	       session, msg->sn, xio_strerror(error));
+
 	return 0;
 }
 
@@ -375,13 +392,14 @@ struct xio_session_ops ses_ops = {
 	.on_session_event		=  on_session_event,
 	.on_session_established		=  NULL,
 	.on_msg				=  on_response,
-	.on_msg_error			=  NULL
+	.on_msg_error			=  on_msg_error
 };
 
 /*---------------------------------------------------------------------------*/
 /* raio_open								     */
 /*---------------------------------------------------------------------------*/
-__RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
+__RAIO_PUBLIC int raio_open(const char *transport,
+			    const struct sockaddr *addr, socklen_t addrlen,
 			    const char *pathname, int flags)
 
 {
@@ -390,13 +408,35 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	struct raio_session_data	*session_data;
 	int				raio_err = 0;
 	int				fd;
+	int				opt;
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 
 	xio_init();
 
-	session_data = calloc(1, sizeof(*session_data));
+	opt = 1;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
+		    &opt, sizeof(int));
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
+		    &opt, sizeof(int));
+
+	opt = 2048;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
+		    &opt, sizeof(int));
+	opt = 2048;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
+		    &opt, sizeof(int));
+
+
+	session_data = (struct raio_session_data *)
+				calloc(1, sizeof(*session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	session_data->cmd_req.out.header.iov_base =
 		calloc(MAX_MSG_LEN, sizeof(char));
@@ -409,8 +449,8 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	session_data->ctx = xio_context_create(NULL, 0, -1);
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%d",
-		get_ip(addr), get_port(addr));
+	sprintf(url, "%s://%s:%d",
+		transport, get_ip(addr), get_port(addr));
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
 	params.user_context	= session_data;
@@ -420,11 +460,12 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	if (session_data->session == NULL)
 		goto cleanup;
 
+	cparams.session			= session_data->session;
+	cparams.ctx			= session_data->ctx;
+	cparams.conn_user_context	= session_data;
+
 	/* connect the session  */
-	session_data->conn = xio_connect(session_data->session,
-					 session_data->ctx, 0,
-					 NULL,
-					 session_data);
+	session_data->conn = xio_connect(&cparams);
 	if (session_data->conn == NULL)
 		goto cleanup1;
 
@@ -445,11 +486,11 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 	}
 
 	retval = unpack_open_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len,
 			&session_data->fd);
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
 	if (retval == -1) {
@@ -460,7 +501,6 @@ __RAIO_PUBLIC int raio_open(const struct sockaddr *addr, socklen_t addrlen,
 
 	errno = 0;
 	fd = rsd_list_add(session_data);
-
 
 	return fd;
 
@@ -517,14 +557,14 @@ __RAIO_PUBLIC int raio_close(int fd)
 	xio_context_run_loop(session_data->ctx, XIO_INFINITE);
 
 	retval = unpack_close_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len);
 	if (retval == -1) {
 		raio_err = errno;
 		printf("libraio: raio_close failed: %m\n");
 	}
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
 cleanup:
@@ -565,6 +605,7 @@ __RAIO_PUBLIC int raio_fstat(int fd, struct stat64 *stbuf)
 			session_data->cmd_req.out.header.iov_base,
 			&session_data->cmd_req.out.header.iov_len);
 
+
 	xio_send_request(session_data->conn, &session_data->cmd_req);
 
 	/* the default xio supplied main loop */
@@ -576,13 +617,13 @@ __RAIO_PUBLIC int raio_fstat(int fd, struct stat64 *stbuf)
 	}
 
 	retval = unpack_fstat_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len,
 			stbuf);
 	if (retval == -1)
 		retval = errno;
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
 	if (retval) {
@@ -628,22 +669,23 @@ __RAIO_PUBLIC int raio_setup(int fd, int maxevents, raio_context_t *ctxp)
 		return -ECONNRESET;
 
 	retval = unpack_setup_answer(
-			session_data->cmd_rsp->in.header.iov_base,
+			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len);
 
 	if (retval == -1)
 		retval = errno;
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
 	if (retval)
 		return -retval;
 
-	session_data->io_ctx = calloc(1, sizeof(*session_data->io_ctx));
+	session_data->io_ctx = (raio_context_t)
+				   calloc(1, sizeof(*session_data->io_ctx));
 
 	ctx = session_data->io_ctx;
-	ctx->io_us_free = calloc(2*session_data->maxevents,
+	ctx->io_us_free = (struct raio_io_u *)calloc(2*session_data->maxevents,
 				 sizeof(struct raio_io_u));
 	ctx->io_u_free_nr = 2*session_data->maxevents;
 
@@ -683,7 +725,6 @@ __RAIO_PUBLIC int raio_destroy(raio_context_t ctx)
 
 	msg_reset(&session_data->cmd_req);
 	pack_destroy_command(
-			session_data->fd,
 			session_data->cmd_req.out.header.iov_base,
 			&session_data->cmd_req.out.header.iov_len);
 
@@ -699,7 +740,7 @@ __RAIO_PUBLIC int raio_destroy(raio_context_t ctx)
 
 	/* don't check answer just clean */
 
-	/* acknowlege xio that response is no longer needed */
+	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
 cleanup:
@@ -803,7 +844,7 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 #define POLL_COMPLETIONS 1
 */
 /*---------------------------------------------------------------------------*/
-/* rsd_getevents							     */
+/* raio_getevents							     */
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_getevents(raio_context_t ctx, long min_nr, long nr,
 				 struct raio_event *events, struct timespec *t)
@@ -903,7 +944,7 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 	struct raio_io_u		*io_u;
 
 	for (i = 0; i < nr; i++) {
-		io_u = ptr_from_int64(events[i].handle);
+		io_u = (struct raio_io_u *)ptr_from_int64(events[i].handle);
 		if (io_u == NULL)
 			continue;
 		TAILQ_REMOVE(&ctx->io_u_queued_list, io_u, io_u_list);
@@ -922,7 +963,7 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 			      size_t len, raio_mr_t *mr)
 {
-	*mr = malloc(sizeof(struct raio_mr));
+	*mr = (raio_mr_t)malloc(sizeof(struct raio_mr));
 	if (*mr == NULL) {
 		printf("libraio: malloc failed. %m\n");
 		return -1;

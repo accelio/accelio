@@ -38,14 +38,13 @@
 #ifndef XIO_COMMON_TRANSPORT_H
 #define XIO_COMMON_TRANSPORT_H
 
-#include "xio_transport.h"
-#include "xio_context.h"
-
 
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
 #define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			9216
+#define DEF_APP_DATA_BUF_SZ		8192
+#define DEF_APP_HDR_SZ			768
+#define SEND_BUF_SZ			(DEF_APP_HDR_SZ + DEF_APP_DATA_BUF_SZ)
 #define MAX_HDR_SZ			512
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
@@ -53,7 +52,9 @@
 					   */
 #define CONN_SETUP_BUF_SIZE		4096
 
-#define NUM_START_PRIMARY_POOL_TASKS	32
+#define NUM_START_PRIMARY_POOL_TASKS	312  /* must be enough to send few +
+					      *	fully post_recv buffers
+					      */
 #define NUM_ALLOC_PRIMARY_POOL_TASKS	512
 
 #define USECS_IN_SEC			1000000
@@ -80,6 +81,7 @@
 enum xio_transport_state {
 	XIO_STATE_INIT,
 	XIO_STATE_LISTEN,
+	XIO_STATE_CONNECTING,
 	XIO_STATE_CONNECTED,
 	XIO_STATE_DISCONNECTED,
 	XIO_STATE_RECONNECT,
@@ -134,20 +136,10 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 	return retval;
 }
 
-int xio_transport_mempool_array_init(struct xio_mempool
-				     ***mempool_array,
-				     int *mempool_array_len);
-
-void xio_transport_mempool_array_release(struct xio_mempool
-					 **mempool_array,
-					 int mempool_array_len);
-
-struct xio_mempool *xio_transport_mempool_array_get(
+struct xio_mempool *xio_transport_mempool_get(
 		struct xio_context *ctx,
-		struct xio_mempool **mempool_array,
-		int mempool_array_len,
 		int reg_mr);
 
-
+char *xio_transport_state_str(enum xio_transport_state state);
 
 #endif  /* XIO_COMMON_TRANSPORT_H */

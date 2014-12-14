@@ -35,18 +35,26 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 #include <ib_cm.h>
 
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
-#include "xio_transport_mempool.h"
+#include "xio_transport.h"
+#include "xio_usr_transport.h"
+#include "xio_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
-#include "xio_rdma_transport.h"
 #include "xio_rdma_utils.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
+#include "xio_rdma_transport.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_validate_rdma_op							     */
@@ -58,13 +66,13 @@ int xio_validate_rdma_op(
 			int max_sge,
 			int *tasks_used)
 {
-	int		l	= 0,
+	unsigned int	l	= 0,
 			r	= 0;
 	uint64_t	laddr	= lsg_list[0].addr;
 	uint64_t	raddr	= rsg_list[0].addr;
 	uint32_t	llen	= lsg_list[0].length;
 	uint32_t	rlen	= rsg_list[0].length;
-	uint32_t	tot_len = 0;
+	int32_t		tot_len = 0;
 	int		k = 0;
 
 	if (lsize < 1 || rsize < 1) {
@@ -215,7 +223,7 @@ void xio_validate_ulimit_memlock(void)
 		return;
 	}
 	if (mlock_limit.rlim_cur != RLIM_INFINITY) {
-		WARN_LOG("Verify that Max Locked Memory (ulimit -l) "
+		WARN_LOG("Verify that Max Locked Memory (ulimit -l) " \
 			 "setting is on unlimited (current is %ld)\n",
 			 mlock_limit.rlim_cur);
 	}

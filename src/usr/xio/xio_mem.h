@@ -38,6 +38,7 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
+#include <xio_env.h>
 
 extern int			disable_huge_pages;
 extern int			allocator_assigned;
@@ -47,7 +48,7 @@ extern struct xio_mem_allocator *mem_allocator;
 extern void *malloc_huge_pages(size_t size);
 extern void free_huge_pages(void *ptr);
 extern void *xio_numa_alloc(size_t bytes, int node);
-extern void xio_numa_free(void *ptr);
+extern void xio_numa_free_ptr(void *ptr);
 
 
 static inline void xio_disable_huge_pages(int disable)
@@ -96,7 +97,7 @@ static inline void *umemalign(size_t boundary, size_t size)
 	if (allocator_assigned && mem_allocator->memalign) {
 		ptr = mem_allocator->memalign(boundary, size, mem_allocator->user_context);
 	} else {
-		if (posix_memalign(&ptr, boundary, size) != 0)
+		if (xio_memalign(&ptr, boundary, size) != 0)
 			return NULL;
 	}
 	if (ptr)
@@ -147,7 +148,7 @@ static inline void unuma_free(void *ptr)
 	if (allocator_assigned && mem_allocator->numa_free)
 		mem_allocator->numa_free(ptr, mem_allocator->user_context);
 	else
-		xio_numa_free(ptr);
+		xio_numa_free_ptr(ptr);
 }
 
 #endif

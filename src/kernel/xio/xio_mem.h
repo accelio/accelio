@@ -38,8 +38,6 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
-#include "xio_common.h"
-
 
 extern int			disable_huge_pages;
 extern int			allocator_assigned;
@@ -55,7 +53,8 @@ static inline void xio_disable_huge_pages(int disable)
 	disable_huge_pages = disable;
 }
 
-static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator) {
+static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator)
+{
 	if (allocator_assigned)
 		return -1;
 	memcpy(mem_allocator, allocator, sizeof(*allocator));

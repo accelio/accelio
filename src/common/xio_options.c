@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
 #include "xio_common.h"
 #include "xio_mem.h"
@@ -47,16 +47,36 @@
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_ENABLE_RECONNECT			0
-#define XIO_OPTVAL_DEF_QUEUE_DEPTH			512
-
+#define XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL		0
+#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS		1024
+#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS		1024
+#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64*1024*1024)
+#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64*1024*1024)
+#define XIO_OPTVAL_DEF_MAX_INLINE_HEADER		256
+#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8*1024)
 
 /* xio options */
 struct xio_options			g_options = {
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
 	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
-	.queue_depth			= XIO_OPTVAL_DEF_QUEUE_DEPTH
+	.max_inline_hdr			= XIO_OPTVAL_DEF_MAX_INLINE_HEADER,
+	.max_inline_data		= XIO_OPTVAL_DEF_MAX_INLINE_DATA,
+	.enable_flow_control		= XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL,
+	.snd_queue_depth_msgs		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS,
+	.rcv_queue_depth_msgs		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,
+	.snd_queue_depth_bytes		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,
+	.rcv_queue_depth_bytes		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,
 };
+
+/*---------------------------------------------------------------------------*/
+/* xio_get_options							     */
+/*---------------------------------------------------------------------------*/
+struct xio_options *xio_get_options(void)
+{
+	return &g_options;
+}
+EXPORT_SYMBOL(xio_get_options);
 
 /*---------------------------------------------------------------------------*/
 /* xio_set_opt								     */
@@ -83,6 +103,13 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		if (optlen == sizeof(struct xio_mem_allocator))
 			return xio_set_mem_allocator(
 					(struct xio_mem_allocator *)optval);
+		break;
+	case XIO_OPTNAME_CONFIG_MEMPOOL:
+		if (optlen == sizeof(struct xio_mempool_config)) {
+			memcpy(&g_mempool_config,
+			       (struct xio_mempool_config *)optval, optlen);
+			return 0;
+		}
 		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		if (optlen == sizeof(int)) {
@@ -160,10 +187,48 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.reconnect = *((int *)optval);
 		return 0;
 		break;
-	case XIO_OPTNAME_QUEUE_DEPTH:
+	case XIO_OPTNAME_ENABLE_FLOW_CONTROL:
+		g_options.enable_flow_control = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
-		g_options.queue_depth = *((int *)optval);
+		g_options.snd_queue_depth_msgs = *((uint64_t *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS:
+		if (*((int *)optval) < 1)
+			break;
+		g_options.rcv_queue_depth_msgs = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
+		if (*((int32_t *)optval) < 1)
+			break;
+		g_options.snd_queue_depth_bytes = *((uint64_t *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
+		if (*((int32_t *)optval) < 1)
+			break;
+		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_INLINE_HEADER:
+		if (optlen != sizeof(int))
+			break;
+		if (*((int *)optval) < 0)
+			break;
+		g_options.max_inline_hdr = *((int *)optval);
+		return 0;
+		break;
+	case XIO_OPTNAME_MAX_INLINE_DATA:
+		if (optlen != sizeof(int))
+			break;
+		if (*((int *)optval) < 0)
+			break;
+		g_options.max_inline_data = *((int *)optval);
 		return 0;
 		break;
 	default:
@@ -172,6 +237,7 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
+EXPORT_SYMBOL(xio_set_opt);
 
 /*---------------------------------------------------------------------------*/
 /* xio_general_get_opt                                                       */
@@ -199,9 +265,33 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.reconnect;
 		 return 0;
-	case XIO_OPTNAME_QUEUE_DEPTH:
+	case XIO_OPTNAME_ENABLE_FLOW_CONTROL:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.queue_depth;
+		 *((int *)optval) = g_options.enable_flow_control;
+		 return 0;
+	case XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.snd_queue_depth_msgs;
+		 return 0;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.rcv_queue_depth_msgs;
+		 return 0;
+	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
+		*optlen = sizeof(uint64_t);
+		 *((uint64_t *)optval) = g_options.snd_queue_depth_bytes;
+		 return 0;
+	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
+		*optlen = sizeof(uint64_t);
+		 *((uint64_t *)optval) = g_options.rcv_queue_depth_bytes;
+		 return 0;
+	case XIO_OPTNAME_MAX_INLINE_HEADER:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.max_inline_hdr;
+		 return 0;
+	case XIO_OPTNAME_MAX_INLINE_DATA:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.max_inline_data;
 		 return 0;
 	default:
 		break;
@@ -301,4 +391,5 @@ int xio_get_opt(void *xio_obj, int level,  int optname,
 	xio_set_error(XIO_E_NOT_SUPPORTED);
 	return -1;
 }
+EXPORT_SYMBOL(xio_get_opt);
 

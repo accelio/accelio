@@ -104,7 +104,7 @@ static struct xio_test_config  test_config = {
 /*---------------------------------------------------------------------------*/
 static void process_request(struct xio_msg *req)
 {
-	static int cnt;
+	static unsigned int cnt;
 
 	if (req == NULL) {
 		cnt = 0;
@@ -200,7 +200,7 @@ static int on_session_event(struct xio_session *session,
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(ctx, 0);  /* exit */
+		xio_context_stop_loop(ctx);  /* exit */
 		if (pool) {
 			msg_pool_free(pool);
 			pool = NULL;
@@ -260,7 +260,6 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 	sglist[0].mr = NULL;
 
 	rsp->sn = 0;
-	rsp->more_in_batch = 0;
 	do {
 		/* recycle the message and fill new request */
 		msg_write(&msg_params, rsp,
@@ -297,7 +296,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	/* alloc transaction */
 	rsp	= msg_pool_get(pool);
 	rsp->request		= req;
-	rsp->more_in_batch	= 0;
 
 	/* fill response */
 	msg_write(&msg_params, rsp,
@@ -350,9 +348,11 @@ static int on_send_response_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_private_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	switch (msg->type) {
 	case XIO_MSG_TYPE_REQ:
@@ -361,6 +361,7 @@ int on_msg_error(struct xio_session *session,
 		msg_pool_put(pool, msg);
 		switch (error) {
 		case XIO_E_MSG_FLUSHED:
+			break;
 		default:
 			xio_assert(0);
 			break;
@@ -373,6 +374,8 @@ int on_msg_error(struct xio_session *session,
 		switch (error) {
 		case XIO_E_MSG_FLUSHED:
 			xio_release_response(msg);
+			msg_pool_put(pool, msg);
+			break;
 		case XIO_E_MSG_DISCARDED:
 			msg_pool_put(pool, msg);
 			break;
@@ -570,14 +573,15 @@ static void print_test_config(
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	int			error;
-	int			retval;
-	char			url[256];
-	struct xio_msg		*msg;
-	struct xio_iovec_ex	*sglist;
-	int			i = 0;
-	struct xio_session_params params;
+	struct xio_session		*session;
+	int				error;
+	int				retval;
+	char				url[256];
+	struct xio_msg			*msg;
+	struct xio_iovec_ex		*sglist;
+	int				i = 0;
+	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	nrecv = 0;
 	nsent = 0;
@@ -622,7 +626,12 @@ int main(int argc, char *argv[])
 		goto exit3;
 	}
 	/* connect the session  */
-	conn = xio_connect(session, ctx, test_config.conn_idx, NULL, NULL);
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= session;
+	cparams.ctx			= ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+
+	conn = xio_connect(&cparams);
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 

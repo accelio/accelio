@@ -38,9 +38,6 @@
 #ifndef XIO_CONNECTION_H
 #define XIO_CONNECTION_H
 
-#include "xio_msg_list.h"
-
-
 enum xio_connection_state {
 		XIO_CONNECTION_STATE_INIT,
 		XIO_CONNECTION_STATE_ESTABLISHED,
@@ -75,17 +72,27 @@ struct xio_connection {
 	/* server's session may have multiple connections each has
 	 * private data assignd by bind
 	 */
+	uint16_t			enable_flow_control;
+	uint16_t			req_sn;
+	uint16_t			req_exp_sn;
+	uint16_t			req_ack_sn;
+	uint16_t			rsp_sn;
+	uint16_t			rsp_exp_sn;
+	uint16_t			rsp_ack_sn;
+	uint16_t			credits_msgs;
+	uint16_t			peer_credits_msgs;
+	uint16_t			rx_queue_watermark_msgs;
 	uint16_t			conn_idx;
 	uint16_t			state;
+	uint16_t			fin_req_timeout;
 	uint16_t			disable_notify;
 	uint16_t			disconnecting;
 	uint16_t			is_flushed;
-	uint16_t			fin_req_timeout;
+	uint16_t			send_req_toggle;
+	uint16_t			pad;
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
-	int32_t				rx_queued_msgs;
 	struct kref			kref;
-	int32_t				send_req_toggle;
 
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
@@ -107,9 +114,16 @@ struct xio_connection {
 	struct xio_session_ops		ses_ops;
 	void				*cb_user_context;
 
+	size_t				tx_bytes;
+	uint64_t			credits_bytes;
+	uint64_t			peer_credits_bytes;
+	uint64_t			rx_queue_watermark_bytes;
+
+	uint32_t			nexus_attr_mask;
+	struct xio_nexus_init_attr	nexus_attr;
 };
 
-struct xio_connection *xio_connection_init(
+struct xio_connection *xio_connection_create(
 		struct xio_session *session,
 		struct xio_context *ctx, int conn_idx,
 		void *cb_user_context);
@@ -160,14 +174,6 @@ int xio_connection_release_read_receipt(struct xio_connection *connection,
 
 void xio_release_response_task(struct xio_task *task);
 
-
-int xio_connection_fin_addref(struct xio_connection *connection);
-
-int xio_connection_fin_put(struct xio_connection *connection);
-
-int xio_connection_release_fin(struct xio_connection *connection,
-			       struct xio_msg *msg);
-
 int xio_send_fin_ack(struct xio_connection *connection,
 		     struct xio_task *task);
 
@@ -180,12 +186,6 @@ int xio_connection_refused(struct xio_connection *connection);
 
 int xio_connection_error_event(struct xio_connection *connection,
 			       enum xio_status reason);
-
-int xio_connection_flush_msgs(struct xio_connection *connection);
-
-int xio_connection_flush_tasks(struct xio_connection *connection);
-
-int xio_connection_notify_msgs_flush(struct xio_connection *connection);
 
 int xio_connection_remove_in_flight(struct xio_connection *connection,
 				    struct xio_msg *msg);
@@ -204,9 +204,6 @@ int xio_connection_send_hello_req(struct xio_connection *connection);
 int xio_connection_send_hello_rsp(struct xio_connection *connection,
 				  struct xio_task *task);
 
-int xio_connection_release_hello(struct xio_connection *connection,
-				 struct xio_msg *msg);
-
 char *xio_connection_state_str(enum xio_connection_state state);
 
 int xio_connection_restart(struct xio_connection *connection);
@@ -223,6 +220,21 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 int xio_on_fin_ack_recv(struct xio_connection *connection,
 			struct xio_task *task);
 
+int xio_on_connection_hello_req_recv(struct xio_connection *connection,
+				     struct xio_task *task);
+
+int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
+					  struct xio_task *task);
+int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
+				     struct xio_task *task);
+
+int xio_send_credits_ack(struct xio_connection *connection);
+
+int xio_on_credits_ack_send_comp(struct xio_connection *connection,
+				 struct xio_task *task);
+
+int xio_on_credits_ack_recv(struct xio_connection *connection,
+			    struct xio_task *task);
 
 #endif /*XIO_CONNECTION_H */
 

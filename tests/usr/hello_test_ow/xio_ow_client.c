@@ -130,7 +130,7 @@ static void process_message(struct test_params *test_params,
 		size_t	data_len = 0;
 		int	i;
 
-		for (i = 0; i < onents; i++)
+for (i = 0; i < onents; i++)
 			data_len += osglist[i].iov_len;
 
 		test_params->stat.txlen = msg->out.header.iov_len + data_len;
@@ -169,7 +169,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -190,8 +190,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(test_params->ctx,
-				      XIO_INFINITE);  /* exit */
+		xio_context_stop_loop(test_params->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -218,7 +217,7 @@ static int on_session_established(struct xio_session *session,
 static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 			    int more_in_batch, void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	test_params->ndelivered++;
 
 	process_message(test_params, msg);
@@ -251,7 +250,6 @@ static int on_msg_delivered(struct xio_session *session, struct xio_msg *msg,
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
-	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
@@ -287,7 +285,7 @@ static int on_msg_send_complete(struct xio_session *session,
 				struct xio_msg *msg,
 				void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	process_message(test_params, msg);
 
 	test_params->ncomp++;
@@ -320,7 +318,6 @@ static int on_msg_send_complete(struct xio_session *session,
 	msg->in.header.iov_base = NULL;
 	msg->in.header.iov_len	= 0;
 	msg->in.data_iov.nents	= 0;
-	msg->more_in_batch	= 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
@@ -353,10 +350,12 @@ static int on_msg_send_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
@@ -536,6 +535,7 @@ int main(int argc, char *argv[])
 	struct xio_msg		*msg;
 	int			i = 0;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -548,6 +548,7 @@ int main(int argc, char *argv[])
 
 	memset(&test_params, 0, sizeof(struct test_params));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	test_params.stat.first_time = 1;
 	test_params.ask_for_receipt = ASK_FOR_RECEIPT;
 	test_params.finite_run = test_config.finite_run;
@@ -587,10 +588,13 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 
+	cparams.session			= session;
+	cparams.ctx			= test_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &test_params;
+
 	/* connect the session  */
-	test_params.connection = xio_connect(session, test_params.ctx,
-					     test_config.conn_idx,
-					     NULL, &test_params);
+	test_params.connection = xio_connect(&cparams);
 
 	printf("**** starting ...\n");
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {

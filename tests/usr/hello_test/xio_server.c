@@ -61,8 +61,8 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define TEST_DISCONNECT		0
 #define DISCONNECT_NR		12000000
-#define PEER_MAX_IN_IOVLEN	256
-#define PEER_MAX_OUT_IOVLEN	256
+#define PEER_MAX_IN_IOVLEN	4
+#define PEER_MAX_OUT_IOVLEN	4
 
 
 struct xio_test_config {
@@ -128,7 +128,7 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_user_context)
 {
 	struct xio_connection_attr	conn_attr;
-	struct test_params		*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -141,22 +141,23 @@ static int on_session_event(struct xio_session *session,
 		conn_attr.user_context = cb_user_context;
 		xio_modify_connection(event_data->conn, &conn_attr,
 				      XIO_CONNECTION_ATTR_USER_CTX);
-		test_params->connection = event_data->conn;
-		break;
-	case XIO_SESSION_REJECT_EVENT:
-		xio_disconnect(event_data->conn);
+		if (!test_params->connection)
+			test_params->connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		printf("last sent:%lu, last comp:%lu, " \
-		       "delta:%lu\n",
-		       test_params->nsent,  test_params->ncomp,
-		       test_params->nsent-test_params->ncomp);
+		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+			printf("last sent:%lu, last comp:%lu, " \
+			       "delta:%lu\n",
+			       test_params->nsent,  test_params->ncomp,
+			       test_params->nsent-test_params->ncomp);
+			test_params->connection = NULL;
+		}
 		xio_connection_destroy(event_data->conn);
-		test_params->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(test_params->ctx, 0);
+		if (event_data->reason != XIO_E_SESSION_REJECTED)
+			xio_context_stop_loop(test_params->ctx);
 		break;
 	default:
 		break;
@@ -172,7 +173,7 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
@@ -181,7 +182,7 @@ static int on_new_session(struct xio_session *session,
 	if (test_params->connection == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
-		xio_reject(session, EISCONN, NULL, 0);
+		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -195,7 +196,7 @@ static int on_request(struct xio_session *session,
 		      void *cb_user_context)
 {
 	struct xio_msg	*rsp;
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	/* process request */
 	process_request(req);
@@ -204,7 +205,6 @@ static int on_request(struct xio_session *session,
 	rsp	= msg_pool_get(test_params->pool);
 
 	rsp->request		= req;
-	rsp->more_in_batch	= more_in_batch;
 
 	/* fill response */
 	msg_write(&test_params->msg_params, rsp,
@@ -230,7 +230,7 @@ static int on_send_response_complete(struct xio_session *session,
 				     struct xio_msg *msg,
 				     void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	test_params->ncomp++;
 
@@ -250,10 +250,12 @@ static int on_send_response_complete(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
@@ -280,7 +282,7 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct test_params	*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 	int			nents = vmsg_sglist_nents(&msg->in);
 	int i;

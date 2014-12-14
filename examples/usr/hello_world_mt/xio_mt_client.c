@@ -73,9 +73,10 @@ struct session_data {
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
-	cpu_set_t		cpuset;
-	char			str[128];
+	struct thread_data		*tdata = (struct thread_data *)data;
+	struct xio_connection_params	cparams;
+	cpu_set_t			cpuset;
+	char				str[128];
 
 	/* set affinity to thread */
 
@@ -87,9 +88,14 @@ static void *worker_thread(void *data)
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= tdata->session;
+	cparams.ctx			= tdata->ctx;
+	cparams.conn_idx		= tdata->cid;
+	cparams.conn_user_context	= tdata;
+
 	/* connect the session  */
-	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, NULL, tdata);
+	tdata->conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	memset(&tdata->req, 0, sizeof(tdata->req));
@@ -97,7 +103,7 @@ static void *worker_thread(void *data)
 		tdata->affinity);
 	tdata->req.out.header.iov_base = strdup(str);
 	tdata->req.out.header.iov_len =
-		strlen(tdata->req.out.header.iov_base) + 1;
+		strlen((const char *)tdata->req.out.header.iov_base) + 1;
 
 	/* send first message */
 	xio_send_request(tdata->conn, &tdata->req);
@@ -141,7 +147,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 	int			i;
 
 	printf("%s. reason: %s\n",
@@ -154,7 +161,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
+			xio_context_stop_loop(session_data->tdata[i].ctx);
 		break;
 	default:
 		break;
@@ -172,7 +179,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
 	tdata->nrecv++;
 

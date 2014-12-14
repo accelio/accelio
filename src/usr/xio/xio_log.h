@@ -38,8 +38,6 @@
 #ifndef XIO_LOG_H
 #define XIO_LOG_H
 
-#include "libxio.h"
-
 
 /*
  * Enable compiler checks for printf-like formatting.
@@ -53,8 +51,8 @@
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
-extern int		xio_logging_level;
-extern xio_log_fn	xio_vlog_fn;
+extern enum xio_log_level	xio_logging_level;
+extern xio_log_fn		xio_vlog_fn;
 
 extern void xio_vlog(const char *file, unsigned line, const char *function,
 		     unsigned level, const char *fmt, ...);

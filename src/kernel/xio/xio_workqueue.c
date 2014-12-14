@@ -44,18 +44,21 @@
 #include <linux/version.h>
 
 #include "libxio.h"
-#include "xio_os.h"
+#include <xio_os.h>
 
-#include "xio_common.h"
-#include "xio_workqueue_priv.h"
 #include "xio_log.h"
+#include "xio_common.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue_priv.h"
 #include "xio_observer.h"
+#include "xio_ev_loop.h"
 #include "xio_context.h"
+#include "xio_context_priv.h"
 
 struct xio_workqueue {
 	struct xio_context	*ctx;
 	struct workqueue_struct	*workqueue;
-	spinlock_t 		lock;
+	spinlock_t		lock;		/* workqueue lock */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -112,6 +115,7 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 
 static void xio_ev_callback(void *user_context)
 {
+	int deleted = 0;
 	struct xio_uwork *uwork = user_context;
 
 	set_bit(XIO_WORK_RUNNING, &uwork->flags);
@@ -130,8 +134,11 @@ static void xio_ev_callback(void *user_context)
 		data = uwork->data;
 		/* Set running before clearing pending */
 		clear_bit(XIO_WORK_PENDING, &uwork->flags);
+		uwork->deleted = &deleted;
 		set_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
 		function(data);
+		if (deleted)
+			return;
 		clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
 	}
 	clear_bit(XIO_WORK_RUNNING, &uwork->flags);
@@ -196,6 +203,9 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			 * it doesn't detect loop cancellation
 			 */
 			TRACE_LOG("self cancellation.\n");
+			clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+			clear_bit(XIO_WORK_RUNNING, &uwork->flags);
+			*uwork->deleted = 1;
 			return -1;
 		} else {
 			/* It is O.K. to arm a work and then to cancel it but
@@ -205,6 +215,20 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			 * since the work was marked canceled in phase 1 it
 			 * is guaranteed not to run in the future.
 			 */
+			/*
+			 * TODO We might have an issue in case the
+			 * xio_ev_callback event was already added to the loop,
+			 * and meanwhile the work was/will be freed from another
+			 * event in this context.
+			 * In this case, we need to remove xio_ev_callback event
+			 * from the loop here, but we do not support this right
+			 * now...
+			 * The best solution for now is to add event for freeing
+			 * the work, after canceling the work.
+			 * Need to make sure to do this in each of the objects
+			 * containing a work, e.g. nexus, connection, ...
+			 */
+			xio_context_disable_event(&uwork->ev_data);
 			return 0;
 		}
 	}

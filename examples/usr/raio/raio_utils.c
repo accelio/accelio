@@ -166,7 +166,7 @@ const char *unpack_iocb(struct raio_iocb *iocb, const char *buffer)
 void pack_open_command(const char *pathname, int flags, void *buf, size_t *len)
 {
 	unsigned int	path_len = strlen(pathname) + 1;
-	char		*buffer = buf;
+	char		*buffer = (char *)buf;
 	unsigned int	overall_size = sizeof(flags) + path_len;
 	struct raio_command cmd = { RAIO_CMD_OPEN, overall_size };
 
@@ -184,7 +184,7 @@ void pack_open_command(const char *pathname, int flags, void *buf, size_t *len)
 /*---------------------------------------------------------------------------*/
 void pack_close_command(int fd, void *buf, size_t *len)
 {
-	char		*buffer = buf;
+	char		*buffer = (char *)buf;
 	unsigned int	overall_size = sizeof(fd);
 	struct raio_command cmd = { RAIO_CMD_CLOSE, overall_size };
 
@@ -201,7 +201,7 @@ void pack_close_command(int fd, void *buf, size_t *len)
 /*---------------------------------------------------------------------------*/
 void pack_fstat_command(int fd, void *buf, size_t *len)
 {
-	char		*buffer = buf;
+	char		*buffer = (char *)buf;
 	unsigned int	overall_size = sizeof(fd);
 	struct raio_command cmd = { RAIO_CMD_FSTAT, overall_size };
 
@@ -219,15 +219,14 @@ void pack_fstat_command(int fd, void *buf, size_t *len)
 void pack_setup_command(int fd, int maxevents,
 			void *buf, size_t *len)
 {
-	char		*buffer = buf;
-	unsigned int	overall_size = 3*sizeof(uint32_t);
+	char		*buffer = (char *)buf;
+	unsigned int	overall_size = sizeof(maxevents);
 	struct raio_command cmd = { RAIO_CMD_IO_SETUP, overall_size };
 
 	pack_u32((uint32_t *)&maxevents,
-	pack_u32((uint32_t *)&fd,
 	pack_u32(&cmd.data_len,
 	pack_u32(&cmd.command,
-		 buffer))));
+		 buffer)));
 
 	*len = sizeof(cmd) + overall_size;
 }
@@ -235,16 +234,15 @@ void pack_setup_command(int fd, int maxevents,
 /*---------------------------------------------------------------------------*/
 /* pack_destroy_command				                             */
 /*---------------------------------------------------------------------------*/
-void pack_destroy_command(int fd, void *buf, size_t *len)
+void pack_destroy_command(void *buf, size_t *len)
 {
-	char		*buffer = buf;
-	unsigned int	overall_size = sizeof(fd);
+	char		*buffer = (char *)buf;
+	unsigned int	overall_size = 0;
 	struct raio_command cmd = { RAIO_CMD_IO_DESTROY, overall_size };
 
-	pack_u32((uint32_t *)&fd,
 	pack_u32(&cmd.data_len,
 	pack_u32(&cmd.command,
-		 buffer)));
+		 buffer));
 
 	*len = sizeof(cmd) + overall_size;
 }
@@ -362,7 +360,7 @@ int unpack_setup_answer(char *buf, size_t len)
 void pack_submit_command(struct raio_iocb *iocb, int is_last_in_batch,
 			 void *buf, size_t *len)
 {
-	char	*buffer = buf;
+	char	*buffer = (char *)buf;
 	unsigned overall_size = SUBMIT_BLOCK_SIZE + sizeof(uint32_t);
 
 	struct raio_command cmd = { RAIO_CMD_IO_SUBMIT, overall_size };

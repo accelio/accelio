@@ -65,6 +65,7 @@
 /* will disconnect after DISCONNECT_FACTOR*print counter msgs */
 #define DISCONNECT_FACTOR	3
 #define	CHAIN_MESSAGES		0
+#define	SET_TOS			1
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
@@ -202,7 +203,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -219,8 +220,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(test_params->ctx,
-				      XIO_INFINITE);  /* exit */
+		xio_context_stop_loop(test_params->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -262,10 +262,10 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct test_params	*test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 	struct xio_iovec_ex	*sglist;
 	static int		chain_messages = CHAIN_MESSAGES;
-	int			j;
+	size_t			j;
 
 	test_params->nrecv++;
 
@@ -305,7 +305,6 @@ static int on_response(struct xio_session *session,
 	}
 
 	msg->sn = 0;
-	msg->more_in_batch = 0;
 
 	/* assign buffers to the message */
 	msg_write(&test_params->msg_params, msg,
@@ -360,13 +359,21 @@ static int on_response(struct xio_session *session,
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
 static int on_msg_error(struct xio_session *session,
-			enum xio_status error, struct xio_msg  *msg,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
 			void *cb_user_context)
 {
-	struct test_params *test_params = cb_user_context;
+	struct test_params *test_params = (struct test_params *)cb_user_context;
 
-	printf("**** [%p] message %lu failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	if (direction == XIO_MSG_DIRECTION_OUT) {
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->sn, xio_strerror(error));
+	} else {
+		xio_release_response(msg);
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->request->sn, xio_strerror(error));
+	}
 
 	msg_pool_put(test_params->pool, msg);
 
@@ -571,7 +578,7 @@ int send_one_by_one(struct test_params *test_params)
 	struct xio_iovec_ex	*sglist;
 	struct xio_msg		*msg;
 	int			i;
-	int			j;
+	size_t			j;
 
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
@@ -622,7 +629,7 @@ int send_chained(struct test_params *test_params)
 	struct xio_iovec_ex	*sglist;
 	struct xio_msg		*msg, *head = NULL, *tail = NULL;
 	int			i;
-	int			j;
+	size_t			j;
 	int			nsent = 0;
 
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
@@ -690,6 +697,7 @@ int main(int argc, char *argv[])
 	struct xio_session		*session;
 	struct test_params		test_params;
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 	int				error;
 	int				retval;
 	static int			chain_messages = CHAIN_MESSAGES;
@@ -705,6 +713,7 @@ int main(int argc, char *argv[])
 
 	memset(&test_params, 0, sizeof(struct test_params));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 	test_params.stat.first_time = 1;
 	test_params.finite_run = test_config.finite_run;
 
@@ -753,10 +762,17 @@ int main(int argc, char *argv[])
 		xio_assert(session != NULL);
 	}
 
+	cparams.session			= session;
+	cparams.ctx			= test_params.ctx;
+	cparams.conn_idx		= test_config.conn_idx;
+	cparams.conn_user_context	= &test_params;
+
+#if SET_TOS
+	cparams.enable_tos		= 1;
+	cparams.tos			= 0x58;
+#endif
 	/* connect the session  */
-	test_params.connection = xio_connect(session, test_params.ctx,
-					     test_config.conn_idx,
-					     NULL, &test_params);
+	test_params.connection = xio_connect(&cparams);
 
 	printf("**** starting ...\n");
 
@@ -790,8 +806,8 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.pool)
-		msg_pool_free(test_params.pool);
+	msg_pool_free(test_params.pool);
+
 cleanup:
 	msg_api_free(&test_params.msg_params);
 

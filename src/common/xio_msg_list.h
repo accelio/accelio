@@ -38,8 +38,6 @@
 #ifndef XIO_MSG_LIST_H
 #define XIO_MSG_LIST_H
 
-#include <libxio.h>
-
 
 struct xio_msg_list {
 	struct xio_msg *first;			/* first element */

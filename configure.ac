@@ -22,15 +22,33 @@ AM_SILENT_RULES([yes])
 # use the C compiler for the following checks
 AC_LANG([C])
 
+##########################################################################
+# rdma compilation support
+##########################################################################
+# usage: ./configure --enable-rdma=no
+#
+AC_MSG_CHECKING([whether to build with rdma])
+AC_ARG_ENABLE([rdma],
+	      [AS_HELP_STRING([--enable-rdma],
+			      [enable rdma transport - default:yes ])],
+			       [enable_rdma=$enableval],
+			       [enable_rdma=yes])
+AC_MSG_RESULT([$enable_rdma])
+
 # Checks for header files.
-AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
-		 [mypj_found_verbs_headers=yes; break;])
+if test "$enable_rdma" = "yes"; then
+	AC_CHECK_HEADERS([infiniband/verbs.h rdma/rdma_cma.h],
+			 [mypj_found_verbs_headers=yes; break;])
+else
+	mypj_found_verbs_headers=no
+fi
 
 AC_CHECK_HEADERS([numa.h],
 		 [mypj_found_numa_headers=yes; break;])
 
 AC_CHECK_HEADERS([event2/event.h],
 		 [mypj_found_event_headers=yes; break;])
+
 
 AM_CONDITIONAL(HAVE_INFINIBAND_VERBS, test "x$mypj_found_verbs_headers" = "xyes")
 
@@ -93,10 +111,12 @@ AC_MSG_RESULT([$enable_debug])
 if test "$enable_debug" = "yes"; then
 	AC_DEFINE([DEBUG],[],[Debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wdeclaration-after-statement \
+		  -Wsign-compare -Wc++-compat \
 		   -fno-omit-frame-pointer -O0 -D_REENTRANT -D_GNU_SOURCE"
 else
 	AC_DEFINE([NDEBUG],[],[No-debug Mode])
 	AM_CFLAGS="$AM_CFLAGS -g -ggdb -Wall -Werror -Wpadded -Wdeclaration-after-statement \
+		  -Wsign-compare -Wc++-compat \
 		  -O3 -D_REENTRANT -D_GNU_SOURCE"
 fi
 
@@ -159,17 +179,13 @@ AC_MSG_RESULT([$enable_kernel_module])
 if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/xio])
 	AC_CONFIG_SUBDIRS([src/kernel/rdma])
+	AC_CONFIG_SUBDIRS([src/kernel/tcp])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
-if test "$mypj_found_event_headers" == "yes"; then
-	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_libevent])
-fi
-fi
-
-if test "$enable_kernel_module" != "no"; then
-	subdirs2="src/kernel/xio";
+	AC_CONFIG_SUBDIRS([tests/kernel/hello_test])
 else
 	subdirs2="src/usr";
+	subdirs2="$subdirs2 src/tools/usr/";
 	subdirs2="$subdirs2 examples/usr/hello_world";
 	subdirs2="$subdirs2 examples/usr/hello_world_daemon";
 
@@ -183,6 +199,7 @@ if test "$enable_fio_build" != "no"; then
 	subdirs2="$subdirs2 examples/usr/fio";
 fi
 fi
+	subdirs2="$subdirs2 tests/usr/common";
 	subdirs2="$subdirs2 tests/usr/hello_test";
 	subdirs2="$subdirs2 tests/usr/hello_test_mt";
 	subdirs2="$subdirs2 tests/usr/hello_test_bidi";
@@ -191,7 +208,6 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 	subdirs2="$subdirs2 regression/usr/reg_basic_mt";
-	subdirs2="$subdirs2 src/tools/usr/";
 fi
 
 ##########################################################################
@@ -232,6 +248,7 @@ AC_SUBST([subdirs2])
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([Doxyfile])
 AC_CONFIG_FILES([src/usr/Makefile])
+AC_CONFIG_FILES([src/tools/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_daemon/Makefile])
@@ -242,6 +259,7 @@ AC_CONFIG_FILES([examples/usr/raio/Makefile])
 if test "$enable_fio_build" != "no"; then
 AC_CONFIG_FILES([examples/usr/fio/Makefile])
 fi
+AC_CONFIG_FILES([tests/usr/common/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_mt/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
@@ -250,7 +268,6 @@ AC_CONFIG_FILES([tests/usr/hello_test_ow/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
-AC_CONFIG_FILES([src/tools/usr/Makefile])
 
 # generate the final Makefile etc.
 AC_OUTPUT
@@ -258,23 +275,23 @@ AC_OUTPUT
 # print warning if tests are enabled but gccxml not found
 if test "$enable_fio_build" = "yes"; then
 if (! test "$FIO_ROOT") ; then
-AC_MSG_WARN([ 
+AC_MSG_WARN([
 *********************************************************************************
 !!!!    There is a problem with the current configuration environment    !!!!
-		     
+
 To run the tests of this package, the following variable(s) need to be defined :
-		     
+
 FIO_ROOT  : The root directory of the fio package
 	    installation:  git clone git://git.kernel.dk/fio.git. run make for
 	    build
 	    tested version: fio-2.1.1
 
-		     
+
 The variables can be defined as environment variables (eg. with bash "export") or
 passed to the configure command (e.g. ./configure FIO_ROOT=/opt/fio/ ).
 The variables should point to the directory which contain
 /engines,/examples,etcsubdirs.
 *********************************************************************************
-]) 
+])
 fi
 fi

@@ -181,7 +181,7 @@ static void xio_module_down(void *data)
 
 	connection = session_data->connection;
 	session_data->connection = NULL;
-	xio_connection_destroy(connection);
+	xio_disconnect(connection);
 
 	return;
 
@@ -205,6 +205,7 @@ static int xio_client_main(void *data)
 
 	struct xio_session	*session;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 	char			url[256];
 	struct xio_context	*ctx;
 	struct session_data	*session_data;
@@ -239,10 +240,14 @@ static int xio_client_main(void *data)
 
 	session = xio_session_create(&params);
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= session;
+	cparams.ctx			= ctx;
+	cparams.conn_user_context	= session_data;
+
 	/* connect the session  */
 	session_data->session = session;
-	session_data->connection = xio_connect(session, ctx, 0,
-					       NULL, session_data);
+	session_data->connection = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {

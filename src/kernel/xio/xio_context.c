@@ -46,10 +46,16 @@
 #include <linux/topology.h>
 
 #include "libxio.h"
-#include "xio_observer.h"
+#include "xio_log.h"
+#include <xio_os.h>
 #include "xio_common.h"
-#include "xio_context.h"
+#include "xio_observer.h"
+#include "xio_idr.h"
+#include "xio_ev_data.h"
 #include "xio_ev_loop.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
+#include "xio_mempool.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -61,6 +67,7 @@ int xio_context_reg_observer(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_context_reg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_unreg_observer		                                     */
@@ -70,6 +77,7 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 {
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
+EXPORT_SYMBOL(xio_context_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_create							     */
@@ -95,7 +103,8 @@ struct xio_context *xio_context_create(unsigned int flags,
 	if ((flags == XIO_LOOP_USER_LOOP) &&
 	    (!(loop_ops && loop_ops->add_event && loop_ops->ev_loop))) {
 		xio_set_error(EINVAL);
-		ERROR_LOG("loop_ops and ev_loop and ev_loop_add_event are mandatory with loop_ops\n");
+		ERROR_LOG("loop_ops and ev_loop and ev_loop_add_event are " \
+			  "mandatory with loop_ops\n");
 		goto cleanup0;
 	}
 
@@ -108,7 +117,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		goto cleanup0;
 
 	/* allocate new context */
-	ctx = kzalloc(sizeof(struct xio_context), GFP_KERNEL);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (ctx == NULL) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kzalloc failed\n");
@@ -118,6 +127,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	if (cpu_hint < 0)
 		cpu_hint = cpu;
 
+	ctx->run_private = 0;
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
@@ -172,6 +182,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	ctx->stats.name[XIO_STAT_DELAY]    = kstrdup("DELAY", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_APPDELAY] = kstrdup("APPDELAY", GFP_KERNEL);
 
+	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
 cleanup3:
@@ -189,6 +200,7 @@ cleanup0:
 
 	return NULL;
 }
+EXPORT_SYMBOL(xio_context_create);
 
 /*---------------------------------------------------------------------------*/
 /* xio_modify_context							     */
@@ -208,6 +220,7 @@ int xio_modify_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_modify_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_query_context							     */
@@ -227,6 +240,7 @@ int xio_query_context(struct xio_context *ctx,
 
 	return 0;
 }
+EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
@@ -234,14 +248,38 @@ int xio_query_context(struct xio_context *ctx,
 void xio_context_destroy(struct xio_context *ctx)
 {
 	int i;
+	int found;
 
+	found = xio_idr_lookup_uobj(usr_idr, ctx);
+	if (found) {
+		xio_idr_remove_uobj(usr_idr, ctx);
+	} else {
+		ERROR_LOG("context not found:%p\n", ctx);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return;
+	}
+
+	ctx->run_private = 0;
 	xio_observable_notify_all_observers(&ctx->observable,
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+	/* allow internally to run the loop for final cleanup */
+	if (ctx->run_private)
+		xio_context_run_loop(ctx);
+
+	if (ctx->run_private)
+		ERROR_LOG("not all observers finished! run_private=%d\n",
+			  ctx->run_private);
+
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
+
+	if (!xio_observable_is_empty(&ctx->observable))
+		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
+
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	for (i = 0; i < XIO_STAT_LAST; i++)
-		if (ctx->stats.name[i])
-			kfree(ctx->stats.name[i]);
+		kfree(ctx->stats.name[i]);
 
 	xio_workqueue_destroy(ctx->workqueue);
 
@@ -251,14 +289,19 @@ void xio_context_destroy(struct xio_context *ctx)
 
 	ctx->ev_loop = NULL;
 
-	if (ctx->ctx_dentry) {
-		debugfs_remove_recursive(ctx->ctx_dentry);
-		ctx->ctx_dentry = NULL;
-	}
+	debugfs_remove_recursive(ctx->ctx_dentry);
+	ctx->ctx_dentry = NULL;
+
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
+
+	if (ctx->mempool) {
+		xio_mempool_destroy(ctx->mempool);
+		ctx->mempool = NULL;
+	}
 
 	kfree(ctx);
 }
+EXPORT_SYMBOL(xio_context_destroy);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_delayed_work						     */
@@ -270,13 +313,17 @@ int xio_ctx_add_delayed_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if delayed work is pending */
+	if (xio_is_delayed_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_add_delayed_work(ctx->workqueue,
 						msec_duration, data,
 						timer_fn, work);
 	if (retval) {
 		xio_set_error(retval);
 		ERROR_LOG("xio_workqueue_add_delayed_work failed. err=%d\n",
-			   retval);
+			  retval);
 	}
 
 	return retval;
@@ -290,11 +337,19 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if delayed work is pending */
+	if (!xio_is_delayed_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
-	if (retval) {
+	if (retval == -1) {
 		xio_set_error(retval);
-		ERROR_LOG("xio_workqueue_del_delayed_work failed. err=%d\n",
-			  retval);
+		DEBUG_LOG(" WARN workqueue_del_delayed_work failed. err=%d\n",
+			 retval);
+	} else if (retval) {
+		xio_set_error(retval);
+		WARN_LOG("workqueue_del_delayed_work failed. err=%d\n",
+			 retval);
 	}
 
 	return retval;
@@ -306,18 +361,21 @@ int xio_context_run_loop(struct xio_context *ctx)
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	return ev_loop->run(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_run_loop);
 
 void xio_context_stop_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	ev_loop->stop(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_stop_loop);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
 	return ev_loop->add_event(ev_loop->loop_object, data);
 }
+EXPORT_SYMBOL(xio_context_add_event);
 
 int xio_context_is_loop_stopping(struct xio_context *ctx)
 {
@@ -334,6 +392,10 @@ int xio_ctx_add_work(struct xio_context *ctx,
 		     xio_ctx_work_t *work)
 {
 	int retval;
+
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
 
 	retval = xio_workqueue_add_work(ctx->workqueue,
 					data, function, work);
@@ -354,6 +416,10 @@ int xio_ctx_del_work(struct xio_context *ctx,
 {
 	int retval;
 
+	/* test if work is pending */
+	if (!xio_is_work_pending(work))
+		return 0;
+
 	retval = xio_workqueue_del_work(ctx->workqueue, work);
 	if (retval) {
 		xio_set_error(retval);
@@ -362,3 +428,21 @@ int xio_ctx_del_work(struct xio_context *ctx,
 
 	return retval;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_mempool_get							     */
+/*---------------------------------------------------------------------------*/
+struct xio_mempool *xio_mempool_get(struct xio_context *ctx)
+{
+	if (ctx->mempool)
+		return ctx->mempool;
+
+	ctx->mempool = xio_mempool_create();
+
+	if (!ctx->mempool) {
+		ERROR_LOG("xio_mempool_create failed\n");
+		return NULL;
+	}
+	return ctx->mempool;
+}
+EXPORT_SYMBOL(xio_mempool_get);

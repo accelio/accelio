@@ -38,8 +38,6 @@
 #ifndef XIO_TASK_H
 #define XIO_TASK_H
 
-#include "libxio.h"
-#include "xio_mbuf.h"
 
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,
@@ -123,9 +121,9 @@ struct xio_tasks_pool_hooks {
 
 struct xio_tasks_pool_params {
 	struct xio_tasks_pool_hooks	pool_hooks;
-	int				start_nr;
-	int				max_nr;
-	int				alloc_nr;
+	unsigned int			start_nr;
+	unsigned int			max_nr;
+	unsigned int			alloc_nr;
 	int				pool_dd_data_sz;
 	int				slab_dd_data_sz;
 	int				task_dd_data_sz;
@@ -287,7 +285,7 @@ static inline int xio_tasks_pool_free_tasks(
 /*---------------------------------------------------------------------------*/
 static inline struct xio_task *xio_tasks_pool_lookup(
 			struct xio_tasks_pool *q,
-			int id)
+			unsigned int id)
 {
 	struct xio_tasks_slab *slab;
 

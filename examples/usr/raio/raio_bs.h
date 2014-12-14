@@ -2,6 +2,7 @@
 #define RAIO_BS_H
 
 #include <sys/queue.h>
+#include <sys/stat.h>
 #include <stdint.h>
 
 struct raio_io_cmd;
@@ -53,9 +54,11 @@ struct backingstore_template {
 struct raio_bs {
 	void				*ctx;
 	int				fd;
-	int				reserved;
+	int				is_null;
+	struct stat64			stbuf;
 	struct backingstore_template	*bst;
 	void				*dd;
+	TAILQ_ENTRY(raio_bs)		list;
 };
 
 /*---------------------------------------------------------------------------*/

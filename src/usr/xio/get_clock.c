@@ -38,18 +38,17 @@
 
 /* For gettimeofday */
 #define _BSD_SOURCE
-#include <sys/time.h>
+#include <xio_env.h>
 
-#include <unistd.h>
 #include <stdio.h>
-#include <pthread.h>
 
+#include "xio_usr_utils.h"
 #include "get_clock.h"
 
 #ifndef GETCLOCK_DEBUG
-#define _DEBUG 0
+#define _DEBUG_MODE 0
 #else
-#define _DEBUG 1
+#define _DEBUG_MODE 1
 #endif
 
 #ifndef DEBUG_DATA
@@ -105,7 +104,7 @@ static double sample_get_cpu_mhz(void)
 
 	for (i = 0; i < MEASUREMENTS; ++i) {
 		tx = x[i];
-		ty = y[i];
+		ty = (double) y[i];
 		sx += tx;
 		sy += ty;
 		sxx += tx * tx;
@@ -116,17 +115,17 @@ static double sample_get_cpu_mhz(void)
 	b = (MEASUREMENTS * sxy - sx * sy) / (MEASUREMENTS * sxx - sx * sx);
 	a = (sy - b * sx) / MEASUREMENTS;
 
-	if (_DEBUG)
+	if (_DEBUG_MODE)
 		fprintf(stderr, "a = %g\n", a);
-	if (_DEBUG)
+	if (_DEBUG_MODE)
 		fprintf(stderr, "b = %g\n", b);
-	if (_DEBUG)
+	if (_DEBUG_MODE)
 		fprintf(stderr, "a / b = %g\n", a / b);
 	r_2 = (MEASUREMENTS * sxy - sx * sy) * (MEASUREMENTS * sxy - sx * sy) /
 		(MEASUREMENTS * sxx - sx * sx) /
 		(MEASUREMENTS * syy - sy * sy);
 
-	if (_DEBUG)
+	if (_DEBUG_MODE)
 		fprintf(stderr, "r^2 = %g\n", r_2);
 	if (r_2 < 0.9) {
 		fprintf(stderr, "Correlation coefficient r^2: %g < 0.9\n", r_2);
@@ -190,10 +189,10 @@ double get_core_freq(void)
 
 	FILE *f;
 	char buf[256];
-	unsigned long khz = 0.0;
+	unsigned long khz = 0;
 	int rc;
 
-	cpu = sched_getcpu();
+	cpu = xio_get_cpu();
 	if (cpu < 0) {
 		perror("sched_getcpu");
 		return 0.0;

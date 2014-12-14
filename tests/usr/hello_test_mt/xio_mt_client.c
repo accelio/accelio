@@ -100,11 +100,12 @@ struct thread_data {
 	struct xio_context	*ctx;
 	struct msg_pool		*pool;
 	pthread_t		thread_id;
-	uint64_t	disconnect_nr;
+	uint64_t		disconnect_nr;
 	uint64_t		nrecv;
 	uint64_t		nsent;
 	uint16_t		finite_run;
-	uint16_t		padding[3];
+	uint16_t		padding;
+	int			exit_code;
 };
 
 /* private session data */
@@ -198,11 +199,12 @@ static void process_response(struct thread_data	*tdata, struct xio_msg *rsp)
 
 static void *worker_thread(void *data)
 {
-	struct thread_data	*tdata = data;
-	cpu_set_t		cpuset;
-	struct xio_msg		*msg;
-	struct xio_iovec_ex	*sglist;
-	int			i;
+	struct thread_data		*tdata = (struct thread_data *)data;
+	cpu_set_t			cpuset;
+	struct xio_connection_params	cparams;
+	struct xio_msg			*msg;
+	struct xio_iovec_ex		*sglist;
+	int				i;
 
 	/* set affinity to thread */
 
@@ -215,6 +217,7 @@ static void *worker_thread(void *data)
 	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
 	if (tdata->pool == NULL) {
 		fprintf(stderr, "failed to alloc pool\n");
+		tdata->exit_code = -1;
 		return NULL;
 	}
 
@@ -222,15 +225,28 @@ static void *worker_thread(void *data)
 	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
 					tdata->affinity);
 
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= tdata->session;
+	cparams.ctx			= tdata->ctx;
+	cparams.conn_idx		= tdata->cid;
+	cparams.conn_user_context	= tdata;
+
 	/* connect the session  */
-	tdata->conn = xio_connect(tdata->session, tdata->ctx,
-				  tdata->cid, NULL, tdata);
+	tdata->conn = xio_connect(&cparams);
+	if (tdata->conn == NULL) {
+		tdata->exit_code = -1;
+		goto exit;
+	}
 
 	for (i = 0;  i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(tdata->pool);
-		if (msg == NULL)
+		if (msg == NULL) {
+			/* on error - disconnect */
+			tdata->exit_code = -1;
+			xio_disconnect(tdata->conn);
 			break;
+		}
 
 		/* get pointers to internal buffers */
 		msg->in.header.iov_base = NULL;
@@ -258,15 +274,19 @@ static void *worker_thread(void *data)
 					xio_strerror(xio_errno()));
 			msg_pool_put(tdata->pool, msg);
 			tdata->nsent++;
-			xio_assert(0);
+			/* on error - disconnect */
+			tdata->exit_code = -1;
+			xio_disconnect(tdata->conn);
+			break;
 		}
 	}
 
 	/* the default xio supplied main loop */
 	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
 
+exit:
 	/* normal exit phase */
-	fprintf(stdout, "exit signaled\n");
+	fprintf(stdout, "thread[%d]: exit signaled\n", tdata->affinity);
 
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
@@ -274,7 +294,11 @@ static void *worker_thread(void *data)
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
 
-	fprintf(stdout, "thread exit\n");
+	if (tdata->exit_code)
+		fprintf(stdout, "thread exit - failure\n");
+	else
+		fprintf(stdout, "thread exit - success\n");
+
 	return NULL;
 }
 
@@ -285,7 +309,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data =
+					(struct session_data *)cb_user_context;
 	int		    i;
 
 	printf("session event: %s. reason: %s\n",
@@ -304,7 +329,8 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
 		for (i = 0; i < MAX_THREADS; i++)
-			xio_context_stop_loop(session_data->tdata[i].ctx, 0);
+			if (session_data->tdata[i].exit_code == 0)
+				xio_context_stop_loop(session_data->tdata[i].ctx);
 		break;
 	default:
 		break;
@@ -321,7 +347,7 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex *sglist;
 
 	tdata->nrecv++;
@@ -355,7 +381,6 @@ static int on_response(struct xio_session *session,
 	sglist[0].mr = NULL;
 
 	msg->sn = 0;
-	msg->more_in_batch = 0;
 
 	/* recycle the message and fill new request */
 	msg_write(&msg_params, msg,
@@ -379,14 +404,22 @@ static int on_response(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_user_context)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
-	struct thread_data  *tdata = cb_user_context;
+	struct thread_data  *tdata = (struct thread_data *)cb_user_context;
 
-	printf("**** [%p] message [%lu] failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+	if (direction == XIO_MSG_DIRECTION_OUT) {
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->sn, xio_strerror(error));
+	} else {
+		xio_release_response(msg);
+		printf("**** [%p] message %lu failed. reason: %s\n",
+		       session, msg->request->sn, xio_strerror(error));
+	}
 
 	msg_pool_put(tdata->pool, msg);
 
@@ -590,6 +623,7 @@ int main(int argc, char *argv[])
 	uint64_t		cpusmask;
 	int			cpusnr;
 	int			cpu;
+	int			exit_code = 0;
 	struct xio_session_params params;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -633,7 +667,8 @@ int main(int argc, char *argv[])
 		int error = xio_errno();
 		fprintf(stderr, "session creation failed. reason %d - (%s)\n",
 			error, xio_strerror(error));
-		xio_assert(sess_data.session != NULL);
+		exit_code = -1;
+		goto exit;
 	}
 
 	/* spawn threads to handle connection */
@@ -657,15 +692,20 @@ int main(int argc, char *argv[])
 	}
 
 	/* join the threads */
-	for (i = 0; i < MAX_THREADS; i++)
+	for (i = 0; i < MAX_THREADS; i++) {
 		pthread_join(sess_data.tdata[i].thread_id, NULL);
+		if (sess_data.tdata[i].exit_code != 0)
+			exit_code = -1;
+	}
+
 
 	fprintf(stdout, "joined all threads\n");
 
 	/* close the session */
 	xio_session_destroy(sess_data.session);
 
+exit:
 	msg_api_free(&msg_params);
 
-	return 0;
+	return exit_code;
 }

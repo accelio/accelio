@@ -264,12 +264,13 @@ stop_loop_now:
 /*---------------------------------------------------------------------------*/
 static int xio_client_thread(void *data)
 {
-	struct thread_data	*tdata;
-	struct session_data	*sdata;
-	struct xio_connection	*connection;
-	struct xio_context	*ctx;
-	int			cpu;
-	int			i = 0;
+	struct thread_data		*tdata;
+	struct session_data		*sdata;
+	struct xio_connection		*connection;
+	struct xio_connection_params	cparams;
+	struct xio_context		*ctx;
+	int				cpu;
+	int				i = 0;
 
 	atomic_inc(&cleanup_complete.thread_count);
 
@@ -314,7 +315,12 @@ static int xio_client_thread(void *data)
 	spin_unlock(&sdata->lock);
 	synchronize_rcu();
 
-	connection = xio_connect(sdata->session, ctx, 0, NULL, tdata);
+	memset(&cparams, 0, sizeof(cparams));
+	cparams.session			= sdata->session;
+	cparams.ctx			= ctx;
+	cparams.conn_user_context	= tdata;
+
+	connection = xio_connect(&cparams);
 	if (!connection) {
 		pr_err("connection create failed\n");
 		goto cleanup2;
@@ -465,6 +471,7 @@ static int xio_client_main(void *data)
 	/* create URL to connect to */
 	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 
+	memset(&params, 0, sizeof(params));
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
 	params.user_context	= sdata;

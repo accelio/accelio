@@ -35,7 +35,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include "libxio.h"
 #include "xio_common.h"
 
@@ -122,6 +122,10 @@ static const char *xio_gen_status_str(enum xio_status ev)
 		return "Send queue overflow";
 	case XIO_E_USER_OBJ_NOT_FOUND:
 		return "User object not found";
+	case XIO_E_PEER_QUEUE_SIZE_MISMATCH:
+		return "Peer receive queue is smaller then message size";
+	case XIO_E_RSP_BUF_SIZE_MISMATCH:
+		return "Response buffer is smaller then actual response";
 	default:
 		return "Unknown error";
 	};
@@ -136,9 +140,10 @@ const char *xio_strerror(int errnum)
 		return strerror(errnum);
 
 	if (errnum >= XIO_E_NOT_SUPPORTED && errnum < XIO_E_LAST_STATUS)
-		return xio_gen_status_str(errnum);
+		return xio_gen_status_str((enum xio_status)errnum);
 
 	return "Unknown error";
 }
+EXPORT_SYMBOL(xio_strerror);
 
 

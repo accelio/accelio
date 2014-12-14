@@ -35,14 +35,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 
-#include "xio_workqueue.h"
 #include "xio_log.h"
+#include "xio_common.h"
 #include "xio_observer.h"
-#include "xio_context.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
 #include "xio_timers_list.h"
-
+#include "xio_context.h"
 
 #define NSEC_PER_SEC		1000000000L
 #define MAX_DELETED_WORKS	1024
@@ -81,7 +82,7 @@ struct xio_workqueue {
 static void set_normalized_timespec(struct timespec *ts,
 				    time_t sec, int64_t nsec)
 {
-	while (nsec >= XIO_NS_IN_SEC) {
+	while (nsec >= (int64_t)XIO_NS_IN_SEC) {
 		nsec -= XIO_NS_IN_SEC;
 		++sec;
 	}
@@ -157,7 +158,7 @@ static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 /*---------------------------------------------------------------------------*/
 static void xio_delayed_action_handler(int fd, int events, void *user_context)
 {
-	struct xio_workqueue	*work_queue = user_context;
+	struct xio_workqueue *work_queue = (struct xio_workqueue *)user_context;
 	int64_t			exp;
 	ssize_t			s;
 
@@ -187,11 +188,11 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 /*---------------------------------------------------------------------------*/
 static void xio_work_action_handler(int fd, int events, void *user_context)
 {
-	struct xio_workqueue	*work_queue = user_context;
-	int64_t			exp;
+	struct xio_workqueue *work_queue = (struct xio_workqueue *)user_context;
+	uint64_t		exp;
 	ssize_t			s;
 	xio_work_handle_t	*work;
-	int			i, found = 0;
+	unsigned int		i, found = 0;
 
 
 	/* drain the pipe data */
@@ -207,14 +208,14 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			ERROR_LOG("failed to read from pipe, %m\n");
 			return;
 		}
-		work = ptr_from_int64(exp);
+		work = (xio_work_handle_t *)ptr_from_int64(exp);
 		if (!work) {
 			ERROR_LOG("null work\n");
 			return;
 		}
 
 		/* scan for deleted work the may be inside the pipe */
-		for(i = 0; i < work_queue->deleted_works_nr; i++) {
+		for (i = 0; i < work_queue->deleted_works_nr; i++) {
 			if (work_queue->deleted_works[i] == exp) {
 				found = 1;
 				break;
@@ -241,7 +242,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	struct xio_workqueue	*work_queue;
 	int			retval;
 
-	work_queue = ucalloc(1, sizeof(*work_queue));
+	work_queue = (struct xio_workqueue *)ucalloc(1, sizeof(*work_queue));
 	if (work_queue == NULL) {
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
@@ -333,9 +334,9 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 /* xio_workqueue_add_delayed_work					     */
 /*---------------------------------------------------------------------------*/
 int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
-			    int msec_duration, void *data,
-			    void (*function)(void *data),
-			    xio_delayed_work_handle_t *dwork)
+				   int msec_duration, void *data,
+				   void (*function)(void *data),
+				   xio_delayed_work_handle_t *dwork)
 {
 	int			retval = 0;
 	enum timers_list_rc	rc;
@@ -447,8 +448,8 @@ int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 		work->flags &= ~XIO_WORK_PENDING;
 		if (work_queue->deleted_works_nr < MAX_DELETED_WORKS) {
 			work_queue->deleted_works[
-				work_queue->deleted_works_nr
-						 ] = uint64_from_ptr(work);
+				work_queue->deleted_works_nr] =
+							uint64_from_ptr(work);
 			work_queue->deleted_works_nr++;
 		} else {
 			ERROR_LOG("failed to delete work\n");

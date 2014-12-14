@@ -36,17 +36,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <xio_os.h>
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
-#include "xio_context.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
 #include "xio_usr_transport.h"
-#include "xio_transport_mempool.h"
-#include "xio_common.h"
+#include "xio_mempool.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
+
+
 
 #ifndef HAVE_INFINIBAND_VERBS_H
 
@@ -141,75 +148,61 @@ int xio_free(struct xio_buf **buf)
 #endif /*HAVE_INFINIBAND_VERBS_H*/
 
 /*---------------------------------------------------------------------------*/
-/* xio_transport_mempool_array_init					     */
+/* xio_transport_mempool_get						     */
 /*---------------------------------------------------------------------------*/
-int xio_transport_mempool_array_init(struct xio_mempool
-				     ***mempool_array,
-				     int *mempool_array_len)
+struct xio_mempool *xio_transport_mempool_get(
+		struct xio_context *ctx, int reg_mr)
 {
-	long cpus_nr = sysconf(_SC_NPROCESSORS_CONF);
-	if (cpus_nr < 0) {
-		xio_set_error(errno);
-		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
+	if (ctx->mempool)
+		return (struct xio_mempool *)ctx->mempool;
 
-
-	/* free devices */
-	*mempool_array_len = 0;
-	*mempool_array = ucalloc(cpus_nr, sizeof(struct xio_rmda_mempool *));
-	if (*mempool_array == NULL) {
-		xio_set_error(errno);
-		ERROR_LOG("mempool_array_init failed. (errno=%d %m)\n", errno);
-		return -1;
-	}
-	*mempool_array_len = cpus_nr;
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_transport_mempool_array_release					     */
-/*---------------------------------------------------------------------------*/
-void xio_transport_mempool_array_release(struct xio_mempool
-						**mempool_array,
-						int mempool_array_len)
-{
-	int i;
-
-	for (i = 0; i < mempool_array_len; i++) {
-		if (mempool_array[i]) {
-			xio_mempool_destroy(mempool_array[i]);
-			mempool_array[i] = NULL;
-		}
-	}
-	ufree(mempool_array);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_transport_mempool_array_get					     */
-/*---------------------------------------------------------------------------*/
-struct xio_mempool *xio_transport_mempool_array_get(
-		struct xio_context *ctx,
-		struct xio_mempool **mempool_array,
-		int mempool_array_len,
-		int reg_mr)
-{
-	if (ctx->nodeid > mempool_array_len) {
-		ERROR_LOG("xio_rdma_mempool_create failed. array overflow\n");
-		return NULL;
-	}
-	if (mempool_array[ctx->nodeid])
-		return mempool_array[ctx->nodeid];
-
-	mempool_array[ctx->nodeid] = xio_mempool_create_prv(
+	ctx->mempool = xio_mempool_create_prv(
 			ctx->nodeid,
 			(reg_mr ? XIO_MEMPOOL_FLAG_REG_MR : 0) |
 			XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC);
 
-	if (!mempool_array[ctx->nodeid]) {
+	if (!ctx->mempool) {
 		ERROR_LOG("xio_mempool_create failed (errno=%d %m)\n", errno);
 		return NULL;
 	}
-	return mempool_array[ctx->nodeid];
+	return (struct xio_mempool *)ctx->mempool;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_transport_state_str						     */
+/*---------------------------------------------------------------------------*/
+char *xio_transport_state_str(enum xio_transport_state state)
+{
+	switch (state) {
+	case XIO_STATE_INIT:
+		return "INIT";
+		break;
+	case XIO_STATE_LISTEN:
+		return "LISTEN";
+		break;
+	case XIO_STATE_CONNECTING:
+		return "CONNECTING";
+		break;
+	case XIO_STATE_CONNECTED:
+		return "CONNECTED";
+		break;
+	case XIO_STATE_DISCONNECTED:
+		return "DISCONNECTED";
+		break;
+	case XIO_STATE_RECONNECT:
+		return "RECONNECT";
+		break;
+	case XIO_STATE_CLOSED:
+		return "CLOSED";
+		break;
+	case XIO_STATE_DESTROYED:
+		return "DESTROYED";
+		break;
+	default:
+		return "UNKNOWN";
+		break;
+	}
+
+	return NULL;
+};
+

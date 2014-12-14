@@ -9,7 +9,7 @@ endif
 
 AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
 AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lpthread -laio \
-	     -L$(top_builddir)/src/usr/ 
+	     -L$(top_builddir)/src/usr/
 
 ###############################################################################
 # THE PROGRAMS TO BUILD
@@ -24,10 +24,10 @@ bin_PROGRAMS = raio_client 			\
 libraio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
-libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/libraio.h 
+libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/libraio.h
 
 libraio_headers   =  get_clock.h		\
-		     msg_pool.h			\
+		     raio_msg_pool.h		\
 		     raio_bs.h			\
 		     raio_buffer.h		\
 		     raio_command.h		\
@@ -36,23 +36,25 @@ libraio_headers   =  get_clock.h		\
 
 libraio_la_SOURCES = $(libraio_include_HEADERS) 	\
 		     $(libraio_headers)		      	\
-		     msg_pool.c			      	\
+		     raio_msg_pool.c			\
 		     raio_utils.c			\
-		     raio_api.c		
+		     raio_api.c
 
-	
+libraio_la_LDFLAGS = -lxio $(libxio_rdma_ldflags) -laio -lrt -lpthread \
+		     -L$(top_builddir)/src/usr/
+
 # list of sources for the binary
 raio_server_SOURCES = raio_server.c		\
 		      raio_handlers.c		\
 		      raio_bs.c 		\
 		      raio_bs_null.c		\
-		      raio_bs_aio.c		
+		      raio_bs_aio.c
+raio_server_DEPENDENCIES = libraio.la
 
 raio_client_SOURCES = raio_client.c		\
 		      get_clock.c
+raio_client_DEPENDENCIES = libraio.la
 
-libraio_la_LDFLAGS = -lxio $(libxio_rdma_ldflags) -laio -lrt -lpthread \
-	     	     -L$(top_builddir)/src/usr/ 
 
 #libraio_la_LDFLAGS = -shared -rdynamic	 	\
 #		      -lxio -lrdmacm -libverbs -laio -lrt -ldl

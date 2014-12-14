@@ -43,9 +43,9 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define TEST_DISCONNECT		0
-#define DISCONNECT_NR		2000000
+#define DISCONNECT_NR		(2*PRINT_COUNTER)
 
+int test_disconnect;
 
 /* private session data */
 struct session_data {
@@ -64,7 +64,6 @@ struct session_data {
 static void process_response(struct session_data *session_data,
 			     struct xio_msg *rsp)
 {
-
 	if (++session_data->cnt == PRINT_COUNTER) {
 		struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
 		int			inents = vmsg_sglist_nents(&rsp->in);
@@ -86,7 +85,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 
 	printf("session event: %s. reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -98,7 +98,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -115,7 +115,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	session_data->nrecv++;
@@ -125,14 +126,15 @@ static int on_response(struct xio_session *session,
 	/* acknowledge xio that response is no longer needed */
 	xio_release_response(rsp);
 
-#if  TEST_DISCONNECT
-	if (session_data->nrecv == DISCONNECT_NR) {
-		xio_disconnect(session_data->conn);
-		return 0;
+	if (test_disconnect) {
+		if (session_data->nrecv == DISCONNECT_NR) {
+			xio_disconnect(session_data->conn);
+			return 0;
+		}
+		if (session_data->nsent == DISCONNECT_NR)
+			return 0;
 	}
-	if (session_data->nsent == DISCONNECT_NR)
-		return 0;
-#endif
+
 
 	session_data->req[i].in.header.iov_base	  = NULL;
 	session_data->req[i].in.header.iov_len	  = 0;
@@ -160,19 +162,21 @@ static struct xio_session_ops ses_ops = {
 /*---------------------------------------------------------------------------*/
 int main(int argc, char *argv[])
 {
-	struct xio_session	*session;
-	char			url[256];
-	struct session_data	session_data;
-	int			i = 0;
-	struct xio_session_params params;
+	struct xio_session		*session;
+	char				url[256];
+	struct session_data		session_data;
+	int				i = 0;
+	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\
+				<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 	memset(&session_data, 0, sizeof(session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	/* initialize library */
 	xio_init();
@@ -187,6 +191,11 @@ int main(int argc, char *argv[])
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
 
+	if (argc > 4)
+		test_disconnect = atoi(argv[4]);
+	else
+		test_disconnect = 0;
+
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
 	params.user_context	= &session_data;
@@ -194,9 +203,12 @@ int main(int argc, char *argv[])
 
 	session = xio_session_create(&params);
 
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
+
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
@@ -205,7 +217,8 @@ int main(int argc, char *argv[])
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
 		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base) + 1;
+			strlen((const char *)
+				session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
 		session_data.req[i].in.sgl_type		  = XIO_SGL_TYPE_IOV;
 		session_data.req[i].in.data_iov.max_nents = XIO_IOVLEN;
@@ -217,7 +230,9 @@ int main(int argc, char *argv[])
 			strdup("hello world data request");
 
 		session_data.req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+			strlen((const char *)
+			  session_data.req[i].out.data_iov.sglist[0].iov_base)
+			   + 1;
 
 		session_data.req[i].out.data_iov.nents = 1;
 	}

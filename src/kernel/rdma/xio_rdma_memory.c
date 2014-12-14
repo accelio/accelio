@@ -48,16 +48,23 @@
 #include <rdma/rdma_cm.h>
 
 #include "libxio.h"
+#include <xio_os.h>
+#include "xio_log.h"
 #include "xio_observer.h"
 #include "xio_common.h"
-#include "xio_context.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"
-#include "xio_rdma_mempool.h"
+#include "xio_mempool.h"
 #include "xio_rdma_transport.h"
+#include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
 
 #define XIO_KMALLOC_THRESHOLD 0x20000 /* 128K - kmalloc limit */
 
@@ -110,7 +117,8 @@ void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Inline were not mapped */
 	if (!(xd->send_wr.send_flags & IB_SEND_INLINE))
-		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents, DMA_TO_DEVICE);
+		ib_dma_unmap_sg(ib_dev, xd->sgt.sgl, xd->sgt.nents,
+				DMA_TO_DEVICE);
 
 	/* Disconnect header from data if any */
 	sg_mark_end(&xd->sgt.sgl[1]);
@@ -136,7 +144,8 @@ int xio_map_rx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 
 	/* Assume scatterlist is terminated properly */
 
-	nents = ib_dma_map_sg(ib_dev, sgt->sgl, sgt->nents, DMA_FROM_DEVICE);
+	nents = ib_dma_map_sg(ib_dev, sgt->sgl, sgt->nents,
+			      DMA_FROM_DEVICE);
 	if (!nents) {
 		xd->mapped = 0;
 		return -1;
@@ -399,7 +408,7 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 /*---------------------------------------------------------------------------*/
 /* xio_reset_desc							     */
 /*---------------------------------------------------------------------------*/
-void xio_reset_desc(struct xio_rdma_mem_desc *desc)
+void xio_reset_desc(struct xio_mem_desc *desc)
 {
 	memset(&desc->sgt, 0, sizeof(desc->sgt));
 }
@@ -408,7 +417,7 @@ void xio_reset_desc(struct xio_rdma_mem_desc *desc)
 /* xio_unmap_desc							     */
 /*---------------------------------------------------------------------------*/
 void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
-		    struct xio_rdma_mem_desc *desc,
+		    struct xio_mem_desc *desc,
 		    enum dma_data_direction direction)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -434,7 +443,7 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 /* xio_map_desc								     */
 /*---------------------------------------------------------------------------*/
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
-		 struct xio_rdma_mem_desc *desc,
+		 struct xio_mem_desc *desc,
 		 enum dma_data_direction direction)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -446,7 +455,8 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* Assume scatterlist is terminated properly */
 
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+			      direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -456,7 +466,8 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_hndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+				direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
@@ -470,7 +481,7 @@ int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 		   struct xio_rdma_transport *rdma_nhndl,
-		   struct xio_rdma_mem_desc *desc,
+		   struct xio_mem_desc *desc,
 		   enum dma_data_direction direction)
 {
 	struct xio_device *dev;
@@ -482,7 +493,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	dev = rdma_ohndl->dev;
 	ib_dev = dev->ib_dev;
-	/* fast unregistration routine may do nothing but it is always exists */
+	/* fast unregistration routine may do nothing but it is
+	 * always exists */
 	dev->fastreg.unreg_rdma_mem(rdma_ohndl, desc, direction);
 
 	/* Assume scatterlist is terminated properly */
@@ -490,7 +502,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	dev = rdma_nhndl->dev;
 	ib_dev = dev->ib_dev;
-	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+	nents = ib_dma_map_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+			      direction);
 	if (!nents) {
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
@@ -499,7 +512,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 
 	/* fast registration routine may do nothing but it is always exists */
 	if (dev->fastreg.reg_rdma_mem(rdma_nhndl, desc, direction)) {
-		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents, direction);
+		ib_dma_unmap_sg(ib_dev, desc->sgt.sgl, desc->sgt.nents,
+				direction);
 		memset(&desc->sgt, 0, sizeof(desc->sgt));
 		desc->mapped = 0;
 		return -1;
@@ -520,14 +534,14 @@ int xio_create_dummy_pool(struct xio_rdma_transport *rdma_hndl)
 }
 
 void xio_unreg_mem_dummy(struct xio_rdma_transport *rdma_hndl,
-			 struct xio_rdma_mem_desc *desc,
+			 struct xio_mem_desc *desc,
 			 enum dma_data_direction cmd_dir)
 {
 	return;
 }
 
 int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
-			   struct xio_rdma_mem_desc *desc,
+			   struct xio_mem_desc *desc,
 			   enum dma_data_direction cmd_dir)
 {
 	desc->mem_reg.mem_h = NULL;
@@ -548,7 +562,7 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  * consecutive elements. Also, it handles one entry SG.
  */
 
-static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
+static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 			      struct ib_device *ibdev, u64 *pages,
 			      int *offset, int *data_size)
 {
@@ -589,7 +603,7 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
 	}
 
 	*data_size = total_sz;
-	DEBUG_LOG("page_vec->data_size:%d cur_page %d\n",
+	TRACE_LOG("page_vec->data_size:%d cur_page %d\n",
 		  *data_size, cur_page);
 	return cur_page;
 }
@@ -600,7 +614,7 @@ static int xio_sg_to_page_vec(struct xio_rdma_mem_desc *mdesc,
  * the number of entries which are aligned correctly. Supports the case where
  * consecutive SG elements are actually fragments of the same physcial page.
  */
-static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
+static int xio_data_buf_aligned_len(struct xio_mem_desc *mdesc,
 				    struct ib_device *ibdev)
 {
 	struct scatterlist *sgl, *sg, *next_sg = NULL;
@@ -635,7 +649,7 @@ static int xio_data_buf_aligned_len(struct xio_rdma_mem_desc *mdesc,
 			break;
 	}
 	ret_len = (next_sg) ? i : i+1;
-	DEBUG_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
+	TRACE_LOG("Found %d aligned entries out of %d in mdesc:%p\n",
 		  ret_len, mdesc->nents, mdesc);
 	return ret_len;
 }
@@ -650,7 +664,7 @@ void xio_free_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 	struct llist_node *node;
 	int i = 0;
 
-	INFO_LOG("freeing rdma_hndl %p FRWR pool\n", rdma_hndl);
+	DEBUG_LOG("freeing rdma_hndl %p FRWR pool\n", rdma_hndl);
 
 	node = llist_del_all(&frwr->pool);
 	while (node) {
@@ -700,7 +714,8 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 	for (i = 0; i < rdma_hndl->max_tx_ready_tasks_num * 2; i++) {
 		desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 		if (!desc) {
-			ERROR_LOG("Failed to allocate a new fast_reg descriptor\n");
+			ERROR_LOG("Failed to allocate a new fast_reg " \
+				  "descriptor\n");
 			ret = -ENOMEM;
 			goto err;
 		}
@@ -709,14 +724,16 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 							      XIO_MAX_IOV + 1);
 		if (IS_ERR(desc->data_frpl)) {
 			ret = PTR_ERR(desc->data_frpl);
-			ERROR_LOG("Failed to allocate ib_fast_reg_page_list err=%d\n", ret);
+			ERROR_LOG("Failed to allocate ib_fast_reg_page_list " \
+				  "err=%d\n", ret);
 			goto err;
 		}
 
 		desc->data_mr = ib_alloc_fast_reg_mr(dev->pd, XIO_MAX_IOV + 1);
 		if (IS_ERR(desc->data_mr)) {
 			ret = PTR_ERR(desc->data_mr);
-			ERROR_LOG("Failed to allocate ib_fast_reg_mr err=%d\n", ret);
+			ERROR_LOG("Failed to allocate ib_fast_reg_mr err=%d\n",
+				  ret);
 			ib_free_fast_reg_page_list(desc->data_frpl);
 			goto err;
 		}
@@ -732,7 +749,7 @@ err:
 }
 
 void xio_unreg_mem_frwr(struct xio_rdma_transport *rdma_hndl,
-			struct xio_rdma_mem_desc *mdesc,
+			struct xio_mem_desc *mdesc,
 			enum dma_data_direction cmd_dir)
 {
 	struct xio_mem_reg *reg = &mdesc->mem_reg;
@@ -776,7 +793,8 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 	memset(&fastreg_wr, 0, sizeof(fastreg_wr));
 	fastreg_wr.opcode = IB_WR_FAST_REG_MR;
 	fastreg_wr.wr_id = XIO_FRWR_LI_WRID;
-	fastreg_wr.wr.fast_reg.iova_start = fdesc->data_frpl->page_list[0] + offset;
+	fastreg_wr.wr.fast_reg.iova_start =
+				fdesc->data_frpl->page_list[0] + offset;
 	fastreg_wr.wr.fast_reg.page_list = fdesc->data_frpl;
 	fastreg_wr.wr.fast_reg.page_list_len = page_list_len;
 	fastreg_wr.wr.fast_reg.page_shift = PAGE_SHIFT;
@@ -803,14 +821,16 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 	return ret;
 }
 
-static struct fast_reg_descriptor *get_fdesc(struct xio_rdma_transport *rdma_hndl)
+static struct fast_reg_descriptor *get_fdesc(
+				struct xio_rdma_transport *rdma_hndl)
 {
 	struct llist_node *node, *nnode;
 	struct fast_reg_descriptor *fdesc;
 
 	node = llist_del_first(&rdma_hndl->fastreg.frwr.pool);
 	if (node)
-		return llist_entry(node, struct fast_reg_descriptor, llist_entry);
+		return llist_entry(node, struct fast_reg_descriptor,
+				   llist_entry);
 
 	node = llist_del_all(&rdma_hndl->fastreg.frwr.pool_ret);
 	if (!node)
@@ -833,7 +853,7 @@ static struct fast_reg_descriptor *get_fdesc(struct xio_rdma_transport *rdma_hnd
  * returns 0 on success, errno code on failure
  */
 int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
-			  struct xio_rdma_mem_desc *mdesc,
+			  struct xio_mem_desc *mdesc,
 			  enum dma_data_direction cmd_dir)
 {
 	struct xio_device *dev = rdma_hndl->dev;
@@ -889,14 +909,14 @@ int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops)
 		ops->free_rdma_reg_res = xio_free_dummy_pool;
 		ops->reg_rdma_mem = xio_reg_rdma_mem_dummy;
 		ops->unreg_rdma_mem = xio_unreg_mem_dummy;
-		INFO_LOG("Fast registration not supported\n");
+		WARN_LOG("Fast registration not supported\n");
 		return 0;
 	case XIO_FAST_MEM_FRWR:
 		ops->alloc_rdma_reg_res = xio_create_frwr_pool;
 		ops->free_rdma_reg_res = xio_free_frwr_pool;
 		ops->reg_rdma_mem = xio_reg_rdma_mem_frwr;
 		ops->unreg_rdma_mem = xio_unreg_mem_frwr;
-		INFO_LOG("FRWR supported, using FRWR for registration\n");
+		DEBUG_LOG("FRWR supported, using FRWR for registration\n");
 		return 0;
 	case XIO_FAST_MEM_FMR:
 		ERROR_LOG("FMRs not yet implemented\n");
@@ -909,10 +929,10 @@ int xio_fast_reg_init(enum xio_fast_reg reg, struct xio_fastreg_ops *ops)
 
 /* drivers/block/nvme.c nvme_map_bio */
 #define XIO_VEC_NOT_VIRT_MERGEABLE(vec1, vec2)   ((vec2)->bv_offset || \
-                        (((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
+		(((vec1)->bv_offset + (vec1)->bv_len) % PAGE_SIZE))
 
 void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
-			     struct xio_rdma_mp_mem *mp)
+			     struct xio_mp_mem *mp)
 {
 	void *ptr = mp->addr;
 	int i;
@@ -941,16 +961,16 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 {
 	switch (vmsg->sgl_type) {
 	case XIO_SGL_TYPE_IOV:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->data_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
 			goto done;
 		}
 	case XIO_SGL_TYPE_IOV_PTR:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->pdata_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
@@ -994,8 +1014,8 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 {
 	switch (vmsg->sgl_type) {
 	case XIO_SGL_TYPE_IOV:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->data_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {
@@ -1003,8 +1023,8 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 			goto done;
 		}
 	case XIO_SGL_TYPE_IOV_PTR:
+		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 		if (vmsg->pdata_iov.nents) {
-			WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
 			*nents = 0;
 			return -EINVAL;
 		} else {

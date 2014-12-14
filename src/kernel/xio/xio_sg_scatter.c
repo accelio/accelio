@@ -39,7 +39,7 @@
 #include <linux/scatterlist.h>
 /* sg represents xio_sg_iovptr; */
 #include "libxio.h"
-#include "xio_os.h"
+#include <xio_os.h>
 #include "xio_sg_table.h"
 
 #ifdef CONFIG_DEBUG_SG

@@ -146,12 +146,6 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 			  struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_req_recv			                     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_req_recv(struct xio_connection *connection,
-				     struct xio_task *task);
-
-/*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
 /*---------------------------------------------------------------------------*/
 struct xio_msg *xio_session_write_accept_rsp(
@@ -177,23 +171,6 @@ struct xio_msg *xio_session_write_reject_rsp(
 int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 			       struct xio_task *task);
 
-/*---------------------------------------------------------------------------*/
-/* xio_on_fin_req_recv				                             */
-/*---------------------------------------------------------------------------*/
-int xio_on_fin_req_recv(struct xio_connection *connection,
-			struct xio_task *task);
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_fin_rsp_send_comp						     */
-/*---------------------------------------------------------------------------*/
-int xio_on_fin_rsp_send_comp(struct xio_connection *connection,
-			     struct xio_task *task);
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_rsp_send_comp				     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_rsp_send_comp(struct xio_connection *connection,
-					  struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_server_nexus_established					     */
@@ -214,12 +191,6 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 /* xio_session_write_setup_req						     */
 /*---------------------------------------------------------------------------*/
 struct xio_msg *xio_session_write_setup_req(struct xio_session *session);
-
-/*---------------------------------------------------------------------------*/
-/* xio_on_connection_hello_rsp_recv			                     */
-/*---------------------------------------------------------------------------*/
-int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
-				     struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_accept_connection					     */

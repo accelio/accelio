@@ -58,9 +58,8 @@ struct msg_pool {
 	struct xio_msg				**stack_end;
 
 	/* max number of elements */
-	size_t					max;
-	int					shmid;
-	int					pad;
+	uint32_t				max;
+	uint32_t				free;
 };
 
 
@@ -113,16 +112,61 @@ void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
 void msg_pool_free(struct msg_pool *pool);
 
 
-/*---------------------------------------------------------------------------*/
-/* msg_reset								     */
-/*---------------------------------------------------------------------------*/
-static inline void msg_reset(struct xio_msg *msg)
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+/**
+ * sg_unmark_end - Undo setting the end of the scatterlist
+ * @sg:          SG entryScatterlist
+ *
+ * Description:
+ *   Removes the termination marker from the given entry of the scatterlist.
+ *
+**/
+static inline void sg_unmark_end(struct scatterlist *sg)
 {
-	msg->in.header.iov_base = NULL;
-	msg->in.header.iov_len = 0;
-	msg->in.data_iov.nents = 0;
-	msg->out.data_iov.nents = 0;
-	msg->out.header.iov_len = 0;
+#ifdef CONFIG_DEBUG_SG
+	BUG_ON(sg->sg_magic != SG_MAGIC);
+#endif
+	sg->page_link &= ~0x02;
+}
+#endif
+
+/*---------------------------------------------------------------------------*/
+/* xio_tbl_set_nents							     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_tbl_set_nents(struct sg_table *tbl, uint32_t nents)
+{
+	struct scatterlist *sg;
+	int i;
+
+#ifdef XIO_DEBUG_SG
+	verify_tbl(tbl);
+#endif
+	if (!tbl || tbl->orig_nents < nents)
+		return;
+
+	sg = tbl->sgl;
+	/* tbl->nents is unsigned so if tbl->nents is ZERO then tbl->nents - 1
+	 * is a huge number, so check this.
+	 */
+	if (tbl->nents && (tbl->nents < tbl->orig_nents)) {
+		for (i = 0; i < tbl->nents - 1; i++)
+			sg = sg_next(sg);
+		sg_unmark_end(sg);
+	}
+
+	if (!nents) {
+		tbl->nents = nents;
+		return;
+	}
+
+	sg = tbl->sgl;
+	for (i = 0; i < nents - 1; i++)
+		sg = sg_next(sg);
+
+	sg_mark_end(sg);
+
+	tbl->nents = nents;
 }
 
 #endif /* #define MSG_API_H */

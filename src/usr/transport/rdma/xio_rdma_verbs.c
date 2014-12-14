@@ -35,22 +35,27 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
-
 #include "libxio.h"
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
-#include "xio_context.h"
-#include "xio_task.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "get_clock.h"
 #include "xio_mem.h"
-#include "xio_transport_mempool.h"
-#include "xio_rdma_transport.h"
+#include "xio_usr_transport.h"
+#include "xio_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
+#include "xio_task.h"
 #include "xio_rdma_utils.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
+#include "xio_context.h"
+#include "xio_rdma_transport.h"
 
 
 /*---------------------------------------------------------------------------*/
@@ -107,7 +112,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 			xio_validate_ulimit_memlock();
 		return NULL;
 	}
-	mr_elem = ucalloc(1, sizeof(*mr_elem));
+	mr_elem = (struct xio_mr_elem *)ucalloc(1, sizeof(*mr_elem));
 	if (mr_elem == NULL)
 		goto  cleanup;
 
@@ -156,7 +161,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	}
 	spin_unlock(&dev_list_lock);
 
-	tmr = ucalloc(1, sizeof(*tmr));
+	tmr = (struct xio_mr *)ucalloc(1, sizeof(*tmr));
 	if (tmr == NULL) {
 		xio_set_error(errno);
 		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
@@ -349,7 +354,7 @@ struct xio_buf *xio_alloc(size_t length)
 		 IBV_ACCESS_REMOTE_WRITE|
 		 IBV_ACCESS_REMOTE_READ;
 
-	buf = ucalloc(1, sizeof(*buf));
+	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
 	if (!buf) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
@@ -444,7 +449,7 @@ int xio_mr_list_free(void)
 /*---------------------------------------------------------------------------*/
 /* xio_rkey_table_create						     */
 /*---------------------------------------------------------------------------*/
-int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
+int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 			  struct xio_rkey_tbl **htbl, uint16_t *len)
 {
 	struct xio_rkey_tbl *tbl, *te;
@@ -458,7 +463,7 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
 		return 0;
 	}
 
-	tbl = ucalloc(mr_num, sizeof(*tbl));
+	tbl = (struct xio_rkey_tbl *)ucalloc(mr_num, sizeof(*tbl));
 	if (!tbl) {
 		*len = 0;
 		return -ENOMEM;
@@ -468,7 +473,7 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *new,
 	 * axis and device is the other axis
 	 */
 	old_h = &old->xm_list;
-	new_h = &new->xm_list;
+	new_h = &_new->xm_list;
 	te = tbl;
 
 	for (old_n = old_h->next, new_n = new_h->next;

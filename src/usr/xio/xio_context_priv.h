@@ -35,71 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_RDMA_MEMPOOL_H
-#define XIO_RDMA_MEMPOOL_H
-
-#include <linux/types.h>
-#include <linux/kernel.h>
-
-struct xio_rdma_mempool;
-struct xio_sge;
-
-struct xio_mem_reg {
-	u32  lkey;
-	u32  rkey;
-	u64  va;
-	u64  len;
-	void *mem_h; /* it is void as it might be FMR or FRWR */
-};
-
-struct xio_rdma_mp_mem {
-	void		*addr;
-	size_t		length;
-	void		*cache;
-};
-
-struct xio_rdma_mem_desc {
-	/* sg table for dma mapping */
-	struct sg_table		sgt;
-	struct xio_rdma_mp_mem	*mp_sge;
-	u32			num_sge;
-	unsigned int		nents;
-	unsigned int		mapped;
-	struct xio_mem_reg	mem_reg;
-};
-
-#define XIO_CHUNKS_SIZE_NR	4
-
-#define XIO_16K_BLOCK_SZ	(16*1024)
-#define XIO_16K_MIN_NR		128
-#define XIO_16K_MAX_NR		1024
-#define XIO_16K_ALLOC_NR	128
-
-#define XIO_64K_BLOCK_SZ	(64*1024)
-#define XIO_64K_MIN_NR		128
-#define XIO_64K_MAX_NR		1024
-#define XIO_64K_ALLOC_NR	128
-
-#define XIO_256K_BLOCK_SZ	(256*1024)
-#define XIO_256K_MIN_NR		128
-#define XIO_256K_MAX_NR		1024
-#define XIO_256K_ALLOC_NR	128
-
-#define XIO_1M_BLOCK_SZ		(1024*1024)
-#define XIO_1M_MIN_NR		128
-#define XIO_1M_MAX_NR		1024
-#define XIO_1M_ALLOC_NR		128
+#ifndef XIO_CONTEXT_PRIV_H_
+#define XIO_CONTEXT_PRIV_H_
 
 
-struct xio_rdma_mempool *xio_rdma_mempool_create(void);
-void xio_rdma_mempool_destroy(struct xio_rdma_mempool *mpool);
-
-int xio_rdma_mempool_alloc(struct xio_rdma_mempool *mpool,
-			   size_t length, struct xio_rdma_mp_mem *mp_mem);
-
-int xio_rdma_mp_sge_alloc(struct xio_rdma_mempool *mpool, struct xio_sge *sge,
-			  u32 num_sge, struct xio_rdma_mem_desc *desc);
-
-void xio_rdma_mempool_free(struct xio_rdma_mem_desc *desc);
-
-#endif
+#endif /* XIO_CONTEXT_PRIV_H_ */

@@ -131,7 +131,7 @@ static int on_session_event(struct xio_session *session,
 		process_request(NULL);
 		xio_session_destroy(session);
 		if (test_config.finite_run)
-			xio_context_stop_loop(ctx, 0); /* exit */
+			xio_context_stop_loop(ctx); /* exit */
 		break;
 	default:
 		break;
@@ -171,7 +171,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp	= msg_pool_get(pool);
 
 	rsp->request		= req;
-	rsp->more_in_batch	= 0;
 
 	/* fill response */
 	msg_write(&msg_params, rsp,
@@ -204,9 +203,11 @@ static int on_send_response_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_private_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->sn, xio_strerror(error));
@@ -402,6 +403,7 @@ int main(int argc, char *argv[])
 {
 	struct xio_server	*server;
 	char			url[256];
+	int			opt;
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -410,6 +412,11 @@ int main(int argc, char *argv[])
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
+
+	opt = 1;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_TCP, XIO_OPTNAME_TCP_NO_DELAY,
+		    &opt, sizeof(int));
 
 	ctx	= xio_context_create(NULL, POLLING_TIMEOUT, test_config.cpu);
 
@@ -437,6 +444,7 @@ int main(int argc, char *argv[])
 	} else {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
+		xio_context_destroy(ctx);
 		xio_assert(0);
 	}
 

@@ -38,52 +38,17 @@
 #ifndef XIO_OS_H
 #define XIO_OS_H
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdarg.h>
 #include <stddef.h>
-#include <stdbool.h>
-#include <errno.h>
-#include <malloc.h>
-#include <fcntl.h>
-#include <utmpx.h>
-#include <time.h>
-#include <netdb.h>
-#include <inttypes.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <pthread.h>
-#include <assert.h>
-#include <limits.h>
-#include <sched.h>
-#include <numa.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/timerfd.h>
-#include <sys/syscall.h>
-#include <sys/resource.h>
-#include <arpa/inet.h>
-#include <linux/types.h>
-#include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/mman.h>
-#include <linux/printk.h>
-#include <linux/atomic.h>
-#include <linux/kref.h>
-#include <linux/usr.h>
-#include <linux/netlink.h>
-#include <linux/debugfs.h>
-#include <linux/jiffies.h>
 
+static inline int	xio_memalign(void **memptr, size_t alignment, size_t size);
+static inline void	xio_memfree(void *memptr);
+static inline long	xio_get_page_size(void);
+static inline void	*xio_mmap(size_t length);
+static inline int	xio_munmap(void *addr, size_t length);
+static inline void	*xio_numa_alloc_onnode(size_t size, int node);
+static inline void	xio_numa_free(void *start, size_t size);
+
+#include <xio_env.h>
 #include "get_clock.h"
 
 #endif /* XIO_OS_H */

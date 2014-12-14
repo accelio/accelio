@@ -114,7 +114,8 @@ static int numa_node_to_cpusmask(int node, uint64_t *cpusmask, int *nr)
 {
 	struct bitmask *mask;
 	uint64_t	bmask = 0;
-	int		retval = -1, i;
+	int		retval = -1;
+	unsigned int	i;
 
 	mask = numa_allocate_cpumask();
 	retval = numa_node_to_cpus(node, mask);
@@ -182,11 +183,17 @@ int main(int argc, char *argv[])
 	int			cpusnum;
 	int			retval = -1;
 	int			ec = EXIT_FAILURE;
+	int			numa_node;
 
 	if (getifaddrs(&ifaddr) == -1) {
 		perror("getifaddrs");
 		goto cleanup;
 	}
+	printf("%-10s %-16s %-30s %-5s %-4s\n",
+	       "interface", "host", "flags", "numa", "cpus");
+	printf("---------------------------------------------------");
+	printf("-------------------------------------------------\n");
+
 
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 		switch (ifa->ifa_addr->sa_family) {
@@ -226,19 +233,19 @@ int main(int argc, char *argv[])
 		if (ifa->ifa_flags & IFF_MASTER)
 			sprintf(flags, "%s %s", flags, "MASTER");
 
+		numa_node = intf_numa_node(ifa->ifa_name);
 		retval = intf_name_best_cpus(ifa->ifa_name,
 					     &cpusmask, &cpusnum);
 		if (retval != 0) {
 			/*perror("intf_name_best_cpus"); */
-			printf("%-10s %-16s %-30s %-4s [0]\n",
-			       ifa->ifa_name, host, flags, "cpus");
+			printf("%-10s %-16s %-30s %-5c %-4s [0]\n",
+			       ifa->ifa_name, host, flags, 0x20, "cpus");
 			continue;
 		}
 		intf_cpusmask_str(cpusmask, cpusnum, cpus_str);
 
-
-		printf("%-10s %-16s %-30s %-4s [%d] - %s\n",
-		       ifa->ifa_name, host, flags, "cpus",
+		printf("%-10s %-16s %-30s %-5d %-4s [%d] - %s\n",
+		       ifa->ifa_name, host, flags, numa_node, "cpus",
 		       cpusnum, cpus_str);
 	}
 	ec = EXIT_SUCCESS;

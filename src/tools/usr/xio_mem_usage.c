@@ -36,17 +36,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <libxio.h>
-#include "xio_os.h"
+#include <sys/hashtable.h>
+#include <xio_os.h>
+#include "xio_log.h"
 #include "xio_common.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_hash.h"
 #include "xio_observer.h"
+#include "xio_usr_transport.h"
 #include "xio_transport.h"
-
+#include "xio_msg_list.h"
+#include "xio_ev_data.h"
+#include "xio_workqueue.h"
 #include "xio_context.h"
+#include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_session.h"
-#include "xio_server.h"
-#include "xio_nexus.h"
 
 #ifdef HAVE_INFINIBAND_VERBS_H
 #include <infiniband/verbs.h>
@@ -54,7 +61,7 @@
 #include "xio_rdma_transport.h"
 #endif
 #include "xio_usr_transport.h"
-#include "xio_transport_mempool.h"
+#include "xio_mempool.h"
 #include "xio_tcp_transport.h"
 
 #define PRINT_SIZE(type) \
@@ -91,8 +98,8 @@ int main(int argc, char **argv)
     printf("\nRDMA Transport:\n");
     PRINT_SIZE(struct xio_rdma_setup_msg);
     PRINT_SIZE(struct xio_rdma_cancel_hdr);
-    PRINT_SIZE(struct xio_req_hdr);
-    PRINT_SIZE(struct xio_rsp_hdr);
+    PRINT_SIZE(struct xio_rdma_req_hdr);
+    PRINT_SIZE(struct xio_rdma_rsp_hdr);
     PRINT_SIZE(struct xio_nop_hdr);
     PRINT_SIZE(struct xio_rdma_task);
     PRINT_SIZE(struct xio_cq);

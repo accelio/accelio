@@ -35,7 +35,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include "xio_os.h"
+#include <xio_os.h>
+#include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
 
@@ -46,7 +47,8 @@ struct xio_observer *xio_observer_create(void *impl, notify_fn_t notify)
 {
 	struct xio_observer *observer;
 
-	observer = kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
+	observer = (struct xio_observer *)
+			kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
 	if (observer == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -76,7 +78,8 @@ struct xio_observable *xio_observable_create(void *impl)
 {
 	struct xio_observable *observable;
 
-	observable = kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
+	observable = (struct xio_observable *)
+			kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
 	if (observable == NULL) {
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -145,7 +148,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 		return;
 	}
 
-	observer_node = kcalloc(1,
+	observer_node = (struct xio_observer_node *)kcalloc(1,
 				sizeof(struct xio_observer_node), GFP_KERNEL);
 	if (observer_node == NULL) {
 		xio_set_error(ENOMEM);
@@ -161,6 +164,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 	list_add(&observer_node->observers_list_node,
 		 &observable->observers_list);
 }
+EXPORT_SYMBOL(xio_observable_reg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_unreg_observer					     */
@@ -184,6 +188,7 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 		}
 	}
 }
+EXPORT_SYMBOL(xio_observable_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_observer					     */
@@ -199,8 +204,8 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 		DEBUG_LOG("spurious notification" \
 			  "observable:%p, observer:%p\n",
 			  observable, observer);
-
 }
+EXPORT_SYMBOL(xio_observable_notify_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_all_observers					     */
@@ -218,6 +223,7 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 				observable->impl, event, event_data);
 	}
 }
+EXPORT_SYMBOL(xio_observable_notify_all_observers);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_any_observer					     */
@@ -244,6 +250,7 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 		break;
 	}
 }
+EXPORT_SYMBOL(xio_observable_notify_any_observer);
 
 /*---------------------------------------------------------------------------*/
 /* xio_observable_unreg_all_observers					     */
@@ -260,4 +267,5 @@ void xio_observable_unreg_all_observers(struct xio_observable *observable)
 	}
 	observable->observer_node = NULL;
 }
+EXPORT_SYMBOL(xio_observable_unreg_all_observers);
 

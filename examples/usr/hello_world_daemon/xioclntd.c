@@ -149,7 +149,8 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 
 	logit(LOG_INFO, "session event: %s. reason: %s\n",
 	      xio_session_event_str(event_data->event),
@@ -169,7 +170,7 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		xio_context_stop_loop(session_data->ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data->ctx);  /* exit */
 		break;
 	default:
 		break;
@@ -186,7 +187,8 @@ static int on_response(struct xio_session *session,
 		       int more_in_batch,
 		       void *cb_user_context)
 {
-	struct session_data *session_data = cb_user_context;
+	struct session_data *session_data = (struct session_data *)
+						cb_user_context;
 	int i = rsp->request->sn % QUEUE_DEPTH;
 
 	session_data->nrecv++;
@@ -229,7 +231,7 @@ static void signal_handler(int sig)
 	if (session_data.conn)
 		xio_disconnect(session_data.conn);
 	else
-		xio_context_stop_loop(session_data.ctx, 0);  /* exit */
+		xio_context_stop_loop(session_data.ctx);  /* exit */
 }
 
 
@@ -333,6 +335,7 @@ int main(int argc, char *const argv[])
 	char			*port = NULL;
 	char			*trans = NULL;
 	struct xio_session_params params;
+	struct xio_connection_params cparams;
 
 	while (1) {
 		c = getopt_long(argc, argv, "a:p:r:hdnV", longopts, NULL);
@@ -396,6 +399,7 @@ int main(int argc, char *const argv[])
 
 	memset(&session_data, 0, sizeof(session_data));
 	memset(&params, 0, sizeof(params));
+	memset(&cparams, 0, sizeof(cparams));
 
 	/* initialize library */
 	xio_init();
@@ -407,7 +411,8 @@ int main(int argc, char *const argv[])
 		session_data.req[i].out.header.iov_base =
 			strdup("hello world header request");
 		session_data.req[i].out.header.iov_len =
-			strlen(session_data.req[i].out.header.iov_base) + 1;
+			strlen((const char *)
+				session_data.req[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
 		session_data.req[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
 		session_data.req[i].out.data_iov.max_nents = XIO_IOVLEN;
@@ -416,7 +421,8 @@ int main(int argc, char *const argv[])
 			strdup("hello world iovec request");
 
 		session_data.req[i].out.data_iov.sglist[0].iov_len =
-			strlen(session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
+			strlen((const char *)
+				session_data.req[i].out.data_iov.sglist[0].iov_base) + 1;
 
 		session_data.req[i].out.data_iov.nents = 1;
 	}
@@ -434,12 +440,16 @@ int main(int argc, char *const argv[])
 	params.user_context	= &session_data;
 	params.uri		= url;
 
+
 reconnect:
 	session = xio_session_create(&params);
 
+	cparams.session			= session;
+	cparams.ctx			= session_data.ctx;
+	cparams.conn_user_context	= &session_data;
+
 	/* connect the session  */
-	session_data.conn = xio_connect(session, session_data.ctx,
-					0, NULL, &session_data);
+	session_data.conn = xio_connect(&cparams);
 
 	/* event dispatcher is now running */
 	xio_context_run_loop(session_data.ctx, XIO_INFINITE);

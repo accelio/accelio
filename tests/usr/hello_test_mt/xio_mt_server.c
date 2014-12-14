@@ -62,6 +62,8 @@
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define PRINT_COUNTER		4000000
 #define MAX_THREADS		6
+#define TEST_DISCONNECT		0
+#define DISCONNECT_NR		12000000
 
 struct xio_test_config {
 	char		server_addr[32];
@@ -70,7 +72,9 @@ struct xio_test_config {
 	uint16_t	cpu;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
-	int		poll_timeout;
+	uint32_t	poll_timeout;
+	uint32_t	finite_run;
+	uint32_t	pad;
 };
 
 struct portals_vec {
@@ -91,7 +95,9 @@ struct thread_stat_data {
 
 struct  thread_data {
 	struct thread_stat_data	stat;
+	struct server_data	*sdata;
 	struct xio_context	*ctx;
+	struct xio_connection	*connection;
 	struct msg_pool		*pool;
 	void			*loop;
 	struct xio_buf		*xbuf;
@@ -99,13 +105,17 @@ struct  thread_data {
 	int			affinity;
 	int			cnt;
 	pthread_t		thread_id;
+	uint64_t		nsent;
+	uint64_t		ncomp;
 };
 
 /* server private data */
 struct server_data {
 	void			*ctx;
 	int			tdata_nr;
-	int			pad;
+	int			disconnected;
+	pthread_spinlock_t	lock;
+	int			finite_run;
 	struct thread_data	*tdata;
 };
 
@@ -129,7 +139,8 @@ static struct portals_vec *portals_get(struct server_data *server_data,
 {
 	/* fill portals array and return it. */
 	int			i;
-	struct portals_vec	*portals = calloc(1, sizeof(*portals));
+	struct portals_vec	*portals =
+			(struct portals_vec *)calloc(1, sizeof(*portals));
 	for (i = 0; i < MAX_THREADS; i++) {
 		portals->vec[i] = strdup(server_data->tdata[i].portal);
 		portals->vec_len++;
@@ -176,7 +187,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 		      int more_in_batch, void *cb_prv_data)
 {
 	struct xio_msg		*rsp;
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
 
 	/* process request */
 	process_request(tdata, req);
@@ -185,7 +196,6 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp	= msg_pool_get(tdata->pool);
 
 	rsp->request		= req;
-	rsp->more_in_batch	= 0;
 
 	/* fill response */
 	msg_write(&msg_prms, rsp,
@@ -196,9 +206,12 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 		printf("**** [%p] Error - xio_send_msg failed. %s\n",
 		       session, xio_strerror(xio_errno()));
 		msg_pool_put(tdata->pool, req);
+
+		/* better to do disconnect */
+		/*xio_disconnect(tdata->conn);*/
 		xio_assert(0);
 	}
-
+	tdata->nsent++;
 
 	return 0;
 }
@@ -210,10 +223,28 @@ static int on_send_response_complete(struct xio_session *session,
 				     struct xio_msg *msg,
 				     void *cb_prv_data)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
+	struct server_data	*sdata  = tdata->sdata;
+
+	tdata->ncomp++;
 
 	/* can be safely freed */
 	msg_pool_put(tdata->pool, msg);
+
+	if (sdata->finite_run && tdata->ncomp == DISCONNECT_NR) {
+		pthread_spin_lock(&sdata->lock);
+		if (tdata->sdata->disconnected == 0) {
+			int			i;
+
+			sdata->disconnected = 1;
+			pthread_spin_unlock(&sdata->lock);
+
+			for (i = 0; i < sdata->tdata_nr; i++)
+				if (sdata->tdata[i].connection)
+					xio_disconnect(sdata->tdata[i].connection);
+		} else
+			pthread_spin_unlock(&sdata->lock);
+	}
 
 	return 0;
 }
@@ -221,11 +252,13 @@ static int on_send_response_complete(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 /* on_msg_error								     */
 /*---------------------------------------------------------------------------*/
-int on_msg_error(struct xio_session *session,
-		 enum xio_status error, struct xio_msg  *msg,
-		 void *cb_prv_data)
+static int on_msg_error(struct xio_session *session,
+			enum xio_status error,
+			enum xio_msg_direction direction,
+			struct xio_msg  *msg,
+			void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_prv_data;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 
 	printf("**** [%p] message [%lu] failed. reason: %s\n",
 	       session, msg->request->sn, xio_strerror(error));
@@ -250,7 +283,7 @@ int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
-	struct thread_data	*tdata = cb_user_context;
+	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
@@ -281,7 +314,7 @@ struct xio_session_ops  portal_server_ops = {
 /*---------------------------------------------------------------------------*/
 static void *portal_server_cb(void *data)
 {
-	struct thread_data	*tdata = data;
+	struct thread_data	*tdata = (struct thread_data *)data;
 	cpu_set_t		cpuset;
 	struct xio_server	*server;
 	int			retval = 0;
@@ -295,6 +328,10 @@ static void *portal_server_cb(void *data)
 
 	/* prepare data for the cuurent thread */
 	tdata->pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
+	if (tdata->pool == NULL) {
+		retval = -1;
+		goto exit;
+	}
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, test_config.poll_timeout,
@@ -307,7 +344,7 @@ static void *portal_server_cb(void *data)
 	if (server == NULL) {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
-		xio_assert(0);
+		retval = -1;
 		goto cleanup;
 	}
 
@@ -329,8 +366,8 @@ static void *portal_server_cb(void *data)
 cleanup:
 	/* free the context */
 	xio_context_destroy(tdata->ctx);
-
-	pthread_exit(&retval);
+exit:
+	pthread_exit((void *)(unsigned long)retval);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -340,8 +377,13 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct server_data *server_data = cb_user_context;
+	struct server_data *sdata;
+	struct thread_data *tdata;
 	int		   i;
+
+	sdata = (struct server_data *)cb_user_context;
+	tdata = (event_data->conn_user_context == sdata) ? NULL :
+		(struct thread_data *)event_data->conn_user_context;
 
 	printf("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),
@@ -349,16 +391,22 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_NEW_CONNECTION_EVENT:
+		if (tdata)
+			tdata->connection = event_data->conn;
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
+		if (tdata)
+			tdata->connection = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		for (i = 0; i < server_data->tdata_nr; i++) {
-			process_request(&server_data->tdata[i], NULL);
-			xio_context_stop_loop(server_data->tdata[i].ctx, 0);
+		for (i = 0; i < sdata->tdata_nr; i++) {
+			process_request(&sdata->tdata[i], NULL);
+			xio_context_stop_loop(sdata->tdata[i].ctx);
 		}
-		xio_context_stop_loop(server_data->ctx, 0);
+		xio_context_stop_loop((struct xio_context *)sdata->ctx);
 		break;
 	default:
 		break;
@@ -375,7 +423,7 @@ static int on_new_session(struct xio_session *session,
 			  void *cb_user_context)
 {
 	struct portals_vec *portals;
-	struct server_data *server_data = cb_user_context;
+	struct server_data *server_data = (struct server_data *)cb_user_context;
 
 	printf("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr),
@@ -437,6 +485,10 @@ static void usage(const char *argv0, int status)
 	printf("\tSet polling timeout in microseconds " \
 			"(default %d)\n", XIO_DEF_POLL);
 
+	printf("\t-f, --finite-run=<finite-run> ");
+	printf("\t0 for infinite run, 1 for infinite run" \
+			"(default 0)\n");
+
 	printf("\t-v, --version ");
 	printf("\t\t\tPrint the version and exit\n");
 
@@ -461,12 +513,13 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 			{ .name = "header-len",	.has_arg = 1, .val = 'n'},
 			{ .name = "data-len",	.has_arg = 1, .val = 'w'},
 			{ .name = "timeout",	.has_arg = 0, .val = 't'},
+			{ .name = "finite",	.has_arg = 1, .val = 'f'},
 			{ .name = "version",	.has_arg = 0, .val = 'v'},
 			{ .name = "help",	.has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:p:r:n:w:t:svh";
+		static char *short_options = "c:p:r:n:w:t:f:svh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -492,6 +545,10 @@ int parse_cmdline(struct xio_test_config *test_config, int argc, char **argv)
 		case 'w':
 			test_config->data_len =
 				(uint32_t)strtol(optarg, NULL, 0);
+			break;
+		case 'f':
+			test_config->finite_run =
+					(uint32_t)strtol(optarg, NULL, 0);
 			break;
 		case 't':
 			test_config->poll_timeout =
@@ -539,6 +596,7 @@ static void print_test_config(
 	printf(" Data Length		: %u\n", test_config_p->data_len);
 	printf(" CPU Affinity		: %x\n", test_config_p->cpu);
 	printf(" Poll Timeout		: %d\n", test_config_p->poll_timeout);
+	printf(" Finite run		: %u\n", test_config_p->finite_run);
 	printf(" =============================================\n");
 }
 
@@ -556,14 +614,18 @@ int main(int argc, char *argv[])
 	uint64_t		cpusmask;
 	int			cpusnr;
 	int			cpu;
+	int			exit_code = 0;
+	void			*thr_exit_code;
 
 
 
 	memset(&server_data, 0, sizeof(server_data));
 
-	server_data.tdata = calloc(MAX_THREADS, sizeof(struct thread_data));
+	server_data.tdata = (struct thread_data *)
+				calloc(MAX_THREADS, sizeof(struct thread_data));
 	if (!server_data.tdata)
 		return -1;
+
 	server_data.tdata_nr = MAX_THREADS;
 
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -588,9 +650,14 @@ int main(int argc, char *argv[])
 			 test_config.hdr_len, test_config.data_len, 1) != 0)
 		return -1;
 
+	pthread_spin_init(&server_data.lock, 0);
+
+
 	/* create thread context for the client */
 	server_data.ctx = xio_context_create(NULL, test_config.poll_timeout,
 					     test_config.cpu);
+
+	server_data.finite_run = test_config.finite_run;
 
 	/* create url to connect to */
 	sprintf(url, "%s://%s:%d",
@@ -599,10 +666,12 @@ int main(int argc, char *argv[])
 		test_config.server_port);
 
 	/* bind a listener server to a portal/url */
-	server = xio_bind(server_data.ctx, &server_ops, url,
-			  NULL, 0, &server_data);
-	if (server == NULL)
+	server = xio_bind((struct xio_context *)server_data.ctx, &server_ops,
+			  url, NULL, 0, &server_data);
+	if (server == NULL) {
+		exit_code = -1;
 		goto cleanup;
+	}
 
 	/* spawn portals */
 	port = test_config.server_port;
@@ -614,6 +683,7 @@ int main(int argc, char *argv[])
 				cpu = 0;
 		}
 		server_data.tdata[i].affinity = cpu;
+		server_data.tdata[i].sdata = &server_data;
 		port++;
 		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
 			test_config.transport,
@@ -622,25 +692,35 @@ int main(int argc, char *argv[])
 			       portal_server_cb, &server_data.tdata[i]);
 	}
 
-	xio_context_run_loop(server_data.ctx, XIO_INFINITE);
+	xio_context_run_loop((struct xio_context *)server_data.ctx,
+			     XIO_INFINITE);
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
 	/* join the threads */
-	for (i = 0; i < MAX_THREADS; i++)
-		pthread_join(server_data.tdata[i].thread_id, NULL);
+	for (i = 0; i < MAX_THREADS; i++) {
+		pthread_join(server_data.tdata[i].thread_id, &thr_exit_code);
+		if (((uint64_t)(uintptr_t)thr_exit_code) != 0)
+			exit_code = -1;
+	}
+	fprintf(stdout, "joined all threads\n");
 
 	/* free the server */
 	xio_unbind(server);
 cleanup:
 	/* free the context */
-	xio_context_destroy(server_data.ctx);
+	xio_context_destroy((struct xio_context *)server_data.ctx);
 
 	free(server_data.tdata);
 
 	msg_api_free(&msg_prms);
 
-	return 0;
+	if (exit_code)
+		fprintf(stdout, "exit code %d\n", exit_code);
+
+	pthread_spin_destroy(&server_data.lock);
+
+	return exit_code;
 }
 

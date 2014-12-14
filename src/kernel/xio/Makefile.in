@@ -10,9 +10,9 @@ XIO_SYMVERS = @XIO_SYMVERS@
 NOSTDINC_FLAGS += @OFED_CFLAGS@
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
-	xio_log.h  xio_mem.h  xio_os.h \
+	xio_log.h  xio_mem.h  xio_os.h xio_mempool.h \
 	../../common/common/xio_observer.h \
-	io_context.c xio_ev_loop.c \
+	io_context.c xio_ev_loop.c xio_mempool.c \
 	xio_init.c xio_mem.c xio_task.c xio_kernel_utils.c \
 	xio_workqueue.c	xio_sg_iov.c xio_sg_iovptr.c xio_sg_scatter.c \
 	xio_sg_table.c	\
@@ -52,6 +52,7 @@ install-y: all
 	$(mkdir_p) /opt/xio/include
 	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
 	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/libxio.h /opt/xio/include
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_base.h /opt/xio/include
 	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_kernel.h /opt/xio/include
 	$(INSTALL) -m 644 Module.symvers /opt/xio/include
 	-/sbin/depmod -a
@@ -74,12 +75,14 @@ distdir: $(DISTFILES)
 	cp -p $(DISTFILES) $(distdir)
 
 
-ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include
+ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
+
 obj-m := xio.o
 xio-objs := \
 	xio_init.o \
 	xio_context.o \
 	xio_ev_loop.o \
+	xio_mempool.o \
 	xio_init.o \
 	xio_mem.o \
 	xio_task.o \

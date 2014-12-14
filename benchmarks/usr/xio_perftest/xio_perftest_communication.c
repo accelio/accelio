@@ -72,11 +72,11 @@ struct control_context {
 static int on_new_connection_event(struct xio_connection *connection,
 				   void *conn_prv_data)
 {
-	struct perf_comm *comm = conn_prv_data;
+	struct perf_comm *comm = (struct perf_comm *)conn_prv_data;
 
 	comm->control_ctx->conn = connection;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }
@@ -88,7 +88,7 @@ static int on_session_event(struct xio_session *session,
 		struct xio_session_event_data *event_data,
 		void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
@@ -106,7 +106,7 @@ static int on_session_event(struct xio_session *session,
 		comm->control_ctx->conn = NULL;
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+		xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 		xio_session_destroy(session);
 		break;
 	default:
@@ -124,14 +124,14 @@ static int on_message(struct xio_session *session,
 		      int more_in_batch,
 		      void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	if (comm->control_ctx->reply)
 		fprintf(stderr, "message overrun\n");
 
 	comm->control_ctx->reply = msg;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }
@@ -143,12 +143,12 @@ static int on_new_session(struct xio_session *session,
 			  struct xio_new_session_req *req,
 			  void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
 	if (comm->control_ctx->conn == NULL)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
-		xio_reject(session, EISCONN, NULL, 0);
+		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
 
 	return 0;
 }
@@ -160,9 +160,9 @@ static int on_session_established(struct xio_session *session,
 				  struct xio_new_session_rsp *rsp,
 				  void *cb_user_context)
 {
-	struct perf_comm *comm = cb_user_context;
+	struct perf_comm *comm = (struct perf_comm *)cb_user_context;
 
-	xio_context_stop_loop(comm->control_ctx->ctx, 0);  /* exit */
+	xio_context_stop_loop(comm->control_ctx->ctx);  /* exit */
 
 	return 0;
 }
@@ -174,7 +174,7 @@ static int on_msg_send_complete(struct xio_session *session,
 				struct xio_msg *rsp,
 				void *conn_user_context)
 {
-	struct perf_comm *comm = conn_user_context;
+	struct perf_comm *comm = (struct perf_comm *)conn_user_context;
 
 	comm->control_ctx->reply  = NULL;
 	if (comm->control_ctx->disconnect)
@@ -202,11 +202,12 @@ struct perf_comm *create_comm_struct(struct perf_parameters *user_param)
 {
 	struct perf_comm *comm;
 
-	comm = calloc(1, sizeof(*comm));
+	comm = (struct perf_comm *)calloc(1, sizeof(*comm));
 	if (comm == NULL)
 		return NULL;
 
-	comm->control_ctx = calloc(1, sizeof(*comm->control_ctx));
+	comm->control_ctx =
+		(struct control_context *)calloc(1, sizeof(*comm->control_ctx));
 	if (comm->control_ctx == NULL) {
 		free(comm);
 		return NULL;
@@ -233,6 +234,7 @@ int establish_connection(struct perf_comm *comm)
 {
 	char				url[256];
 	struct xio_session_params	params;
+	struct xio_connection_params	cparams;
 
 	/* create thread context for the client */
 	comm->control_ctx->ctx = xio_context_create(NULL, 0, -1);
@@ -261,11 +263,14 @@ int establish_connection(struct perf_comm *comm)
 		/* create url to connect to */
 		comm->control_ctx->session = xio_session_create(&params);
 
+		memset(&cparams, 0, sizeof(cparams));
+		cparams.session			= comm->control_ctx->session;
+		cparams.ctx			= comm->control_ctx->ctx;
+		cparams.conn_user_context	= comm;
+
+
 		/* connect the session  */
-		comm->control_ctx->conn = xio_connect(
-				comm->control_ctx->session,
-				comm->control_ctx->ctx, 0, NULL,
-				comm);
+		comm->control_ctx->conn = xio_connect(&cparams);
 	}
 
 	/* the default xio supplied main loop */
@@ -372,7 +377,7 @@ int ctx_read_data(struct perf_comm *comm, void *data, int size, int *osize)
 
 	if (osize)
 		*osize = comm->control_ctx->reply->in.header.iov_len;
-	if (comm->control_ctx->reply->in.header.iov_len > size)
+	if (comm->control_ctx->reply->in.header.iov_len > (size_t)size)
 		goto cleanup;
 
 	if (comm->control_ctx->reply->in.header.iov_len)
@@ -550,7 +555,8 @@ static int numa_node_to_cpusmask(int node, uint64_t *cpusmask, int *nr)
 {
 	struct bitmask *mask;
 	uint64_t	bmask = 0;
-	int		retval = -1, i;
+	int		retval = -1;
+	unsigned int	i;
 
 	mask = numa_allocate_cpumask();
 	retval = numa_node_to_cpus(node, mask);
