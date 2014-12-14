@@ -49,9 +49,11 @@
 #include <io.h>
 #include <stdint.h>
 #include <errno.h>
+#include <assert.h>
 #include <BaseTsd.h>
 
 #include <xio_base.h>
+#include <xio-basic-env.h>
 #include "list.h"
 
 
@@ -59,8 +61,6 @@ typedef SSIZE_T ssize_t;
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 typedef int64_t __s64;
-
-#define inline __inline
 
 
 #define __func__		__FUNCTION__
@@ -607,6 +607,29 @@ inline int c99_snprintf(char* str, size_t size, const char* format, ...){
 static inline int close(int fd)
 {
 	return _close(fd);
+}
+
+#define ___GFP_WAIT	0x10u
+#define ___GFP_IO	0x40u
+#define ___GFP_FS	0x80u
+
+#define GFP_KERNEL (___GFP_WAIT | ___GFP_IO | ___GFP_FS)
+
+/* should be __bitwise__  but it is dummy */
+typedef unsigned gfp_t;
+
+ static inline char *kstrdup(const char *s, gfp_t gfp)
+{
+	/* Make sure code transfered to kernel will work as expected */
+	assert(gfp == GFP_KERNEL);
+	return strdup(s);
+}
+
+static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
+{
+	/* Make sure code transfered to kernel will work as expected */
+	assert(gfp == GFP_KERNEL);
+	return strndup(s, len);
 }
 
 #endif /* XIO_ENV_H */

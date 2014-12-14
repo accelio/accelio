@@ -35,9 +35,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <xio_env.h>
 #include <xio_os.h>
 #include "xio_log.h"
 #include "xio_common.h"
+#include "xio_mem.h"
 
 #define HUGE_PAGE_SZ			(2*1024*1024)
 

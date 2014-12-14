@@ -55,6 +55,7 @@
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
+#include <xio-advanced-env.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_req_recv			                             */

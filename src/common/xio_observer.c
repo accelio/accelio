@@ -39,6 +39,7 @@
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
+#include <xio-advanced-env.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_observer_create							     */

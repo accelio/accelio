@@ -35,43 +35,54 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef WIN_XIO_OS_H
+#define WIN_XIO_OS_H
+
+
 #include <xio_env.h>
-#include <xio_os.h>
-#include "libxio.h"
-#include "xio_tls.h"
+
+//*
+
+#include <Winsock2.h>
+#include <Windows.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#include <malloc.h>
+
+#include <time.h>
+#include <inttypes.h>
+#include <ctype.h>
+#include <assert.h>
+#include <limits.h>
 
 
 
-/*---------------------------------------------------------------------------*/
-/* global tls	                                                             */
-/*---------------------------------------------------------------------------*/
-static xio_tls int _xio_errno;
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 
-/*---------------------------------------------------------------------------*/
-/* xio_thread_data_destruct						     */
-/*---------------------------------------------------------------------------*/
-void xio_thread_data_destruct(void)
-{
-}
+#include <linux/list.h>
+#include <linux/printk.h>
+#include <linux/atomic.h>
+#include <linux/kref.h>
+#include <linux/usr.h>
+#include <linux/debugfs.h>
+//#include <linux/jiffies.h>
 
-/*---------------------------------------------------------------------------*/
-/* xio_thread_data_construct						     */
-/*---------------------------------------------------------------------------*/
-void xio_thread_data_construct(void)
-{
-}
+#include "get_clock.h"
 
-/*---------------------------------------------------------------------------*/
-/* debugging facilities							     */
-/*---------------------------------------------------------------------------*/
-void xio_set_error(int errnum) { _xio_errno = errnum; }
-EXPORT_SYMBOL(xio_set_error);
+#include "spinlock.h"
 
 
-/*---------------------------------------------------------------------------*/
-/* xio_errno								     */
-/*---------------------------------------------------------------------------*/
-int xio_errno(void) { return _xio_errno; }
-EXPORT_SYMBOL(xio_errno);
+//*/
 
+//*/
+#endif /* WIN_XIO_OS_H */
