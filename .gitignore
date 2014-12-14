@@ -53,3 +53,7 @@ Doxyfile
 *.ko.unsigned.cmd
 *.ko.unsigned
 *.ko
+*.mod.c
+modules.order
+Module.symvers
+.tmp_versions
