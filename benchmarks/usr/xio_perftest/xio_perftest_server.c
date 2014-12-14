@@ -352,6 +352,7 @@ static void on_test_results(struct test_results *results)
 /*---------------------------------------------------------------------------*/
 int run_server_test(struct perf_parameters *user_param)
 {
+	char			str[512];
 	struct server_data	server_data;
 	struct perf_command	command;
 	unsigned int		i;
@@ -368,7 +369,7 @@ int run_server_test(struct perf_parameters *user_param)
 	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
 	if (i == 0) {
 		printf("best cpus [%d] %s\n", cpusnr,
-		       intf_cpusmask_str(cpusmask, cpusnr, user_param->intf_name));
+		       intf_cpusmask_str(cpusmask, cpusnr, str));
 	}
 
 	server_data.my_test_param.machine_type	= user_param->machine_type;
