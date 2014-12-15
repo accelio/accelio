@@ -102,8 +102,7 @@ static inline void xio_timers_list_init(struct xio_timers_list *timers_list)
 {
 	INIT_LIST_HEAD(&timers_list->timers_head);
 #ifdef SAFE_LIST
-	spin_lock_init2(&timers_list->lock,
-			  PTHREAD_PROCESS_PRIVATE);
+	spin_lock_init(&timers_list->lock);
 #endif
 }
 
@@ -196,10 +195,6 @@ static inline void xio_timers_list_close(struct xio_timers_list *timers_list)
 		list_del_init(&tentry->entry);
 	}
 	xio_timers_list_unlock(timers_list);
-
-#ifdef SAFE_LIST
-	spin_lock_destroy(&timers_list->lock);
-#endif
 }
 
 /*---------------------------------------------------------------------------*/
