@@ -3,7 +3,7 @@
 # Arguments Check
 if [ $# -lt 2 ]; then
         echo "[$0] Missing Parameters!"
-        echo "Usage: $0 [Server IP] [Port] [Transport (optional)]"
+        echo "Usage: $0 [Server IP] [Port] [Transport (optional)]  [0 for infinite run and 1 for finite. Optional, default is 1]"
         exit 1
 fi
 
@@ -16,4 +16,10 @@ if [ $# -eq 3 ]; then
 	trans=$3
 fi
 
-taskset -c 0 ./xio_mt_client ${server_ip} ${port} ${trans}
+finite_run=1 #running definitely
+if [ ! -z "$4" ]
+then
+        finite_run=$4
+fi
+
+taskset -c 0 ./xio_mt_client ${server_ip} ${port} ${trans} ${finite_run}

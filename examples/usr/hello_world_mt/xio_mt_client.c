@@ -45,8 +45,9 @@
 
 #define MAX_THREADS		4
 #define PRINT_COUNTER		400000
-#define TEST_DISCONNECT		1
 #define DISCONNECT_NR		3000000
+
+int test_disconnect;
 
 struct thread_data {
 	int			cid;
@@ -189,15 +190,16 @@ static int on_response(struct xio_session *session,
 	/* acknowlege xio that response is no longer needed */
 	xio_release_response(rsp);
 
-#if  TEST_DISCONNECT
-	if (tdata->nrecv == DISCONNECT_NR) {
-		xio_disconnect(tdata->conn);
-		return 0;
+	if (test_disconnect) {
+		if (tdata->nrecv == DISCONNECT_NR) {
+			xio_disconnect(tdata->conn);
+			return 0;
+		}
 	}
 
 	if (tdata->nsent == DISCONNECT_NR)
 		return 0;
-#endif
+
 	tdata->req.in.header.iov_base	  = NULL;
 	tdata->req.in.header.iov_len	  = 0;
 	vmsg_sglist_set_nents(&tdata->req.in, 0);
@@ -231,8 +233,8 @@ int main(int argc, char *argv[])
 
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\
+				<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 	memset(&session_data, 0, sizeof(session_data));
@@ -245,6 +247,11 @@ int main(int argc, char *argv[])
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+
+	if (argc > 4)
+		test_disconnect = atoi(argv[4]);
+	else
+		test_disconnect = 1;
 
 	params.type		= XIO_SESSION_CLIENT;
 	params.ses_ops		= &ses_ops;
