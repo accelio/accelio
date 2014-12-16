@@ -827,9 +827,14 @@ static inline void xio_cm_channel_release(struct xio_cm_channel *channel)
 static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
-	DEBUG_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
-	xio_context_destroy_wait(ctx);
+	struct xio_rdma_transport *rdma_hndl =
+				(struct xio_rdma_transport *)trans_hndl;
 
+	DEBUG_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
+	/*due to long timewait - force ignoring */
+	rdma_hndl->ignore_timewait = 1;
+
+	xio_context_destroy_wait(ctx);
 	xio_rdma_close(trans_hndl);
 
 	return 0;
@@ -2129,6 +2134,11 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
 					"err=%d\n", rdma_hndl, retval);
 	}
+	/* from context shutdown */
+	if (rdma_hndl->ignore_timewait) {
+		on_cm_timewait_exit(rdma_hndl);
+		return;
+	}
 
 	rdma_hndl->timewait = 0;
 
@@ -2548,6 +2558,14 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
+
+		/* from context shutdown */
+		if (rdma_hndl->ignore_timewait) {
+			kref_put(&transport->kref, xio_rdma_close_cb);
+			on_cm_timewait_exit(rdma_hndl);
+			return;
+		}
+
 		break;
 	case XIO_STATE_CLOSED:
 		return;

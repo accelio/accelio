@@ -426,7 +426,9 @@ struct xio_rdma_transport {
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad1[2];
+	uint16_t			pad1;
+
+	uint16_t			ignore_timewait;
 
 	/* too big to be on stack - use as temporaries */
 	union {
