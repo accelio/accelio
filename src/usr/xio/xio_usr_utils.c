@@ -284,7 +284,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 
 	ERROR_LOG("********************************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
-	if (xio_msg->type == XIO_MSG_TYPE_REQ)
+	if (xio_msg->type == XIO_MSG_TYPE_REQ ||
+	    xio_msg->type == XIO_ONE_WAY_REQ)
 		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
 		ERROR_LOG("response:%p, serial number:%lld\n",
