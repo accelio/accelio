@@ -1136,6 +1136,13 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 		ERROR_LOG("failed to retrieve CQ event, cq:%p\n", cq);
 		return;
 	}
+
+	/* if a poll was previously scheduled, remove it,
+	   as it will be scheduled when necessary */
+	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+
+	xio_poll_cq_armable(tcq);
+
 	/* accumulate number of cq events that need to
 	 * be acked, and periodically ack them
 	 */
@@ -1143,12 +1150,6 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 		ibv_ack_cq_events(tcq->cq, 128/*UINT_MAX*/);
 		tcq->cq_events_that_need_ack = 0;
 	}
-
-	/* if a poll was previously scheduled, remove it,
-	   as it will be scheduled when necessary */
-	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
-
-	xio_poll_cq_armable(tcq);
 }
 
 /*---------------------------------------------------------------------------*/
