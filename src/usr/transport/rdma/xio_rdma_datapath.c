@@ -1146,8 +1146,8 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 	/* accumulate number of cq events that need to
 	 * be acked, and periodically ack them
 	 */
-	if (++tcq->cq_events_that_need_ack == 128/*UINT_MAX*/) {
-		ibv_ack_cq_events(tcq->cq, 128/*UINT_MAX*/);
+	if (++tcq->cq_events_that_need_ack == MAX_ACKED_CQE/*UINT_MAX*/) {
+		ibv_ack_cq_events(tcq->cq, MAX_ACKED_CQE/*UINT_MAX*/);
 		tcq->cq_events_that_need_ack = 0;
 	}
 }

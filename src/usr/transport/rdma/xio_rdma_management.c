@@ -383,6 +383,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	struct xio_cq		*tcq;
 	int			retval;
 	int			comp_vec = 0;
+	int			alloc_sz;
 #ifdef HAVE_IBV_MODIFY_CQ
 	int			throttle = 0;
 #endif
@@ -413,6 +414,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	tcq->alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
 	tcq->max_cqe  = dev->device_attr.max_cqe;
+	alloc_sz = tcq->max_cqe;
 
 	/* set com_vector to cpu */
 	comp_vec = ctx->cpuid % dev->verbs->num_comp_vectors;
@@ -450,7 +452,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	}
 
 
-	tcq->cq = ibv_create_cq(dev->verbs, tcq->alloc_sz, tcq,
+	tcq->cq = ibv_create_cq(dev->verbs, alloc_sz, tcq,
 				tcq->channel, comp_vec);
 	TRACE_LOG("comp_vec:%d\n", comp_vec);
 	if (tcq->cq == NULL) {
@@ -476,8 +478,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	/* set cq depth params */
 	tcq->dev	= dev;
-	tcq->cq_depth	= tcq->alloc_sz;
-	tcq->cqe_avail	= tcq->alloc_sz;
+	tcq->cq_depth	= alloc_sz;
+	tcq->cqe_avail	= alloc_sz;
 
 	INIT_LIST_HEAD(&tcq->trans_list);
 

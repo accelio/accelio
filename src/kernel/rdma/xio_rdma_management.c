@@ -255,7 +255,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 		goto cleanup0;
 	}
 
-	alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
+	tcq->alloc_sz	= min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
+	alloc_sz	= dev->device_attr.max_cqe;
 
 	/* allocate device wc array */
 	tcq->wc_array = kcalloc(MAX_POLL_WC, sizeof(struct ib_wc), GFP_KERNEL);
@@ -268,7 +269,6 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	tcq->ctx	= ctx;
 	tcq->dev	= dev;
 	tcq->max_cqe	= dev->device_attr.max_cqe;
-	tcq->alloc_sz	= alloc_sz;
 	tcq->cq_depth	= alloc_sz;
 	tcq->cqe_avail	= alloc_sz;
 	tcq->wc_array_len = MAX_POLL_WC;
