@@ -75,7 +75,10 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
-
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
 	task->imsg.sn = hdr.serial_num;
 	task->connection = connection;
 	task->session = session;

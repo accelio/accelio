@@ -464,7 +464,10 @@ int xio_connection_send(struct xio_connection *connection,
 			}
 		}
 	}
-
+#ifdef XIO_SESSION_DEBUG
+	hdr.connection = uint64_from_ptr(connection);
+	hdr.session = uint64_from_ptr(connection->session);
+#endif
 	xio_session_write_header(task, &hdr);
 
 	/* send it */

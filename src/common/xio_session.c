@@ -238,6 +238,10 @@ void xio_session_write_header(struct xio_task *task,
 	PACK_SVAL(hdr, tmp_hdr, credits_msgs);
 	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 	PACK_LLVAL(hdr, tmp_hdr, credits_bytes);
+#ifdef XIO_SESSION_DEBUG
+	PACK_LLVAL(hdr, tmp_hdr, connection);
+	PACK_LLVAL(hdr, tmp_hdr, session);
+#endif
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -263,6 +267,10 @@ void xio_session_read_header(struct xio_task *task,
 	UNPACK_SVAL(tmp_hdr, hdr, credits_msgs);
 	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
 	UNPACK_LLVAL(tmp_hdr, hdr, credits_bytes);
+#ifdef XIO_SESSION_DEBUG
+	UNPACK_LLVAL(tmp_hdr, hdr, connection);
+	UNPACK_LLVAL(tmp_hdr, hdr, session);
+#endif
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -451,6 +459,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		  connection->req_ack_sn,
 		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
 	msg->sn		= hdr.serial_num;
 	msg->flags	= 0;
 	msg->next	= NULL;
@@ -558,6 +570,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		  connection->rsp_ack_sn,
 		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
+
 	msg->sn = hdr.serial_num;
 
 	omsg		= sender_task->omsg;

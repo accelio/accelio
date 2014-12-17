@@ -49,6 +49,7 @@ extern struct xio_mempool_config	g_mempool_config;
 /*---------------------------------------------------------------------------*/
 /* defines								     */
 /*---------------------------------------------------------------------------*/
+/*#define XIO_SESSION_DEBUG*/
 
 /* Macro for 64 bit variables to switch to from net */
 #define ntohll(x) (((uint64_t)(ntohl((int)((x << 32) >> 32))) << 32) | \
@@ -210,6 +211,10 @@ PACKED_MEMORY(struct xio_session_hdr {
 	uint16_t		pad[3];
 	uint32_t		receipt_result;
 	uint64_t		credits_bytes;
+#ifdef XIO_SESSION_DEBUG
+	uint64_t		connection;
+	uint64_t		session;
+#endif
 });
 
 /* setup flags */
