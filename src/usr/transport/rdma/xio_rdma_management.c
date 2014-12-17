@@ -2114,6 +2114,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
 	int retval;
+	int timeout;
 
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
@@ -2137,17 +2138,17 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 					"err=%d\n", rdma_hndl, retval);
 	}
 	/* from context shutdown */
-	if (rdma_hndl->ignore_timewait) {
-		on_cm_timewait_exit(rdma_hndl);
-		return;
-	}
+	if (rdma_hndl->ignore_timewait)
+		timeout = XIO_TIMEWAIT_EXIT_FAST_TIMEOUT;
+	else
+		timeout = XIO_TIMEWAIT_EXIT_TIMEOUT;
 
 	rdma_hndl->timewait = 0;
 
 	/* trigger the timer */
 	retval = xio_ctx_add_delayed_work(
 				rdma_hndl->base.ctx,
-				XIO_TIMEWAIT_EXIT_TIMEOUT, rdma_hndl,
+				timeout, rdma_hndl,
 				on_cm_timewait_exit,
 				&rdma_hndl->timewait_timeout_work);
 	if (retval != 0) {
@@ -2560,14 +2561,6 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
-
-		/* from context shutdown */
-		if (rdma_hndl->ignore_timewait) {
-			kref_put(&transport->kref, xio_rdma_close_cb);
-			on_cm_timewait_exit(rdma_hndl);
-			return;
-		}
-
 		break;
 	case XIO_STATE_CLOSED:
 		return;
