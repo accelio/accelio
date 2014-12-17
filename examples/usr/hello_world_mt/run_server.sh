@@ -9,6 +9,9 @@ fi
 
 export LD_LIBRARY_PATH=../../../src/usr/
 
+# Configuring Running Directory
+TOP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 server_ip=$1
 port=$2
 trans="rdma"
@@ -22,4 +25,4 @@ then
 	finite_run=$4
 fi
 
-taskset -c 0 ./xio_mt_server ${server_ip} ${port} ${trans} ${finite_run}
+taskset -c 0 $TOP_DIR/xio_mt_server ${server_ip} ${port} ${trans} ${finite_run}
