@@ -319,6 +319,8 @@ static void xio_cq_down(struct kref *kref)
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
 
+	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+
 	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
 
 	if (tcq->cq_events_that_need_ack != 0) {
@@ -1797,6 +1799,12 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 
 	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 				 &rdma_hndl->timewait_timeout_work);
+
+	xio_ctx_remove_event(rdma_hndl->base.ctx,
+			     &rdma_hndl->ev_data_timewait_exit);
+
+	xio_ctx_remove_event(rdma_hndl->base.ctx,
+			     &rdma_hndl->ev_data_close);
 
 	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
 
