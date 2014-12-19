@@ -1059,9 +1059,11 @@ int xio_on_new_message(struct xio_session *s,
 		break;
 	case XIO_SESSION_SETUP_REQ:
 		retval = xio_on_setup_req_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_SESSION_SETUP_RSP:
 		retval = xio_on_setup_rsp_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_CONNECTION_HELLO_REQ:
 		retval = xio_on_connection_hello_req_recv(connection, task);
