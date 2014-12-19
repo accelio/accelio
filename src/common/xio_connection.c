@@ -1416,10 +1416,11 @@ int xio_release_response(struct xio_msg *msg)
 			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
 
-			if ((connection->credits_msgs >=
-			     connection->rx_queue_watermark_msgs) ||
-			    (connection->credits_bytes >=
-			     connection->rx_queue_watermark_bytes))
+			if (connection->state == XIO_CONNECTION_STATE_ONLINE &&
+			    ((connection->credits_msgs >=
+			      connection->rx_queue_watermark_msgs) ||
+			     (connection->credits_bytes >=
+			      connection->rx_queue_watermark_bytes)))
 				xio_send_credits_ack(connection);
 		}
 
@@ -1471,11 +1472,11 @@ int xio_release_msg(struct xio_msg *msg)
 
 			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
-
-			if ((connection->credits_msgs >=
-			     connection->rx_queue_watermark_msgs) ||
-			    (connection->credits_bytes >=
-			     connection->rx_queue_watermark_bytes))
+			if (connection->state == XIO_CONNECTION_STATE_ONLINE &&
+			    ((connection->credits_msgs >=
+			      connection->rx_queue_watermark_msgs) ||
+			     (connection->credits_bytes >=
+			      connection->rx_queue_watermark_bytes)))
 				xio_send_credits_ack(connection);
 		}
 
