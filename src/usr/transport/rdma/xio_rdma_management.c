@@ -319,7 +319,8 @@ static void xio_cq_down(struct kref *kref)
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
 
-	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
 
 	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
 

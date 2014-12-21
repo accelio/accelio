@@ -1037,9 +1037,9 @@ static void xio_rearm_completions(struct xio_cq *tcq)
 			  errno);
 	}
 
-	xio_ctx_init_event(&tcq->event_data,
+	xio_ctx_init_event(&tcq->consume_cq_event_data,
 			   xio_sched_consume_cq, tcq);
-	xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+	xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
 
 	tcq->num_delayed_arm = 0;
 }
@@ -1067,9 +1067,9 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 		/* no more completions on cq, give up and arm the interrupts */
 		xio_rearm_completions(tcq);
 	else {
-		xio_ctx_init_event(&tcq->event_data,
+		xio_ctx_init_event(&tcq->poll_cq_event_data,
 				   xio_sched_poll_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+		xio_ctx_add_event(tcq->ctx, &tcq->poll_cq_event_data);
 	}
 }
 
@@ -1095,9 +1095,9 @@ static void xio_sched_consume_cq(void *data)
 
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (err > 0) {
-		xio_ctx_init_event(&tcq->event_data,
+		xio_ctx_init_event(&tcq->consume_cq_event_data,
 				   xio_sched_consume_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+		xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
 	}
 }
 
@@ -1140,7 +1140,8 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 
 	/* if a poll was previously scheduled, remove it,
 	   as it will be scheduled when necessary */
-	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
 
 	xio_poll_cq_armable(tcq);
 

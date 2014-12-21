@@ -278,7 +278,8 @@ struct xio_cq  {
 	struct ibv_comp_channel		*channel;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
-	xio_ctx_event_t			event_data;
+	xio_ctx_event_t			consume_cq_event_data;
+	xio_ctx_event_t			poll_cq_event_data;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
 	int32_t				cq_events_that_need_ack;
