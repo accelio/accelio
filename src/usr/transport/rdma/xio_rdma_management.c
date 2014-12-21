@@ -417,7 +417,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	tcq->alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
 	tcq->max_cqe  = dev->device_attr.max_cqe;
-	alloc_sz = tcq->max_cqe;
+	alloc_sz = tcq->alloc_sz;
 
 	/* set com_vector to cpu */
 	comp_vec = ctx->cpuid % dev->verbs->num_comp_vectors;
