@@ -1316,8 +1316,8 @@ EXPORT_SYMBOL(xio_send_msg);
 /*---------------------------------------------------------------------------*/
 int xio_connection_xmit_msgs(struct xio_connection *connection)
 {
-	if (connection->state == XIO_CONNECTION_STATE_ONLINE ||
-	    connection->state == XIO_CONNECTION_STATE_FIN_WAIT_1) {
+	if (connection->state == XIO_CONNECTION_STATE_ONLINE /*||
+	    connection->state == XIO_CONNECTION_STATE_FIN_WAIT_1*/) {
 		return xio_connection_xmit(connection);
 	}
 
