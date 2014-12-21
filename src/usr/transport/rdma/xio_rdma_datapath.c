@@ -570,7 +570,15 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
 
-	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
+	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, " \
+			  "wr_id:0x%llx, " \
+			  "err:%s, vendor_err:0x%x\n",
+			   rdma_hndl, rdma_task, task,
+			   wc->wr_id,
+			   ibv_wc_status_str(wc->status),
+			   wc->vendor_err);
+	} else {
 		if (rdma_hndl)  {
 			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, " \
 				  "rdma_task:%p, task:%p, wr_id:0x%lx, " \
@@ -596,8 +604,9 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	/* temporary  */
 	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
 		if (rdma_hndl) {
-			ERROR_LOG("connection is disconnected\n");
-			rdma_hndl->state = XIO_STATE_DISCONNECTED;
+			ERROR_LOG("cq error reported. calling " \
+				  "rdma_disconnect. rdma_hndl:%p\n",
+				  rdma_hndl);
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
 				ERROR_LOG("rdma_hndl:%p rdma_disconnect" \
