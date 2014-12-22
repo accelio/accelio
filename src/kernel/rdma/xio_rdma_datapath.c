@@ -646,8 +646,9 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 	/* temporary  */
 	if (wc->status != IB_WC_WR_FLUSH_ERR) {
 		if (rdma_hndl) {
-			ERROR_LOG("connection is disconnected\n");
-			rdma_hndl->state = XIO_STATE_DISCONNECTED;
+			ERROR_LOG("cq error reported. calling " \
+				  "rdma_disconnect. rdma_hndl:%p\n",
+				  rdma_hndl);
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
 				ERROR_LOG("rdma_hndl:%p rdma_disconnect" \
