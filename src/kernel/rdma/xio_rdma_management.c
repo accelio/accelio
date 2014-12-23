@@ -269,8 +269,6 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	tcq->ctx	= ctx;
 	tcq->dev	= dev;
 	tcq->max_cqe	= dev->device_attr.max_cqe;
-	tcq->cq_depth	= alloc_sz;
-	tcq->cqe_avail	= alloc_sz;
 	tcq->wc_array_len = MAX_POLL_WC;
 	INIT_LIST_HEAD(&tcq->trans_list);
 	INIT_LIST_HEAD(&tcq->cq_list_entry);
@@ -306,6 +304,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
 		goto cleanup3;
 	}
+	tcq->cq_depth	= tcq->cq->cqe;
+	tcq->cqe_avail	= tcq->cq->cqe;
 
 /* due to ib_modify_cq API change, need to add backporting */
 #if 0
@@ -506,14 +506,17 @@ static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else if (tcq->cq_depth + tcq->alloc_sz < tcq->max_cqe) {
+		int cqe = tcq->cq->cqe;
 		int retval = ib_resize_cq(tcq->cq,
 					  tcq->cq_depth + tcq->alloc_sz);
 		if (retval != 0) {
 			ERROR_LOG("ibv_resize_cq failed. ret=%d\n", retval);
 			return -1;
 		}
-		tcq->cq_depth  += tcq->alloc_sz;
-		tcq->cqe_avail += tcq->alloc_sz;
+		tcq->cq_depth  += (tcq->cq->cqe - cqe);
+		tcq->cqe_avail += (tcq->cq->cqe - cqe);
+		DEBUG_LOG("cq_resize: expected:%d, actual:%d\n",
+			  tcq->cq_depth, tcq->cq->cqe);
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else {
