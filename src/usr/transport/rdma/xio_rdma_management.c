@@ -2127,8 +2127,9 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
-	if ((rdma_hndl->state == XIO_STATE_CONNECTED) ||
-	    (rdma_hndl->state == XIO_STATE_CONNECTING)) {
+
+	switch (rdma_hndl->state) {
+	case XIO_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
@@ -2136,16 +2137,36 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
-	} else if (rdma_hndl->state == XIO_STATE_CLOSED) {
+		break;
+	case XIO_STATE_CONNECTING:
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+			  rdma_hndl);
+		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		retval = xio_rdma_disconnect(rdma_hndl, 0);
+		if (retval)
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+		/*  for beacon */
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+	break;
+	case XIO_STATE_CLOSED:
 		/* coming here from
 		 * context_shutdown/rdma_close,
-		 *		 * don't go to disconnect
-		 *		 state */
+		 * don't go to disconnect state
+		 */
 		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
-					"err=%d\n", rdma_hndl, retval);
+				  "err=%d\n", rdma_hndl, retval);
+	break;
+	case XIO_STATE_INIT:
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_DISCONNECTED:
+	case XIO_STATE_RECONNECT:
+	case XIO_STATE_DESTROYED:
+	break;
 	}
+
 	/* from context shutdown */
 	if (rdma_hndl->ignore_timewait)
 		timeout = XIO_TIMEWAIT_EXIT_FAST_TIMEOUT;
