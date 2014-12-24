@@ -2212,7 +2212,7 @@ int xio_connection_disconnected(struct xio_connection *connection)
 
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
-	if (!connection->disable_notify)
+	if (!connection->disable_notify && !connection->disconnecting)
 		xio_session_notify_connection_disconnected(
 				connection->session, connection,
 				(enum xio_status)connection->close_reason);
