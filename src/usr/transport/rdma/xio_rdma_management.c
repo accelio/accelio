@@ -319,6 +319,9 @@ static void xio_cq_down(struct kref *kref)
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
 
+	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
+
 	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
 
 	if (tcq->cq_events_that_need_ack != 0) {
@@ -383,6 +386,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	struct xio_cq		*tcq;
 	int			retval;
 	int			comp_vec = 0;
+	int			alloc_sz;
 #ifdef HAVE_IBV_MODIFY_CQ
 	int			throttle = 0;
 #endif
@@ -413,6 +417,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	tcq->alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
 	tcq->max_cqe  = dev->device_attr.max_cqe;
+	alloc_sz = tcq->alloc_sz;
 
 	/* set com_vector to cpu */
 	comp_vec = ctx->cpuid % dev->verbs->num_comp_vectors;
@@ -450,7 +455,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	}
 
 
-	tcq->cq = ibv_create_cq(dev->verbs, tcq->alloc_sz, tcq,
+	tcq->cq = ibv_create_cq(dev->verbs, alloc_sz, tcq,
 				tcq->channel, comp_vec);
 	TRACE_LOG("comp_vec:%d\n", comp_vec);
 	if (tcq->cq == NULL) {
@@ -476,8 +481,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	/* set cq depth params */
 	tcq->dev	= dev;
-	tcq->cq_depth	= tcq->alloc_sz;
-	tcq->cqe_avail	= tcq->alloc_sz;
+	tcq->cq_depth	= tcq->cq->cqe;
+	tcq->cqe_avail	= tcq->cq->cqe;
 
 	INIT_LIST_HEAD(&tcq->trans_list);
 
@@ -827,9 +832,14 @@ static inline void xio_cm_channel_release(struct xio_cm_channel *channel)
 static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 				     struct xio_context *ctx)
 {
-	DEBUG_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
-	xio_context_destroy_wait(ctx);
+	struct xio_rdma_transport *rdma_hndl =
+				(struct xio_rdma_transport *)trans_hndl;
 
+	DEBUG_LOG("context: [shutdown] trans_hndl:%p\n", trans_hndl);
+	/*due to long timewait - force ignoring */
+	rdma_hndl->ignore_timewait = 1;
+
+	xio_context_destroy_wait(ctx);
 	xio_rdma_close(trans_hndl);
 
 	return 0;
@@ -839,20 +849,23 @@ static int xio_rdma_context_shutdown(struct xio_transport_base *trans_hndl,
 /*---------------------------------------------------------------------------*/
 /* xio_cq_alloc_slots							     */
 /*---------------------------------------------------------------------------*/
-static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
+int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 {
 	if (cqe_num < tcq->cqe_avail) {
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else if (tcq->cq_depth + tcq->alloc_sz < tcq->max_cqe) {
+		int cqe = tcq->cq->cqe;
 		int retval = ibv_resize_cq(tcq->cq,
 					   (tcq->cq_depth + tcq->alloc_sz));
 		if (retval != 0) {
 			ERROR_LOG("ibv_resize_cq failed. %m\n");
 			return -1;
 		}
-		tcq->cq_depth  += tcq->alloc_sz;
-		tcq->cqe_avail += tcq->alloc_sz;
+		tcq->cq_depth  += (tcq->cq->cqe - cqe);
+		tcq->cqe_avail += (tcq->cq->cqe - cqe);
+		DEBUG_LOG("cq_resize: expected:%d, actual:%d\n",
+			  tcq->cq_depth, tcq->cq->cqe);
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else {
@@ -1791,6 +1804,12 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 				 &rdma_hndl->timewait_timeout_work);
 
+	xio_ctx_remove_event(rdma_hndl->base.ctx,
+			     &rdma_hndl->ev_data_timewait_exit);
+
+	xio_ctx_remove_event(rdma_hndl->base.ctx,
+			     &rdma_hndl->ev_data_close);
+
 	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
 
 	xio_rdma_phantom_pool_destroy(rdma_hndl);
@@ -2107,11 +2126,13 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
 	int retval;
+	int timeout;
 
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
-	if ((rdma_hndl->state == XIO_STATE_CONNECTED) ||
-	    (rdma_hndl->state == XIO_STATE_CONNECTING)) {
+
+	switch (rdma_hndl->state) {
+	case XIO_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
@@ -2119,23 +2140,48 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
-	} else if (rdma_hndl->state == XIO_STATE_CLOSED) {
+		break;
+	case XIO_STATE_CONNECTING:
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+			  rdma_hndl);
+		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		retval = xio_rdma_disconnect(rdma_hndl, 0);
+		if (retval)
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+		/*  for beacon */
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+	break;
+	case XIO_STATE_CLOSED:
 		/* coming here from
 		 * context_shutdown/rdma_close,
-		 *		 * don't go to disconnect
-		 *		 state */
+		 * don't go to disconnect state
+		 */
 		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
-					"err=%d\n", rdma_hndl, retval);
+				  "err=%d\n", rdma_hndl, retval);
+	break;
+	case XIO_STATE_INIT:
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_DISCONNECTED:
+	case XIO_STATE_RECONNECT:
+	case XIO_STATE_DESTROYED:
+	break;
 	}
+
+	/* from context shutdown */
+	if (rdma_hndl->ignore_timewait)
+		timeout = XIO_TIMEWAIT_EXIT_FAST_TIMEOUT;
+	else
+		timeout = XIO_TIMEWAIT_EXIT_TIMEOUT;
 
 	rdma_hndl->timewait = 0;
 
 	/* trigger the timer */
 	retval = xio_ctx_add_delayed_work(
 				rdma_hndl->base.ctx,
-				XIO_TIMEWAIT_EXIT_TIMEOUT, rdma_hndl,
+				timeout, rdma_hndl,
 				on_cm_timewait_exit,
 				&rdma_hndl->timewait_timeout_work);
 	if (retval != 0) {
@@ -2548,6 +2594,20 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
+		if (rdma_hndl->ignore_timewait && rdma_hndl->timewait == 0) {
+			xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+						 &rdma_hndl->timewait_timeout_work);
+			/* trigger the timer */
+			retval = xio_ctx_add_delayed_work(
+					rdma_hndl->base.ctx,
+					XIO_TIMEWAIT_EXIT_FAST_TIMEOUT, rdma_hndl,
+					on_cm_timewait_exit,
+					&rdma_hndl->timewait_timeout_work);
+			if (retval != 0) {
+				ERROR_LOG("xio_ctx_timer_add_delayed_work failed.\n");
+				return;
+			}
+		}
 		break;
 	case XIO_STATE_CLOSED:
 		return;

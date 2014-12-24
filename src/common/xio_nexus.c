@@ -54,6 +54,7 @@
 #include "xio_server.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
+#include <xio-advanced-env.h>
 
 /*---------------------------------------------------------------------------*/
 /* private structures							     */
@@ -1554,12 +1555,11 @@ static int xio_nexus_on_cancel_request(struct xio_nexus *nexus,
 				       union xio_transport_event_data
 				       *event_data)
 {
-	union xio_nexus_event_data nexus_event_data = {
-		.cancel.ulp_msg		= event_data->cancel.ulp_msg,
-		.cancel.ulp_msg_sz	= event_data->cancel.ulp_msg_sz,
-		.cancel.task		= event_data->cancel.task,
-		.cancel.result		= event_data->cancel.result,
-	};
+	union xio_nexus_event_data nexus_event_data = {};
+	nexus_event_data.cancel.ulp_msg = event_data->cancel.ulp_msg;
+	nexus_event_data.cancel.ulp_msg_sz = event_data->cancel.ulp_msg_sz;
+	nexus_event_data.cancel.task = event_data->cancel.task;
+	nexus_event_data.cancel.result = event_data->cancel.result;
 
 	/* route the message to any of the sessions */
 	xio_observable_notify_any_observer(
@@ -1577,12 +1577,11 @@ static int xio_nexus_on_cancel_response(struct xio_nexus *nexus,
 					union xio_transport_event_data
 					*event_data)
 {
-	union xio_nexus_event_data nexus_event_data = {
-		.cancel.ulp_msg		= event_data->cancel.ulp_msg,
-		.cancel.ulp_msg_sz	= event_data->cancel.ulp_msg_sz,
-		.cancel.task		= event_data->cancel.task,
-		.cancel.result		= event_data->cancel.result,
-	};
+	union xio_nexus_event_data nexus_event_data = {};
+	nexus_event_data.cancel.ulp_msg = event_data->cancel.ulp_msg;
+	nexus_event_data.cancel.ulp_msg_sz = event_data->cancel.ulp_msg_sz;
+	nexus_event_data.cancel.task = event_data->cancel.task;
+	nexus_event_data.cancel.result = event_data->cancel.result;
 
 	/* route the message to any of the sessions */
 	xio_observable_notify_any_observer(

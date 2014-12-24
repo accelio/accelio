@@ -155,6 +155,53 @@ static void process_response(struct xio_msg *rsp)
 }
 
 /*---------------------------------------------------------------------------*/
+/* on_connection_established						     */
+/*---------------------------------------------------------------------------*/
+static int on_connection_established(struct xio_connection *conn)
+{
+	struct xio_msg			*msg;
+
+	printf("**** starting ...\n");
+
+	/* create transaction */
+	msg = msg_pool_get(pool);
+	if (msg == NULL)
+		return 0;
+
+	/* get pointers to internal buffers */
+	msg->in.header.iov_base = NULL;
+	msg->in.header.iov_len = 0;
+	vmsg_sglist_set_nents(&msg->in, 0);
+
+	/*
+	   sglist = vmsg_sglist(&msg->in);
+	   sglist[0].iov_base = NULL;
+	   sglist[0].iov_len  = ONE_MB;
+	   sglist[0].mr = NULL;
+	   vmsg_sglist_set_nents(&msg->in, 1);
+	   */
+
+	/* recycle the message and fill new request */
+	msg_write(&msg_params, msg,
+			test_config.hdr_len,
+			1, test_config.data_len);
+
+	/* try to send it */
+	if (xio_send_request(conn, msg) == -1) {
+		printf("**** sent %d messages\n", 1);
+		if (xio_errno() != EAGAIN)
+			printf("**** [%p] Error - xio_send_msg " \
+					"failed. %s\n",
+					conn,
+					xio_strerror(xio_errno()));
+		msg_pool_put(pool, msg);
+		xio_assert(0);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* on_session_event							     */
 /*---------------------------------------------------------------------------*/
 static int on_session_event(struct xio_session *session,
@@ -166,6 +213,9 @@ static int on_session_event(struct xio_session *session,
 	       xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
+	case XIO_SESSION_CONNECTION_ESTABLISHED_EVENT:
+		on_connection_established(event_data->conn);
+		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		xio_connection_destroy(event_data->conn);
 		break;
@@ -234,23 +284,21 @@ static int on_response(struct xio_session *session,
 	*/
 	msg->sn = 0;
 
-	do {
-		/* recycle the message and fill new request */
-		msg_write(&msg_params, msg,
-			  test_config.hdr_len,
-			  1, test_config.data_len);
+	/* recycle the message and fill new request */
+	msg_write(&msg_params, msg,
+			test_config.hdr_len,
+			1, test_config.data_len);
 
-		/* try to send it */
-		if (xio_send_request(conn, msg) == -1) {
-			if (xio_errno() != EAGAIN)
-				printf("**** [%p] Error - xio_send_msg " \
-				       "failed %s\n",
-				       session,
-				       xio_strerror(xio_errno()));
-			msg_pool_put(pool, msg);
-			xio_assert(0);
-		}
-	} while (0);
+	/* try to send it */
+	if (xio_send_request(conn, msg) == -1) {
+		if (xio_errno() != EAGAIN)
+			printf("**** [%p] Error - xio_send_msg " \
+					"failed %s\n",
+					session,
+					xio_strerror(xio_errno()));
+		msg_pool_put(pool, msg);
+		xio_assert(0);
+	}
 
 	return 0;
 }
@@ -442,9 +490,8 @@ int main(int argc, char *argv[])
 	int				error;
 	int				retval;
 	char				url[256];
-	struct xio_msg			*msg;
 	/*struct xio_iovec_ex		*sglist; */
-	int				i = 0, opt;
+	int				opt;
 	struct xio_session_params	params;
 	struct xio_connection_params	cparams;
 
@@ -492,6 +539,8 @@ int main(int argc, char *argv[])
 			error, xio_strerror(error));
 		xio_assert(session != NULL);
 	}
+	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
+
 	/* connect the session  */
 	memset(&cparams, 0, sizeof(cparams));
 	cparams.session		= session;
@@ -499,49 +548,6 @@ int main(int argc, char *argv[])
 	cparams.conn_idx	= test_config.conn_idx;
 
 	conn = xio_connect(&cparams);
-
-	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
-
-	printf("**** starting ...\n");
-	while (1) {
-		/* create transaction */
-		msg = msg_pool_get(pool);
-		if (msg == NULL)
-			break;
-
-		/* get pointers to internal buffers */
-		msg->in.header.iov_base = NULL;
-		msg->in.header.iov_len = 0;
-		vmsg_sglist_set_nents(&msg->in, 0);
-
-		/*
-		sglist = vmsg_sglist(&msg->in);
-		sglist[0].iov_base = NULL;
-		sglist[0].iov_len  = ONE_MB;
-		sglist[0].mr = NULL;
-		vmsg_sglist_set_nents(&msg->in, 1);
-		*/
-
-		/* recycle the message and fill new request */
-		msg_write(&msg_params, msg,
-			  test_config.hdr_len,
-			  1, test_config.data_len);
-
-		/* try to send it */
-		if (xio_send_request(conn, msg) == -1) {
-			printf("**** sent %d messages\n", i);
-			if (xio_errno() != EAGAIN)
-				printf("**** [%p] Error - xio_send_msg " \
-				       "failed. %s\n",
-					session,
-					xio_strerror(xio_errno()));
-			msg_pool_put(pool, msg);
-			xio_assert(0);
-		}
-		i++;
-		if (i == 1)
-			break;
-	}
 
 	/* the default xio supplied main loop */
 	retval = xio_context_run_loop(ctx, XIO_INFINITE);

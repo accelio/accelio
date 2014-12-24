@@ -255,7 +255,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 		goto cleanup0;
 	}
 
-	alloc_sz = min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
+	tcq->alloc_sz	= min(dev->device_attr.max_cqe, CQE_ALLOC_SIZE);
+	alloc_sz	= tcq->alloc_sz;
 
 	/* allocate device wc array */
 	tcq->wc_array = kcalloc(MAX_POLL_WC, sizeof(struct ib_wc), GFP_KERNEL);
@@ -268,9 +269,6 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	tcq->ctx	= ctx;
 	tcq->dev	= dev;
 	tcq->max_cqe	= dev->device_attr.max_cqe;
-	tcq->alloc_sz	= alloc_sz;
-	tcq->cq_depth	= alloc_sz;
-	tcq->cqe_avail	= alloc_sz;
 	tcq->wc_array_len = MAX_POLL_WC;
 	INIT_LIST_HEAD(&tcq->trans_list);
 	INIT_LIST_HEAD(&tcq->cq_list_entry);
@@ -306,6 +304,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
 		goto cleanup3;
 	}
+	tcq->cq_depth	= tcq->cq->cqe;
+	tcq->cqe_avail	= tcq->cq->cqe;
 
 /* due to ib_modify_cq API change, need to add backporting */
 #if 0
@@ -506,14 +506,17 @@ static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else if (tcq->cq_depth + tcq->alloc_sz < tcq->max_cqe) {
+		int cqe = tcq->cq->cqe;
 		int retval = ib_resize_cq(tcq->cq,
 					  tcq->cq_depth + tcq->alloc_sz);
 		if (retval != 0) {
 			ERROR_LOG("ibv_resize_cq failed. ret=%d\n", retval);
 			return -1;
 		}
-		tcq->cq_depth  += tcq->alloc_sz;
-		tcq->cqe_avail += tcq->alloc_sz;
+		tcq->cq_depth  += (tcq->cq->cqe - cqe);
+		tcq->cqe_avail += (tcq->cq->cqe - cqe);
+		DEBUG_LOG("cq_resize: expected:%d, actual:%d\n",
+			  tcq->cq_depth, tcq->cq->cqe);
 		tcq->cqe_avail -= cqe_num;
 		return 0;
 	} else {
@@ -2011,23 +2014,43 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 
 	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
-	if (rdma_hndl->state == XIO_STATE_CONNECTED ||
-	    rdma_hndl->state == XIO_STATE_CONNECTING) {
+	switch (rdma_hndl->state) {
+	case XIO_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 		rdma_hndl->state = XIO_STATE_DISCONNECTED;
 		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
-			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
-				  "err=%d\n",
-				  rdma_hndl, retval);
-	} else if (rdma_hndl->state == XIO_STATE_CLOSED) {
-		/* coming here from context_shutdown/rdma_close,
-		 * don't go to disconnect state */
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+		break;
+	case XIO_STATE_CONNECTING:
+		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
+			  rdma_hndl);
+		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		retval = xio_rdma_disconnect(rdma_hndl, 0);
+		if (retval)
+			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
+				  rdma_hndl);
+		/*  for beacon */
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+	break;
+	case XIO_STATE_CLOSED:
+		/* coming here from
+		 * context_shutdown/rdma_close,
+		 * don't go to disconnect state
+		 */
 		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
-				 "err=%d\n", rdma_hndl, retval);
+				  "err=%d\n", rdma_hndl, retval);
+	break;
+	case XIO_STATE_INIT:
+	case XIO_STATE_LISTEN:
+	case XIO_STATE_DISCONNECTED:
+	case XIO_STATE_RECONNECT:
+	case XIO_STATE_DESTROYED:
+	break;
 	}
 }
 

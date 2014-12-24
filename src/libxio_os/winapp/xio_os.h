@@ -35,41 +35,54 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef XIO_ENV_H
-#define XIO_ENV_H
+#ifndef WIN_XIO_OS_H
+#define WIN_XIO_OS_H
 
 
-/*---------------------------------------------------------------------------*/
-/*-------------------- Memory related things --------------------------------*/
-/*---------------------------------------------------------------------------*/
-#define PACKED_MEMORY( __Declaration__ ) \
-		__Declaration__ __attribute__((__packed__))
+#include <xio_env.h>
+
+//*
+
+#include <Winsock2.h>
+#include <Windows.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#include <malloc.h>
+
+#include <time.h>
+#include <inttypes.h>
+#include <ctype.h>
+#include <assert.h>
+#include <limits.h>
 
 
-/*---------------------------------------------------------------------------*/
-#define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
-#define sum_to_ptr(_ptr, a) ((_ptr) + (a))
 
-/*---------------------------------------------------------------------------*/
-/*-------------------- Threads related things --------------------------------*/
-/*---------------------------------------------------------------------------*/
-#define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \
-		__sync_bool_compare_and_swap(ptr, oldval, newval)
-#define  xio_sync_fetch_and_add32(ptr, value) \
-	__sync_fetch_and_add((ptr), (value))
-#define  xio_sync_fetch_and_add64(ptr, value) \
-	__sync_fetch_and_add((ptr), (value))
-
-/*---------------------------------------------------------------------------*/
-/*-------------------- Socket related things --------------------------------*/
-/*---------------------------------------------------------------------------*/
-#define INVALID_SOCKET (-1)
-#define XIO_ESHUTDOWN		ESHUTDOWN
-#define XIO_EINPROGRESS		EINPROGRESS /* connect on non-blocking socket */
-#define XIO_EAGAIN		EAGAIN      /* recv    on non-blocking socket */
-#define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
-#define XIO_ECONNABORTED	ECONNABORTED
-#define XIO_ECONNRESET		ECONNRESET
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 
-#endif /* XIO_ENV_H */
+#include <linux/list.h>
+#include <linux/printk.h>
+#include <linux/atomic.h>
+#include <linux/kref.h>
+#include <linux/usr.h>
+#include <linux/debugfs.h>
+//#include <linux/jiffies.h>
+
+#include "get_clock.h"
+
+#include "spinlock.h"
+
+
+//*/
+
+//*/
+#endif /* WIN_XIO_OS_H */

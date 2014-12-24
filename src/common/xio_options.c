@@ -57,16 +57,16 @@
 
 /* xio options */
 struct xio_options			g_options = {
-	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
-	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
-	.reconnect			= XIO_OPTVAL_DEF_ENABLE_RECONNECT,
-	.max_inline_hdr			= XIO_OPTVAL_DEF_MAX_INLINE_HEADER,
-	.max_inline_data		= XIO_OPTVAL_DEF_MAX_INLINE_DATA,
-	.enable_flow_control		= XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL,
-	.snd_queue_depth_msgs		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS,
-	.rcv_queue_depth_msgs		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,
-	.snd_queue_depth_bytes		= XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,
-	.rcv_queue_depth_bytes		= XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,
+	XIO_OPTVAL_DEF_MAX_IN_IOVSZ,		/*max_in_iovsz*/
+	XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,		/*max_out_iovsz*/
+	XIO_OPTVAL_DEF_ENABLE_RECONNECT,	/*reconnect*/
+	XIO_OPTVAL_DEF_MAX_INLINE_HEADER,	/*max_inline_hdr*/
+	XIO_OPTVAL_DEF_MAX_INLINE_DATA,		/*max_inline_data*/
+	XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL,	/*enable_flow_control*/
+	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS,	/*snd_queue_depth_msgs*/
+	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,	/*rcv_queue_depth_msgs*/
+	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,	/*snd_queue_depth_bytes*/
+	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,	/*rcv_queue_depth_bytes*/
 };
 
 /*---------------------------------------------------------------------------*/
@@ -194,7 +194,7 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
-		g_options.snd_queue_depth_msgs = *((uint64_t *)optval);
+		g_options.snd_queue_depth_msgs = (int)*((uint64_t *)optval);
 		return 0;
 		break;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS:

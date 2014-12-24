@@ -48,6 +48,7 @@ extern struct list_head		dev_list;
 extern spinlock_t		dev_list_lock;
 
 #define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
+#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	10    /* 10 milliseconds */
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -59,8 +60,9 @@ extern spinlock_t		dev_list_lock;
 #define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
+#define MAX_ACKED_CQE			128
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
+#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE+MAX_ACKED_CQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define MAX_INLINE_DATA			200
@@ -275,7 +277,8 @@ struct xio_cq  {
 	struct ibv_comp_channel		*channel;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
-	xio_ctx_event_t			event_data;
+	xio_ctx_event_t			consume_cq_event_data;
+	xio_ctx_event_t			poll_cq_event_data;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
 	int32_t				cq_events_that_need_ack;
@@ -426,7 +429,9 @@ struct xio_rdma_transport {
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad1[2];
+	uint16_t			pad1;
+
+	uint16_t			ignore_timewait;
 
 	/* too big to be on stack - use as temporaries */
 	union {

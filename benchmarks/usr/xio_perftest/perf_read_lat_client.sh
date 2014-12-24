@@ -11,9 +11,10 @@ fi
 
 server_ip=$1
 trans="rdma"
+intf_name="ib2"
 if [ $# -eq 2 ]; then
 	trans=$2
 fi
 
-./xio_read_lat -c 8 -n 8 -t 100 -r ${trans} ${server_ip}
+./xio_read_lat -c 8 -n 8 -t 100 -i ${intf_name} -r ${trans} ${server_ip} -o ./xio_read_lat.csv
 

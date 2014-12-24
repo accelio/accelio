@@ -98,6 +98,7 @@ static void xio_dtor(void)
 	}
 	xio_idr_destroy(usr_idr);
 	xio_thread_data_destruct();
+	xio_env_cleanup();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -106,11 +107,12 @@ static void xio_dtor(void)
 static void xio_ctor(void)
 {
 	size_t i;
+	xio_env_startup();
 	for (i = 0; i < transport_tbl_sz; i++)
 		if (!transport_tbl[i])
 			transport_tbl[i] = transport_func_list_tbl[i]();
 
-	page_size = sysconf(_SC_PAGESIZE);
+	page_size = xio_get_page_size();
 	if (page_size < 0)
 		page_size = 4096;
 	g_mhz = xio_get_cpu_mhz();
@@ -129,10 +131,7 @@ static void xio_ctor(void)
 	}
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
-/*---------------------------------------------------------------------------*/
-__attribute__((constructor)) void xio_init(void)
+void xio_init(void)
 {
 	mutex_lock(&ini_mutex);
 	if (++ini_refcnt == 1)
@@ -140,7 +139,7 @@ __attribute__((constructor)) void xio_init(void)
 	mutex_unlock(&ini_mutex);
 }
 
-__attribute__((destructor))  void xio_shutdown(void)
+void xio_shutdown(void)
 {
 	mutex_lock(&ini_mutex);
 	if (ini_refcnt <= 0) {
@@ -154,3 +153,15 @@ __attribute__((destructor))  void xio_shutdown(void)
 	mutex_unlock(&ini_mutex);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_constructor like module init					     */
+/*---------------------------------------------------------------------------*/
+LIBRARY_INITIALIZER(xio_constructor)
+{
+	xio_init();
+}
+
+LIBRARY_FINALIZER(xio_destructor)
+{
+	xio_shutdown();
+}

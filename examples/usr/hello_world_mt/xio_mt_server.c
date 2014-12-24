@@ -45,9 +45,9 @@
 #define MAX_THREADS		4
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		1000000
-#define TEST_DISCONNECT		1
 #define DISCONNECT_NR		2000000
 
+int test_disconnect;
 
 struct portals_vec {
 	int			vec_len;
@@ -135,12 +135,12 @@ static int on_request(struct xio_session *session,
 	xio_send_response(&tdata->rsp[i]);
 	tdata->nsent++;
 
-#if  TEST_DISCONNECT
-	if (tdata->nsent == DISCONNECT_NR && tdata->connection) {
-		xio_disconnect(tdata->connection);
-		return 0;
+	if (test_disconnect) {
+		if (tdata->nsent == DISCONNECT_NR && tdata->connection) {
+			xio_disconnect(tdata->connection);
+			return 0;
+		}
 	}
-#endif
 
 	return 0;
 }
@@ -301,8 +301,8 @@ int main(int argc, char *argv[])
 	uint16_t		port = atoi(argv[2]);
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\n",
-		       argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>\
+				<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
 
@@ -320,6 +320,12 @@ int main(int argc, char *argv[])
 		sprintf(url, "%s://%s:%d", argv[3], argv[1], port);
 	else
 		sprintf(url, "rdma://%s:%d", argv[1], port);
+
+	if (argc > 4)
+		test_disconnect = atoi(argv[4]);
+	else
+		test_disconnect = 1;
+
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data->ctx, &server_ops,
 			  url, NULL, 0, server_data);

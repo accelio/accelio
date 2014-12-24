@@ -41,6 +41,7 @@
 #include "xio_hash.h"
 #include <sys/hashtable.h>
 #include "xio_idr.h"
+#include <xio-advanced-env.h>
 
 struct xio_idr_entry {
 	void					*key;

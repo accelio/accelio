@@ -53,7 +53,7 @@
 struct xio_timers_list {
 	struct list_head		timers_head;
 #ifdef SAFE_LIST
-	pthread_spinlock_t		lock;
+	spinlock_t			lock;
 	int				pad;
 #endif
 };
@@ -69,14 +69,14 @@ enum timers_list_rc {
 static inline void xio_timers_list_lock(struct xio_timers_list *timers_list)
 {
 #ifdef SAFE_LIST
-	pthread_spin_lock(&timers_list->lock);
+	spin_lock(&timers_list->lock);
 #endif
 }
 
 static inline void xio_timers_list_unlock(struct xio_timers_list *timers_list)
 {
 #ifdef SAFE_LIST
-	pthread_spin_unlock(&timers_list->lock);
+	spin_unlock(&timers_list->lock);
 #endif
 }
 
@@ -88,7 +88,7 @@ static inline uint64_t xio_timers_list_ns_current_get(void)
 	uint64_t	ns_monotonic;
 	struct timespec ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	xio_clock_gettime(&ts);
 
 	ns_monotonic = (ts.tv_sec*XIO_NS_IN_SEC) + (uint64_t)ts.tv_nsec;
 
@@ -102,8 +102,7 @@ static inline void xio_timers_list_init(struct xio_timers_list *timers_list)
 {
 	INIT_LIST_HEAD(&timers_list->timers_head);
 #ifdef SAFE_LIST
-	pthread_spin_init(&timers_list->lock,
-			  PTHREAD_PROCESS_PRIVATE);
+	spin_lock_init(&timers_list->lock);
 #endif
 }
 
@@ -196,10 +195,6 @@ static inline void xio_timers_list_close(struct xio_timers_list *timers_list)
 		list_del_init(&tentry->entry);
 	}
 	xio_timers_list_unlock(timers_list);
-
-#ifdef SAFE_LIST
-	pthread_spin_destroy(&timers_list->lock);
-#endif
 }
 
 /*---------------------------------------------------------------------------*/

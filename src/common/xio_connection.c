@@ -55,6 +55,7 @@
 #include "xio_nexus.h"
 #include "xio_session.h"
 #include "xio_connection.h"
+#include <xio-advanced-env.h>
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_TIMEOUT		300000
@@ -65,59 +66,59 @@
 
 static struct xio_transition xio_transition_table[][2] = {
 /* INIT */	  {
-		   {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		   {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		  },
 
 /* ESTABLISHED */ {
-		   {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		   {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		  },
 
 /* ONLINE */      {
-		   {.valid = 1, .next_state = XIO_CONNECTION_STATE_CLOSE_WAIT, .send_flags = SEND_ACK },
-		   {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		   {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_CLOSE_WAIT, /*send_flags*/ SEND_ACK },
+		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		  },
 
 /* FIN_WAIT_1 */  {
-		   {.valid = 1, .next_state = XIO_CONNECTION_STATE_CLOSING, .send_flags = SEND_ACK },
-		   {.valid = 1, .next_state = XIO_CONNECTION_STATE_FIN_WAIT_2, .send_flags = 0 },
+		   {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_CLOSING, /*send_flags*/ SEND_ACK },
+		   {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_FIN_WAIT_2, /*send_flags*/ 0 },
 		  },
 /* FIN_WAIT_2 */ {
-		  {.valid = 1, .next_state = XIO_CONNECTION_STATE_TIME_WAIT, .send_flags = SEND_ACK },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_TIME_WAIT, /*send_flags*/ SEND_ACK },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		 },
 /* CLOSING */    {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 1, .next_state = XIO_CONNECTION_STATE_TIME_WAIT, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_TIME_WAIT, /*send_flags*/ 0 },
 		 },
 /* TIME_WAIT */  {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		 },
 /* CLOSE_WAIT */ {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		 },
 /* LAST_ACK */   {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 1, .next_state = XIO_CONNECTION_STATE_CLOSED, .send_flags = 0  },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 1, /*next_state*/ XIO_CONNECTION_STATE_CLOSED, /*send_flags*/ 0 },
 		 },
 /* CLOSED */	 {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		 },
 /* DISCONNECTED */{
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		 },
 /* ERROR */	 {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		  },
 /* INVALID */	  {
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0,},
-		  {.valid = 0, .next_state = XIO_CONNECTION_STATE_INVALID, .send_flags = 0 },
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0,},
+		  {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
 		  },
 };
 
@@ -416,7 +417,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->nexus		= connection->nexus;
 	task->connection	= connection;
 	task->omsg		= msg;
-	task->omsg_flags	= msg->flags;
+	task->omsg_flags	= (uint16_t)msg->flags;
 	task->omsg->next	= NULL;
 
 	/* mark as a control message */
@@ -427,7 +428,7 @@ int xio_connection_send(struct xio_connection *connection,
 	    connection->session->ses_ops.on_ow_msg_send_complete)
 		xio_connection_set_ow_send_comp_params(msg);
 
-	hdr.flags		= msg->flags;
+	hdr.flags		= (uint32_t)msg->flags;
 	hdr.dest_session_id	= connection->session->peer_session_id;
 	if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
 		if (IS_REQUEST(msg->type)) {
@@ -463,7 +464,10 @@ int xio_connection_send(struct xio_connection *connection,
 			}
 		}
 	}
-
+#ifdef XIO_SESSION_DEBUG
+	hdr.connection = uint64_from_ptr(connection);
+	hdr.session = uint64_from_ptr(connection->session);
+#endif
 	xio_session_write_header(task, &hdr);
 
 	/* send it */
@@ -960,7 +964,7 @@ int xio_send_request(struct xio_connection *connection,
 		     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
 		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		      connection->state != XIO_CONNECTION_STATE_INIT))) {
-		xio_set_error(ESHUTDOWN);
+		xio_set_error(XIO_ESHUTDOWN);
 		return -1;
 	}
 
@@ -1084,7 +1088,7 @@ int xio_send_response(struct xio_msg *msg)
 			/* we discard the response as connection is not active
 			 * anymore
 			 */
-			xio_set_error(ESHUTDOWN);
+			xio_set_error(XIO_ESHUTDOWN);
 			xio_tasks_pool_put(task);
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_DISCARDED,
@@ -1185,7 +1189,7 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	xio_msg_list_remove(&connection->one_way_msg_pool, rsp, pdata);
 
 	rsp->type = (enum xio_msg_type)
-		(((uint)msg->type & ~XIO_REQUEST) | XIO_RESPONSE);
+		(((unsigned)msg->type & ~XIO_REQUEST) | XIO_RESPONSE);
 	rsp->request = msg;
 
 	rsp->flags = XIO_MSG_FLAG_EX_RECEIPT_FIRST;
@@ -1230,7 +1234,7 @@ int xio_send_msg(struct xio_connection *connection,
 		     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
 		      connection->state != XIO_CONNECTION_STATE_ESTABLISHED &&
 		      connection->state != XIO_CONNECTION_STATE_INIT))) {
-		xio_set_error(ESHUTDOWN);
+		xio_set_error(XIO_ESHUTDOWN);
 		return -1;
 	}
 
@@ -1312,8 +1316,8 @@ EXPORT_SYMBOL(xio_send_msg);
 /*---------------------------------------------------------------------------*/
 int xio_connection_xmit_msgs(struct xio_connection *connection)
 {
-	if (connection->state == XIO_CONNECTION_STATE_ONLINE ||
-	    connection->state == XIO_CONNECTION_STATE_FIN_WAIT_1) {
+	if (connection->state == XIO_CONNECTION_STATE_ONLINE /*||
+	    connection->state == XIO_CONNECTION_STATE_FIN_WAIT_1*/) {
 		return xio_connection_xmit(connection);
 	}
 
@@ -1412,10 +1416,11 @@ int xio_release_response(struct xio_msg *msg)
 			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
 
-			if ((connection->credits_msgs >=
-			     connection->rx_queue_watermark_msgs) ||
-			    (connection->credits_bytes >=
-			     connection->rx_queue_watermark_bytes))
+			if (connection->state == XIO_CONNECTION_STATE_ONLINE &&
+			    ((connection->credits_msgs >=
+			      connection->rx_queue_watermark_msgs) ||
+			     (connection->credits_bytes >=
+			      connection->rx_queue_watermark_bytes)))
 				xio_send_credits_ack(connection);
 		}
 
@@ -1467,11 +1472,11 @@ int xio_release_msg(struct xio_msg *msg)
 
 			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
-
-			if ((connection->credits_msgs >=
-			     connection->rx_queue_watermark_msgs) ||
-			    (connection->credits_bytes >=
-			     connection->rx_queue_watermark_bytes))
+			if (connection->state == XIO_CONNECTION_STATE_ONLINE &&
+			    ((connection->credits_msgs >=
+			      connection->rx_queue_watermark_msgs) ||
+			     (connection->credits_bytes >=
+			      connection->rx_queue_watermark_bytes)))
 				xio_send_credits_ack(connection);
 		}
 

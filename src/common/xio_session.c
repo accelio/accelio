@@ -57,6 +57,7 @@
 #include "xio_sessions_cache.h"
 #include "xio_session.h"
 #include "xio_session_priv.h"
+#include <xio-advanced-env.h>
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
@@ -237,6 +238,10 @@ void xio_session_write_header(struct xio_task *task,
 	PACK_SVAL(hdr, tmp_hdr, credits_msgs);
 	PACK_LVAL(hdr, tmp_hdr, receipt_result);
 	PACK_LLVAL(hdr, tmp_hdr, credits_bytes);
+#ifdef XIO_SESSION_DEBUG
+	PACK_LLVAL(hdr, tmp_hdr, connection);
+	PACK_LLVAL(hdr, tmp_hdr, session);
+#endif
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -262,6 +267,10 @@ void xio_session_read_header(struct xio_task *task,
 	UNPACK_SVAL(tmp_hdr, hdr, credits_msgs);
 	UNPACK_LVAL(tmp_hdr, hdr, receipt_result);
 	UNPACK_LLVAL(tmp_hdr, hdr, credits_bytes);
+#ifdef XIO_SESSION_DEBUG
+	UNPACK_LLVAL(tmp_hdr, hdr, connection);
+	UNPACK_LLVAL(tmp_hdr, hdr, session);
+#endif
 
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_session_hdr));
 }
@@ -271,10 +280,9 @@ void xio_session_read_header(struct xio_task *task,
 /*---------------------------------------------------------------------------*/
 void xio_session_notify_teardown(struct xio_session *session, int reason)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_TEARDOWN_EVENT,
-		.reason = (enum xio_status)reason
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_TEARDOWN_EVENT;
+	event.reason = (enum xio_status)reason;
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
@@ -287,12 +295,11 @@ void xio_session_notify_teardown(struct xio_session *session, int reason)
 void xio_session_notify_new_connection(struct xio_session *session,
 				       struct xio_connection *connection)
 {
-	struct xio_session_event_data  event = {
-		.conn			= connection,
-		.conn_user_context	= connection->cb_user_context,
-		.event			= XIO_SESSION_NEW_CONNECTION_EVENT,
-		.reason			= XIO_E_SUCCESS,
-	};
+	struct xio_session_event_data  event = {};
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
+	event.event = XIO_SESSION_NEW_CONNECTION_EVENT;
+	event.reason = XIO_E_SUCCESS;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -307,12 +314,11 @@ void xio_session_notify_connection_established(
 		struct xio_session *session,
 		struct xio_connection *connection)
 {
-	struct xio_session_event_data  event = {
-		.conn		   = connection,
-		.conn_user_context = connection->cb_user_context,
-		.event		   = XIO_SESSION_CONNECTION_ESTABLISHED_EVENT,
-		.reason		   = XIO_E_SUCCESS,
-	};
+	struct xio_session_event_data  event = {};
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
+	event.event = XIO_SESSION_CONNECTION_ESTABLISHED_EVENT;
+	event.reason = XIO_E_SUCCESS;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -327,12 +333,11 @@ void xio_session_notify_connection_established(
 void xio_session_notify_connection_closed(struct xio_session *session,
 					  struct xio_connection *connection)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_CONNECTION_CLOSED_EVENT,
-		.reason = connection->close_reason,
-		.conn = connection,
-		.conn_user_context = connection->cb_user_context
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_CONNECTION_CLOSED_EVENT;
+	event.reason = (enum xio_status)connection->close_reason;
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
@@ -347,12 +352,11 @@ void xio_session_notify_connection_disconnected(
 		struct xio_connection *connection,
 		enum xio_status reason)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT,
-		.reason = reason,
-		.conn = connection,
-		.conn_user_context = connection->cb_user_context
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
+	event.reason = reason;
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -367,12 +371,11 @@ void xio_session_notify_connection_refused(struct xio_session *session,
 					   struct xio_connection *connection,
 					   enum xio_status reason)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_CONNECTION_REFUSED_EVENT,
-		.reason = reason,
-		.conn = connection,
-		.conn_user_context = connection->cb_user_context
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_CONNECTION_REFUSED_EVENT;
+	event.reason = reason;
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -386,12 +389,12 @@ void xio_session_notify_connection_refused(struct xio_session *session,
 void xio_session_notify_connection_teardown(struct xio_session *session,
 					    struct xio_connection *connection)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT,
-		.reason = connection->close_reason,
-		.conn = connection,
-		.conn_user_context = connection->cb_user_context
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT;
+	event.reason = (enum xio_status)connection->close_reason;
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
+
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -406,12 +409,11 @@ void xio_session_notify_connection_error(struct xio_session *session,
 					 struct xio_connection *connection,
 					 enum xio_status reason)
 {
-	struct xio_session_event_data  event = {
-		.event = XIO_SESSION_CONNECTION_ERROR_EVENT,
-		.reason = reason,
-		.conn = connection,
-		.conn_user_context = connection->cb_user_context
-	};
+	struct xio_session_event_data  event = {};
+	event.event = XIO_SESSION_CONNECTION_ERROR_EVENT;
+	event.reason = reason;
+	event.conn = connection;
+	event.conn_user_context = connection->cb_user_context;
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -457,6 +459,10 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		  connection->req_ack_sn,
 		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
 	msg->sn		= hdr.serial_num;
 	msg->flags	= 0;
 	msg->next	= NULL;
@@ -564,6 +570,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		  connection->rsp_ack_sn,
 		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
+
 	msg->sn = hdr.serial_num;
 
 	omsg		= sender_task->omsg;
@@ -1048,9 +1059,11 @@ int xio_on_new_message(struct xio_session *s,
 		break;
 	case XIO_SESSION_SETUP_REQ:
 		retval = xio_on_setup_req_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_SESSION_SETUP_RSP:
 		retval = xio_on_setup_rsp_recv(connection, task);
+		xmit = 1;
 		break;
 	case XIO_CONNECTION_HELLO_REQ:
 		retval = xio_on_connection_hello_req_recv(connection, task);

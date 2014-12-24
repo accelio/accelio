@@ -570,7 +570,15 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 		rdma_hndl = rdma_task->rdma_hndl;
 	}
 
-	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
+	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
+		TRACE_LOG("rdma_hndl:%p, rdma_task:%p, task:%p, " \
+			  "wr_id:0x%llx, " \
+			  "err:%s, vendor_err:0x%x\n",
+			   rdma_hndl, rdma_task, task,
+			   wc->wr_id,
+			   ibv_wc_status_str(wc->status),
+			   wc->vendor_err);
+	} else {
 		if (rdma_hndl)  {
 			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, " \
 				  "rdma_task:%p, task:%p, wr_id:0x%lx, " \
@@ -596,8 +604,9 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	/* temporary  */
 	if (wc->status != IBV_WC_WR_FLUSH_ERR) {
 		if (rdma_hndl) {
-			ERROR_LOG("connection is disconnected\n");
-			rdma_hndl->state = XIO_STATE_DISCONNECTED;
+			ERROR_LOG("cq error reported. calling " \
+				  "rdma_disconnect. rdma_hndl:%p\n",
+				  rdma_hndl);
 			retval = rdma_disconnect(rdma_hndl->cm_id);
 			if (retval)
 				ERROR_LOG("rdma_hndl:%p rdma_disconnect" \
@@ -1037,9 +1046,9 @@ static void xio_rearm_completions(struct xio_cq *tcq)
 			  errno);
 	}
 
-	xio_ctx_init_event(&tcq->event_data,
+	xio_ctx_init_event(&tcq->consume_cq_event_data,
 			   xio_sched_consume_cq, tcq);
-	xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+	xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
 
 	tcq->num_delayed_arm = 0;
 }
@@ -1067,9 +1076,9 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 		/* no more completions on cq, give up and arm the interrupts */
 		xio_rearm_completions(tcq);
 	else {
-		xio_ctx_init_event(&tcq->event_data,
+		xio_ctx_init_event(&tcq->poll_cq_event_data,
 				   xio_sched_poll_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+		xio_ctx_add_event(tcq->ctx, &tcq->poll_cq_event_data);
 	}
 }
 
@@ -1095,9 +1104,9 @@ static void xio_sched_consume_cq(void *data)
 
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (err > 0) {
-		xio_ctx_init_event(&tcq->event_data,
+		xio_ctx_init_event(&tcq->consume_cq_event_data,
 				   xio_sched_consume_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->event_data);
+		xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
 	}
 }
 
@@ -1136,19 +1145,22 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 		ERROR_LOG("failed to retrieve CQ event, cq:%p\n", cq);
 		return;
 	}
-	/* accumulate number of cq events that need to
-	 * be acked, and periodically ack them
-	 */
-	if (++tcq->cq_events_that_need_ack == 128/*UINT_MAX*/) {
-		ibv_ack_cq_events(tcq->cq, 128/*UINT_MAX*/);
-		tcq->cq_events_that_need_ack = 0;
-	}
+	tcq->cq_events_that_need_ack++;
 
 	/* if a poll was previously scheduled, remove it,
 	   as it will be scheduled when necessary */
-	xio_ctx_remove_event(tcq->ctx, &tcq->event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
 
 	xio_poll_cq_armable(tcq);
+
+	/* accumulate number of cq events that need to
+	 * be acked, and periodically ack them
+	 */
+	if (tcq->cq_events_that_need_ack == MAX_ACKED_CQE/*UINT_MAX*/) {
+		ibv_ack_cq_events(tcq->cq, MAX_ACKED_CQE/*UINT_MAX*/);
+		tcq->cq_events_that_need_ack = 0;
+	}
 }
 
 /*---------------------------------------------------------------------------*/

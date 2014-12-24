@@ -55,6 +55,7 @@
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
+#include <xio-advanced-env.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_req_recv			                             */
@@ -69,13 +70,15 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	struct xio_session_hdr		hdr;
 	struct xio_session		*session = connection->session;
 	int				retval;
-	struct xio_session_event_data  error_event = {
-		.event = XIO_SESSION_ERROR_EVENT,
-	};
+	struct xio_session_event_data  error_event = {};
+	error_event.event = XIO_SESSION_ERROR_EVENT;
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
-
+#ifdef XIO_SESSION_DEBUG
+	connection->peer_connection = hdr.connection;
+	connection->peer_session = hdr.session;
+#endif
 	task->imsg.sn = hdr.serial_num;
 	task->connection = connection;
 	task->session = session;

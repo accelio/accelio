@@ -35,6 +35,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <xio_env.h>
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
@@ -43,8 +44,6 @@
 #include "xio_sg_table.h"
 #include "xio_observer.h"
 #include "xio_usr_transport.h"
-
-#include <dlfcn.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_host_port_to_ss							     */
@@ -271,51 +270,6 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 }
 EXPORT_SYMBOL(xio_uri_to_ss);
 
-/*
- * xio_get_nodeid(cpuid) - This will return the node to which selected cpu
- * belongs
- */
-unsigned int xio_get_nodeid(unsigned int cpu_id)
-{
-	DIR *directory_parent, *directory_node;
-	struct dirent *de, *dn;
-	char directory_path[255];
-	unsigned int cpu;
-	int node_id = 0;
-	int found = 0;
-
-	directory_parent = opendir("/sys/devices/system/node");
-	if (!directory_parent)  {
-		fprintf(stderr,
-			"/sys not mounted or not a numa system. Assuming one node: %s\n",
-			strerror(errno));
-		return 0; /* By Default assume it to belong to node zero */
-	} else {
-		while ((de = readdir(directory_parent)) != NULL) {
-			if (strncmp(de->d_name, "node", 4))
-				continue;
-			sprintf(directory_path, "/sys/devices/system/node/%s",
-				de->d_name);
-			directory_node = opendir(directory_path);
-			while ((dn = readdir(directory_node)) != NULL) {
-				if (strncmp(dn->d_name, "cpu", 3))
-					continue;
-				cpu = strtoul(dn->d_name+3, NULL, 0);
-				if (cpu == cpu_id) {
-					node_id = strtoul(de->d_name + 4,
-							  NULL, 0);
-					found = 1;
-					break;
-				}
-			}
-			closedir(directory_node);
-			if (found)
-				break;
-		}
-		closedir(directory_parent);
-	}
-	return node_id;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_msg_dump								     */
@@ -330,7 +284,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 
 	ERROR_LOG("********************************************************\n");
 	ERROR_LOG("type:0x%x\n", xio_msg->type);
-	if (xio_msg->type == XIO_MSG_TYPE_REQ)
+	if (xio_msg->type == XIO_MSG_TYPE_REQ ||
+	    xio_msg->type == XIO_ONE_WAY_REQ)
 		ERROR_LOG("serial number:%lld\n", xio_msg->sn);
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
 		ERROR_LOG("response:%p, serial number:%lld\n",
@@ -394,125 +349,4 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 }
 EXPORT_SYMBOL(xio_msg_dump);
 
-struct getcpu_cache {
-	unsigned long blob[128 / sizeof(long)];
-};
-
-typedef long (*vgetcpu_fn)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
-static vgetcpu_fn vgetcpu;
-
-static int init_vgetcpu(void)
-{
-	void *vdso;
-
-	dlerror();
-	vdso = dlopen("linux-vdso.so.1", RTLD_LAZY);
-	if (vdso == NULL)
-		return -1;
-	vgetcpu = (vgetcpu_fn)dlsym(vdso, "__vdso_getcpu");
-	dlclose(vdso);
-	return vgetcpu == NULL ? -1 : 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_get_cpu								     */
-/*---------------------------------------------------------------------------*/
-unsigned xio_get_cpu()
-{
-	static int first = 1;
-	unsigned cpu;
-
-	if (!first && vgetcpu) {
-		vgetcpu(&cpu, NULL, NULL);
-		return cpu;
-	}
-	if (!first)
-		return sched_getcpu();
-
-	first = 0;
-	if (init_vgetcpu() < 0) {
-		vgetcpu = NULL;
-		return sched_getcpu();
-	}
-	vgetcpu(&cpu, NULL, NULL) ;
-	return cpu;
-}
-
-
-/*
-#define CACHE_LINE_FILE	\
-	"/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size"
-
-static inline int arch_cache_line_size(void)
-{
-	char size[32];
-	int fd, ret;
-
-	fd = open(CACHE_LINE_FILE, O_RDONLY);
-	if (fd < 0)
-		return -1;
-
-	ret = read(fd, size, sizeof(size));
-
-	close(fd);
-
-	if (ret <= 0)
-		return -1;
-	else
-		return atoi(size);
-}
-
-*/
-
-
-#define XIO_HZ_DIR   "/var/tmp/accelio.d"
-#define XIO_HZ_FILE  XIO_HZ_DIR "/hz"
-
-
-/*---------------------------------------------------------------------------*
- * xio_get_cpu_mhz							     *
- *									     *
- * since this operation may take time cache it on a cookie,		     *
- * and use the cookie if exist						     *
- *									     *
- *---------------------------------------------------------------------------*/
-double xio_get_cpu_mhz(void)
-{
-	char	size[32]= { 0 };
-	double	hz = 0;
-	int	fd;
-	ssize_t ret;
-
-	fd = open(XIO_HZ_FILE, O_RDONLY);
-	if (fd < 0)
-		goto try_create;
-
-	ret = read(fd, size, sizeof(size));
-
-	close(fd);
-
-	if (ret > 0)
-		return atof(size);
-
-try_create:
-	hz = get_cpu_mhz(0);
-
-	ret = mkdir(XIO_HZ_DIR, 0777);
-	if (ret < 0)
-		goto exit;
-
-	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_SYNC, 0644);
-	if (fd < 0)
-		goto exit;
-
-	sprintf(size,"%f", hz);
-	ret = write(fd, size, sizeof(size));
-	if (ret < 0)
-		goto close_and_exit;
-
-close_and_exit:
-	close(fd);
-exit:
-	return hz;
-}
 

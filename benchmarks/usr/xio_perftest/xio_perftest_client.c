@@ -411,6 +411,7 @@ int run_client_test(struct perf_parameters *user_param)
 	struct session_data	sess_data;
 	struct perf_comm	*comm;
 	struct thread_data	*tdata;
+	char			str[512];
 	char			url[256];
 	unsigned int		i = 0;
 	int			cpu;
@@ -457,7 +458,7 @@ int run_client_test(struct perf_parameters *user_param)
 	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
 	if (i == 0) {
 		printf("best cpus [%d] %s\n", cpusnr,
-		       intf_cpusmask_str(cpusmask, cpusnr, user_param->intf_name));
+		       intf_cpusmask_str(cpusmask, cpusnr, str));
 	}
 
 	printf("%s", RESULT_FMT);

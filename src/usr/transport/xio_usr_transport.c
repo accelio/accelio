@@ -90,7 +90,7 @@ struct xio_buf *xio_alloc(size_t length)
 	size_t			real_size;
 	int			alloced = 0;
 
-	buf = ucalloc(1, sizeof(*buf));
+	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
 	if (!buf) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);

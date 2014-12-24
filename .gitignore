@@ -48,3 +48,12 @@ version.c
 doc
 Doxyfile
 .dirstamp
+*.o.cmd
+*.ko.cmd
+*.ko.unsigned.cmd
+*.ko.unsigned
+*.ko
+*.mod.c
+modules.order
+Module.symvers
+.tmp_versions

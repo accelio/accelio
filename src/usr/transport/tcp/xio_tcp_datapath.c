@@ -50,6 +50,7 @@
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_tcp_transport.h"
+#include "xio_mem.h"
 
 
 

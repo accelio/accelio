@@ -49,9 +49,11 @@
 #include <io.h>
 #include <stdint.h>
 #include <errno.h>
+#include <assert.h>
 #include <BaseTsd.h>
 
 #include <xio_base.h>
+#include <xio-basic-env.h>
 #include "list.h"
 
 
@@ -59,8 +61,6 @@ typedef SSIZE_T ssize_t;
 typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 typedef int64_t __s64;
-
-#define inline __inline
 
 
 #define __func__		__FUNCTION__
@@ -145,6 +145,10 @@ static const INIT_ONCE INIT_ONCE_RESET_VALUE = INIT_ONCE_STATIC_INIT;
 	memcpy(once_control, &INIT_ONCE_RESET_VALUE, sizeof(INIT_ONCE))
 #define is_reset_thread_once_t(once_control) \
 	(0 == memcmp(once_control, &INIT_ONCE_RESET_VALUE, sizeof(INIT_ONCE)))
+#define  xio_sync_fetch_and_add32(ptr, value) \
+		(InterlockedAddAcquire((volatile LONG *)(ptr), (value)) - (value))
+#define  xio_sync_fetch_and_add64(ptr, value) \
+		(InterlockedAddAcquire64((volatile LONG64 *)(ptr), (value)) - (value))
 
 /* TODO: perhaps protect the type cast */
 #define xio_sync_bool_compare_and_swap(ptr, oldval, newval) \
@@ -538,6 +542,23 @@ ssize_t inline sendmsg(int sd, struct msghdr *msg, int flags)
 /*---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------*/
+static inline void xio_env_cleanup() {
+	WSACleanup();
+}
+
+/*---------------------------------------------------------------------------*/
+static inline void xio_env_startup() {
+	WSADATA wsaData;
+	/* IMPORTANT: Don't call WSAStartup from DllMain because according to
+	documentation it can lead to deadlock */
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData))
+	{
+		fprintf(stderr, "FATAL ERROR: WSAStartup has failed\n");
+		abort();
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 static inline char *
 strndup(char const *s, size_t n)
 {
@@ -586,6 +607,29 @@ inline int c99_snprintf(char* str, size_t size, const char* format, ...){
 static inline int close(int fd)
 {
 	return _close(fd);
+}
+
+#define ___GFP_WAIT	0x10u
+#define ___GFP_IO	0x40u
+#define ___GFP_FS	0x80u
+
+#define GFP_KERNEL (___GFP_WAIT | ___GFP_IO | ___GFP_FS)
+
+/* should be __bitwise__  but it is dummy */
+typedef unsigned gfp_t;
+
+ static inline char *kstrdup(const char *s, gfp_t gfp)
+{
+	/* Make sure code transfered to kernel will work as expected */
+	assert(gfp == GFP_KERNEL);
+	return strdup(s);
+}
+
+static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
+{
+	/* Make sure code transfered to kernel will work as expected */
+	assert(gfp == GFP_KERNEL);
+	return strndup(s, len);
 }
 
 #endif /* XIO_ENV_H */

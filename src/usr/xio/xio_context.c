@@ -45,6 +45,7 @@
 #include "xio_ev_loop.h"
 #include "xio_idr.h"
 #include "xio_workqueue.h"
+#include <xio-advanced-env.h>
 #include "xio_timers_list.h"
 #include "xio_context.h"
 #include "xio_usr_utils.h"
