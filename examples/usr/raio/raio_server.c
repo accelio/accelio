@@ -234,6 +234,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 					disconnect = raio_handler_on_req(
 					  session_data->dd_data,
 					  session_data->portal_data[i].dd_data,
+					  last_in_rxq,
 					  req);
 					if (disconnect)
 						raio_session_disconnect(

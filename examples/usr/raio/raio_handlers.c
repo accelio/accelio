@@ -643,7 +643,6 @@ static int on_cmd_submit_comp(struct raio_io_cmd *iocmd)
 		vmsg_sglist_set_nents(&io_u->rsp->out, 0);
 		sglist[0].iov_len = 0;
 	}
-
 	xio_send_response(io_u->rsp);
 
 	return 0;
@@ -656,6 +655,7 @@ static int raio_handle_submit(void *prv_session_data,
 			      void *prv_portal_data,
 			      struct raio_command *cmd,
 			      char *cmd_data,
+			      int last_in_batch,
 			      struct xio_msg *req)
 {
 	struct raio_io_portal_data	*pd =
@@ -729,11 +729,16 @@ static int raio_handle_submit(void *prv_session_data,
 	io_u->rsp->user_context		= io_u;
 	io_u->rsp->out.data_iov.nents	= 1;
 
-
 	/* issues request to bs */
 	retval = -raio_bs_cmd_submit(bs_dev, &io_u->iocmd);
 	if (retval)
 		goto reject;
+
+	if (last_in_batch) {
+		TAILQ_FOREACH(bs_dev, &pd->dev_list, list) {
+			raio_bs_set_last_in_batch(bs_dev);
+		}
+	}
 
 	return 0;
 reject:
@@ -817,6 +822,7 @@ static int raio_handle_destroy_comp(void *prv_session_data,
 /* raio_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
 int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
+			int last_in_batch,
 			struct xio_msg *req)
 {
 	char			*buffer = (char *)req->in.header.iov_base;
@@ -843,6 +849,7 @@ int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
 		raio_handle_submit(prv_session_data,
 				   prv_portal_data,
 				   &cmd, cmd_data,
+				   last_in_batch,
 				   req);
 		break;
 	case RAIO_CMD_OPEN:

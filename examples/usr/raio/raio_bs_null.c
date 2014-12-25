@@ -79,6 +79,14 @@ static inline void raio_bs_null_close(struct raio_bs *dev)
 }
 
 /*---------------------------------------------------------------------------*/
+/* raio_bs_null_set_last_in_batch					     */
+/*---------------------------------------------------------------------------*/
+static inline void raio_bs_null_set_last_in_batch(struct raio_bs *dev)
+{
+}
+
+
+/*---------------------------------------------------------------------------*/
 /* raio_null_bst							     */
 /*---------------------------------------------------------------------------*/
 static struct backingstore_template raio_null_bst = {
@@ -87,6 +95,7 @@ static struct backingstore_template raio_null_bst = {
 	.bs_open		= raio_bs_null_open,
 	.bs_close		= raio_bs_null_close,
 	.bs_cmd_submit		= raio_bs_null_cmd_submit,
+	.bs_set_last_in_batch	= raio_bs_null_set_last_in_batch
 };
 
 /*---------------------------------------------------------------------------*/
