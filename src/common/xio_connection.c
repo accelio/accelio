@@ -61,9 +61,6 @@
 #define XIO_CONNECTION_TIMEOUT		300000
 #define XIO_IOV_THRESHOLD		20
 
-#define		IS_APPLICATION_MSG(msg) \
-		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
-
 static struct xio_transition xio_transition_table[][2] = {
 /* INIT */	  {
 		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
@@ -328,7 +325,7 @@ int xio_connection_send(struct xio_connection *connection,
 
 
 	/* is control message */
-	is_control = !IS_APPLICATION_MSG(msg);
+	is_control = !IS_APPLICATION_MSG(msg->type);
 
 	/* flow control test */
 	if (!is_control && connection->enable_flow_control) {
@@ -419,6 +416,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->omsg		= msg;
 	task->omsg_flags	= (uint16_t)msg->flags;
 	task->omsg->next	= NULL;
+	task->last_in_rxq	= 0;
 
 	/* mark as a control message */
 	task->is_control = is_control;
@@ -603,7 +601,7 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 		     XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 			continue;
 		}
-		if (!IS_APPLICATION_MSG(pmsg))
+		if (!IS_APPLICATION_MSG(pmsg->type))
 			continue;
 		xio_session_notify_msg_error(connection, pmsg,
 					     status,
@@ -803,7 +801,7 @@ static inline int xio_connection_xmit_inl(
 		} else {
 			*retry_cnt = 0;
 			xio_msg_list_remove(msgq, msg, pdata);
-			if (IS_APPLICATION_MSG(msg)) {
+			if (IS_APPLICATION_MSG(msg->type)) {
 				xio_msg_list_insert_tail(
 						in_flight_msgq, msg,
 						pdata);
@@ -880,7 +878,7 @@ static int xio_connection_xmit(struct xio_connection *connection)
 int xio_connection_remove_in_flight(struct xio_connection *connection,
 				    struct xio_msg *msg)
 {
-	if (!IS_APPLICATION_MSG(msg))
+	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
 	if (IS_REQUEST(msg->type))
@@ -899,7 +897,7 @@ int xio_connection_remove_in_flight(struct xio_connection *connection,
 int xio_connection_remove_msg_from_queue(struct xio_connection *connection,
 					 struct xio_msg *msg)
 {
-	if (!IS_APPLICATION_MSG(msg))
+	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
 	if (IS_REQUEST(msg->type))
