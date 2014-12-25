@@ -990,7 +990,7 @@ static inline void xio_rdma_wr_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_handle_wc(struct ib_wc *wc)
+static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 {
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -1003,12 +1003,14 @@ static inline void xio_handle_wc(struct ib_wc *wc)
 
 	switch (wc->opcode) {
 	case IB_WC_RECV:
+		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IB_WC_SEND:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_RDMA_READ:
+		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rd_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_RDMA_WRITE:
@@ -1033,7 +1035,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	struct xio_rdma_transport *rdma_hndl;
 	struct xio_cq		*tcq;
 	int			nr = 8;
-	int			nr_comp = 0;
+	int			nr_comp = 0, last_in_rxq = -1;
 	unsigned long		timeout;
 	unsigned long		start_time;
 
@@ -1058,10 +1060,18 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		nr = min(((u32)max_nr), tcq->wc_array_len);
 		retval = ib_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
+			for (i = retval-1; i >= 0; i--) {
+				if (tcq->wc_array[i].opcode == IB_WC_RECV ||
+				    tcq->wc_array[i].opcode == IB_WC_RDMA_READ)	{
+					last_in_rxq = i;
+					break;
+				}
+			}
 			for (i = 0; i < retval; i++) {
 				if (rdma_hndl->tcq->wc_array[i].status ==
 				    IB_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i]);
+					xio_handle_wc(&tcq->wc_array[i],
+						      (last_in_rxq == i));
 				else
 					xio_handle_wc_error(&tcq->wc_array[i]);
 			}
@@ -1103,7 +1113,7 @@ static int xio_cq_event_handler(struct xio_cq *tcq)
 	u32		budget = MAX_POLL_WC;
 	int		poll_nr, polled;
 	int		retval;
-	int		i;
+	int		i, last_in_rxq = -1;
 
 	start_time = jiffies;
 
@@ -1119,10 +1129,19 @@ retry:
 		polled = i;
 		budget -= i;
 		tcq->wqes += i;
+
+		for (i = polled-1; i >= 0; i--) {
+			if (tcq->wc_array[i].opcode == IB_WC_RECV ||
+			    tcq->wc_array[i].opcode == IB_WC_RDMA_READ)	{
+				last_in_rxq = i;
+				break;
+			}
+		}
 		/* process work completions */
 		for (i = 0; i < polled; i++) {
 			if (tcq->wc_array[i].status == IB_WC_SUCCESS)
-				xio_handle_wc(&tcq->wc_array[i]);
+				xio_handle_wc(&tcq->wc_array[i],
+					      (last_in_rxq == i));
 			else
 				xio_handle_wc_error(&tcq->wc_array[i]);
 		}

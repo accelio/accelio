@@ -502,7 +502,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		/*if (connection->ses_ops.on_msg) */
 			connection->ses_ops.on_msg(
 					connection->session, msg,
-					0,
+					task->last_in_rxq,
 					connection->cb_user_context);
 	}
 
@@ -635,7 +635,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 		} else {
 			if (connection->ses_ops.on_ow_msg_send_complete) {
@@ -655,7 +655,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 			}
 			/* standalone receipt */
@@ -694,7 +694,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 					connection->ses_ops.on_msg(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 			}
 		}

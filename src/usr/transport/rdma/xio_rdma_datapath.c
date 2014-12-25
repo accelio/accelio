@@ -930,7 +930,7 @@ static inline void xio_rdma_wr_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_handle_wc(struct ibv_wc *wc)
+static inline void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -943,12 +943,14 @@ static inline void xio_handle_wc(struct ibv_wc *wc)
 
 	switch (wc->opcode) {
 	case IBV_WC_RECV:
+		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_SEND:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_RDMA_READ:
+		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rd_comp_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_RDMA_WRITE:
@@ -973,7 +975,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	int		stop = 0;
 	int		wclen = max_wc, i, numwc  = 0;
 	int		timeouts_num = 0;
-	int		polled = 0;
+	int		polled = 0, last_in_rxq = -1;
 	cycles_t	timeout;
 	cycles_t	start_time = 0;
 
@@ -1016,9 +1018,17 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			break;
 		}
 		timeouts_num = 0;
+		for (i = err - 1; i >= 0; i--) {
+			if (tcq->wc_array[i].opcode == IBV_WC_RECV ||
+			    tcq->wc_array[i].opcode == IBV_WC_RDMA_READ) {
+				last_in_rxq = i;
+				break;
+			}
+		}
 		for (i = 0; i < err; i++) {
 			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
-				xio_handle_wc(&tcq->wc_array[i]);
+				xio_handle_wc(&tcq->wc_array[i],
+					      (i == last_in_rxq));
 			else
 				xio_handle_wc_error(&tcq->wc_array[i]);
 		}
@@ -1175,7 +1185,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq;
 	int				nr_comp = 0, recv_counter;
-	int				nr;
+	int				nr, last_in_rxq = -1;
 	cycles_t			timeout = -1;
 	cycles_t			start_time = get_cycles();
 
@@ -1194,12 +1204,20 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		retval = ibv_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
 			recv_counter = 0;
+			for (i = retval-1; i >= 0; i--) {
+				if (tcq->wc_array[i].opcode == IBV_WC_RECV ||
+				    tcq->wc_array[i].opcode == IBV_WC_RDMA_READ) {
+					last_in_rxq = i;
+					break;
+				}
+			}
 			for (i = 0; i < retval; i++) {
 				if (tcq->wc_array[i].opcode == IBV_WC_RECV)
 					recv_counter++;
 				if (rdma_hndl->tcq->wc_array[i].status ==
 						IBV_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i]);
+					xio_handle_wc(&tcq->wc_array[i],
+						      (last_in_rxq == i));
 				else
 					xio_handle_wc_error(&tcq->wc_array[i]);
 			}
