@@ -950,7 +950,6 @@ static inline void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_RDMA_READ:
-		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rd_comp_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_RDMA_WRITE:
@@ -978,6 +977,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	int		polled = 0, last_in_rxq = -1;
 	cycles_t	timeout;
 	cycles_t	start_time = 0;
+	struct xio_task *task;
 
 	for (;;) {
 		if (wclen > tcq->wc_array_len)
@@ -1019,10 +1019,17 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 		}
 		timeouts_num = 0;
 		for (i = err - 1; i >= 0; i--) {
-			if (tcq->wc_array[i].opcode == IBV_WC_RECV ||
-			    tcq->wc_array[i].opcode == IBV_WC_RDMA_READ) {
-				last_in_rxq = i;
-				break;
+			if (tcq->wc_array[i].opcode == IBV_WC_RECV &&
+			    tcq->wc_array[i].status == IBV_WC_SUCCESS) {
+				task = (struct xio_task *)
+					ptr_from_int64(tcq->wc_array[i].wr_id);
+				xio_mbuf_read_first_tlv(&task->mbuf);
+				task->tlv_type = xio_mbuf_tlv_type(
+						&task->mbuf);
+				if (IS_APPLICATION_MSG(task->tlv_type)) {
+					last_in_rxq = i;
+					break;
+				}
 			}
 		}
 		for (i = 0; i < err; i++) {
@@ -1182,6 +1189,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 {
 	int				retval;
 	int				i;
+	struct xio_task			*task;
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq;
 	int				nr_comp = 0, recv_counter;
@@ -1205,10 +1213,18 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		if (likely(retval > 0)) {
 			recv_counter = 0;
 			for (i = retval-1; i >= 0; i--) {
-				if (tcq->wc_array[i].opcode == IBV_WC_RECV ||
-				    tcq->wc_array[i].opcode == IBV_WC_RDMA_READ) {
-					last_in_rxq = i;
-					break;
+				if (tcq->wc_array[i].opcode == IBV_WC_RECV &&
+				    tcq->wc_array[i].status == IBV_WC_SUCCESS) {
+					task =(struct xio_task *)
+						ptr_from_int64(
+						      tcq->wc_array[i].wr_id);
+					xio_mbuf_read_first_tlv(&task->mbuf);
+					task->tlv_type = xio_mbuf_tlv_type(
+						       &task->mbuf);
+					if (IS_APPLICATION_MSG(task->tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
 				}
 			}
 			for (i = 0; i < retval; i++) {

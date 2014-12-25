@@ -3023,7 +3023,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 		while (i--) {
 			++ret_count;
 			tcp_task = task->dd_data;
-			task->last_in_rxq = (i == 0);
 			switch (task->tlv_type) {
 			case XIO_CANCEL_REQ:
 				xio_tcp_on_recv_cancel_req_data(tcp_hndl, task);
@@ -3032,6 +3031,9 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 				xio_tcp_on_recv_cancel_rsp_data(tcp_hndl, task);
 				break;
 			default:
+				task->last_in_rxq =
+				    (IS_APPLICATION_MSG( task->tlv_type) &&
+				     (i == 0));
 				if (IS_REQUEST(task->tlv_type)) {
 					retval =
 					xio_tcp_on_recv_req_data(tcp_hndl,

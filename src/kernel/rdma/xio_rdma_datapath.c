@@ -1032,6 +1032,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 {
 	int			retval;
 	int			i;
+	struct xio_task		*task;
 	struct xio_rdma_transport *rdma_hndl;
 	struct xio_cq		*tcq;
 	int			nr = 8;
@@ -1061,10 +1062,18 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		retval = ib_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
 			for (i = retval-1; i >= 0; i--) {
-				if (tcq->wc_array[i].opcode == IB_WC_RECV ||
-				    tcq->wc_array[i].opcode == IB_WC_RDMA_READ)	{
-					last_in_rxq = i;
-					break;
+				if (tcq->wc_array[i].opcode == IB_WC_RECV &&
+				    tcq->wc_array[i].status == IB_WC_SUCCESS) {
+					task = (struct xio_task *)
+						ptr_from_int64(
+							tcq->wc_array[i].wr_id);
+					xio_mbuf_read_first_tlv(&task->mbuf);
+					task->tlv_type = xio_mbuf_tlv_type(
+								&task->mbuf);
+					if (IS_APPLICATION_MSG(task->tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
 				}
 			}
 			for (i = 0; i < retval; i++) {
@@ -1109,6 +1118,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 /*---------------------------------------------------------------------------*/
 static int xio_cq_event_handler(struct xio_cq *tcq)
 {
+	struct xio_task *task;
 	unsigned long	start_time;
 	u32		budget = MAX_POLL_WC;
 	int		poll_nr, polled;
@@ -1131,10 +1141,17 @@ retry:
 		tcq->wqes += i;
 
 		for (i = polled-1; i >= 0; i--) {
-			if (tcq->wc_array[i].opcode == IB_WC_RECV ||
-			    tcq->wc_array[i].opcode == IB_WC_RDMA_READ)	{
-				last_in_rxq = i;
-				break;
+			if (tcq->wc_array[i].opcode == IB_WC_RECV &&
+			    tcq->wc_array[i].status == IB_WC_SUCCESS) {
+				task = (struct xio_task *)ptr_from_int64(
+						tcq->wc_array[i].wr_id);
+				xio_mbuf_read_first_tlv(&task->mbuf);
+				task->tlv_type = xio_mbuf_tlv_type(
+							&task->mbuf);
+				if (IS_APPLICATION_MSG(task->tlv_type)) {
+					last_in_rxq = i;
+					break;
+				}
 			}
 		}
 		/* process work completions */
