@@ -217,7 +217,7 @@ static void raio_session_disconnect(struct raio_session_data *session_data)
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session, struct xio_msg *req,
-		      int more_in_batch, void *cb_user_context)
+		      int last_in_rxq, void *cb_user_context)
 {
 	struct raio_thread_data *tdata =
 				    (struct raio_thread_data *)cb_user_context;

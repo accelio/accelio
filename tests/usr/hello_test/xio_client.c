@@ -244,7 +244,7 @@ static int on_session_established(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_msg_delivered(struct xio_session *session,
 			    struct xio_msg *msg,
-			    int more_in_batch,
+			    int last_in_rxq,
 			    void *cb_user_context)
 {
 	/*
@@ -259,7 +259,7 @@ static int on_msg_delivered(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *msg,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	struct test_params *test_params = (struct test_params *)cb_user_context;
