@@ -467,5 +467,16 @@ static inline int xio_mbuf_set_data_length(struct xio_mbuf *mbuf,
 	return -1;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_mbuf_read_first_tlv						     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_mbuf_read_type(struct xio_mbuf *mbuf)
+{
+	struct xio_tlv *tlv = (struct xio_tlv *)mbuf->buf.head;
+
+	return ntohl(tlv->type);
+}
+
+
 #endif
 
