@@ -512,6 +512,8 @@ static inline void xio_device_put(struct xio_device *dev)
 	kref_put(&dev->kref, xio_device_down);
 }
 
+void xio_set_timewait_timer(struct xio_rdma_transport *rdma_hndl);
+
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr_add_dev							     */
 /* add a new discovered device to a the mr list				     */

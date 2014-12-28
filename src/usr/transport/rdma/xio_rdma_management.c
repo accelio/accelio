@@ -2120,16 +2120,46 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_set_timewait_timer						     */
+/*---------------------------------------------------------------------------*/
+void xio_set_timewait_timer(struct xio_rdma_transport *rdma_hndl)
+{
+	int retval;
+	int timeout;
+
+	if (rdma_hndl->timewait)
+		return;
+
+	/* from context shutdown */
+	if (rdma_hndl->ignore_timewait)
+		timeout = XIO_TIMEWAIT_EXIT_FAST_TIMEOUT;
+	else
+		timeout = XIO_TIMEWAIT_EXIT_TIMEOUT;
+
+	/* trigger the timer */
+	retval = xio_ctx_add_delayed_work(
+				rdma_hndl->base.ctx,
+				timeout, rdma_hndl,
+				on_cm_timewait_exit,
+				&rdma_hndl->timewait_timeout_work);
+	if (retval != 0) {
+		ERROR_LOG("xio_ctx_timer_add_delayed_work failed.\n");
+		return;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* on_cm_disconnected							     */
 /*---------------------------------------------------------------------------*/
 static void  on_cm_disconnected(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
 	int retval;
-	int timeout;
 
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
+
+	rdma_hndl->timewait = 0;
 
 	switch (rdma_hndl->state) {
 	case XIO_STATE_CONNECTED:
@@ -2168,25 +2198,6 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 	case XIO_STATE_RECONNECT:
 	case XIO_STATE_DESTROYED:
 	break;
-	}
-
-	/* from context shutdown */
-	if (rdma_hndl->ignore_timewait)
-		timeout = XIO_TIMEWAIT_EXIT_FAST_TIMEOUT;
-	else
-		timeout = XIO_TIMEWAIT_EXIT_TIMEOUT;
-
-	rdma_hndl->timewait = 0;
-
-	/* trigger the timer */
-	retval = xio_ctx_add_delayed_work(
-				rdma_hndl->base.ctx,
-				timeout, rdma_hndl,
-				on_cm_timewait_exit,
-				&rdma_hndl->timewait_timeout_work);
-	if (retval != 0) {
-		ERROR_LOG("xio_ctx_timer_add_delayed_work failed.\n");
-		return;
 	}
 }
 
