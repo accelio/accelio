@@ -2605,6 +2605,14 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		break;
 	case XIO_STATE_DISCONNECTED:
 		rdma_hndl->state = XIO_STATE_CLOSED;
+
+		if (rdma_hndl->ignore_timewait && rdma_hndl->timewait == 0) {
+			xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+						 &rdma_hndl->timewait_timeout_work);
+			xio_set_timewait_timer(rdma_hndl);
+		}
+
+#if 0
 		if (rdma_hndl->ignore_timewait && rdma_hndl->timewait == 0) {
 			xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 						 &rdma_hndl->timewait_timeout_work);
@@ -2619,6 +2627,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 				return;
 			}
 		}
+#endif
 		break;
 	case XIO_STATE_CLOSED:
 		return;
