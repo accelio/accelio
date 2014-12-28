@@ -2611,23 +2611,6 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 						 &rdma_hndl->timewait_timeout_work);
 			xio_set_timewait_timer(rdma_hndl);
 		}
-
-#if 0
-		if (rdma_hndl->ignore_timewait && rdma_hndl->timewait == 0) {
-			xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
-						 &rdma_hndl->timewait_timeout_work);
-			/* trigger the timer */
-			retval = xio_ctx_add_delayed_work(
-					rdma_hndl->base.ctx,
-					XIO_TIMEWAIT_EXIT_FAST_TIMEOUT, rdma_hndl,
-					on_cm_timewait_exit,
-					&rdma_hndl->timewait_timeout_work);
-			if (retval != 0) {
-				ERROR_LOG("xio_ctx_timer_add_delayed_work failed.\n");
-				return;
-			}
-		}
-#endif
 		break;
 	case XIO_STATE_CLOSED:
 		return;

@@ -48,7 +48,7 @@ extern struct list_head		dev_list;
 extern spinlock_t		dev_list_lock;
 
 #define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
-#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	10    /* 10 milliseconds */
+#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	0    /*  0 milliseconds */
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -62,7 +62,7 @@ extern spinlock_t		dev_list_lock;
 #define EXTRA_RQE			32
 #define MAX_ACKED_CQE			128
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE+MAX_ACKED_CQE)
+#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define MAX_INLINE_DATA			200
