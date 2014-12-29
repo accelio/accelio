@@ -2514,6 +2514,7 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 
 	/* transition from online to close_wait - notify the application */
 	if (connection->state == XIO_CONNECTION_STATE_CLOSE_WAIT) {
+		connection->disconnecting = 1;
 		xio_send_fin_req(connection);
 
 		connection->close_reason = XIO_E_SESSION_DISCONNECTED;
