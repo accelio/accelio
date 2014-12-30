@@ -2036,7 +2036,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 	struct xio_session	*session;
 	struct xio_context	*ctx;
 	int			destroy_session = 0;
-	int			state;
 	int			close_reason;
 	struct xio_connection	*tmp_connection = NULL;
 
@@ -2045,7 +2044,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 							 kref);
 	session = connection->session;
 	ctx = connection->ctx;
-	state = session->state;
 	close_reason = connection->close_reason;
 
 	DEBUG_LOG("xio_connection_post_destroy. session:%p, connection:%p " \
