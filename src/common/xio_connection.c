@@ -2028,22 +2028,11 @@ static inline void xio_connection_release_hello(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_teardown							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_session_teardown(void *_session)
-{
-	struct xio_session *session = (struct xio_session *)_session;
-
-	xio_session_notify_teardown(session, session->teardown_reason);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_connection_post_destroy						     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_post_destroy(struct kref *kref)
 {
 	int			retval;
-	int			reason;
 	struct xio_session	*session;
 	struct xio_context	*ctx;
 	int			destroy_session = 0;
@@ -2101,32 +2090,8 @@ static void xio_connection_post_destroy(struct kref *kref)
 	if (session->disable_teardown)
 		return;
 
-	switch (state) {
-	case XIO_SESSION_STATE_REJECTED:
-		reason = XIO_E_SESSION_REJECTED;
-		break;
-	case XIO_SESSION_STATE_ACCEPTED:
-		if (session->type == XIO_SESSION_SERVER)
-			reason = XIO_E_SESSION_DISCONNECTED;
-		else
-			reason = XIO_E_SESSION_REFUSED;
-		break;
-	default:
-		reason = close_reason;
-		break;
-	}
-
-	/* last chance to teardown */
-	if (destroy_session) {
-		session->state = XIO_SESSION_STATE_CLOSING;
-		session->teardown_reason = reason;
-		retval = xio_ctx_add_work(
-				ctx,
-				session,
-				xio_session_teardown,
-				&session->teardown_work);
-
-	}
+	if (destroy_session)
+		xio_session_init_teardown(session, ctx, close_reason);
 }
 
 /*---------------------------------------------------------------------------*/

@@ -228,7 +228,8 @@ void xio_session_notify_teardown(struct xio_session *session, int reason);
 
 void xio_session_notify_rejected(struct xio_session *session);
 
-void xio_session_post_teardown(struct xio_session *session);
+void xio_session_init_teardown(struct xio_session *session,
+			       struct xio_context *ctx, int close_reason);
 
 #endif /*XIO_SESSION_H */
 
