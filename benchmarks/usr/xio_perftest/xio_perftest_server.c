@@ -89,7 +89,7 @@ struct server_data {
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
 			struct xio_msg *req,
-			int more_in_batch,
+			int last_in_rxq,
 			void *cb_prv_data)
 {
 	struct xio_msg		*rsp;

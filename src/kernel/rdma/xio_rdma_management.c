@@ -509,8 +509,9 @@ static int xio_cq_alloc_slots(struct xio_cq *tcq, int cqe_num)
 		int cqe = tcq->cq->cqe;
 		int retval = ib_resize_cq(tcq->cq,
 					  tcq->cq_depth + tcq->alloc_sz);
-		if (retval != 0) {
-			ERROR_LOG("ibv_resize_cq failed. ret=%d\n", retval);
+		if (retval != 0 || (cqe == tcq->cq->cqe)) {
+			ERROR_LOG("ibv_resize_cq failed. ret=%d, cqe:%d\n",
+				  retval, cqe);
 			return -1;
 		}
 		tcq->cq_depth  += (tcq->cq->cqe - cqe);

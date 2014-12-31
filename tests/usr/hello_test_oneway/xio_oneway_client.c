@@ -259,7 +259,7 @@ static int on_session_established(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_message_delivered(struct xio_session *session,
 				struct xio_msg *msg,
-				int more_in_batch,
+				int last_in_rxq,
 				void *cb_user_context)
 {
 	struct ow_test_params *ow_params =
@@ -320,7 +320,7 @@ static int on_message_delivered(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_server_message(struct xio_session *session,
 			     struct xio_msg *msg,
-			     int more_in_batch,
+			     int last_in_rxq,
 			     void *cb_user_context)
 {
 	struct ow_test_params *ow_params =

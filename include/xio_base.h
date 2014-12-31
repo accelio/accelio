@@ -482,7 +482,7 @@ struct xio_session_ops {
 	 *
 	 *  @param[in] session			the session
 	 *  @param[in] msg			the incoming message
-	 *  @param[in] more_in_batch		hint that more incoming messages
+	 *  @param[in] last_in_rxq		hint that more incoming messages
 	 *					are expected
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
@@ -491,7 +491,7 @@ struct xio_session_ops {
 	 */
 	int (*on_msg)(struct xio_session *session,
 		      struct xio_msg *msg,
-		      int more_in_batch,
+		      int last_in_rxq,
 		      void *conn_user_context);
 
 	/**
@@ -499,7 +499,7 @@ struct xio_session_ops {
 	 *
 	 *  @param[in] session			the session
 	 *  @param[in] msg			the incoming message
-	 *  @param[in] more_in_batch		hint that more incoming messages
+	 *  @param[in] last_in_rxq		hint that more incoming messages
 	 *					are expected
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
@@ -508,7 +508,7 @@ struct xio_session_ops {
 	 */
 	int (*on_msg_delivered)(struct xio_session *session,
 				struct xio_msg *msg,
-				int more_in_batch,
+				int last_in_rxq,
 				void *conn_user_context);
 
 	/**

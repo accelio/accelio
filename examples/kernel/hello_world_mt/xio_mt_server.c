@@ -159,7 +159,7 @@ void process_request(struct thread_data *tdata, struct xio_msg *req)
 /*---------------------------------------------------------------------------*/
 int on_request(struct xio_session *session,
 			struct xio_msg *req,
-			int more_in_batch,
+			int last_in_rxq,
 			void *cb_user_context)
 {
 	struct thread_data *tdata;

@@ -61,9 +61,6 @@
 #define XIO_CONNECTION_TIMEOUT		300000
 #define XIO_IOV_THRESHOLD		20
 
-#define		IS_APPLICATION_MSG(msg) \
-		  (IS_MESSAGE((msg)->type) || IS_ONE_WAY((msg)->type))
-
 static struct xio_transition xio_transition_table[][2] = {
 /* INIT */	  {
 		   {/*valid*/ 0, /*next_state*/ XIO_CONNECTION_STATE_INVALID, /*send_flags*/ 0 },
@@ -328,7 +325,7 @@ int xio_connection_send(struct xio_connection *connection,
 
 
 	/* is control message */
-	is_control = !IS_APPLICATION_MSG(msg);
+	is_control = !IS_APPLICATION_MSG(msg->type);
 
 	/* flow control test */
 	if (!is_control && connection->enable_flow_control) {
@@ -419,6 +416,7 @@ int xio_connection_send(struct xio_connection *connection,
 	task->omsg		= msg;
 	task->omsg_flags	= (uint16_t)msg->flags;
 	task->omsg->next	= NULL;
+	task->last_in_rxq	= 0;
 
 	/* mark as a control message */
 	task->is_control = is_control;
@@ -603,7 +601,7 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 		     XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 			continue;
 		}
-		if (!IS_APPLICATION_MSG(pmsg))
+		if (!IS_APPLICATION_MSG(pmsg->type))
 			continue;
 		xio_session_notify_msg_error(connection, pmsg,
 					     status,
@@ -803,7 +801,7 @@ static inline int xio_connection_xmit_inl(
 		} else {
 			*retry_cnt = 0;
 			xio_msg_list_remove(msgq, msg, pdata);
-			if (IS_APPLICATION_MSG(msg)) {
+			if (IS_APPLICATION_MSG(msg->type)) {
 				xio_msg_list_insert_tail(
 						in_flight_msgq, msg,
 						pdata);
@@ -880,7 +878,7 @@ static int xio_connection_xmit(struct xio_connection *connection)
 int xio_connection_remove_in_flight(struct xio_connection *connection,
 				    struct xio_msg *msg)
 {
-	if (!IS_APPLICATION_MSG(msg))
+	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
 	if (IS_REQUEST(msg->type))
@@ -899,7 +897,7 @@ int xio_connection_remove_in_flight(struct xio_connection *connection,
 int xio_connection_remove_msg_from_queue(struct xio_connection *connection,
 					 struct xio_msg *msg)
 {
-	if (!IS_APPLICATION_MSG(msg))
+	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
 	if (IS_REQUEST(msg->type))
@@ -2030,26 +2028,14 @@ static inline void xio_connection_release_hello(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_teardown							     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_session_teardown(void *_session)
-{
-	struct xio_session *session = (struct xio_session *)_session;
-
-	xio_session_notify_teardown(session, session->teardown_reason);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_connection_post_destroy						     */
 /*---------------------------------------------------------------------------*/
 static void xio_connection_post_destroy(struct kref *kref)
 {
 	int			retval;
-	int			reason;
 	struct xio_session	*session;
 	struct xio_context	*ctx;
 	int			destroy_session = 0;
-	int			state;
 	int			close_reason;
 	struct xio_connection	*tmp_connection = NULL;
 
@@ -2058,7 +2044,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 							 kref);
 	session = connection->session;
 	ctx = connection->ctx;
-	state = session->state;
 	close_reason = connection->close_reason;
 
 	DEBUG_LOG("xio_connection_post_destroy. session:%p, connection:%p " \
@@ -2103,32 +2088,8 @@ static void xio_connection_post_destroy(struct kref *kref)
 	if (session->disable_teardown)
 		return;
 
-	switch (state) {
-	case XIO_SESSION_STATE_REJECTED:
-		reason = XIO_E_SESSION_REJECTED;
-		break;
-	case XIO_SESSION_STATE_ACCEPTED:
-		if (session->type == XIO_SESSION_SERVER)
-			reason = XIO_E_SESSION_DISCONNECTED;
-		else
-			reason = XIO_E_SESSION_REFUSED;
-		break;
-	default:
-		reason = close_reason;
-		break;
-	}
-
-	/* last chance to teardown */
-	if (destroy_session) {
-		session->state = XIO_SESSION_STATE_CLOSING;
-		session->teardown_reason = reason;
-		retval = xio_ctx_add_work(
-				ctx,
-				session,
-				xio_session_teardown,
-				&session->teardown_work);
-
-	}
+	if (destroy_session)
+		xio_session_init_teardown(session, ctx, close_reason);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2212,7 +2173,7 @@ int xio_connection_disconnected(struct xio_connection *connection)
 
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
-	if (!connection->disable_notify)
+	if (!connection->disable_notify && !connection->disconnecting)
 		xio_session_notify_connection_disconnected(
 				connection->session, connection,
 				(enum xio_status)connection->close_reason);
@@ -2516,6 +2477,7 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 
 	/* transition from online to close_wait - notify the application */
 	if (connection->state == XIO_CONNECTION_STATE_CLOSE_WAIT) {
+		connection->disconnecting = 1;
 		xio_send_fin_req(connection);
 
 		connection->close_reason = XIO_E_SESSION_DISCONNECTED;

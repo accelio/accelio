@@ -216,7 +216,7 @@ static int on_new_session(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
 		      struct xio_msg *req,
-		      int more_in_batch,
+		      int last_in_rxq,
 		      void *cb_user_context)
 {
 	struct server_data *server_data = (struct server_data *)cb_user_context;

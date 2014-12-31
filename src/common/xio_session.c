@@ -502,7 +502,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		/*if (connection->ses_ops.on_msg) */
 			connection->ses_ops.on_msg(
 					connection->session, msg,
-					0,
+					task->last_in_rxq,
 					connection->cb_user_context);
 	}
 
@@ -635,7 +635,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 		} else {
 			if (connection->ses_ops.on_ow_msg_send_complete) {
@@ -655,7 +655,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 				connection->ses_ops.on_msg_delivered(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 			}
 			/* standalone receipt */
@@ -694,7 +694,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 					connection->ses_ops.on_msg(
 						connection->session,
 						omsg,
-						0,
+						task->last_in_rxq,
 						connection->cb_user_context);
 			}
 		}
@@ -1613,3 +1613,55 @@ int xio_session_notify_msg_error(struct xio_connection *connection,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_session_pre_teardown						     */
+/*---------------------------------------------------------------------------*/
+static void xio_session_pre_teardown(void *_session)
+{
+	struct xio_session	*session = (struct xio_session *)_session;
+	int			destroy_session = 0;
+	int			reason;
+
+	switch (session->state) {
+	case XIO_SESSION_STATE_REJECTED:
+		reason = XIO_E_SESSION_REJECTED;
+		break;
+	case XIO_SESSION_STATE_ACCEPTED:
+		if (session->type == XIO_SESSION_SERVER)
+			reason = XIO_E_SESSION_DISCONNECTED;
+		else
+			reason = XIO_E_SESSION_REFUSED;
+		break;
+	default:
+		reason = session->teardown_reason;
+		break;
+	}
+
+	spin_lock(&session->connections_list_lock);
+	destroy_session = ((session->connections_nr == 0) &&
+			(session->lead_connection == NULL) &&
+			(session->redir_connection == NULL));
+	spin_unlock(&session->connections_list_lock);
+
+	/* last chance to teardown */
+	if (destroy_session) {
+		session->state = XIO_SESSION_STATE_CLOSING;
+		session->teardown_reason = reason;
+		xio_session_notify_teardown(session, session->teardown_reason);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_init_teardown						     */
+/*---------------------------------------------------------------------------*/
+inline void xio_session_init_teardown(struct xio_session *session,
+				      struct xio_context *ctx,
+				      int close_reason)
+{
+		session->teardown_reason = close_reason;
+		xio_ctx_add_work(
+				ctx,
+				session,
+				xio_session_pre_teardown,
+				&session->teardown_work);
+}

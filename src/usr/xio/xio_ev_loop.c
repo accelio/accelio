@@ -371,9 +371,6 @@ static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 	uint32_t		out_events;
 	cycles_t		start_cycle  = 0;
 
-	loop->stop_loop = 0;
-	loop->wakeup_armed = 0;
-
 	if (timeout != -1)
 		start_cycle = get_cycles();
 
@@ -587,5 +584,16 @@ int xio_ev_loop_get_poll_params(void *loop_hndl,
 inline int xio_ev_loop_is_stopping(void *loop_hndl)
 {
 	return loop_hndl ? ((struct xio_ev_loop	*)loop_hndl)->stop_loop : 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_reset_stop						     */
+/*---------------------------------------------------------------------------*/
+inline void xio_ev_loop_reset_stop(void *loop_hndl)
+{
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
+
+	loop->stop_loop = 0;
+	loop->wakeup_armed = 0;
 }
 

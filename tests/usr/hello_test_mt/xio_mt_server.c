@@ -184,7 +184,7 @@ static void process_request(struct thread_data *tdata, struct xio_msg *msg)
 /* on_request								     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session, struct xio_msg *req,
-		      int more_in_batch, void *cb_prv_data)
+		      int last_in_rxq, void *cb_prv_data)
 {
 	struct xio_msg		*rsp;
 	struct thread_data	*tdata = (struct thread_data *)cb_prv_data;
