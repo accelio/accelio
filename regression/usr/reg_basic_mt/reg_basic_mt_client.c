@@ -409,7 +409,7 @@ static int on_msg_error(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *rsp,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	struct connection_entry	*conn_entry	=

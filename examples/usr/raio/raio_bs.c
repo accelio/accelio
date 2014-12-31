@@ -169,4 +169,12 @@ int raio_bs_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd)
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* raio_bs_set_last_in_batch						     */
+/*---------------------------------------------------------------------------*/
+void raio_bs_set_last_in_batch(struct raio_bs *dev)
+{
+	if (dev->bst->bs_set_last_in_batch)
+		dev->bst->bs_set_last_in_batch(dev);
+}
 

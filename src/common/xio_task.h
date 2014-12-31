@@ -75,9 +75,10 @@ struct xio_task {
 	uint16_t                imsg_flags;
 	uint16_t                ltid;           /* local task id        */
 	uint16_t                rtid;           /* remote task id       */
+	uint16_t                last_in_rxq;
+	uint16_t                pad;
 	uint32_t                magic;
 	int32_t                 status;
-	int32_t                 pad;
 
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */

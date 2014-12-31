@@ -380,13 +380,23 @@ static int raio_bs_aio_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd)
 
 	info->nwaiting++;
 
-	if ((info->nwaiting == info->iodepth - info->npending) ||
-	    (cmd->is_last_in_batch)) {
+	if (info->nwaiting == info->iodepth - info->npending) {
 		raio_aio_submit_dev_batch(info);
 		raio_bs_aio_process_events(dev);
 	}
 
 	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* raio_bs_aio_set_last_in_batch                                             */
+/*---------------------------------------------------------------------------*/
+static void raio_bs_aio_set_last_in_batch(struct raio_bs *dev)
+{
+	struct raio_bs_aio_info	*info = (struct raio_bs_aio_info *)dev->dd;
+
+	raio_aio_submit_dev_batch(info);
+	raio_bs_aio_process_events(dev);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -413,6 +423,7 @@ static struct backingstore_template raio_aio_bst = {
 	.bs_open		= raio_bs_aio_open,
 	.bs_close		= raio_bs_aio_close,
 	.bs_cmd_submit		= raio_bs_aio_cmd_submit,
+	.bs_set_last_in_batch	= raio_bs_aio_set_last_in_batch
 };
 
 /*

@@ -249,7 +249,7 @@ static int on_session_established(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *msg,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	/*struct xio_iovec_ex	*sglist; */

@@ -229,7 +229,7 @@ static int on_session_established(struct xio_session *session,
 /* on_response								     */
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session, struct xio_msg *rsp,
-		       int more_in_batch, void *cb_user_context)
+		       int last_in_rxq, void *cb_user_context)
 {
 	struct xio_iovec_ex	*sglist;
 
@@ -286,7 +286,7 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 /* on_request								     */
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session, struct xio_msg *req,
-		      int more_in_batch, void *cb_user_context)
+		      int last_in_rxq, void *cb_user_context)
 {
 	struct xio_msg	*rsp;
 
@@ -315,14 +315,14 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 /* on_request								     */
 /*---------------------------------------------------------------------------*/
 static int on_message(struct xio_session *session, struct xio_msg *msg,
-		      int more_in_batch, void *cb_prv_data)
+		      int last_in_rxq, void *cb_prv_data)
 {
 	switch (msg->type) {
 	case XIO_MSG_TYPE_REQ:
-		on_request(session, msg, more_in_batch, cb_prv_data);
+		on_request(session, msg, last_in_rxq, cb_prv_data);
 		break;
 	case XIO_MSG_TYPE_RSP:
-		on_response(session, msg, more_in_batch, cb_prv_data);
+		on_response(session, msg, last_in_rxq, cb_prv_data);
 		break;
 	default:
 		printf("unknown message type : %d\n", msg->type);

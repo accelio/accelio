@@ -562,6 +562,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 					 struct xio_rdma_transport, beacon_task);
 
 		TRACE_LOG("beacon rdma_hndl:%p\n", rdma_hndl);
+		xio_set_timewait_timer(rdma_hndl);
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 		return;
 	}
@@ -930,7 +931,7 @@ static inline void xio_rdma_wr_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_handle_wc(struct ibv_wc *wc)
+static inline void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
@@ -943,6 +944,7 @@ static inline void xio_handle_wc(struct ibv_wc *wc)
 
 	switch (wc->opcode) {
 	case IBV_WC_RECV:
+		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_SEND:
@@ -970,12 +972,14 @@ static inline void xio_handle_wc(struct ibv_wc *wc)
 static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 {
 	int		err = 0;
-	int		stop = 0;
+	int		stop = 0, tlv_type;
 	int		wclen = max_wc, i, numwc  = 0;
 	int		timeouts_num = 0;
-	int		polled = 0;
+	int		polled = 0, last_in_rxq = -1;
 	cycles_t	timeout;
 	cycles_t	start_time = 0;
+	struct ibv_wc	*wc;
+	struct xio_task *task;
 
 	for (;;) {
 		if (wclen > tcq->wc_array_len)
@@ -1016,11 +1020,28 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 			break;
 		}
 		timeouts_num = 0;
+
+		wc = &tcq->wc_array[err - 1];
+		for (i = err - 1; i >= 0; i--) {
+			if (wc->opcode == IBV_WC_RECV &&
+			    wc->status == IBV_WC_SUCCESS) {
+				task =(struct xio_task *)
+					ptr_from_int64(wc->wr_id);
+				tlv_type = xio_mbuf_read_type(&task->mbuf);
+				if (IS_APPLICATION_MSG(tlv_type)) {
+					last_in_rxq = i;
+					break;
+				}
+			}
+			wc--;
+		}
+		wc = &tcq->wc_array[0];
 		for (i = 0; i < err; i++) {
-			if (likely(tcq->wc_array[i].status == IBV_WC_SUCCESS))
-				xio_handle_wc(&tcq->wc_array[i]);
+			if (likely(wc->status == IBV_WC_SUCCESS))
+				xio_handle_wc(wc, (i == last_in_rxq));
 			else
-				xio_handle_wc_error(&tcq->wc_array[i]);
+				xio_handle_wc_error(wc);
+			wc++;
 		}
 		numwc += err;
 		if (numwc == max_wc) {
@@ -1172,12 +1193,15 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 {
 	int				retval;
 	int				i;
+	struct xio_task			*task;
 	struct xio_rdma_transport	*rdma_hndl;
 	struct xio_cq			*tcq;
 	int				nr_comp = 0, recv_counter;
-	int				nr;
+	int				nr, last_in_rxq = -1;
+	int				tlv_type;
 	cycles_t			timeout = -1;
 	cycles_t			start_time = get_cycles();
+	struct ibv_wc			*wc;
 
 	if (min_nr > max_nr)
 		return -1;
@@ -1194,14 +1218,30 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		retval = ibv_poll_cq(tcq->cq, nr, tcq->wc_array);
 		if (likely(retval > 0)) {
 			recv_counter = 0;
+			wc = &tcq->wc_array[retval - 1];
+			for (i = retval-1; i >= 0; i--) {
+				if (wc->opcode == IBV_WC_RECV &&
+				    wc->status == IBV_WC_SUCCESS) {
+					task =(struct xio_task *)
+						ptr_from_int64(wc->wr_id);
+					tlv_type = xio_mbuf_read_type(&task->mbuf);
+					if (IS_APPLICATION_MSG(tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
+				}
+				wc--;
+			}
+			wc = &tcq->wc_array[0];
 			for (i = 0; i < retval; i++) {
-				if (tcq->wc_array[i].opcode == IBV_WC_RECV)
+				if (wc->opcode == IBV_WC_RECV)
 					recv_counter++;
-				if (rdma_hndl->tcq->wc_array[i].status ==
-						IBV_WC_SUCCESS)
-					xio_handle_wc(&tcq->wc_array[i]);
+				if (likely(wc->status == IBV_WC_SUCCESS))
+					xio_handle_wc(wc,
+						      (last_in_rxq == i));
 				else
-					xio_handle_wc_error(&tcq->wc_array[i]);
+					xio_handle_wc_error(wc);
+				wc++;
 			}
 			nr_comp += recv_counter;
 			max_nr -= recv_counter;

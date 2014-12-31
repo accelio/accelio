@@ -112,7 +112,7 @@ static int on_session_event(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *rsp,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	struct session_data *session_data = (struct session_data *)

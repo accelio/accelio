@@ -82,6 +82,13 @@ int xio_ev_loop_run_timeout(void *loop_hndl, int timeout_msec);
 void xio_ev_loop_stop(void *loop);
 
 /**
+ * reset stop parameters
+ *
+ * @param[in] loop		Pointer to event loop
+ */
+void xio_ev_loop_reset_stop(void *loop_hndl);
+
+/**
  * check if stop activated
  *
  * @param[in] loop		Pointer to event loop

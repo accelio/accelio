@@ -344,7 +344,7 @@ static int on_session_event(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *msg,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	struct thread_data  *tdata = (struct thread_data *)cb_user_context;

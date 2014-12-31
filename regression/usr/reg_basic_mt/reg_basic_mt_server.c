@@ -183,7 +183,7 @@ static void msg_obj_init(void *user_context, void *obj)
 /*---------------------------------------------------------------------------*/
 static int on_request(struct xio_session *session,
 		      struct xio_msg *req,
-		      int more_in_batch,
+		      int last_in_rxq,
 		      void *cb_user_context)
 {
 	struct thread_data	*tdata  = (struct thread_data *)cb_user_context;

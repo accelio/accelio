@@ -346,6 +346,15 @@ cleanup1:
 EXPORT_SYMBOL(xio_context_create);
 
 /*---------------------------------------------------------------------------*/
+/* xio_context_reset_stop						     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_reset_stop(struct xio_context *ctx)
+{
+	xio_ev_loop_reset_stop(ctx->ev_loop);
+}
+
+
+/*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
 /*---------------------------------------------------------------------------*/
 void xio_context_destroy(struct xio_context *ctx)
@@ -370,8 +379,10 @@ void xio_context_destroy(struct xio_context *ctx)
 					    XIO_CONTEXT_EVENT_CLOSE, NULL);
 
 	/* allow internally to run the loop for final cleanup */
-	if (ctx->run_private)
+	if (ctx->run_private) {
+		xio_context_reset_stop(ctx);
 		xio_context_run_loop(ctx, XIO_INFINITE);
+	}
 
 	if (ctx->run_private)
 		ERROR_LOG("not all observers finished! run_private=%d\n",

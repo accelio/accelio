@@ -228,7 +228,7 @@ static int on_new_session(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_client_message(struct xio_session *session,
 			     struct xio_msg *msg,
-			     int more_in_batch,
+			     int last_in_rxq,
 			     void *cb_prv_data)
 {
 	/* process message */
@@ -244,7 +244,7 @@ static int on_client_message(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int on_message_delivered(struct xio_session *session,
 				struct xio_msg *msg,
-				int more_in_batch,
+				int last_in_rxq,
 				void *cb_user_context)
 {
 	struct xio_msg *new_msg;

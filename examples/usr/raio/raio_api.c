@@ -341,7 +341,7 @@ static void on_submit_answer(struct xio_msg *rsp)
 /*---------------------------------------------------------------------------*/
 static int on_response(struct xio_session *session,
 		       struct xio_msg *rsp,
-		       int more_in_batch,
+		       int last_in_rxq,
 		       void *cb_user_context)
 {
 	struct raio_session_data  *session_data =

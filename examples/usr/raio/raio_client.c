@@ -302,6 +302,7 @@ int main(int argc, char *argv[])
 	double			usec, size, rate, pps;
 #ifdef WRITE_FILE
 	int			fdw;
+	char *			file = "/tmp/copy";
 #endif
 
 	file_path = NULL;
@@ -456,7 +457,7 @@ int main(int argc, char *argv[])
 						  write(
 						     fdw,
 						     events[i].obj->u.c.buf,
-						     actual_len);
+						     events[i].obj->u.c.nbytes);
 
 #endif
 						raio_pool_put(iocb_pool,
