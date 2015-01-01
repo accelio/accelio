@@ -30,14 +30,14 @@ if [ -z "$4" ]
 then
 	data_len="0"
 else
-	data_len=$3
+	data_len=$4
 fi
 
 if [ -z "$5" ]
 then
 	trans="rdma"
 else
-	trans=$4
+	trans=$5
 fi
 
 ./xio_mt_server -c 1 -p ${port} -r ${trans} -n 0 -w ${data_len} -f ${finite_run} ${server_ip} 
