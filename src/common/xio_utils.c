@@ -448,3 +448,14 @@ size_t memcpyv_ex(struct xio_iovec_ex *dst, int dsize,
 	return d;
 }
 
+extern const char XIO_VERSION_STRING[];
+
+/*---------------------------------------------------------------------------*/
+/* xio_version								     */
+/*---------------------------------------------------------------------------*/
+inline const char *xio_version(void)
+{
+	return XIO_VERSION_STRING;
+}
+EXPORT_SYMBOL(xio_version);
+

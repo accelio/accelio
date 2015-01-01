@@ -1185,6 +1185,12 @@ const char *xio_strerror(int errnum);
  */
 int xio_errno(void);
 
+/**
+ * Get library version string.
+ *
+ * @return Pointer to static buffer in library that holds the version string.
+ */
+const char *xio_version(void);
 
 #ifdef __cplusplus
 }

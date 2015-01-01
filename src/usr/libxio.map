@@ -11,6 +11,7 @@ XIO_1.0 {
 		xio_get_opt;
 		xio_errno;		
 		xio_strerror;
+		xio_version;
 		xio_alloc;
 		xio_free;
 		xio_reg_mr;		

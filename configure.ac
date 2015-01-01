@@ -216,7 +216,7 @@ fi
 # add version.c uses strings to get GIT hash version
 ##########################################################################
 if test -d "${GIT_DIR:-${ac_top_srcdir:-./}/.git}" ; then
-	GITHEAD=`git describe 2>/dev/null`
+	GITHEAD=`git describe --tags --long 2>/dev/null`
 	if test -z ${GITHEAD} ; then
 		GITHEAD=`git rev-parse HEAD`
 	fi
@@ -228,6 +228,7 @@ else
 fi
 echo "const char XIO_GIT_HEAD@<:@@:>@ = \"GIT_VERSION: $GITHEAD\";" \/\* for use with strings \*\/ >version.c
 echo "const char XIO_GIT_HEAD_STRING@<:@@:>@ = \"$GITHEAD\";" >>version.c
+echo "const char XIO_VERSION_STRING@<:@@:>@ = \"accelio_$GITHEAD\";" >>version.c
 
 AC_MSG_CHECKING([for git head])
 AC_MSG_RESULT([$GITHEAD])
