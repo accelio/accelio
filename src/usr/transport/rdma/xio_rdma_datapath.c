@@ -583,22 +583,28 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 		if (rdma_hndl)  {
 			ERROR_LOG("[%s] - state:%d, rdma_hndl:%p, " \
 				  "rdma_task:%p, task:%p, wr_id:0x%lx, " \
-				  "err:%s, vendor_err:0x%x\n",
+				  "err:%s, vendor_err:0x%x, \
+				   byte_len:%d, opcode:0x%x\n",
 				  rdma_hndl->base.is_client ?
 				  "client" : "server",
 				  rdma_hndl->state,
 				  rdma_hndl, rdma_task, task,
 				  wc->wr_id,
 				  ibv_wc_status_str(wc->status),
-				  wc->vendor_err);
+				  wc->vendor_err,
+				  wc->byte_len,
+				  wc->opcode);
 			if (task->omsg)
 				xio_msg_dump(task->omsg);
 		} else
-			ERROR_LOG("wr_id:0x%lx, err:%s, vendor_err:0x%x\n",
+			ERROR_LOG("wr_id:0x%lx, err:%s, vendor_err:0x%x",
+				  "byte_len:%d, opcode:0x%x\n",
 				  wc->wr_id,
 				  ibv_wc_status_str(wc->status),
-				  wc->vendor_err);
-	}
+				  wc->vendor_err,
+				  wc->byte_len,
+				  wc->opcode);
+		}
 	if (task && rdma_task)
 		xio_handle_task_error(task);
 
