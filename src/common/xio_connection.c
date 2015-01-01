@@ -1195,6 +1195,9 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 
 	rsp->out.header.iov_len = 0;
 	rsp->out.data_iov.nents = 0;
+	rsp->in.header.iov_len = 0;
+	rsp->in.data_iov.nents = 0;
+
 
 	xio_msg_list_insert_tail(&connection->rsps_msgq, rsp, pdata);
 
