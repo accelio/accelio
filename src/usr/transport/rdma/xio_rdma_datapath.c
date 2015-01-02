@@ -1887,7 +1887,7 @@ static int xio_rdma_prep_req_out_data(
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 				rdma_task->write_sge[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				rdma_task->write_sge[i].cache = NULL;
+				rdma_task->write_sge[i].priv = NULL;
 				rdma_task->write_sge[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
 				rdma_task->write_sge[i].length =
@@ -2008,7 +2008,7 @@ static int xio_rdma_prep_req_in_data(
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 				rdma_task->read_sge[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				rdma_task->read_sge[i].cache = NULL;
+				rdma_task->read_sge[i].priv = NULL;
 				rdma_task->read_sge[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
 				rdma_task->read_sge[i].length =
@@ -2649,7 +2649,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					     i++) {
 						xio_mempool_free(
 					    &rdma_sender_task->read_sge[i]);
-					rdma_sender_task->read_sge[i].cache = 0;
+					rdma_sender_task->read_sge[i].priv = NULL;
 					}
 					rdma_sender_task->read_num_sge = 0;
 				} else {
@@ -3022,7 +3022,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 		sge_set_length(sgtbl_ops, sg,
 			       rdma_task->req_write_sge[i].length);
 		rlen += rdma_task->req_write_sge[i].length;
-		rdma_task->read_sge[i].cache = NULL;
+		rdma_task->read_sge[i].priv = NULL;
 	}
 
 	sgtbl		= xio_sg_table_get(&task->imsg.out);
@@ -3034,7 +3034,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			sge_set_addr(sgtbl_ops, sg, NULL);
 			sge_set_length(sgtbl_ops, sg,
 				       rdma_task->req_read_sge[i].length);
-			rdma_task->write_sge[i].cache = NULL;
+			rdma_task->write_sge[i].priv = NULL;
 		}
 	} else if (rdma_task->req_recv_num_sge) {
 		tbl_set_nents(sgtbl_ops, sgtbl, rdma_task->req_recv_num_sge);
@@ -3043,7 +3043,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			sge_set_length(sgtbl_ops, sg,
 				       rdma_task->req_recv_sge[i].length);
 			sge_set_mr(sgtbl_ops, sg, NULL);
-			rdma_task->write_sge[i].cache = NULL;
+			rdma_task->write_sge[i].priv = NULL;
 		}
 	} else {
 		tbl_set_nents(sgtbl_ops, sgtbl, 0);

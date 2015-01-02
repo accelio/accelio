@@ -60,16 +60,16 @@ struct msg_pool {
 
 	struct xio_msg				**stack_ptr;
 	struct xio_msg				**stack_end;
-	void						*header;
-	void						*data;
+	void					*header;
+	void					*data;
 
-	struct xio_mr					*mr;
+	struct xio_reg_mem			reg_mem;
 	/* max number of elements */
-	size_t						max;
-	int						in_hdrlen;
-	int						in_datalen;
-	int						shmid;
-	int						pad;
+	size_t					max;
+	int					in_hdrlen;
+	int					in_datalen;
+	int					shmid;
+	int					pad;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -203,7 +203,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 			exit(1);
 		}
 		memset(msg_pool->data, 0, datalen);
-		msg_pool->mr = xio_reg_mr(msg_pool->data, datalen);
+		xio_mem_register(msg_pool->data, datalen, &msg_pool->reg_mem);
 	}
 
 
@@ -231,7 +231,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 			sglist = vmsg_sglist(&msg->out);
 			sglist[0].iov_base = data;
 			sglist[0].iov_len = out_datalen;
-			sglist[0].mr = msg_pool->mr;
+			sglist[0].mr = msg_pool->reg_mem.mr;
 			data = data + out_datalen;
 			vmsg_sglist_set_nents(&msg->out, 1);
 		}
@@ -249,7 +249,7 @@ static struct msg_pool *msg_pool_alloc(int max,
 			sglist = vmsg_sglist(&msg->in);
 			sglist[0].iov_base = data;
 			sglist[0].iov_len = in_datalen;
-			sglist[0].mr = msg_pool->mr;
+			sglist[0].mr = msg_pool->reg_mem.mr;
 			data = data + in_datalen;
 			vmsg_sglist_set_nents(&msg->in, 1);
 		}
@@ -280,7 +280,7 @@ struct msg_pool *msg_pool_create(size_t hdr_size, size_t data_size,
 void msg_pool_delete(struct msg_pool *pool)
 {
 	if (pool) {
-		xio_dereg_mr(&pool->mr);
+		xio_mem_dereg(&pool->reg_mem);
 		if (pool->data)
 			free_mem_buf((uint8_t *)pool->data, pool->shmid);
 		free(pool->header);

@@ -57,90 +57,78 @@
 
 #ifndef HAVE_INFINIBAND_VERBS_H
 
-static struct xio_mr dummy_mr;
-
 /*---------------------------------------------------------------------------*/
-/* xio_reg_mr								     */
+/* xio_mem_register							     */
 /*---------------------------------------------------------------------------*/
-struct xio_mr *xio_reg_mr(void *addr, size_t length)
+int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
-	if (addr == NULL) {
+	if (addr == NULL || !reg_mem) {
 		xio_set_error(EINVAL);
-		return NULL;
+		return -1;
 	}
 
-	return &dummy_mr;
+	reg_mem->addr = addr;
+	reg_mem->length = length;
+	reg_mem->mr = NULL;
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_dereg_mr								     */
 /*---------------------------------------------------------------------------*/
-int xio_dereg_mr(struct xio_mr **p_tmr)
+int xio_mem_dereg(struct xio_reg_mem *reg_mem)
 {
-	*p_tmr = NULL;
+	reg_mem->mr = NULL;
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_alloc								     */
 /*---------------------------------------------------------------------------*/
-struct xio_buf *xio_alloc(size_t length)
+int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 {
-	struct xio_buf		*buf;
 	size_t			real_size;
 	int			alloced = 0;
 
-	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
-	if (!buf) {
-		xio_set_error(errno);
-		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
-		return NULL;
-	}
-
 	real_size = ALIGN(length, page_size);
-	buf->addr = umemalign(page_size, real_size);
-	if (!buf->addr) {
+	reg_mem->addr = umemalign(page_size, real_size);
+	if (!reg_mem->addr) {
 		ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
 		goto cleanup;
 	}
-	memset(buf->addr, 0, real_size);
+	/*memset(reg_mem->addr, 0, real_size);*/
 	alloced = 1;
 
-	buf->mr = xio_reg_mr(&buf->addr, length);
-	if (!buf->mr) {
+	xio_mem_register(reg_mem->addr, length, reg_mem);
+	if (!reg_mem->mr) {
 		ERROR_LOG("xio_reg_mr failed. addr:%p, length:%d\n",
-			  buf->addr, length, access);
+			 reg_mem->addr, length, access);
 
 		goto cleanup1;
 	}
-	buf->length = length;
+	reg_mem->length = length;
 
-	return buf;
+	return 0;
 
 cleanup1:
 	if (alloced)
-		ufree(buf->addr);
-
+		ufree(reg_mem->addr);
 cleanup:
-	ufree(buf);
-	return NULL;
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_free								     */
 /*---------------------------------------------------------------------------*/
-int xio_free(struct xio_buf **buf)
+int xio_mem_free(struct xio_reg_mem *reg_mem)
 {
-	struct xio_mr		*tmr = (*buf)->mr;
 	int			retval = 0;
 
-	if ((*buf)->addr)
-		ufree((*buf)->addr);
+	if (reg_mem->addr)
+		ufree(reg_mem->addr);
 
-	retval = xio_dereg_mr(&tmr);
-
-	ufree(*buf);
-	*buf = NULL;
+	retval = xio_mem_dereg(reg_mem);
 
 	return retval;
 }

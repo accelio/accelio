@@ -58,10 +58,7 @@ struct  thread_data {
 	struct perf_parameters	*user_param;
 	struct msg_pool		*pool;
 	struct xio_context	*ctx;
-	struct xio_buf		*out_xbuf;
-	struct xio_buf		*in_xbuf;
-	char			*buf;
-	struct xio_mr		*mr;
+	struct xio_reg_mem	in_reg_mem;
 	int			affinity;
 	int			portal_index;
 	pthread_t		thread_id;
@@ -156,18 +153,18 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
-	if (!tdata->in_xbuf) {
-		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
-	} else if (tdata->in_xbuf->length < sglist[0].iov_len) {
-		xio_free(&tdata->in_xbuf);
-		tdata->in_xbuf = xio_alloc(sglist[0].iov_len);
+	if (!tdata->in_reg_mem.addr) {
+		xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
+	} else if (tdata->in_reg_mem.length < sglist[0].iov_len) {
+		xio_mem_free(&tdata->in_reg_mem);
+		xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
 	}
 
 	vmsg_sglist_set_nents(&msg->in, 1);
 
-	sglist[0].iov_base	= tdata->in_xbuf->addr;
-	sglist[0].iov_len	= tdata->in_xbuf->length;
-	sglist[0].mr		= tdata->in_xbuf->mr;
+	sglist[0].iov_base	= tdata->in_reg_mem.addr;
+	sglist[0].iov_len	= tdata->in_reg_mem.length;
+	sglist[0].mr		= tdata->in_reg_mem.mr;
 
 	return 0;
 }
@@ -224,17 +221,8 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->mr)
-		xio_dereg_mr(&tdata->mr);
-
-	if (tdata->buf)
-		free(tdata->buf);
-
-	if (tdata->out_xbuf)
-		xio_free(&tdata->out_xbuf);
-
-	if (tdata->in_xbuf)
-		xio_free(&tdata->in_xbuf);
+	if (tdata->in_reg_mem.addr)
+		xio_mem_free(&tdata->in_reg_mem);
 
 cleanup:
 	/* free the context */

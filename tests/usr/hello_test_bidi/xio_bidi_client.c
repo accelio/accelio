@@ -83,7 +83,7 @@ static struct msg_pool		*pool;
 static uint64_t			print_counter;
 static struct xio_connection	*conn;
 static struct xio_context	*ctx;
-static struct xio_buf		*xbuf;
+static struct xio_reg_mem	reg_mem;
 static struct msg_params	msg_params;
 static uint64_t			nrecv;
 static uint64_t			nsent;
@@ -403,11 +403,11 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (xbuf == NULL)
-		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &reg_mem);
 
-	sglist[0].iov_base = xbuf->addr;
-	sglist[0].mr = xbuf->mr;
+	sglist[0].iov_base = reg_mem.addr;
+	sglist[0].mr = reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -585,7 +585,8 @@ int main(int argc, char *argv[])
 
 	nrecv = 0;
 	nsent = 0;
-	xbuf = NULL;
+
+	memset(&reg_mem, 0, sizeof reg_mem);
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
@@ -701,10 +702,8 @@ exit1:
 
 	msg_api_free(&msg_params);
 
-	if (xbuf) {
-		xio_free(&xbuf);
-		xbuf = NULL;
-	}
+	if (reg_mem.addr)
+		xio_mem_free(&reg_mem);
 
 	fprintf(stdout, "exit complete\n");
 

@@ -963,12 +963,15 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 			      size_t len, raio_mr_t *mr)
 {
+	struct xio_reg_mem reg_mem;
+
 	*mr = (raio_mr_t)malloc(sizeof(struct raio_mr));
 	if (*mr == NULL) {
 		printf("libraio: malloc failed. %m\n");
 		return -1;
 	}
-	(*mr)->omr = xio_reg_mr(buf, len);
+	xio_mem_register(buf, len, &reg_mem);
+	(*mr)->omr = reg_mem.mr;
 	if ((*mr)->omr == NULL) {
 		printf("libraio: failed to register mr. %m\n");
 		free(*mr);
@@ -983,8 +986,11 @@ __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_dereg_mr(raio_context_t ctx, raio_mr_t mr)
 {
-	int retval = xio_dereg_mr(&mr->omr);
+	struct xio_reg_mem	reg_mem;
+	int			retval;
 
+	reg_mem.mr = mr->omr;
+	retval = xio_mem_dereg(&reg_mem);
 	if (retval == -1)
 		printf("libraio: failed to deregister mr. %m\n");
 	free(mr);

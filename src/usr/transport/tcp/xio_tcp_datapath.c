@@ -684,7 +684,7 @@ static int xio_tcp_prep_req_out_data(
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 				tcp_task->write_sge[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				tcp_task->write_sge[i].cache = NULL;
+				tcp_task->write_sge[i].priv = NULL;
 				tcp_task->write_sge[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
 				tcp_task->write_sge[i].length =
@@ -1239,7 +1239,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 				tcp_task->read_sge[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				tcp_task->read_sge[i].cache = NULL;
+				tcp_task->read_sge[i].priv = NULL;
 				tcp_task->read_sge[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
 				tcp_task->read_sge[i].length =
@@ -2140,7 +2140,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 		sge_set_length(sgtbl_ops, sg,
 			       tcp_task->req_write_sge[i].length);
 		rlen += tcp_task->req_write_sge[i].length;
-		tcp_task->read_sge[i].cache = NULL;
+		tcp_task->read_sge[i].priv = NULL;
 	}
 	sgtbl		= xio_sg_table_get(&task->imsg.out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -2151,7 +2151,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			sge_set_addr(sgtbl_ops, sg, NULL);
 			sge_set_length(sgtbl_ops, sg,
 				       tcp_task->req_read_sge[i].length);
-			tcp_task->write_sge[i].cache = NULL;
+			tcp_task->write_sge[i].priv = NULL;
 		}
 	} else if (tcp_task->req_recv_num_sge) {
 		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_recv_num_sge);
@@ -2160,7 +2160,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			sge_set_length(sgtbl_ops, sg,
 				       tcp_task->req_recv_sge[i].length);
 			sge_set_mr(sgtbl_ops, sg, NULL);
-			tcp_task->write_sge[i].cache = NULL;
+			tcp_task->write_sge[i].priv = NULL;
 		}
 	} else {
 		tbl_set_nents(sgtbl_ops, sgtbl, 0);
@@ -2671,7 +2671,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 						i++) {
 					xio_mempool_free(
 						&tcp_sender_task->read_sge[i]);
-					tcp_sender_task->read_sge[i].cache = 0;
+					tcp_sender_task->read_sge[i].priv = NULL;
 				}
 				tcp_sender_task->read_num_sge = 0;
 			} else {

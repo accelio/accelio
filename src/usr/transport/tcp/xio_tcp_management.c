@@ -2041,18 +2041,19 @@ static int xio_tcp_primary_pool_slab_pre_create(
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 	size_t	alloc_sz = alloc_nr*tcp_hndl->membuf_sz;
+	int	retval;
 
 	tcp_slab->buf_size = tcp_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		tcp_slab->io_buf = xio_alloc(alloc_sz);
-		if (!tcp_slab->io_buf) {
+		retval= xio_mem_alloc(alloc_sz, &tcp_slab->reg_mem);
+		if (!retval) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc tcp pool sz:%zu failed\n",
 				  alloc_sz);
 			return -1;
 		}
-		tcp_slab->data_pool = tcp_slab->io_buf->addr;
+		tcp_slab->data_pool = tcp_slab->reg_mem.addr;
 	} else {
 		/* maybe allocation of with unuma_alloc can provide better
 		 * performance?
@@ -2111,8 +2112,8 @@ static int xio_tcp_primary_pool_slab_destroy(
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 
-	if (tcp_slab->io_buf)
-		xio_free(&tcp_slab->io_buf);
+	if (tcp_slab->reg_mem.addr)
+		xio_mem_free(&tcp_slab->reg_mem);
 	else
 		ufree_huge_pages(tcp_slab->data_pool);
 
@@ -2149,10 +2150,10 @@ static int xio_tcp_primary_pool_slab_init_task(
 	tcp_task->rxd.msg_iov = (struct iovec *)ptr;
 	ptr += (max_iovsz + 1)*sizeof(struct iovec);
 
-	tcp_task->read_sge = (struct xio_mempool_obj *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
-	tcp_task->write_sge = (struct xio_mempool_obj *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
+	tcp_task->read_sge = (struct xio_reg_mem *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_reg_mem);
+	tcp_task->write_sge = (struct xio_reg_mem *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_reg_mem);
 
 	tcp_task->req_read_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
@@ -2189,17 +2190,17 @@ static int xio_tcp_task_pre_put(
 	/* put buffers back to pool */
 
 	for (i = 0; i < tcp_task->read_num_sge; i++) {
-		if (tcp_task->read_sge[i].cache) {
+		if (tcp_task->read_sge[i].priv) {
 			xio_mempool_free(&tcp_task->read_sge[i]);
-			tcp_task->read_sge[i].cache = NULL;
+			tcp_task->read_sge[i].priv = NULL;
 		}
 	}
 	tcp_task->read_num_sge = 0;
 
 	for (i = 0; i < tcp_task->write_num_sge; i++) {
-		if (tcp_task->write_sge[i].cache) {
+		if (tcp_task->write_sge[i].priv) {
 			xio_mempool_free(&tcp_task->write_sge[i]);
-			tcp_task->write_sge[i].cache = NULL;
+			tcp_task->write_sge[i].priv = NULL;
 		}
 	}
 	tcp_task->write_num_sge		= 0;
@@ -2245,7 +2246,7 @@ static void xio_tcp_primary_pool_get_params(
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
 			(2 * (max_iovsz + 1))*sizeof(struct iovec) +
-			 2 * max_iovsz * sizeof(struct xio_mempool_obj) +
+			 2 * max_iovsz * sizeof(struct xio_reg_mem) +
 			 4 * max_iovsz * sizeof(struct xio_sge);
 }
 

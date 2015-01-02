@@ -76,8 +76,8 @@ struct thread_data {
 	int				affinity;
 	int				pad;
 	struct obj_pool			*rsp_pool;
-	struct obj_pool			*in_iobuf_pool;
-	struct obj_pool			*out_iobuf_pool;
+	struct obj_pool			*in_reg_mem_pool;
+	struct obj_pool			*out_reg_mem_pool;
 	struct xio_context		*ctx;
 	struct server_data		*server_data;
 	pthread_t			thread_id;
@@ -134,35 +134,35 @@ static void portals_free(struct portals_vec *portals)
 }
 
 /*---------------------------------------------------------------------------*/
-/* out_iobuf_obj_init							     */
+/* out_reg_mem_init							     */
 /*---------------------------------------------------------------------------*/
-static void out_iobuf_obj_init(void *user_context, void *obj)
+static void out_reg_mem_init(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
+	struct xio_reg_mem	*reg_mem = (struct xio_reg_mem *)obj;
 	struct thread_data	*tdata	= (struct thread_data *)user_context;
 
-	*iobuf = xio_alloc(tdata->server_data->server_dlen);
+	xio_mem_alloc(tdata->server_data->server_dlen, reg_mem);
 }
 
 /*---------------------------------------------------------------------------*/
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
-static void in_iobuf_obj_init(void *user_context, void *obj)
+static void in_reg_mem_init(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
+	struct xio_reg_mem	*reg_mem = (struct xio_reg_mem *)obj;
 	struct thread_data	*tdata	= (struct thread_data *)user_context;
 
-	*iobuf = xio_alloc(tdata->server_data->client_dlen);
+	xio_mem_alloc(tdata->server_data->client_dlen, reg_mem);
 }
 
 /*---------------------------------------------------------------------------*/
 /* on_request callback							     */
 /*---------------------------------------------------------------------------*/
-static void iobuf_obj_free(void *user_context, void *obj)
+static void reg_mem_free(void *user_context, void *obj)
 {
-	struct xio_buf		**iobuf	= (struct xio_buf **)obj;
+	struct xio_reg_mem	*reg_mem = (struct xio_reg_mem *)obj;
 
-	xio_free(iobuf);
+	xio_mem_free(reg_mem);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -188,12 +188,12 @@ static int on_request(struct xio_session *session,
 {
 	struct thread_data	*tdata  = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&req->in);
-	struct xio_buf	**iobuf = (struct xio_buf **)sglist[0].user_context;
+	struct xio_reg_mem	*reg_mem = (struct xio_reg_mem *)sglist[0].user_context;
 	struct xio_msg		*rsp;
 
 	/* process request */
-	if (iobuf && vmsg_sglist_nents(&req->in)) {
-		obj_pool_put(tdata->in_iobuf_pool, iobuf);
+	if (reg_mem && vmsg_sglist_nents(&req->in)) {
+		obj_pool_put(tdata->in_reg_mem_pool, reg_mem);
 		sglist[0].user_context = NULL;
 	}
 
@@ -207,13 +207,13 @@ static int on_request(struct xio_session *session,
 //
 	sglist = vmsg_sglist(&rsp->out);
 	if (tdata->server_data->server_dlen) {
-		iobuf = (struct xio_buf **)obj_pool_get(tdata->out_iobuf_pool);
+		reg_mem = (struct xio_reg_mem *)obj_pool_get(tdata->out_reg_mem_pool);
 
-		sglist[0].iov_base	= (*iobuf)->addr;
+		sglist[0].iov_base	= reg_mem->addr;
 		sglist[0].iov_len	=
 				tdata->server_data->server_dlen;
-		sglist[0].mr		= (*iobuf)->mr;
-		sglist[0].user_context = iobuf;
+		sglist[0].mr		= reg_mem->mr;
+		sglist[0].user_context = reg_mem;
 		vmsg_sglist_set_nents(&rsp->out, 1);
 	} else {
 		vmsg_sglist_set_nents(&rsp->out, 0);
@@ -270,15 +270,15 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
-	struct xio_buf		**iobuf;
+	struct xio_reg_mem	*reg_mem;
 
-	iobuf = (struct xio_buf **)obj_pool_get(tdata->in_iobuf_pool);
+	reg_mem = (struct xio_reg_mem *)obj_pool_get(tdata->in_reg_mem_pool);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	sglist[0].iov_base	= (*iobuf)->addr;
-	sglist[0].iov_len	= (*iobuf)->length;
-	sglist[0].mr		= (*iobuf)->mr;
-	sglist[0].user_context	= iobuf;
+	sglist[0].iov_base	= reg_mem->addr;
+	sglist[0].iov_len	= reg_mem->length;
+	sglist[0].mr		= reg_mem->mr;
+	sglist[0].user_context	= reg_mem;
 
 	return 0;
 }
@@ -294,7 +294,7 @@ static int on_send_rsp_complete(struct xio_session *session,
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&rsp->out);
 
 	if (tdata->server_data->server_dlen) {
-		obj_pool_put(tdata->out_iobuf_pool,
+		obj_pool_put(tdata->out_reg_mem_pool,
 			     sglist[0].user_context);
 
 		sglist[0].iov_base	= NULL;
@@ -323,7 +323,7 @@ static int on_msg_error(struct xio_session *session,
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&rsp->out);
 
 	if (tdata->server_data->server_dlen) {
-		obj_pool_put(tdata->out_iobuf_pool,
+		obj_pool_put(tdata->out_reg_mem_pool,
 			     sglist[0].user_context);
 
 		sglist[0].iov_base		= NULL;
@@ -374,16 +374,16 @@ static void *portal_server_cb(void *data)
 	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
 
 	if (tdata->server_data->server_dlen)
-		tdata->out_iobuf_pool = obj_pool_init(
+		tdata->out_reg_mem_pool = obj_pool_init(
 				tdata->server_data->queue_depth + EXTRA_QDEPTH,
-				sizeof(struct xio_buf *),
-				tdata, out_iobuf_obj_init);
+				sizeof(struct xio_reg_mem),
+				tdata, out_reg_mem_init);
 
 	if (tdata->server_data->client_dlen)
-		tdata->in_iobuf_pool = obj_pool_init(
+		tdata->in_reg_mem_pool = obj_pool_init(
 				tdata->server_data->queue_depth + EXTRA_QDEPTH,
-				sizeof(struct xio_buf *),
-				tdata, in_iobuf_obj_init);
+				sizeof(struct xio_reg_mem),
+				tdata, in_reg_mem_init);
 
 	tdata->rsp_pool = obj_pool_init(
 			tdata->server_data->queue_depth + EXTRA_QDEPTH,
@@ -411,9 +411,9 @@ static void *portal_server_cb(void *data)
 
 	obj_pool_free(tdata->rsp_pool, NULL, NULL);
 	if (tdata->server_data->client_dlen)
-		obj_pool_free(tdata->in_iobuf_pool, NULL, iobuf_obj_free);
+		obj_pool_free(tdata->in_reg_mem_pool, NULL, reg_mem_free);
 	if (tdata->server_data->server_dlen)
-		obj_pool_free(tdata->out_iobuf_pool, NULL, iobuf_obj_free);
+		obj_pool_free(tdata->out_reg_mem_pool, NULL, reg_mem_free);
 
 cleanup:
 	/* free the context */

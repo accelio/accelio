@@ -245,8 +245,8 @@ struct xio_rdma_task {
 	uint32_t			write_num_sge;
 	uint32_t			recv_num_sge;
 	uint32_t			pad0;
-	struct xio_mempool_obj		*read_sge;
-	struct xio_mempool_obj		*write_sge;
+	struct xio_reg_mem		*read_sge;
+	struct xio_reg_mem		*write_sge;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
@@ -322,7 +322,7 @@ struct xio_rdma_tasks_slab {
 
 	/* memory registration for data */
 	struct ibv_mr			*data_mr;
-	struct xio_buf			*io_buf;
+	struct xio_reg_mem		reg_mem;
 	int				buf_size;
 	int				alloc_nr;
 };

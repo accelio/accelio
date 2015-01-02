@@ -100,7 +100,7 @@ struct  thread_data {
 	struct xio_connection	*connection;
 	struct msg_pool		*pool;
 	void			*loop;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	char			portal[64];
 	int			affinity;
 	int			cnt;
@@ -287,11 +287,11 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (tdata->xbuf == NULL)
-		tdata->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (tdata->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &tdata->reg_mem);
 
-	sglist[0].iov_base = tdata->xbuf->addr;
-	sglist[0].mr = tdata->xbuf->mr;
+	sglist[0].iov_base = tdata->reg_mem.addr;
+	sglist[0].mr = tdata->reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -360,8 +360,8 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->xbuf)
-		xio_free(&tdata->xbuf);
+	if (tdata->reg_mem.addr)
+		xio_mem_free(&tdata->reg_mem);
 
 cleanup:
 	/* free the context */

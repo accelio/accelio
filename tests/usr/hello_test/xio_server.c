@@ -79,7 +79,7 @@ struct test_params {
 	struct msg_pool		*pool;
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	uint64_t		nsent;
 	uint64_t		ncomp;
 	struct msg_params	msg_params;
@@ -287,12 +287,12 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	int			nents = vmsg_sglist_nents(&msg->in);
 	int i;
 
-	if (test_params->xbuf == NULL)
-		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (test_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &test_params->reg_mem);
 
 	for (i = 0; i < nents; i++) {
-		sglist[i].iov_base = test_params->xbuf->addr;
-	        sglist[i].mr = test_params->xbuf->mr;
+		sglist[i].iov_base = test_params->reg_mem.addr;
+	        sglist[i].mr = test_params->reg_mem.mr;
 	}
 
 	return 0;
@@ -531,10 +531,8 @@ int main(int argc, char *argv[])
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 
-	if (test_params.xbuf) {
-		xio_free(&test_params.xbuf);
-		test_params.xbuf = NULL;
-	}
+	if (test_params.reg_mem.addr)
+		xio_mem_free(&test_params.reg_mem);
 
 cleanup:
 	msg_api_free(&test_params.msg_params);

@@ -86,6 +86,46 @@ const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_dereg_mr								     */
+/*---------------------------------------------------------------------------*/
+static int xio_dereg_mr(struct xio_mr *tmr)
+{
+	struct xio_mr		*ptmr, *tmp_ptmr;
+	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
+	int			retval, found = 0;
+
+	spin_lock(&mr_list_lock);
+	list_for_each_entry_safe(ptmr, tmp_ptmr, &mr_list, mr_list_entry) {
+		if (ptmr == tmr) {
+			list_del(&tmr->mr_list_entry);
+			found = 1;
+			break;
+		}
+	}
+	spin_unlock(&mr_list_lock);
+
+	if (found) {
+		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
+					 dm_list_entry) {
+			retval = ibv_dereg_mr(tmr_elem->mr);
+			if (retval != 0) {
+				xio_set_error(errno);
+				ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			}
+			/* Remove the item from the list. */
+			spin_lock(&dev_list_lock);
+			list_del(&tmr_elem->dm_list_entry);
+			list_del(&tmr_elem->xm_list_entry);
+			spin_unlock(&dev_list_lock);
+			ufree(tmr_elem);
+		}
+		ufree(tmr);
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_reg_mr_ex_dev							     */
 /*---------------------------------------------------------------------------*/
 static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
@@ -205,7 +245,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	return tmr;
 
 cleanup1:
-	retval = xio_dereg_mr(&tmr);
+	retval = xio_dereg_mr(tmr);
 	if (retval != 0)
 		ERROR_LOG("xio_dereg_mr failed\n");
 cleanup2:
@@ -213,19 +253,36 @@ cleanup2:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_reg_mr								     */
+/* xio_dereg_mr_by_dev							     */
 /*---------------------------------------------------------------------------*/
-struct xio_mr *xio_reg_mr(void *addr, size_t length)
+int xio_dereg_mr_by_dev(struct xio_device *dev)
 {
-	if (addr == NULL) {
-		xio_set_error(EINVAL);
-		return NULL;
+	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
+	int			retval;
+
+	spin_lock(&dev_list_lock);
+	if (list_empty(&dev->xm_list)) {
+		spin_unlock(&dev_list_lock);
+		return 0;
 	}
 
-	return xio_reg_mr_ex(&addr, length,
-			     IBV_ACCESS_LOCAL_WRITE |
-			     IBV_ACCESS_REMOTE_WRITE|
-			     IBV_ACCESS_REMOTE_READ);
+	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
+				 xm_list_entry) {
+		if (tmr_elem->mr) {
+			retval = ibv_dereg_mr(tmr_elem->mr);
+			if (retval != 0) {
+				xio_set_error(errno);
+				ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			}
+		}
+		/* Remove the item from the lists. */
+		list_del(&tmr_elem->dm_list_entry);
+		list_del(&tmr_elem->xm_list_entry);
+		ufree(tmr_elem);
+	}
+	spin_unlock(&dev_list_lock);
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -266,86 +323,51 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_dereg_mr								     */
+/* xio_mem_register							     */
 /*---------------------------------------------------------------------------*/
-int xio_dereg_mr(struct xio_mr **p_tmr)
+int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
-	struct xio_mr		*tmr = *p_tmr;
-	struct xio_mr		*ptmr, *tmp_ptmr;
-	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
-	int			retval, found = 0;
-
-	spin_lock(&mr_list_lock);
-	list_for_each_entry_safe(ptmr, tmp_ptmr, &mr_list, mr_list_entry) {
-		if (ptmr == tmr) {
-			list_del(&tmr->mr_list_entry);
-			found = 1;
-			break;
-		}
+	if (addr == NULL || length == 0) {
+		xio_set_error(EINVAL);
+		return -1;
 	}
-	spin_unlock(&mr_list_lock);
+	reg_mem->mr = xio_reg_mr_ex(&addr, length,
+			     IBV_ACCESS_LOCAL_WRITE |
+			     IBV_ACCESS_REMOTE_WRITE|
+			     IBV_ACCESS_REMOTE_READ);
+	if (reg_mem->mr  == NULL)
+		return -1;
 
-	if (found) {
-		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
-					 dm_list_entry) {
-			retval = ibv_dereg_mr(tmr_elem->mr);
-			if (retval != 0) {
-				xio_set_error(errno);
-				ERROR_LOG("ibv_dereg_mr failed, %m\n");
-			}
-			/* Remove the item from the list. */
-			spin_lock(&dev_list_lock);
-			list_del(&tmr_elem->dm_list_entry);
-			list_del(&tmr_elem->xm_list_entry);
-			spin_unlock(&dev_list_lock);
-			ufree(tmr_elem);
-		}
-		ufree(tmr);
-		*p_tmr = NULL;
-	}
+	reg_mem->addr	= addr;
+	reg_mem->length = length;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_dereg_mr_by_dev							     */
+/* xio_mem_dereg							     */
 /*---------------------------------------------------------------------------*/
-int xio_dereg_mr_by_dev(struct xio_device *dev)
+int xio_mem_dereg(struct xio_reg_mem *reg_mem)
 {
-	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
-	int			retval;
+	int retval;
 
-	spin_lock(&dev_list_lock);
-	if (list_empty(&dev->xm_list)) {
-		spin_unlock(&dev_list_lock);
-		return 0;
+	if (!reg_mem->mr) {
+		xio_set_error(EINVAL);
+		return -1;
 	}
 
-	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
-				 xm_list_entry) {
-		if (tmr_elem->mr) {
-			retval = ibv_dereg_mr(tmr_elem->mr);
-			if (retval != 0) {
-				xio_set_error(errno);
-				ERROR_LOG("ibv_dereg_mr failed, %m\n");
-			}
-		}
-		/* Remove the item from the lists. */
-		list_del(&tmr_elem->dm_list_entry);
-		list_del(&tmr_elem->xm_list_entry);
-		ufree(tmr_elem);
-	}
-	spin_unlock(&dev_list_lock);
+	retval = xio_dereg_mr(reg_mem->mr);
 
-	return 0;
+	reg_mem->mr = NULL;
+
+	return  retval;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_alloc								     */
+/* xio_mem_alloc							     */
 /*---------------------------------------------------------------------------*/
-struct xio_buf *xio_alloc(size_t length)
+int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 {
-	struct xio_buf		*buf;
 	struct xio_device	*dev;
 	size_t			real_size;
 	uint64_t		access;
@@ -354,21 +376,14 @@ struct xio_buf *xio_alloc(size_t length)
 		 IBV_ACCESS_REMOTE_WRITE|
 		 IBV_ACCESS_REMOTE_READ;
 
-	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
-	if (!buf) {
-		xio_set_error(errno);
-		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
-		return NULL;
-	}
-
 	dev = list_first_entry(&dev_list, struct xio_device, dev_list_entry);
 
 	if (dev && IBV_IS_MPAGES_AVAIL(&dev->device_attr)) {
 		access |= IBV_XIO_ACCESS_ALLOCATE_MR;
-		buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
-		if (buf->mr) {
-			buf->length		= length;
-			buf->mr->addr_alloced	= 0;
+		reg_mem->mr = xio_reg_mr_ex(&reg_mem->addr, length, access);
+		if (reg_mem->mr) {
+			reg_mem->length			= length;
+			reg_mem->mr->addr_alloced	= 0;
 			goto exit;
 		}
 		WARN_LOG("Contig pages allocation failed. (errno=%d %m)\n",
@@ -376,50 +391,55 @@ struct xio_buf *xio_alloc(size_t length)
 	}
 
 	real_size = ALIGN(length, page_size);
-	buf->addr = umemalign(page_size, real_size);
-	if (!buf->addr) {
+	reg_mem->addr = umemalign(page_size, real_size);
+	if (!reg_mem->addr) {
 		ERROR_LOG("memalign failed. sz:%zu\n", real_size);
 		goto cleanup;
 	}
-	buf->mr = xio_reg_mr_ex(&buf->addr, length, access);
-	if (!buf->mr) {
+	reg_mem->mr = xio_reg_mr_ex(&reg_mem->addr, length, access);
+	if (!reg_mem->mr) {
 		ERROR_LOG("xio_reg_mr_ex failed. " \
 			  "addr:%p, length:%d, access:0x%x\n",
-			  buf->addr, length, access);
+			   reg_mem->addr, length, access);
 
 		goto cleanup1;
 	}
-	memset(buf->addr, 0, length);
-	buf->length		= length;
-	buf->mr->addr_alloced	= 1;
+	/*memset(reg_mem->addr, 0, length);*/
+	reg_mem->length			= length;
+	reg_mem->mr->addr_alloced	= 1;
 
 exit:
-	return buf;
+	return 0;
 
 cleanup1:
-	ufree(buf->addr);
+	ufree(reg_mem->addr);
 cleanup:
-	ufree(buf);
-	return NULL;
+	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_free								     */
+/* xio_mem_free								     */
 /*---------------------------------------------------------------------------*/
-int xio_free(struct xio_buf **buf)
+int xio_mem_free(struct xio_reg_mem *reg_mem)
 {
-	struct xio_mr		*tmr = (*buf)->mr;
-	int			retval = 0;
+	int retval;
 
-	if (tmr->addr_alloced)
-		ufree((*buf)->addr);
+	if (!reg_mem->mr) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
 
-	retval = xio_dereg_mr(&tmr);
+	if (reg_mem->mr->addr_alloced) {
+		ufree(reg_mem->addr);
+		reg_mem->addr			= NULL;
+		reg_mem->mr->addr_alloced	= 0;
+	}
 
-	ufree(*buf);
-	*buf = NULL;
+	retval = xio_dereg_mr(reg_mem->mr);
 
-	return retval;
+	reg_mem->mr	= NULL;
+
+	return  retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -440,7 +460,7 @@ int xio_mr_list_free(void)
 
 	while (!list_empty(&mr_list)) {
 		tmr = list_first_entry(&mr_list, struct xio_mr, mr_list_entry);
-		xio_dereg_mr(&tmr);
+		xio_dereg_mr(tmr);
 	}
 
 	return 0;

@@ -138,7 +138,9 @@ void msg_api_free(struct msg_params *msg_params)
 		msg_params->g_hdr = NULL;
 	}
 	if (msg_params->g_data_mr) {
-		xio_dereg_mr(&msg_params->g_data_mr);
+		struct xio_reg_mem reg_mem;
+		reg_mem.mr = msg_params->g_data_mr;
+		xio_mem_dereg(&reg_mem);
 		msg_params->g_data_mr = NULL;
 	}
 	if (msg_params->g_data) {
@@ -160,6 +162,7 @@ int msg_api_init(struct msg_params *msg_params,
 	const char	*ptr;
 	size_t		len;
 	int		pagesize = sysconf(_SC_PAGESIZE);
+	struct xio_reg_mem reg_mem;
 
 	if (pagesize < 0)
 		return -1;
@@ -192,8 +195,8 @@ int msg_api_init(struct msg_params *msg_params,
 			strncpy((char *)msg_params->g_data, ptr, len);
 		msg_params->g_data[len] = 0;
 
-		msg_params->g_data_mr =
-			xio_reg_mr(msg_params->g_data, datalen);
+		xio_mem_register(msg_params->g_data, datalen, &reg_mem);
+		msg_params->g_data_mr = reg_mem.mr;
 		if (!msg_params->g_data_mr)
 			goto cleanup;
 	}

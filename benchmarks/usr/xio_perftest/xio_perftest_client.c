@@ -71,7 +71,7 @@ struct thread_data {
 	struct thread_stat_data stat;
 	struct session_data    *sdata;
 	struct msg_pool		*pool;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	struct xio_session	*session;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
@@ -222,7 +222,7 @@ static void *worker_thread(void *data)
 	tdata->conn = xio_connect(&cparams);
 
 	if (tdata->data_len)
-		tdata->xbuf = xio_alloc(tdata->data_len);
+		xio_mem_alloc(tdata->data_len, &tdata->reg_mem);
 
 	for (i = 0;  i < tdata->user_param->queue_depth; i++) {
 		/* create transaction */
@@ -240,9 +240,9 @@ static void *worker_thread(void *data)
 		sglist = vmsg_sglist(&msg->out);
 		if (tdata->data_len) {
 			vmsg_sglist_set_nents(&msg->out, 1);
-			sglist[0].iov_base	= tdata->xbuf->addr;
-			sglist[0].iov_len	= tdata->xbuf->length;
-			sglist[0].mr		= tdata->xbuf->mr;
+			sglist[0].iov_base	= tdata->reg_mem.addr;
+			sglist[0].iov_len	= tdata->reg_mem.length;
+			sglist[0].mr		= tdata->reg_mem.mr;
 		} else {
 			vmsg_sglist_set_nents(&msg->out, 0);
 		}
@@ -270,8 +270,8 @@ static void *worker_thread(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->xbuf)
-		xio_free(&tdata->xbuf);
+	if (tdata->reg_mem.addr)
+		xio_mem_free(&tdata->reg_mem);
 
 
 	/* free the context */

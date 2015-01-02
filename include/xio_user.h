@@ -320,61 +320,64 @@ void xio_init(void);
 void xio_shutdown(void);
 
 /*---------------------------------------------------------------------------*/
-/* Memory registration API                                                   */
+/* Memory registration/allocation API					     */
 /*---------------------------------------------------------------------------*/
 /**
- * register memory region for RDMA operations
- *
- * @param[in]	buf	Pre-allocated memory aimed to store the data
- * @param[in]   len	The pre allocated memory length
- *
- * @returns pointer to memory region opaque structure
+ * @struct xio_reg_mem
+ * @brief registered memory buffer descriptor
+ *        used by all allocation and registration methods
+ *        it's the user responsibility to save allocation type and use an
+ *        appropriate free method appropriately
  */
-struct xio_mr *xio_reg_mr(void *buf, size_t len);
+struct xio_reg_mem {
+	void		*addr;		/**< buffer's memory address	     */
+	size_t		length;		/**< buffer's memory length	     */
+	struct xio_mr	*mr;		/**< xio specific memory region	     */
+	void		*priv;		/**< xio private data		     */
+};
 
 /**
- * unregister registered memory region
+ * register/allocate memory for RDMA operations
  *
- * @param[in,out] p_mr Pointer to registered memory region handle
+ * @param[in] addr	memory address or NULL if allocation required.
+ * @param[in] length	length of the allocated/registered memory.
+ * @param[out] reg_mem	registered memory data structure
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_dereg_mr(struct xio_mr **p_mr);
-
-/*---------------------------------------------------------------------------*/
-/* Memory allocators API						     */
-/*---------------------------------------------------------------------------*/
-/**
- * allocates and register memory region for RDMA operations
- *
- * @param[in] len	The required memory length
- *
- * @returns pointer to memory buffer
- */
-struct xio_buf *xio_alloc(size_t len);
+int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * free and unregister registered memory region
+ * unregister registered memory region, create by @ref xio_mem_register
  *
- * @param[in] buf	Pointer to the allocated buffer
+ * @param[in,out] reg_mem - previously registered memory data structure.
  *
  * @returns success (0), or a (negative) error value
  */
-int xio_free(struct xio_buf **buf);
+int xio_mem_dereg(struct xio_reg_mem *reg_mem);
+
+/**
+ * register memory for RDMA operations
+ *
+ * @param[in] length	length of the allocated memory.
+ * @param[out] reg_mem	registered memory data structure
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem);
+
+/**
+ * free registered memory region, create by @ref xio_mem_alloc
+ *
+ * @param[in,out] reg_mem - previously registered memory data structure.
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_mem_free(struct xio_reg_mem *reg_mem);
 
 /*---------------------------------------------------------------------------*/
 /* XIO memory pool API							     */
 /*---------------------------------------------------------------------------*/
-/**
- * @struct xio_mempool_obj
- * @brief mempool object item
- */
-struct xio_mempool_obj {
-	void		*addr;		/**< allocated address		     */
-	size_t		length;		/**< allocted  length		     */
-	struct xio_mr	*mr;		/**< memory region		     */
-	void		*cache;		/**< private cache - xio internal    */
-};
 
 /**
  * @enum xio_mempool_flag
@@ -407,13 +410,6 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 /* for backward compatibility - shall be deprecated in the future */
 
 /**
- * create mempool with NO (!) slabs
- *
- * for backward compatibility - shall be deprecated in the future
- */
-#define xio_mempool_create_ex	xio_mempool_create
-
-/**
  * add a slab to current set (setup only)
  *
  * @param[in] mpool	  the memory pool
@@ -429,14 +425,6 @@ int xio_mempool_add_slab(struct xio_mempool *mpool,
 			 size_t alloc_quantum_nr);
 
 /**
- * add a slab to current set (setup only)
- *
- * for backward compatibility - shall be deprecated in the future
- */
-#define xio_mempool_add_allocator xio_mempool_add_slab
-
-
-/**
  * destroy memory pool
  *
  * @param[in] mpool	  the memory pool
@@ -449,20 +437,20 @@ void xio_mempool_destroy(struct xio_mempool *mpool);
  *
  * @param[in] mpool	  the memory pool
  * @param[in] length	  buffer size to allocate
- * @param[in] mp_obj	  the allocated mempool object
+ * @param[in] reg_mem	  registered memory block.
  *
  * @returns success (0), or a (negative) error value
  */
 int xio_mempool_alloc(struct xio_mempool *mpool,
-		      size_t length, struct xio_mempool_obj *mp_obj);
+		      size_t length, struct xio_reg_mem *reg_mem);
 
 /**
  * free mempool object back to memory pool
  *
- * @param[in] mp_obj	  the allocated mempool object
+ * @param[in] reg_mem	  the allocated mempool object
  *
  */
-void xio_mempool_free(struct xio_mempool_obj *mp_obj);
+void xio_mempool_free(struct xio_reg_mem *reg_mem);
 
 
 #ifdef __cplusplus

@@ -87,7 +87,7 @@ struct ow_test_stat {
 
 struct ow_test_params {
 	struct msg_pool		*pool;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
 	struct ow_test_stat	rx_stat;
@@ -367,11 +367,11 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 				(struct ow_test_params *)cb_user_context;
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (ow_params->xbuf == NULL)
-		ow_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (ow_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &ow_params->reg_mem);
 
-	sglist[0].iov_base = ow_params->xbuf->addr;
-	sglist[0].mr = ow_params->xbuf->mr;
+	sglist[0].iov_base = ow_params->reg_mem.addr;
+	sglist[0].mr = ow_params->reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -676,10 +676,8 @@ int main(int argc, char *argv[])
 	if (ow_params.pool)
 		msg_pool_free(ow_params.pool);
 
-	if (ow_params.xbuf) {
-		xio_free(&ow_params.xbuf);
-		ow_params.xbuf = NULL;
-	}
+	if (ow_params.reg_mem.addr)
+		xio_mem_free(&ow_params.reg_mem);
 
 cleanup:
 	msg_api_free(&ow_params.msg_params);

@@ -12,10 +12,10 @@ XIO_1.0 {
 		xio_errno;		
 		xio_strerror;
 		xio_version;
-		xio_alloc;
-		xio_free;
-		xio_reg_mr;		
-		xio_dereg_mr;		
+		xio_mem_alloc;
+		xio_mem_free;
+		xio_mem_register;		
+		xio_mem_dereg;		
 		xio_init;		
 		xio_shutdown;		
 		xio_context_create;		

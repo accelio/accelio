@@ -286,8 +286,11 @@ static int xio_mem_slab_free(struct xio_mem_slab *slab)
 		list_for_each_entry_safe(r, tmp_r, &slab->mem_regions_list,
 					 mem_region_entry) {
 			list_del(&r->mem_region_entry);
-			if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
-				xio_dereg_mr(&r->omr);
+			if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
+				struct xio_reg_mem   reg_mem;
+				reg_mem.mr = r->omr;
+				xio_mem_dereg(&reg_mem);
+			}
 
 			if (slab->pool->flags &
 					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
@@ -369,7 +372,9 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	}
 
 	if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
-		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
+		struct xio_reg_mem reg_mem;
+		xio_mem_register(region->buf, data_alloc_sz, &reg_mem);
+		region->omr = reg_mem.mr;
 		if (region->omr == NULL) {
 			if (slab->pool->flags &
 					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
@@ -572,7 +577,7 @@ static inline int size2index(struct xio_mempool *p, size_t sz)
 /* xio_mempool_alloc							     */
 /*---------------------------------------------------------------------------*/
 int xio_mempool_alloc(struct xio_mempool *p, size_t length,
-		      struct xio_mempool_obj *mp_obj)
+		      struct xio_reg_mem *reg_mem)
 {
 	int			index;
 	struct xio_mem_slab	*slab;
@@ -584,10 +589,10 @@ retry:
 	if (index == -1) {
 		errno = EINVAL;
 		ret = -1;
-		mp_obj->addr	= NULL;
-		mp_obj->mr	= NULL;
-		mp_obj->cache	= NULL;
-		mp_obj->length	= 0;
+		reg_mem->addr	= NULL;
+		reg_mem->mr	= NULL;
+		reg_mem->priv	= NULL;
+		reg_mem->length	= 0;
 		goto cleanup;
 	}
 	slab = &p->slab[index];
@@ -625,10 +630,10 @@ retry:
 			pthread_spin_unlock(&slab->lock);
 	}
 
-	mp_obj->addr	= block->buf;
-	mp_obj->mr	= block->omr;
-	mp_obj->cache	= block;
-	mp_obj->length	= length;
+	reg_mem->addr	= block->buf;
+	reg_mem->mr	= block->omr;
+	reg_mem->priv	= block;
+	reg_mem->length	= length;
 
 #ifdef DEBUG_MEMPOOL_MT
 	__sync_fetch_and_add(&slab->used_mb_nr, 1);
@@ -651,14 +656,14 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_mempool_free							     */
 /*---------------------------------------------------------------------------*/
-void xio_mempool_free(struct xio_mempool_obj *mp_obj)
+void xio_mempool_free(struct xio_reg_mem *reg_mem)
 {
 	struct xio_mem_block	*block;
 
-	if (!mp_obj || !mp_obj->cache)
+	if (!reg_mem || !reg_mem->priv)
 		return;
 
-	block = (struct xio_mem_block *)mp_obj->cache;
+	block = (struct xio_mem_block *)reg_mem->priv;
 
 #ifdef DEBUG_MEMPOOL_MT
 	if (__sync_fetch_and_sub(&block->refcnt, 1) != 1) {

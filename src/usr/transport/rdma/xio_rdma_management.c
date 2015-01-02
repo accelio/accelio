@@ -1309,9 +1309,9 @@ static int xio_rdma_task_pre_put(
 	/* put buffers back to pool */
 	if (rdma_task->read_num_sge) {
 		for (i = 0; i < rdma_task->read_num_sge; i++) {
-			if (rdma_task->read_sge[i].cache) {
+			if (rdma_task->read_sge[i].priv) {
 				xio_mempool_free(&rdma_task->read_sge[i]);
-				rdma_task->read_sge[i].cache = NULL;
+				rdma_task->read_sge[i].priv = NULL;
 			}
 		}
 		rdma_task->read_num_sge = 0;
@@ -1319,9 +1319,9 @@ static int xio_rdma_task_pre_put(
 
 	if (rdma_task->write_num_sge) {
 		for (i = 0; i < rdma_task->write_num_sge; i++) {
-			if (rdma_task->write_sge[i].cache) {
+			if (rdma_task->write_sge[i].priv) {
 				xio_mempool_free(&rdma_task->write_sge[i]);
-				rdma_task->write_sge[i].cache = NULL;
+				rdma_task->write_sge[i].priv = NULL;
 			}
 		}
 		rdma_task->write_num_sge	= 0;
@@ -1516,25 +1516,26 @@ static int xio_rdma_primary_pool_slab_pre_create(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 	size_t alloc_sz = alloc_nr*rdma_hndl->membuf_sz;
+	int	retval;
 
 	rdma_slab->alloc_nr = alloc_nr;
 	rdma_slab->buf_size = rdma_hndl->membuf_sz;
 
 	if (disable_huge_pages) {
-		rdma_slab->io_buf = xio_alloc(alloc_sz);
-		if (!rdma_slab->io_buf) {
+		retval = xio_mem_alloc(alloc_sz, &rdma_slab->reg_mem);
+		if (retval == -1) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc rdma pool sz:%zu failed\n",
 				  alloc_sz);
 			return -1;
 		}
-		rdma_slab->data_pool = rdma_slab->io_buf->addr;
+		rdma_slab->data_pool = rdma_slab->reg_mem.addr;
 		rdma_slab->data_mr = xio_rdma_mr_lookup(
-						rdma_slab->io_buf->mr,
+						rdma_slab->reg_mem.mr,
 						rdma_hndl->tcq->dev);
 		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
-			xio_free(&rdma_slab->io_buf);
+			xio_mem_free(&rdma_slab->reg_mem);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
 		}
@@ -1591,7 +1592,7 @@ static int xio_rdma_primary_pool_slab_post_create(
 	if (rdma_slab->data_mr->pd == rdma_hndl->tcq->dev->pd)
 		return 0;
 
-	if (!rdma_slab->io_buf) {
+	if (!rdma_slab->reg_mem.addr) {
 		size_t alloc_sz = rdma_slab->buf_size * rdma_slab->alloc_nr;
 		ibv_dereg_mr(rdma_slab->data_mr);
 		rdma_slab->data_mr = ibv_reg_mr(rdma_hndl->tcq->dev->pd,
@@ -1608,11 +1609,11 @@ static int xio_rdma_primary_pool_slab_post_create(
 		}
 	} else {
 		rdma_slab->data_mr = xio_rdma_mr_lookup(
-						rdma_slab->io_buf->mr,
+						rdma_slab->reg_mem.mr,
 						rdma_hndl->tcq->dev);
 		if (!rdma_slab->data_mr) {
 			xio_set_error(errno);
-			xio_free(&rdma_slab->io_buf);
+			xio_mem_free(&rdma_slab->reg_mem);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			return -1;
 		}
@@ -1651,8 +1652,8 @@ static int xio_rdma_primary_pool_slab_destroy(
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
-	if (rdma_slab->io_buf) {
-		xio_free(&rdma_slab->io_buf);
+	if (rdma_slab->reg_mem.addr) {
+		xio_mem_free(&rdma_slab->reg_mem);
 	} else {
 		ibv_dereg_mr(rdma_slab->data_mr);
 		ufree_huge_pages(rdma_slab->data_pool);
@@ -1721,10 +1722,10 @@ static int xio_rdma_primary_pool_slab_init_task(
 	rdma_task->rdmad.sge = (struct ibv_sge *)ptr;
 	ptr += max_sge*sizeof(struct ibv_sge);
 
-	rdma_task->read_sge = (struct xio_mempool_obj *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
-	rdma_task->write_sge = (struct xio_mempool_obj *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mempool_obj);
+	rdma_task->read_sge = (struct xio_reg_mem *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_reg_mem);
+	rdma_task->write_sge = (struct xio_reg_mem *)ptr;
+	ptr += max_iovsz*sizeof(struct xio_reg_mem);
 
 	rdma_task->req_read_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz*sizeof(struct xio_sge);
@@ -1771,7 +1772,7 @@ static void xio_rdma_primary_pool_get_params(
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		(max_sge + 1 + max_sge)*sizeof(struct ibv_sge) +
-		 2 * max_iovsz * sizeof(struct xio_mempool_obj) +
+		 2 * max_iovsz * sizeof(struct xio_reg_mem) +
 		 4 * max_iovsz * sizeof(struct xio_sge);
 }
 

@@ -218,8 +218,8 @@ struct xio_tcp_task {
 	struct xio_tcp_work_req		rxd;
 
 	/* User (from vmsg) or pool buffer used for */
-	struct xio_mempool_obj		*read_sge;
-	struct xio_mempool_obj		*write_sge;
+	struct xio_reg_mem		*read_sge;
+	struct xio_reg_mem		*write_sge;
 
 	/* What this side got from the peer for SEND */
 	/* What this side got from the peer for RDMA equivalent R/W
@@ -240,7 +240,7 @@ struct xio_tcp_task {
 
 struct xio_tcp_tasks_slab {
 	void				*data_pool;
-	struct xio_buf			*io_buf;
+	struct xio_reg_mem		reg_mem;
 	int				buf_size;
 	int				pad;
 };
