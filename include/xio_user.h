@@ -337,10 +337,10 @@ struct xio_reg_mem {
 };
 
 /**
- * register/allocate memory for RDMA operations
+ * register pre allocated memory for RDMA operations
  *
- * @param[in] addr	memory address or NULL if allocation required.
- * @param[in] length	length of the allocated/registered memory.
+ * @param[in] addr	buffer's memory address
+ * @param[in] length	buffer's memory length
  * @param[out] reg_mem	registered memory data structure
  *
  * @returns success (0), or a (negative) error value
@@ -357,9 +357,9 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
 int xio_mem_dereg(struct xio_reg_mem *reg_mem);
 
 /**
- * register memory for RDMA operations
+ * allocate and register memory for RDMA operations
  *
- * @param[in] length	length of the allocated memory.
+ * @param[in] length	length of required buffer memory.
  * @param[out] reg_mem	registered memory data structure
  *
  * @returns success (0), or a (negative) error value
@@ -433,11 +433,11 @@ int xio_mempool_add_slab(struct xio_mempool *mpool,
 void xio_mempool_destroy(struct xio_mempool *mpool);
 
 /**
- * allocate mempool object from memory pool
+ * allocate memory buffer from memory pool
  *
  * @param[in] mpool	  the memory pool
  * @param[in] length	  buffer size to allocate
- * @param[in] reg_mem	  registered memory block.
+ * @param[in] reg_mem	  registered memory data structure
  *
  * @returns success (0), or a (negative) error value
  */
@@ -445,9 +445,9 @@ int xio_mempool_alloc(struct xio_mempool *mpool,
 		      size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * free mempool object back to memory pool
+ * free memory buffer back to memory pool
  *
- * @param[in] reg_mem	  the allocated mempool object
+ * @param[in] reg_mem	  registered memory data structure
  *
  */
 void xio_mempool_free(struct xio_reg_mem *reg_mem);
