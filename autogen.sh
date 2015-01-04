@@ -10,7 +10,8 @@ subdirlist=("src/kernel/xio"				\
 	    "src/kernel/tcp"				\
 	    "examples/kernel/hello_world"		\
 	    "examples/kernel/hello_world_mt"		\
-	    "tests/kernel/hello_test")
+	    "tests/kernel/hello_test"                   \
+            "tests/kernel/hello_test_lat")
 
 for subdir in ${!subdirlist[*]} ; do
 	#printf "	%s\n" "${subdirlist[$subdir]}"

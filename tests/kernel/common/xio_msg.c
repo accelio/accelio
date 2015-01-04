@@ -234,6 +234,10 @@ inline void msg_pool_free(struct msg_pool *pool)
 {
 	int i;
 	struct xio_msg		*msg;
+
+	if (pool == NULL)
+		return;
+
 	for (i = 0; i < pool->max; i++) {
 		msg = pool->array[i];
 		if (msg->in.sgl_type == XIO_SGL_TYPE_SCATTERLIST)
@@ -241,7 +245,7 @@ inline void msg_pool_free(struct msg_pool *pool)
 		if (msg->out.sgl_type == XIO_SGL_TYPE_SCATTERLIST)
 			sg_free_table(&msg->out.data_tbl);
 	}
-	if (pool)
-		vfree(pool);
+
+	vfree(pool);
 }
 
