@@ -62,6 +62,8 @@
 /*---------------------------------------------------------------------------*/
 int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
+	static struct xio_mr dummy_mr;
+
 	if (addr == NULL || !reg_mem) {
 		xio_set_error(EINVAL);
 		return -1;
@@ -69,13 +71,13 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 
 	reg_mem->addr = addr;
 	reg_mem->length = length;
-	reg_mem->mr = NULL;
+	reg_mem->mr = &dummy_mr;
 
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_dereg_mr								     */
+/* xio_mem_dereg							     */
 /*---------------------------------------------------------------------------*/
 int xio_mem_dereg(struct xio_reg_mem *reg_mem)
 {
@@ -84,7 +86,7 @@ int xio_mem_dereg(struct xio_reg_mem *reg_mem)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_alloc								     */
+/* xio_mem_alloc							     */
 /*---------------------------------------------------------------------------*/
 int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 {
@@ -119,7 +121,7 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_free								     */
+/* xio_mem_free								     */
 /*---------------------------------------------------------------------------*/
 int xio_mem_free(struct xio_reg_mem *reg_mem)
 {
