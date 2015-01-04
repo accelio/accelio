@@ -181,6 +181,7 @@ int intf_best_cpus(const char *addr, uint64_t *cpusmask, int *nr)
 	char		if_name[32];
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	retval = intf_name(addr, if_name);
 	if (retval < 0)
 		return  -1;
@@ -201,6 +202,7 @@ int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr)
 {
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	numa_node = intf_numa_node(if_name);
 	if (numa_node < 0)
 		return -1;

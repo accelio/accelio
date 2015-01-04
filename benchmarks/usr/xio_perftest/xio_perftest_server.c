@@ -346,7 +346,7 @@ int run_server_test(struct perf_parameters *user_param)
 	unsigned int		i;
 	int			len, retval;
 	unsigned int		max_cpus;
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnr;
 	unsigned int		cpu;
 
@@ -371,7 +371,7 @@ int run_server_test(struct perf_parameters *user_param)
 
 	/* spawn portals */
 	for (i = 0, cpu = 0; i < user_param->threads_num; i++, cpu++) {
-		while (1) {
+		while (cpusmask) {
 			if (cpusmask_test_bit(cpu, &cpusmask))
 				break;
 			if (++cpu == max_cpus)

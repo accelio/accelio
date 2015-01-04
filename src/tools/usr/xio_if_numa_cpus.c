@@ -145,6 +145,7 @@ static int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr)
 {
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	numa_node = intf_numa_node(if_name);
 	if (numa_node < 0)
 		return -1;
@@ -179,7 +180,7 @@ int main(int argc, char *argv[])
 	char			host[NI_MAXHOST] = {0};
 	char			cpus_str[256];
 	char			flags[1024];
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnum;
 	int			retval = -1;
 	int			ec = EXIT_FAILURE;

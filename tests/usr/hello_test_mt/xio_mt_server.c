@@ -611,7 +611,7 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port;
 	int			max_cpus;
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnr;
 	int			cpu;
 	int			exit_code = 0;
@@ -676,7 +676,7 @@ int main(int argc, char *argv[])
 	/* spawn portals */
 	port = test_config.server_port;
 	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
-		while (1) {
+		while (cpusmask) {
 			if (cpusmask_test_bit(cpu, &cpusmask))
 				break;
 			if (++cpu == max_cpus)
