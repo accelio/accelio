@@ -182,6 +182,11 @@ void usage(const char *argv0, int status)
 	printf("\t\t\tSet the number of messages to send " \
 	       "(default %d)\n", XIO_DEF_QUEUE_DEPTH);
 
+	printf("\t-s, --start_thread=<thread num> ");
+	printf("\t\t\t\tSet the start number of thread (default %d)\n",
+	       XIO_DEF_START_THREAD);
+
+
 	printf("\t-v, --version ");
 	printf("\t\t\t\t\tPrint the version and exit\n");
 
@@ -241,6 +246,7 @@ static void init_perf_params(struct perf_parameters *user_param)
 {
 	user_param->server_port		= XIO_DEF_PORT;
 	user_param->cpu			= XIO_DEF_CPU;
+	user_param->start_thread	= XIO_DEF_START_THREAD;
 	user_param->queue_depth		= XIO_DEF_QUEUE_DEPTH;
 	user_param->poll_timeout	= XIO_DEF_POLL_TIMEOUT;
 	user_param->threads_num		= XIO_DEF_THREADS_NUM;
@@ -315,13 +321,14 @@ int parse_cmdline(struct perf_parameters *user_param,
 			{ .name = "portals",	 .has_arg = 1, .val = 'w'},
 			{ .name = "poll_time",   .has_arg = 1, .val = 't'},
 			{ .name = "queue_depth", .has_arg = 1, .val = 'q'},
-			{ .name = "output file", .has_arg = 1, .val = 'o'},
+			{ .name = "output_file", .has_arg = 1, .val = 'o'},
+			{ .name = "start_thread",.has_arg = 1, .val = 's'},
 			{ .name = "version",	 .has_arg = 0, .val = 'v'},
 			{ .name = "help",	 .has_arg = 0, .val = 'h'},
 			{0, 0, 0, 0},
 		};
 
-		static char *short_options = "c:i:p:n:r:w:t:q:o:vh";
+		static char *short_options = "c:i:p:n:r:w:t:q:o:s:vh";
 
 		c = getopt_long(argc, argv, short_options,
 				long_options, NULL);
@@ -428,6 +435,17 @@ int parse_cmdline(struct perf_parameters *user_param,
 				goto invalid_cmdline;
 
 		break;
+		case 's':
+			if (!optarg)
+				goto invalid_cmdline;
+			errno = 0;
+			l = strtol(optarg, NULL, 0);
+			if (errno) {
+				fprintf(stderr, "strtol failed :%m\n");
+				goto invalid_cmdline;
+			}
+			user_param->start_thread = l;
+			break;
 		case 'v':
 			printf("version: %s\n", XIO_PERF_VERSION);
 			exit(0);
@@ -459,6 +477,9 @@ int parse_cmdline(struct perf_parameters *user_param,
 	if (!user_param->intf_name) {
 		user_param->intf_name = strdup(XIO_DEF_INTERFACE);
 	}
+	if (user_param->start_thread > user_param->threads_num)
+		user_param->start_thread = user_param->threads_num;
+
 
 	if (portals && !user_param->portals_arr) {
 		user_param->portals_arr =
@@ -517,6 +538,8 @@ void print_test_info(const struct perf_parameters *user_param)
 	       user_param->queue_depth);
 	printf(" Threads		: %d\n",
 	       user_param->threads_num);
+	printf(" Start Thread		: %d\n",
+	       user_param->start_thread);
 	printf(" Poll timeout		: %d\n",
 	       user_param->poll_timeout);
 	if (user_param->output_file)

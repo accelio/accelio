@@ -17,5 +17,7 @@ if [ $# -eq 3 ]; then
 	trans=$3
 fi
 
-./xio_read_bw -c 8 -n 8 -i${intf} -r ${trans} ${server_ip} -o ./xio_read_bw.csv
+start_thread=8
+
+./xio_read_bw -c 8 -n 8 -s ${start_thread}  -i ${intf} -r ${trans} ${server_ip} -o ./xio_read_bw.csv
 

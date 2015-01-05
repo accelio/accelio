@@ -139,8 +139,6 @@ static void *statistics_thread_cb(void *data)
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 	/* makes it hot */
-	sleep(1);
-
 	for (i = 0; i < threads_iter; i++) {
 		scnt_start += sess_data->tdata[i].stat.scnt;
 		rtt_start += sess_data->tdata[i].stat.tot_rtt;
@@ -154,7 +152,7 @@ static void *statistics_thread_cb(void *data)
 	for (i = 0; i < threads_iter; i++)
 		sess_data->tdata[i].do_stat = 1;
 
-	sleep(2);
+	sleep(1);
 	/* stop collecting statistics data */
 	for (i = 0; i < threads_iter; i++)
 		sess_data->tdata[i].do_stat = 0;
@@ -429,7 +427,7 @@ int run_client_test(struct perf_parameters *user_param)
 
 	g_mhz		= get_cpu_mhz(0);
 	max_cpus	= sysconf(_SC_NPROCESSORS_ONLN);
-	threads_iter	= 1;
+	threads_iter    = user_param->start_thread;
 	size_log2	= 0;
 
 	tdata = (struct thread_data *)

@@ -60,6 +60,7 @@ typedef enum { READ, WRITE} Verb;
 
 #define XIO_DEF_PORT			2061
 #define XIO_DEF_CPU			0
+#define XIO_DEF_START_THREAD		1
 
 #define XIO_DEF_TRANSPORT		"rdma"
 
@@ -95,10 +96,12 @@ typedef enum { READ, WRITE} Verb;
 struct perf_parameters {
 	uint16_t		server_port;
 	uint16_t		cpu;
+	uint32_t		start_thread;
 	uint32_t		queue_depth;
 	uint32_t		poll_timeout;
 	uint32_t		threads_num;
 	uint32_t		portals_arr_len;
+	uint32_t		pad;
 	TestType		test_type;
 	MachineType		machine_type;
 	Verb			verb;
