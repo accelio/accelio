@@ -154,7 +154,7 @@ static void *statistics_thread_cb(void *data)
 	for (i = 0; i < threads_iter; i++)
 		sess_data->tdata[i].do_stat = 1;
 
-	sleep(1);
+	sleep(2);
 	/* stop collecting statistics data */
 	for (i = 0; i < threads_iter; i++)
 		sess_data->tdata[i].do_stat = 0;
@@ -585,9 +585,9 @@ cleanup:
 
 	ctx_hand_shake(comm);
 
+cleanup2:
 	ctx_close_connection(comm);
 
-cleanup2:
 	destroy_comm_struct(comm);
 
 	free(tdata);
