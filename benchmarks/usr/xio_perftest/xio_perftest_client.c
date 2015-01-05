@@ -139,6 +139,8 @@ static void *statistics_thread_cb(void *data)
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 	/* makes it hot */
+	sleep(1);
+
 	for (i = 0; i < threads_iter; i++) {
 		scnt_start += sess_data->tdata[i].stat.scnt;
 		rtt_start += sess_data->tdata[i].stat.tot_rtt;
