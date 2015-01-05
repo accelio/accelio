@@ -380,6 +380,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 
 	if (dev && IBV_IS_MPAGES_AVAIL(&dev->device_attr)) {
 		access |= IBV_XIO_ACCESS_ALLOCATE_MR;
+		reg_mem->addr = NULL;
 		reg_mem->mr = xio_reg_mr_ex(&reg_mem->addr, length, access);
 		if (reg_mem->mr) {
 			reg_mem->length			= length;
