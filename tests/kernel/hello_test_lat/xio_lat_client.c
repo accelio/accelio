@@ -460,13 +460,13 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 
 	if (argv[6]) {
 		tmp = 0;
-		if(kstrtouint(argv[8], 0, &tmp))
+		if(kstrtouint(argv[6], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->finite_run = (uint16_t)tmp;
 	}
 
 	if (argv[7]) {
-		if(kstrtouint(argv[9], 0, &tmp))
+		if(kstrtouint(argv[7], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->cpu = (int16_t)tmp;
 	}
