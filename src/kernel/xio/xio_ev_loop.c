@@ -386,7 +386,7 @@ retry_dont_wait:
 			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 			clear_bit(XIO_EV_HANDLER_PENDING, &tev->states);
 			if (time_after(jiffies, start_time)) {
-				schedule();
+				/* schedule(); todo need to understand better */
 				start_time = jiffies;
 			}
 			if (test_bit(XIO_EV_HANDLER_ENABLED, &tev->states))
