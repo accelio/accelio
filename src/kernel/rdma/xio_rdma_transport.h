@@ -287,6 +287,9 @@ struct xio_cq  {
 	u32				cqe_avail;    /* free elements  */
 	struct kref			kref;       /* utilization counter */
 	u32				num_delayed_arm;
+	u32				pad;
+	u32				polling_started;
+	struct timespec			polling_end_time;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */

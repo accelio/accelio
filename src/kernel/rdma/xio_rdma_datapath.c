@@ -1178,10 +1178,18 @@ retry:
 		}
 	}
 
-	if (!budget) {
+	/* If we got anything, return quickly, and come again later */
+	if (likely(budget != MAX_POLL_WC)) {
 		/* budget was consumed, reschedule */
 		xio_cq_data_callback_cont(tcq->cq, tcq);
 		return 0;
+	}
+
+	if (unlikely(tcq->polling_started == 0 && tcq->ctx->polling_timeout)) {
+		getnstimeofday(&tcq->polling_end_time);
+		timespec_add_ns(&tcq->polling_end_time,
+				tcq->ctx->polling_timeout * NSECS_IN_USEC);
+		tcq->polling_started = 1;
 	}
 
 	/* If loop was terminated before the budget was consumed
@@ -1198,14 +1206,26 @@ retry:
 		return 0;
 	}
 
+	if (likely(tcq->polling_started)) {
+		struct timespec ts;
+		getnstimeofday(&ts);
+		if (tcq->polling_end_time.tv_sec > ts.tv_sec ||
+		    tcq->polling_end_time.tv_nsec > ts.tv_nsec) {
+			xio_cq_data_callback_cont(tcq->cq, tcq);
+			return 0;
+		} else {
+			tcq->polling_started = 0;
+		}
+	}
+
+	tcq->num_delayed_arm = 0;
+
 	/* retries limit reached */
 	retval = ib_req_notify_cq(tcq->cq,
 				  IB_CQ_NEXT_COMP |
 				  IB_CQ_REPORT_MISSED_EVENTS);
 	if (likely(!retval))
 		return 0;
-
-	tcq->num_delayed_arm = 0;
 
 	/* if driver supports IB_CQ_REPORT_MISSED_EVENTS
 	 * note budget is not yet consumed
