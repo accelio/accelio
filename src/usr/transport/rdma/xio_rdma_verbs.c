@@ -394,6 +394,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 	real_size = ALIGN(length, page_size);
 	reg_mem->addr = umemalign(page_size, real_size);
 	if (!reg_mem->addr) {
+		xio_set_error(ENOMEM);
 		ERROR_LOG("memalign failed. sz:%zu\n", real_size);
 		goto cleanup;
 	}
@@ -487,7 +488,8 @@ int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 	tbl = (struct xio_rkey_tbl *)ucalloc(mr_num, sizeof(*tbl));
 	if (!tbl) {
 		*len = 0;
-		return -ENOMEM;
+		xio_set_error(ENOMEM);
+		return -1;
 	}
 
 	/* MR elements are arranged in a matrix like fashion, were MR is one

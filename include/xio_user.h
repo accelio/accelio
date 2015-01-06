@@ -213,7 +213,7 @@ struct xio_poll_params {
  * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
  * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
  *
- * @returns xio context handle, or NULL upon error
+ * @return xio context handle, or NULL upon error
  */
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 				       int polling_timeout_us,
@@ -226,7 +226,8 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
  * @param[in] poll_params Structure with polling parameters
  *			  to be added to external dispatcher
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_get_poll_params(struct xio_context *ctx,
 				struct xio_poll_params *poll_params);
@@ -241,7 +242,8 @@ int xio_context_get_poll_params(struct xio_context *ctx,
  * @param[in] handler	event handler that handles the event
  * @param[in] data	user private data
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_add_ev_handler(struct xio_context *ctx,
 			       int fd, int events,
@@ -254,7 +256,8 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
  * @param[in] ctx	The xio context handle
  * @param[in] fd	the file descriptor
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_del_ev_handler(struct xio_context *ctx,
 			       int fd);
@@ -268,7 +271,8 @@ int xio_context_del_ev_handler(struct xio_context *ctx,
  *				xio_context_loop_run will block
  *				before exiting
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 
@@ -291,7 +295,7 @@ void xio_context_stop_loop(struct xio_context *ctx);
  *			where a NULL timeout waits until at least min_nr
  *			events have been seen.
  *
- * @returns On success,  xio_poll_completions() returns the number of events
+ * @return On success,  xio_poll_completions() returns the number of events
  *	    read: 0 if no events are available, or less than min_nr if the
  *	    timeout has elapsed.  the failure return -1.
  */
@@ -343,7 +347,8 @@ struct xio_reg_mem {
  * @param[in] length	buffer's memory length
  * @param[out] reg_mem	registered memory data structure
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
 
@@ -352,7 +357,8 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
  *
  * @param[in,out] reg_mem - previously registered memory data structure.
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mem_dereg(struct xio_reg_mem *reg_mem);
 
@@ -362,7 +368,8 @@ int xio_mem_dereg(struct xio_reg_mem *reg_mem);
  * @param[in] length	length of required buffer memory.
  * @param[out] reg_mem	registered memory data structure
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem);
 
@@ -371,7 +378,8 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem);
  *
  * @param[in,out] reg_mem - previously registered memory data structure.
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mem_free(struct xio_reg_mem *reg_mem);
 
@@ -403,7 +411,7 @@ enum xio_mempool_flag {
  * @param[in] flags	  mask of mempool creation flags
  *			  defined (@ref xio_mempool_flag)
  *
- * @returns success (0), or a (negative) error value
+ * @return pointer to xio_mempool object or NULL upon failure
  */
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
@@ -418,7 +426,8 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  * @param[in] max	  maximum buffers to allocate
  * @param[in] alloc_quantum_nr	growing quantum
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mempool_add_slab(struct xio_mempool *mpool,
 			 size_t size, size_t min, size_t max,
@@ -439,7 +448,8 @@ void xio_mempool_destroy(struct xio_mempool *mpool);
  * @param[in] length	  buffer size to allocate
  * @param[in] reg_mem	  registered memory data structure
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mempool_alloc(struct xio_mempool *mpool,
 		      size_t length, struct xio_reg_mem *reg_mem);

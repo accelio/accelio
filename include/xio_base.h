@@ -281,7 +281,8 @@ void xio_context_destroy(struct xio_context *ctx);
  * @param[in] attr	The context attributes structure
  * @param[in] attr_mask Attribute mask to modify
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_modify_context(struct xio_context *ctx,
 		       struct xio_context_attr *attr,
@@ -294,8 +295,9 @@ int xio_modify_context(struct xio_context *ctx,
  * @param[in] attr	The context attributes structure
  * @param[in] attr_mask Attribute mask to query
  *
- * @returns success (0), or a (negative) error value
-  *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ *
  */
 int xio_query_context(struct xio_context *ctx,
 		      struct xio_context_attr *attr,
@@ -431,7 +433,7 @@ struct xio_session_ops {
 	 *  @param[in] data		session event data information
 	 *  @param[in] cb_user_context	user private data provided in session
 	 *			        open
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_session_event)(struct xio_session *session,
 				struct xio_session_event_data *data,
@@ -444,7 +446,7 @@ struct xio_session_ops {
 	 *  @param[in] req		new session request information
 	 *  @param[in] cb_user_context	user private data provided in session
 	 *			        open
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_new_session)(struct xio_session *session,
 			      struct xio_new_session_req *req,
@@ -457,7 +459,7 @@ struct xio_session_ops {
 	 *  @param[in] rsp		new session's response information
 	 *  @param[in] cb_user_context	user private data provided in session
 	 *			        open
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_session_established)(struct xio_session *session,
 				      struct xio_new_session_rsp *rsp,
@@ -471,7 +473,7 @@ struct xio_session_ops {
 	 *				responder
 	 *  @param[in] cb_user_context	user private data provided in
 	 *			        xio_bind
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_msg_send_complete)(struct xio_session *session,
 				    struct xio_msg *rsp,
@@ -487,7 +489,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_msg)(struct xio_session *session,
 		      struct xio_msg *msg,
@@ -504,7 +506,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_msg_delivered)(struct xio_session *session,
 				struct xio_msg *msg,
@@ -520,7 +522,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_msg_error)(struct xio_session *session,
 			    enum xio_status error,
@@ -537,7 +539,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_cancel)(struct xio_session *session,
 			 struct xio_msg  *msg,
@@ -552,7 +554,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*on_cancel_request)(struct xio_session *session,
 				 struct xio_msg  *msg,
@@ -565,7 +567,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided in
 	 *					connection open on which
 	 *					the message send
-	 *  @returns 0
+	 *  @return 0
 	 */
 	int (*assign_data_in_buf)(struct xio_msg *msg,
 				  void *conn_user_context);
@@ -578,7 +580,7 @@ struct xio_session_ops {
 	 *  @param[in] conn_user_context	user private data provided on
 	 *					connection creation
 	 *
-	 *  @returns 0
+	 *  @return 0
 	 *  @note  called only if "read receipt" was not requested
 	 */
 	int (*on_ow_msg_send_complete)(struct xio_session *session,
@@ -592,7 +594,7 @@ struct xio_session_ops {
  *
  * @param[in] params	session creations parameters
  *
- * @returns xio session context, or NULL upon error
+ * @return xio session context, or NULL upon error
  */
 struct xio_session *xio_session_create(struct xio_session_params *params);
 
@@ -601,7 +603,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params);
  *
  * @param[in] session		The xio session handle
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_session_destroy(struct xio_session *session);
 
@@ -612,7 +615,8 @@ int xio_session_destroy(struct xio_session *session);
  * @param[in] attr	The session attributes structure
  * @param[in] attr_mask attribute mask to query
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_query_session(struct xio_session *session,
 		      struct xio_session_attr *attr,
@@ -625,7 +629,8 @@ int xio_query_session(struct xio_session *session,
  * @param[in] attr	The session attributes structure
  * @param[in] attr_mask attribute mask to query
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_modify_session(struct xio_session *session,
 		       struct xio_session_attr *attr,
@@ -637,7 +642,7 @@ int xio_modify_session(struct xio_session *session,
  *
  * @param[in] event	The session event
  *
- * @returns a string that describes the event code
+ * @return a string that describes the event code
  */
 const char *xio_session_event_str(enum xio_session_event event);
 
@@ -701,7 +706,7 @@ struct xio_connection_params {
  *
  * @param[in] cparams	The xio connection parameters structure
  *
- * @returns xio connection, or NULL upon error
+ * @return xio connection, or NULL upon error
  */
 struct xio_connection *xio_connect(struct xio_connection_params  *cparams);
 
@@ -710,7 +715,8 @@ struct xio_connection *xio_connect(struct xio_connection_params  *cparams);
  *
  * @param[in] conn	The xio connection handle
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_disconnect(struct xio_connection *conn);
 
@@ -719,7 +725,8 @@ int xio_disconnect(struct xio_connection *conn);
  *
  * @param[in] conn	The xio connection handle
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_connection_destroy(struct xio_connection *conn);
 
@@ -730,7 +737,8 @@ int xio_connection_destroy(struct xio_connection *conn);
  * @param[in] attr	The connection attributes structure
  * @param[in] attr_mask Attribute mask to modify
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_modify_connection(struct xio_connection *conn,
 			  struct xio_connection_attr *attr,
@@ -742,7 +750,8 @@ int xio_modify_connection(struct xio_connection *conn,
  * @param[in] attr	The connection attributes structure
  * @param[in] attr_mask attribute mask to modify
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_query_connection(struct xio_connection *conn,
 			 struct xio_connection_attr *attr,
@@ -753,7 +762,8 @@ int xio_query_connection(struct xio_connection *conn,
  * @param[in] conn	The xio connection handle
  * @param[in] req	request message to send
  *
- * @return success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_send_request(struct xio_connection *conn,
 		     struct xio_msg *req);
@@ -763,7 +773,8 @@ int xio_send_request(struct xio_connection *conn,
  *
  * @param[in] rsp	Response to send
  *
- * @returns	success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_send_response(struct xio_msg *rsp);
 
@@ -774,7 +785,8 @@ int xio_send_response(struct xio_msg *rsp);
  *			sent
  * @param[in] req	request message to cancel
  *
- * @return success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_cancel_request(struct xio_connection *conn,
 		       struct xio_msg *req);
@@ -784,7 +796,8 @@ int xio_cancel_request(struct xio_connection *conn,
  * @param[in] req	the outstanding request to cancel
  * @param[in] result	responder cancellation code
  *
- * @return success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_cancel(struct xio_msg *req, enum xio_status result);
 
@@ -796,7 +809,8 @@ int xio_cancel(struct xio_msg *req, enum xio_status result);
  *
  * @param[in] rsp The released response
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_release_response(struct xio_msg *rsp);
 
@@ -806,7 +820,8 @@ int xio_release_response(struct xio_msg *rsp);
  * @param[in] conn	The xio connection handle
  * @param[in] msg	The message to send
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_send_msg(struct xio_connection *conn,
 		 struct xio_msg *msg);
@@ -820,7 +835,8 @@ int xio_send_msg(struct xio_connection *conn,
  *
  * @param[in] msg	The released message
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_release_msg(struct xio_msg *msg);
 
@@ -839,7 +855,7 @@ int xio_release_msg(struct xio_msg *msg);
  * @param[in] flags	Message related flags as defined in enum xio_msg_flags
  * @param[in] cb_user_context Private data pointer to pass to each callback
  *
- * @returns xio server context, or NULL upon error
+ * @return xio server context, or NULL upon error
  */
 struct xio_server *xio_bind(struct xio_context *ctx,
 			    struct xio_session_ops *ops,
@@ -853,7 +869,8 @@ struct xio_server *xio_bind(struct xio_context *ctx,
  *
  * @param[in] server	The xio server handle
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_unbind(struct xio_server *server);
 
@@ -873,7 +890,8 @@ int xio_unbind(struct xio_server *server);
  * @param[in] private_data_len	Specifies the size of the user-controlled
  *				data buffer
  *
- * @returns	success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_accept(struct xio_session *session,
 	       const char **portals_array,
@@ -890,7 +908,8 @@ int xio_accept(struct xio_session *session,
  *				"rdma://127.0.0.1:1234"
  * @param[in] portals_array_len The string array length
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_redirect(struct xio_session *session,
 		 const char **portals_array,
@@ -910,7 +929,8 @@ int xio_redirect(struct xio_session *session,
  * @param[in] private_data_len	Specifies the size of the user-controlled
  *				data buffer
  *
- * @return success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_reject(struct xio_session *session,
 	       enum xio_status reason,
@@ -1025,7 +1045,7 @@ struct xio_mem_allocator {
 	 *  @param[in] size		        size in bytes to allocate
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 *  @return pointer to allocated memory or NULL if allocate fails
 	 */
 	void * (*allocate)(size_t size, void *user_context);
 
@@ -1039,7 +1059,7 @@ struct xio_mem_allocator {
 	 *  @param[in] size			size in  bytes to allocate
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 *  @return pointer to allocated memory or NULL if allocate fails
 	 */
 	void *  (*memalign)(size_t boundary, size_t size, void *user_context);
 
@@ -1058,7 +1078,7 @@ struct xio_mem_allocator {
 	 *  @param[in] size			block size to allocate
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 *  @return pointer to allocated memory or NULL if allocate fails
 	 */
 	void * (*malloc_huge_pages)(size_t size, void *user_context);
 
@@ -1069,7 +1089,7 @@ struct xio_mem_allocator {
 	 *  @param[in] ptr			pointer to allocated block
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to block or NULL if allocate fails
+	 *  @return pointer to block or NULL if allocate fails
 	 */
 	void   (*free_huge_pages)(void *ptr, void *user_context);
 
@@ -1080,7 +1100,7 @@ struct xio_mem_allocator {
 	 *  @param[in] node			the numa node
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to allocated memory or NULL if allocate fails
+	 *  @return pointer to allocated memory or NULL if allocate fails
 	 */
 	void * (*numa_alloc)(size_t size, int node, void *user_context);
 
@@ -1091,7 +1111,7 @@ struct xio_mem_allocator {
 	 *  @param[in] ptr			pointer to allocated block
 	 *  @param[in] user_context		user specific context
 	 *
-	 *  @returns pointer to block or NULL if allocate fails
+	 *  @return pointer to block or NULL if allocate fails
 	 */
 	void   (*numa_free)(void *ptr, void *user_context);
 };
@@ -1140,7 +1160,8 @@ struct xio_mem_allocator {
  * @param[in] optlen	The size, in bytes, of the buffer pointed to by
  *			the optval parameter
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_set_opt(void *xio_obj, int level, int optname,
 		const void *optval, int optlen);
@@ -1160,7 +1181,8 @@ int xio_set_opt(void *xio_obj, int level, int optname,
  * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
  *			  the optval parameter
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_get_opt(void *xio_obj, int level, int optname,
 		void *optval, int *optlen);
@@ -1174,14 +1196,14 @@ int xio_get_opt(void *xio_obj, int level, int optname,
  *
  * @param[in] errnum	The xio error code
  *
- * @returns a string that describes the error code
+ * @return a string that describes the error code
  */
 const char *xio_strerror(int errnum);
 
 /**
  * return last xio error
  *
- * @returns lasr xio error code
+ * @return lasr xio error code
  */
 int xio_errno(void);
 

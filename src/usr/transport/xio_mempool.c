@@ -695,8 +695,10 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 	slab_ix = p->slabs_nr;
 	if (p->slabs_nr) {
 		for (ix = 0; ix < p->slabs_nr; ++ix) {
-			if (p->slab[ix].mb_size == size)
-				return -EEXIST;
+			if (p->slab[ix].mb_size == size) {
+				xio_set_error(EEXIST);
+				return -1;
+			}
 			if (p->slab[ix].mb_size > size) {
 				slab_ix = ix;
 				break;
@@ -707,6 +709,11 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 	/* expand */
 	new_slab = (struct xio_mem_slab *)ucalloc(p->slabs_nr + 2,
 						  sizeof(struct xio_mem_slab));
+	if (new_slab == NULL) {
+		xio_set_error(ENOMEM);
+		return -1;
+	}
+
 	/* fill/shift slabs */
 	for (ix = 0; ix < p->slabs_nr + 1; ++ix) {
 		if (ix == slab_ix) {
