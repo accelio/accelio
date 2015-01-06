@@ -65,7 +65,7 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_POOL_SIZE		2048
 #define ONE_MB			(1 << 20)
-#define POLLING_TIMEOUT		25
+#define POLLING_TIMEOUT		500
 #define DISCONNECT_FACTOR	3
 
 #define SG_TBL_LEN		64
@@ -97,6 +97,11 @@ MODULE_PARM_DESC(finite_run, "0 for infinite run, 1 for infinite run");
 
 module_param_named(cpu, xio_argv[7], charp, 0);
 MODULE_PARM_DESC(cpu, "Bind to specific cpu");
+
+/*
+ * Important: If running client & server on same machine, use "cpu"
+ * parameter to run on different cpus.
+ */
 
 static struct task_struct *xio_main_th;
 static struct completion cleanup_complete;
