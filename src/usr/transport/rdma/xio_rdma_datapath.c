@@ -596,8 +596,8 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 				  wc->opcode);
 			if (task->omsg)
 				xio_msg_dump(task->omsg);
-		} else
-			ERROR_LOG("wr_id:0x%lx, err:%s, vendor_err:0x%x",
+		} else {
+			ERROR_LOG("wr_id:0x%lx, err:%s, vendor_err:0x%x " \
 				  "byte_len:%d, opcode:0x%x\n",
 				  wc->wr_id,
 				  ibv_wc_status_str(wc->status),
@@ -605,6 +605,11 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 				  wc->byte_len,
 				  wc->opcode);
 		}
+		ERROR_LOG("qp_num:0x%x, src_qp:0x%x, wc_flags:0x%x, " \
+			  "pkey_index:%d, slid:%d, sl:0x%x, dlid_path_bits:0x%x\n",
+			   wc->qp_num, wc->src_qp, wc->wc_flags, wc->pkey_index,
+			   wc->slid, wc->sl, wc->dlid_path_bits);
+	}
 	if (task && rdma_task)
 		xio_handle_task_error(task);
 
