@@ -206,7 +206,7 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
 			clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 			*uwork->deleted = 1;
-			return -1;
+			return 0;
 		} else {
 			/* It is O.K. to arm a work and then to cancel it but
 			 * waiting for it will create a lockout situation.

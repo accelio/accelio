@@ -1645,6 +1645,8 @@ static void xio_session_pre_teardown(void *_session)
 
 	/* last chance to teardown */
 	if (destroy_session) {
+		xio_ctx_del_work(session->teardown_work_ctx,
+				 &session->teardown_work);
 		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
 		xio_session_notify_teardown(session, session->teardown_reason);
@@ -1659,6 +1661,7 @@ inline void xio_session_init_teardown(struct xio_session *session,
 				      int close_reason)
 {
 		session->teardown_reason = close_reason;
+		session->teardown_work_ctx = ctx;
 		xio_ctx_add_work(
 				ctx,
 				session,
