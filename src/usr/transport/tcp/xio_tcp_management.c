@@ -2047,7 +2047,7 @@ static int xio_tcp_primary_pool_slab_pre_create(
 
 	if (disable_huge_pages) {
 		retval= xio_mem_alloc(alloc_sz, &tcp_slab->reg_mem);
-		if (!retval) {
+		if (retval) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("xio_alloc tcp pool sz:%zu failed\n",
 				  alloc_sz);
