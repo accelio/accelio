@@ -191,7 +191,7 @@ static inline long xio_get_num_processors(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static inline long xio_get_current_processor_number(void)
+static inline long xio_get_cpu(void)
 {
 	/*TODO: consider GetCurrentProcessorNumberEx */
 	return GetCurrentProcessorNumber();
@@ -303,6 +303,9 @@ typedef SOCKET socket_t;
 static inline int xio_get_last_socket_error() { return WSAGetLastError(); }
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_closesocket(socket_t sock) {return closesocket(sock);}
+
+/*---------------------------------------------------------------------------*/
 /*
 *  based on: http://cantrip.org/socketpair.c
 *
@@ -364,15 +367,15 @@ static inline int socketpair(int domain, int type, int protocol,
 		if (socks[1] == INVALID_SOCKET)
 			break;
 
-		closesocket(listener);
+		xio_closesocket(listener);
 		return 0;
 
 	} while (0);
 
 	e = WSAGetLastError();
-	closesocket(listener);
-	closesocket(socks[0]);
-	closesocket(socks[1]);
+	xio_closesocket(listener);
+	xio_closesocket(socks[0]);
+	xio_closesocket(socks[1]);
 	WSASetLastError(e);
 	return SOCKET_ERROR;
 }
@@ -401,7 +404,7 @@ static inline socket_t xio_socket_non_blocking(int domain, int type,
 	}
 
 	if (xio_set_blocking(sock_fd, 0) < 0) {
-		closesocket(sock_fd);
+		xio_closesocket(sock_fd);
 		return -1;
 	}
 	return sock_fd;
@@ -418,7 +421,7 @@ static inline socket_t xio_accept_non_blocking(int sockfd,
 	}
 
 	if (xio_set_blocking(new_sock_fd, 0) < 0) {
-		closesocket(new_sock_fd);
+		xio_closesocket(new_sock_fd);
 		return -1;
 	}
 	return new_sock_fd;

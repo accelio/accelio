@@ -142,12 +142,6 @@ static inline long xio_get_num_processors(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static inline long xio_get_current_processor_number(void)
-{
-	return sched_getcpu();
-}
-
-/*---------------------------------------------------------------------------*/
 static inline int xio_clock_gettime(struct timespec *ts)
 {
 	return clock_gettime(CLOCK_MONOTONIC, ts);
@@ -196,7 +190,6 @@ static inline unsigned xio_get_cpu()
 	vgetcpu(&cpu, NULL, NULL) ;
 	return cpu;
 }
-
 
 /*
 #define CACHE_LINE_FILE	\
