@@ -519,7 +519,7 @@ static inline int xio_rdma_wr_error_handler(
 static void xio_handle_task_error(struct xio_task *task)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport       *rdma_hndl = rdma_task->rdma_hndl;
+	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
 	switch (rdma_task->ib_op) {
 	case XIO_IB_RECV:
@@ -568,7 +568,7 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	}
 	if (task && task->dd_data) {
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
-		rdma_hndl = rdma_task->rdma_hndl;
+		rdma_hndl = (struct xio_rdma_transport *)task->trans_hndl;
 	}
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
@@ -945,8 +945,7 @@ static inline void xio_rdma_wr_comp_handler(
 static inline void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport *rdma_hndl = rdma_task->rdma_hndl;
+	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
 	/*
 	TRACE_LOG("received opcode :%s [%x]\n",

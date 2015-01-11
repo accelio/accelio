@@ -43,6 +43,7 @@
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
 #define xio_ctx_event_t xio_ev_data_t
 
+#define XIO_PROTO_LAST  2	/* from enum xio_proto */
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
@@ -75,6 +76,13 @@ struct xio_statistics {
 struct xio_context {
 	void				*ev_loop;
 	void				*mempool;
+	/* pools per transport */
+	struct xio_tasks_pool		*primary_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*primary_pool_ops[XIO_PROTO_LAST];
+
+	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
+
 	int				cpuid;
 	int				nodeid;
 	int				polling_timeout;

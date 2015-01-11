@@ -138,10 +138,8 @@ struct xio_nexus {
 	struct xio_transport_base	*transport_hndl;
 
 	struct xio_tasks_pool		*primary_tasks_pool;
-	struct xio_tasks_pool_ops	*primary_pool_ops;
-
 	struct xio_tasks_pool		*initial_tasks_pool;
-	struct xio_tasks_pool_ops	*initial_pool_ops;
+
 	struct xio_observer		trans_observer;
 	struct xio_observer		ctx_observer;
 	struct xio_observer		srv_observer;

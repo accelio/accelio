@@ -47,6 +47,9 @@
 #include "xio_workqueue.h"
 #include <xio-advanced-env.h>
 #include "xio_timers_list.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
+#include "xio_task.h"
 #include "xio_context.h"
 #include "xio_usr_utils.h"
 
@@ -353,6 +356,26 @@ static inline void xio_context_reset_stop(struct xio_context *ctx)
 	xio_ev_loop_reset_stop(ctx->ev_loop);
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_tasks_pools_destroy						     */
+/*---------------------------------------------------------------------------*/
+static void xio_ctx_task_pools_destroy(struct xio_context *ctx)
+{
+	int i;
+
+	for (i = 0; i < XIO_PROTO_LAST; i++) {
+		if (ctx->initial_tasks_pool[i]) {
+			xio_tasks_pool_free_tasks(ctx->initial_tasks_pool[i]);
+			xio_tasks_pool_destroy(ctx->initial_tasks_pool[i]);
+			ctx->initial_tasks_pool[i] = NULL;
+		}
+		if (ctx->primary_tasks_pool[i]) {
+			xio_tasks_pool_free_tasks(ctx->primary_tasks_pool[i]);
+			xio_tasks_pool_destroy(ctx->primary_tasks_pool[i]);
+			ctx->primary_tasks_pool[i] = NULL;
+		}
+	}
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
@@ -412,8 +435,9 @@ void xio_context_destroy(struct xio_context *ctx)
 		xio_mempool_destroy((struct xio_mempool *)ctx->mempool);
 		ctx->mempool = NULL;
 	}
-
 	xio_ev_loop_destroy(&ctx->ev_loop);
+
+	xio_ctx_task_pools_destroy(ctx);
 
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 	ufree(ctx);

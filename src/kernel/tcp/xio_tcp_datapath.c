@@ -757,15 +757,12 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 /*---------------------------------------------------------------------------*/
 void xio_tcp_tx_completion_handler(void *xio_task)
 {
-	struct xio_task		*task, *ptask, *next_ptask;
-	struct xio_tcp_task	*tcp_task;
-	struct xio_tcp_transport *tcp_hndl;
+	struct xio_task		*ptask, *next_ptask;
 	int			found = 0;
 	int			removed = 0;
-
-	task = xio_task;
-	tcp_task = task->dd_data;
-	tcp_hndl = tcp_task->tcp_hndl;
+	struct xio_task		*task = (struct xio_task *)xio_task;
+	XIO_TO_TCP_TASK(task, tcp_task);
+	XIO_TO_TCP_HNDL(task, tcp_hndl);
 
 	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->in_flight_list,
 				 tasks_list_entry) {

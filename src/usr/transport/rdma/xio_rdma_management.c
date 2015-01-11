@@ -957,6 +957,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->sqe_avail	= MAX_SEND_WR;
 
 	rdma_hndl->beacon_task.dd_data = ptr_from_int64(XIO_BEACON_WRID);
+	rdma_hndl->beacon_task.trans_hndl = (struct xio_transport_base *)rdma_hndl;
 	rdma_hndl->beacon.wr_id	 = uint64_from_ptr(&rdma_hndl->beacon_task);
 	rdma_hndl->beacon.opcode = IBV_WR_SEND;
 
@@ -1073,8 +1074,6 @@ static void xio_rdma_task_init(struct xio_task *task,
 			       struct ibv_mr *srmr)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-
-	rdma_task->rdma_hndl = rdma_hndl;
 
 	xio_rxd_init(&rdma_task->rxd, task, buf, size, srmr);
 	xio_txd_init(&rdma_task->txd, task, buf, size, srmr);
@@ -1216,8 +1215,10 @@ static inline struct xio_task *xio_rdma_initial_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
 	if (rdma_hndl->initial_pool_cls.task_get) {
-		return rdma_hndl->initial_pool_cls.task_get(
-					rdma_hndl->initial_pool_cls.pool);
+		struct xio_task *task = rdma_hndl->initial_pool_cls.task_get(
+						rdma_hndl->initial_pool_cls.pool);
+		task->trans_hndl = (struct xio_transport_base *)rdma_hndl;
+		return task;
 	}
 	return NULL;
 }
@@ -1228,9 +1229,12 @@ static inline struct xio_task *xio_rdma_initial_task_alloc(
 struct xio_task *xio_rdma_primary_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->primary_pool_cls.task_get)
-		return rdma_hndl->primary_pool_cls.task_get(
-					rdma_hndl->primary_pool_cls.pool);
+	if (rdma_hndl->primary_pool_cls.task_get) {
+		struct xio_task *task = rdma_hndl->primary_pool_cls.task_get(
+						rdma_hndl->primary_pool_cls.pool);
+		task->trans_hndl = (struct xio_transport_base *)rdma_hndl;
+		return task;
+	}
 	return NULL;
 }
 /*---------------------------------------------------------------------------*/
@@ -1404,8 +1408,8 @@ static void xio_rdma_initial_pool_get_params(
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
 	*start_nr = NUM_CONN_SETUP_TASKS;
-	*alloc_nr = 0;
-	*max_nr = NUM_CONN_SETUP_TASKS;
+	*alloc_nr = NUM_CONN_SETUP_TASKS;
+	*max_nr = 10*NUM_CONN_SETUP_TASKS;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
@@ -1655,7 +1659,11 @@ static int xio_rdma_primary_pool_slab_destroy(
 	if (rdma_slab->reg_mem.addr) {
 		xio_mem_free(&rdma_slab->reg_mem);
 	} else {
-		ibv_dereg_mr(rdma_slab->data_mr);
+		int retval = ibv_dereg_mr(rdma_slab->data_mr);
+		if (retval != 0) {
+			xio_set_error(errno);
+			ERROR_LOG("ibv_dereg_mr failed, %m\n");
+		}
 		ufree_huge_pages(rdma_slab->data_pool);
 	}
 
@@ -1677,9 +1685,8 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		(struct xio_rdma_transport *)new_th;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
-	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	rdma_task->rdma_hndl = new_hndl;
+	task->trans_hndl = new_th;
 
 	/* if the same device is used then there is no need to remap */
 	if (old_hndl->tcq->dev == new_hndl->tcq->dev)

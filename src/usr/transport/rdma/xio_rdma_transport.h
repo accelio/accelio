@@ -86,7 +86,9 @@ extern spinlock_t		dev_list_lock;
 #define XIO_TO_RDMA_TASK(xt, rt)			\
 		struct xio_rdma_task *(rt) =		\
 			(struct xio_rdma_task *)(xt)->dd_data
-
+#define XIO_TO_RDMA_HNDL(xt, rh)				\
+		struct xio_rdma_transport *(rh) =		\
+			(struct xio_rdma_transport *)(xt)->trans_hndl
 
 
 #ifdef HAVE_MPAGES_EXP
@@ -232,7 +234,6 @@ struct xio_work_req {
 
 
 struct xio_rdma_task {
-	struct xio_rdma_transport	*rdma_hndl;
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */

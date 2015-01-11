@@ -38,6 +38,8 @@
 #ifndef XIO_TCP_TRANSPORT_H_
 #define XIO_TCP_TRANSPORT_H_
 
+struct xio_tcp_transport;
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -77,6 +79,10 @@ extern double				g_mhz;
 #define XIO_TO_TCP_TASK(xt, tt)			\
 		struct xio_tcp_task *(tt) =		\
 			(struct xio_tcp_task *)(xt)->dd_data
+#define XIO_TO_TCP_HNDL(xt, th)				\
+		struct xio_tcp_transport *(th) =		\
+			(struct xio_tcp_transport *)(xt)->trans_hndl
+
 
 
 /*---------------------------------------------------------------------------*/
@@ -128,7 +134,7 @@ struct xio_tcp_options {
 
 #define XIO_TCP_REQ_HEADER_VERSION	1
 
-PACKED_MEMORY(struct xio_tcp_req_hdr{
+PACKED_MEMORY(struct xio_tcp_req_hdr {
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
@@ -198,8 +204,6 @@ struct xio_tcp_work_req {
 };
 
 struct xio_tcp_task {
-	struct xio_tcp_transport	*tcp_hndl;
-
 	enum xio_tcp_op_code		tcp_op;
 
 	uint32_t			recv_num_sge;

@@ -553,7 +553,7 @@ static int xio_rdma_wr_error_handler(struct xio_rdma_transport *rdma_hndl,
 static void xio_handle_task_error(struct xio_task *task)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport *rdma_hndl = rdma_task->rdma_hndl;
+	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
 	switch (rdma_task->ib_op) {
 	case XIO_IB_RECV:
@@ -604,7 +604,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
 		task = ptr_from_int64(wc->wr_id);
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
-		rdma_hndl = rdma_task->rdma_hndl;
+		rdma_hndl = (struct xio_rdma_transport *)task->trans_hndl;
 	}
 
 	if (wc->status == IB_WC_WR_FLUSH_ERR) {
@@ -993,8 +993,7 @@ static inline void xio_rdma_wr_comp_handler(
 static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 {
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport	*rdma_hndl = rdma_task->rdma_hndl;
+	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
 	/*
 	TRACE_LOG("received opcode :%s byte_len [%u]\n",

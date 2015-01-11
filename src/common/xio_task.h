@@ -64,6 +64,7 @@ struct xio_task {
 	struct xio_session	*session;
 	struct xio_connection	*connection;
 	struct xio_nexus	*nexus;
+	struct xio_transport_base *trans_hndl;
 
 	struct xio_mbuf		mbuf;
 	enum xio_task_state	state;		/* task state enum	*/

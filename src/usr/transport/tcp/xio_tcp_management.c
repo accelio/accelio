@@ -1834,8 +1834,6 @@ static void xio_tcp_task_init(struct xio_task *task,
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 
-	tcp_task->tcp_hndl = tcp_hndl;
-
 	xio_tcp_rxd_init(&tcp_task->rxd, buf, size);
 	xio_tcp_txd_init(&tcp_task->txd, buf, size);
 
@@ -1877,8 +1875,10 @@ static inline struct xio_task *xio_tcp_initial_task_alloc(
 					struct xio_tcp_transport *tcp_hndl)
 {
 	if (tcp_hndl->initial_pool_cls.task_get) {
-		return tcp_hndl->initial_pool_cls.task_get(
+		struct xio_task *task = tcp_hndl->initial_pool_cls.task_get(
 					tcp_hndl->initial_pool_cls.pool);
+		task->trans_hndl = (struct xio_transport_base *)tcp_hndl;
+		return task;
 	}
 	return NULL;
 }
@@ -1889,9 +1889,12 @@ static inline struct xio_task *xio_tcp_initial_task_alloc(
 struct xio_task *xio_tcp_primary_task_alloc(
 					struct xio_tcp_transport *tcp_hndl)
 {
-	if (tcp_hndl->primary_pool_cls.task_get)
-		return tcp_hndl->primary_pool_cls.task_get(
+	if (tcp_hndl->primary_pool_cls.task_get) {
+		struct xio_task *task = tcp_hndl->primary_pool_cls.task_get(
 					tcp_hndl->primary_pool_cls.pool);
+		task->trans_hndl = (struct xio_transport_base *)tcp_hndl;
+		return task;
+	}
 	return NULL;
 }
 
@@ -2219,7 +2222,7 @@ static int xio_tcp_task_pre_put(
 			 task->mbuf.buf.head,
 			 task->mbuf.buf.buflen);
 
-	xio_ctx_del_work(tcp_task->tcp_hndl->base.ctx, &tcp_task->comp_work);
+	xio_ctx_del_work(task->trans_hndl->ctx, &tcp_task->comp_work);
 
 	return 0;
 }
