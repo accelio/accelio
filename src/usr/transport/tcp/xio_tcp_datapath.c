@@ -832,7 +832,6 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 	int			found = 0;
 	int			removed = 0;
 	struct xio_task		*task = (struct xio_task *)xio_task;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	XIO_TO_TCP_HNDL(task, tcp_hndl);
 
 	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->in_flight_list,
@@ -840,8 +839,6 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 		list_move_tail(&ptask->tasks_list_entry,
 			       &tcp_hndl->tx_comp_list);
 		removed++;
-		tcp_task = (struct xio_tcp_task *)ptask->dd_data;
-
 		if (IS_REQUEST(ptask->tlv_type)) {
 			xio_tcp_on_req_send_comp(tcp_hndl, ptask);
 			xio_tasks_pool_put(ptask);
