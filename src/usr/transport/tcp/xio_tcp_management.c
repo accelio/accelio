@@ -2010,11 +2010,60 @@ static void xio_tcp_initial_pool_get_params(
 {
 	*start_nr = NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 0;
-	*max_nr = NUM_CONN_SETUP_TASKS;
+	*max_nr = 10*NUM_CONN_SETUP_TASKS;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
 			      3*sizeof(struct iovec);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_task_pre_put						     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_task_pre_put(
+		struct xio_transport_base *trans_hndl,
+		struct xio_task *task)
+{
+	unsigned int	i;
+	XIO_TO_TCP_TASK(task, tcp_task);
+
+	/* recycle TCP  buffers back to pool */
+
+	/* put buffers back to pool */
+
+	for (i = 0; i < tcp_task->read_num_sge; i++) {
+		if (tcp_task->read_sge[i].priv) {
+			xio_mempool_free(&tcp_task->read_sge[i]);
+			tcp_task->read_sge[i].priv = NULL;
+		}
+	}
+	tcp_task->read_num_sge = 0;
+
+	for (i = 0; i < tcp_task->write_num_sge; i++) {
+		if (tcp_task->write_sge[i].priv) {
+			xio_mempool_free(&tcp_task->write_sge[i]);
+			tcp_task->write_sge[i].priv = NULL;
+		}
+	}
+	tcp_task->write_num_sge		= 0;
+	tcp_task->req_write_num_sge	= 0;
+	tcp_task->rsp_write_num_sge	= 0;
+	tcp_task->req_read_num_sge	= 0;
+	tcp_task->req_recv_num_sge	= 0;
+	tcp_task->sn			= 0;
+
+	tcp_task->tcp_op		= XIO_TCP_NULL;
+
+	xio_tcp_rxd_init(&tcp_task->rxd,
+			 task->mbuf.buf.head,
+			 task->mbuf.buf.buflen);
+	xio_tcp_txd_init(&tcp_task->txd,
+			 task->mbuf.buf.head,
+			 task->mbuf.buf.buflen);
+
+	xio_ctx_del_work(task->trans_hndl->ctx, &tcp_task->comp_work);
+
+	return 0;
 }
 
 static struct xio_tasks_pool_ops initial_tasks_pool_ops;
@@ -2030,6 +2079,8 @@ static void init_initial_tasks_pool_ops() {
 		xio_tcp_initial_pool_slab_init_task;
 	initial_tasks_pool_ops.pool_post_create =
 		xio_tcp_initial_pool_post_create;
+	initial_tasks_pool_ops.task_pre_put =
+		xio_tcp_task_pre_put;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -2177,56 +2228,6 @@ static int xio_tcp_primary_pool_slab_init_task(
 
 	return 0;
 }
-
-/*---------------------------------------------------------------------------*/
-/* xio_tcp_task_pre_put						     */
-/*---------------------------------------------------------------------------*/
-static int xio_tcp_task_pre_put(
-		struct xio_transport_base *trans_hndl,
-		struct xio_task *task)
-{
-	unsigned int	i;
-	XIO_TO_TCP_TASK(task, tcp_task);
-
-	/* recycle TCP  buffers back to pool */
-
-	/* put buffers back to pool */
-
-	for (i = 0; i < tcp_task->read_num_sge; i++) {
-		if (tcp_task->read_sge[i].priv) {
-			xio_mempool_free(&tcp_task->read_sge[i]);
-			tcp_task->read_sge[i].priv = NULL;
-		}
-	}
-	tcp_task->read_num_sge = 0;
-
-	for (i = 0; i < tcp_task->write_num_sge; i++) {
-		if (tcp_task->write_sge[i].priv) {
-			xio_mempool_free(&tcp_task->write_sge[i]);
-			tcp_task->write_sge[i].priv = NULL;
-		}
-	}
-	tcp_task->write_num_sge		= 0;
-	tcp_task->req_write_num_sge	= 0;
-	tcp_task->rsp_write_num_sge	= 0;
-	tcp_task->req_read_num_sge	= 0;
-	tcp_task->req_recv_num_sge	= 0;
-	tcp_task->sn			= 0;
-
-	tcp_task->tcp_op		= XIO_TCP_NULL;
-
-	xio_tcp_rxd_init(&tcp_task->rxd,
-			 task->mbuf.buf.head,
-			 task->mbuf.buf.buflen);
-	xio_tcp_txd_init(&tcp_task->txd,
-			 task->mbuf.buf.head,
-			 task->mbuf.buf.buflen);
-
-	xio_ctx_del_work(task->trans_hndl->ctx, &tcp_task->comp_work);
-
-	return 0;
-}
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_primary_pool_get_params					     */
