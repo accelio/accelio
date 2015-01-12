@@ -1407,9 +1407,10 @@ static void xio_rdma_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	*start_nr = NUM_CONN_SETUP_TASKS;
-	*alloc_nr = NUM_CONN_SETUP_TASKS;
-	*max_nr = 10*NUM_CONN_SETUP_TASKS;
+	*start_nr = 10*NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 10*NUM_CONN_SETUP_TASKS;;
+	*max_nr = 100*NUM_CONN_SETUP_TASKS;
+
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
@@ -1773,7 +1774,7 @@ static void xio_rdma_primary_pool_get_params(
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = max((g_options.snd_queue_depth_msgs +
-		       g_options.rcv_queue_depth_msgs)*40, 1024);
+		       g_options.rcv_queue_depth_msgs)*100, 1024);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);

@@ -904,7 +904,7 @@ void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
 	 * simultaneously
 	 */
 
-	rdma_hndl->num_tasks = 6*(rdma_hndl->sq_depth +
+	rdma_hndl->num_tasks = 100*(rdma_hndl->sq_depth +
 				  rdma_hndl->actual_rq_depth);
 
 	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks*rdma_hndl->membuf_sz;
@@ -1252,9 +1252,10 @@ static void xio_rdma_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	*start_nr = NUM_CONN_SETUP_TASKS;
-	*alloc_nr = 0;
-	*max_nr = NUM_CONN_SETUP_TASKS;
+	*start_nr = 10*NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 10*NUM_CONN_SETUP_TASKS;;
+	*max_nr = 100*NUM_CONN_SETUP_TASKS;
+
 	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_rdma_task) +

@@ -47,7 +47,7 @@ extern double				g_mhz;
 
 
 /* definitions */
-#define NUM_TASKS			3264 /* 6 * (MAX_SEND_WR +
+#define NUM_TASKS			54400 /* 100 * (MAX_SEND_WR +
 					      * MAX_RECV_WR + EXTRA_RQE)
 					      */
 

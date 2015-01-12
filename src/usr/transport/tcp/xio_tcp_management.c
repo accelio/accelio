@@ -2008,9 +2008,9 @@ static void xio_tcp_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	*start_nr = NUM_CONN_SETUP_TASKS;
-	*alloc_nr = 0;
-	*max_nr = 10*NUM_CONN_SETUP_TASKS;
+	*start_nr = 10*NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 10*NUM_CONN_SETUP_TASKS;
+	*max_nr = 100*NUM_CONN_SETUP_TASKS;
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +

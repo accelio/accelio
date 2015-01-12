@@ -2130,14 +2130,67 @@ static void xio_tcp_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	*start_nr = NUM_CONN_SETUP_TASKS;
-	*alloc_nr = 0;
-	*max_nr = NUM_CONN_SETUP_TASKS;
+	*start_nr = 10*NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 10*NUM_CONN_SETUP_TASKS;
+	*max_nr = 100*NUM_CONN_SETUP_TASKS;
+
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
 			      3*sizeof(struct iovec);
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_task_pre_put							     */
+/*---------------------------------------------------------------------------*/
+static int xio_tcp_task_pre_put(struct xio_transport_base *trans_hndl,
+				struct xio_task *task)
+{
+	unsigned int	i;
+	XIO_TO_TCP_TASK(task, tcp_task);
+
+	/* recycle TCP  buffers back to pool */
+
+	/* put buffers back to pool */
+
+	for (i = 0; i < tcp_task->read_num_sge; i++) {
+		if (tcp_task->read_sge[i].cache) {
+			xio_mempool_free_mp(&tcp_task->read_sge[i]);
+			tcp_task->read_sge[i].cache = NULL;
+		}
+	}
+
+	tcp_task->read_num_sge = 0;
+
+	for (i = 0; i < tcp_task->write_num_sge; i++) {
+		if (tcp_task->write_sge[i].cache) {
+			xio_mempool_free_mp(&tcp_task->write_sge[i]);
+			tcp_task->write_sge[i].cache = NULL;
+		}
+	}
+
+	tcp_task->write_num_sge		= 0;
+	tcp_task->req_write_num_sge	= 0;
+	tcp_task->rsp_write_num_sge	= 0;
+	tcp_task->req_read_num_sge	= 0;
+	tcp_task->req_recv_num_sge	= 0;
+	tcp_task->sn			= 0;
+
+	tcp_task->tcp_op		= XIO_TCP_NULL;
+
+	xio_tcp_rxd_init(&tcp_task->rxd,
+			 task->mbuf.buf.head,
+			 task->mbuf.buf.buflen);
+	xio_tcp_txd_init(&tcp_task->txd,
+			 task->mbuf.buf.head,
+			 task->mbuf.buf.buflen);
+
+	/* todo how to remove? */
+	xio_context_disable_event(&tcp_task->comp_event);
+
+	return 0;
+}
+
 
 static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 	.pool_get_params	= xio_tcp_initial_pool_get_params,
@@ -2145,7 +2198,8 @@ static struct xio_tasks_pool_ops initial_tasks_pool_ops = {
 	.slab_destroy		= xio_tcp_initial_pool_slab_destroy,
 	.slab_init_task		= xio_tcp_initial_pool_slab_init_task,
 	.slab_uninit_task	= xio_tcp_pool_slab_uninit_task,
-	.pool_post_create	= xio_tcp_initial_pool_post_create
+	.pool_post_create	= xio_tcp_initial_pool_post_create,
+	.task_pre_put		= xio_tcp_task_pre_put
 };
 
 
@@ -2295,57 +2349,6 @@ static int xio_tcp_primary_pool_slab_init_task(
 			tcp_hndl,
 			buf,
 			tcp_slab->buf_size);
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_tcp_task_pre_put							     */
-/*---------------------------------------------------------------------------*/
-static int xio_tcp_task_pre_put(struct xio_transport_base *trans_hndl,
-				struct xio_task *task)
-{
-	unsigned int	i;
-	XIO_TO_TCP_TASK(task, tcp_task);
-
-	/* recycle TCP  buffers back to pool */
-
-	/* put buffers back to pool */
-
-	for (i = 0; i < tcp_task->read_num_sge; i++) {
-		if (tcp_task->read_sge[i].cache) {
-			xio_mempool_free_mp(&tcp_task->read_sge[i]);
-			tcp_task->read_sge[i].cache = NULL;
-		}
-	}
-
-	tcp_task->read_num_sge = 0;
-
-	for (i = 0; i < tcp_task->write_num_sge; i++) {
-		if (tcp_task->write_sge[i].cache) {
-			xio_mempool_free_mp(&tcp_task->write_sge[i]);
-			tcp_task->write_sge[i].cache = NULL;
-		}
-	}
-
-	tcp_task->write_num_sge		= 0;
-	tcp_task->req_write_num_sge	= 0;
-	tcp_task->rsp_write_num_sge	= 0;
-	tcp_task->req_read_num_sge	= 0;
-	tcp_task->req_recv_num_sge	= 0;
-	tcp_task->sn			= 0;
-
-	tcp_task->tcp_op		= XIO_TCP_NULL;
-
-	xio_tcp_rxd_init(&tcp_task->rxd,
-			 task->mbuf.buf.head,
-			 task->mbuf.buf.buflen);
-	xio_tcp_txd_init(&tcp_task->txd,
-			 task->mbuf.buf.head,
-			 task->mbuf.buf.buflen);
-
-	/* todo how to remove? */
-	xio_context_disable_event(&tcp_task->comp_event);
 
 	return 0;
 }
