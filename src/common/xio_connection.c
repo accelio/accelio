@@ -55,7 +55,7 @@
 #include "xio_nexus.h"
 #include "xio_session.h"
 #include "xio_connection.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 #define MSG_POOL_SZ			1024
 #define XIO_CONNECTION_TIMEOUT		300000

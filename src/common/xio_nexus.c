@@ -54,7 +54,7 @@
 #include "xio_server.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* private structures							     */

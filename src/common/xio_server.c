@@ -55,7 +55,7 @@
 #include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_server.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
