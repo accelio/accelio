@@ -1,5 +1,5 @@
 // stdafx.cpp : source file that includes just the standard includes
-// AccelioDll.pch will be the pre-compiled header
+// xiodll.pch will be the pre-compiled header
 // stdafx.obj will contain the pre-compiled type information
 
 #include "stdafx.h"
