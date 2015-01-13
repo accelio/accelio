@@ -108,6 +108,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_usr_utils.c		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
+			./xio/xio_netlink.c		\
 			./xio/xio_workqueue.c		\
 			./xio/xio_sg_iov.c		\
 			./xio/xio_sg_iovptr.c		\

@@ -53,6 +53,8 @@
 #include "xio_context.h"
 #include "xio_usr_utils.h"
 
+int xio_netlink(struct xio_context *ctx);
+
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
 /*---------------------------------------------------------------------------*/
@@ -74,93 +76,6 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 	xio_observable_unreg_observer(&ctx->observable, observer);
 }
 EXPORT_SYMBOL(xio_context_unreg_observer);
-
-/*---------------------------------------------------------------------------*/
-/* xio_stats_handler							     */
-/*---------------------------------------------------------------------------*/
-static void xio_stats_handler(int fd, int events, void *data)
-{
-	struct xio_context *ctx = (struct xio_context *)data;
-	unsigned char buf[NLMSG_SPACE(1024)];
-	struct nlmsghdr *nlh = (struct nlmsghdr *)buf;
-	struct msghdr msg;
-	struct iovec iov;
-	struct sockaddr_nl dest_addr;
-	uint64_t now = get_cycles();
-	ssize_t ret;
-	char *ptr;
-	int i;
-
-	/* read netlink message */
-	iov.iov_base = (void *)nlh;
-	/* max size for receive */
-	iov.iov_len = NLMSG_SPACE(1024);
-
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_name = (void *)&dest_addr;
-	msg.msg_namelen = sizeof(dest_addr);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	ret = recvmsg(fd, &msg, 0);
-	if (ret <= 0)
-		return;
-
-	ptr = (char *)NLMSG_DATA(nlh);
-
-	switch (nlh->nlmsg_type - NLMSG_MIN_TYPE) {
-	case 0: /* Format */
-		/* counting will start now */
-		memset(&ctx->stats.counter, 0,
-		       XIO_STAT_LAST * sizeof(uint64_t));
-		/* First the cycles' hertz (assumed to be fixed) */
-		memcpy(ptr, &ctx->stats.hertz, sizeof(ctx->stats.hertz));
-		ptr += sizeof(ctx->stats.hertz);
-		memcpy(ptr, &now, sizeof(now));
-		ptr += sizeof(now);
-		/* Counters' name */
-		for (i = 0; i < XIO_STAT_LAST; i++) {
-			if (!ctx->stats.name[i])
-				continue;
-			strcpy(ptr, ctx->stats.name[i]);
-			/* keep the '\0' */
-			ptr += strlen(ptr) + 1;
-		}
-		/* but not the last '\0' */
-		ptr--;
-		break;
-	case 1: /* Statistics */
-		/* Fisrt the timestamp in cycles */
-		memcpy(ptr, &now, sizeof(now));
-		ptr += sizeof(now);
-		/* for each named counter counter */
-		for (i = 0; i < XIO_STAT_LAST; i++) {
-			if (!ctx->stats.name[i])
-				continue;
-			memcpy((void *)ptr, &ctx->stats.counter[i],
-			       sizeof(uint64_t));
-			ptr += sizeof(uint64_t);
-		}
-		break;
-	default: /* Not yet implemented */
-		ERROR_LOG("Unsupported message type(%d)\n", nlh->nlmsg_type);
-		return;
-	}
-
-	/* header is in the buffer */
-	nlh->nlmsg_len = ptr - (char *)buf;
-	iov.iov_len = nlh->nlmsg_len;
-
-	nlh->nlmsg_pid = getpid();
-	nlh->nlmsg_flags = 1;
-	/* don't modify type */
-
-	/* Send unicst */
-	dest_addr.nl_groups = 0;
-	/* send response */
-	ret = sendmsg(fd, &msg, 0);
-	if (ret <= 0)
-		return;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_pin_to_cpu - pin to specific cpu					     */
@@ -216,9 +131,6 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 {
 	struct xio_context		*ctx = NULL;
 	int				cpu;
-	struct sockaddr_nl		nladdr;
-	int				fd;
-	socklen_t			addr_len;
 
 	xio_read_logging_level();
 
@@ -263,86 +175,17 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	if (!ctx->workqueue) {
 		xio_set_error(errno);
 		ERROR_LOG("schedwork_queue_init failed. %m\n");
-		goto cleanup1;
+		goto cleanup;
 	}
 
-	/* only root can bind netlink socket */
-	if (geteuid() != 0) {
-		DEBUG_LOG("statistics monitoring disabled. " \
-			  "not privileged user\n");
-		goto exit;
-	}
-
-	fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
-	if (fd < 0) {
-		xio_set_error(errno);
-		ERROR_LOG("socket failed. %m\n");
-		goto cleanup1;
-	}
-
-	nladdr.nl_family = AF_NETLINK;
-	nladdr.nl_pad = 0;
-
-	/* Listen to both UC and MC
-	 * By default the monitoring program send MC request but if
-	 * a thread starts after the monitor program than it will miss
-	 * the request for the format. When the monitoring program receives
-	 * statistics from a thread that it doesn't have its format it will
-	 * send a UC request directly to it
-	 *
-	 */
-	nladdr.nl_pid	 = 0;
-	nladdr.nl_groups = 1;
-
-	if (bind(fd, (struct sockaddr *)&nladdr, sizeof(nladdr))) {
-		xio_set_error(errno);
-		ERROR_LOG("bind failed. %m\n");
-		goto cleanup2;
-	}
-
-	addr_len = sizeof(nladdr);
-	if (getsockname(fd, (struct sockaddr *)&nladdr, &addr_len)) {
-		xio_set_error(errno);
-		ERROR_LOG("getsockname failed. %m\n");
-		goto cleanup2;
-	}
-
-	if (addr_len != sizeof(nladdr)) {
-		xio_set_error(EINVAL);
-		ERROR_LOG("invalid addr_len\n");
-		goto cleanup2;
-	}
-	if (nladdr.nl_family != AF_NETLINK) {
-		xio_set_error(EINVAL);
-		ERROR_LOG("invalid nl_family\n");
-		goto cleanup2;
-	}
+	if (-1 == xio_netlink(ctx))
+		goto cleanup;
 
 
-	DEBUG_LOG("netlink socket bind to port %u\n",
-		  nladdr.nl_pid);
-
-	xio_ev_loop_add(ctx->ev_loop, fd, XIO_POLLIN,
-			xio_stats_handler, ctx);
-
-	ctx->stats.hertz = g_mhz * 1000000.0 + 0.5;
-	/* Init default counters' name */
-	ctx->stats.name[XIO_STAT_TX_MSG] = strdup("TX_MSG");
-	ctx->stats.name[XIO_STAT_RX_MSG] = strdup("RX_MSG");
-	ctx->stats.name[XIO_STAT_TX_BYTES] = strdup("TX_BYTES");
-	ctx->stats.name[XIO_STAT_RX_BYTES] = strdup("RX_BYTES");
-	ctx->stats.name[XIO_STAT_DELAY] = strdup("DELAY");
-	ctx->stats.name[XIO_STAT_APPDELAY] = strdup("APPDELAY");
-
-	ctx->netlink_sock = (void *)(unsigned long) fd;
-
-exit:
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
-cleanup2:
-	close(fd);
-cleanup1:
+cleanup:
 	ufree(ctx);
 	return NULL;
 }
