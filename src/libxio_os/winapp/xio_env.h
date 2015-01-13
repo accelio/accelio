@@ -49,13 +49,15 @@
 #include <io.h>
 #include <stdint.h>
 #include <errno.h>
-#include <assert.h>
 #include <BaseTsd.h>
 
 #include <xio_base.h>
 #include <xio_env_basic.h>
 #include "list.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef SSIZE_T ssize_t;
 typedef __int32 int32_t;
@@ -197,6 +199,20 @@ static inline long xio_get_cpu(void)
 	return GetCurrentProcessorNumber();
 }
 
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_node_of_cpu(int cpu)
+{
+//	assert(0 && "not yet supported");
+	return -1; /* error */
+}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_run_on_node(int node)
+{
+//	assert(0 && "not yet supported");
+	return -1; /* error */
+}
+
 struct timespec {
 	time_t   tv_sec;        /* seconds */
 	long     tv_nsec;       /* nanoseconds */
@@ -255,6 +271,26 @@ int static inline gettimeofday(struct timeval *tv, struct timezone2 *tz)
 #define localtime_r( _clock, _result ) \
 	(*(_result) = *localtime((const time_t *)(_clock)), \
 	(_result))
+
+/*---------------------------------------------------------------------------*
+ * xio_get_cpu_mhz							     *
+ *									     *
+ * since this operation may take time cache it on a cookie,		     *
+ * and use the cookie if exist						     *
+ *									     *
+ *---------------------------------------------------------------------------*/
+static inline double xio_get_cpu_mhz(void)
+{
+	static double cpu_mhz;
+
+	if (!cpu_mhz) {
+		LARGE_INTEGER performanceFrequency;
+		QueryPerformanceFrequency(&performanceFrequency);
+		cpu_mhz = (double)performanceFrequency.QuadPart;
+	}
+
+	return cpu_mhz;
+}
 
 /*---------------------------------------------------------------------------*/
 static inline int xio_clock_gettime(struct timespec *ts)
