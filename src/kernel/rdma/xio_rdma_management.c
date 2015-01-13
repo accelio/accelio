@@ -1287,6 +1287,10 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	char *ptr;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	/* set the task to point to hndl */
+	task->trans_hndl = transport_hndl;
+
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
 	ptr += sizeof(struct xio_rdma_task);
