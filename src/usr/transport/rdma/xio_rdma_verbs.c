@@ -147,7 +147,9 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 	if (!mr) {
 		xio_set_error(errno);
 		if (!alloc_mr)
-			ERROR_LOG("ibv_reg_mr failed, %m\n");
+			ERROR_LOG("ibv_reg_mr failed, %m. " \
+				  "addr:%p, length:%zd, access:0x%lx\n",
+				  *addr, length, access);
 		if (errno == ENOMEM)
 			xio_validate_ulimit_memlock();
 		return NULL;
