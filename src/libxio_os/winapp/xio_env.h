@@ -713,7 +713,7 @@ static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
 
 static inline int xio_timerfd_create()
 {
-	return 0;
+	return (int)xio_socket_non_blocking(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 }
 
 static inline int xio_timerfd_settime(int fd, int flags,
