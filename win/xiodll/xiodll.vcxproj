@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{B68FDBC5-75F5-46D5-93A7-3F2432945306}</ProjectGuid>
+    <ProjectGuid>{57E1DF48-4438-4D61-B83F-B64F64523ED1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>xiodll</RootNamespace>
   </PropertyGroup>

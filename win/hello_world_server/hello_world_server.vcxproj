@@ -160,8 +160,8 @@
     <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AccelioDll\AccelioDll.vcxproj">
-      <Project>{b68fdbc5-75f5-46d5-93a7-3f2432945306}</Project>
+    <ProjectReference Include="..\xiodll\xiodll.vcxproj">
+      <Project>{57e1df48-4438-4d61-b83f-b64f64523ed1}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
