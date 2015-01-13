@@ -109,8 +109,11 @@ static inline void ufree(void *ptr)
 {
 	if (allocator_assigned && mem_allocator->free)
 		mem_allocator->free(ptr, mem_allocator->user_context);
+#ifndef WIN32
+	/*TODO: for win, sometimes 'free' and sometimes aligned_free is needed*/
 	else
 		free(ptr);
+#endif
 }
 
 static inline void *umalloc_huge_pages(size_t size)

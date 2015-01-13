@@ -70,6 +70,7 @@
 #define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
 #define XIO_ECONNABORTED	ECONNABORTED
 #define XIO_ECONNRESET		ECONNRESET
+#define XIO_ECONNREFUSED        ECONNREFUSED
 
 
 #endif /* XIO_ENV_H */

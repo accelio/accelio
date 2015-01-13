@@ -83,8 +83,8 @@ static void process_request(struct server_data *server_data,
 				len = 64;
 			tmp = str[len];
 			str[len] = '\0';
-			printf("message header : [%lu] - %s\n",
-			       (req->sn + 1), str);
+			printf("message header : [%llu] - %s\n",
+			       (unsigned long long)(req->sn + 1), str);
 			str[len] = tmp;
 		}
 		for (i = 0; i < nents; i++) {
@@ -95,8 +95,9 @@ static void process_request(struct server_data *server_data,
 					len = 64;
 				tmp = str[len];
 				str[len] = '\0';
-				printf("message data: [%lu][%d][%d] - %s\n",
-				       (req->sn + 1), i, len, str);
+				printf("message data: [%llu][%d][%d] - %s\n",
+				       (unsigned long long)(req->sn + 1),
+				       i, len, str);
 				str[len] = tmp;
 			}
 		}

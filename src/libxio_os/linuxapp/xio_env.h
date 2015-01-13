@@ -77,6 +77,9 @@
 #include <linux/mman.h>
 #include <get_clock.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/
@@ -216,6 +219,17 @@ static inline int arch_cache_line_size(void)
 
 */
 
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_node_of_cpu(int cpu)
+{
+	return numa_node_of_cpu(cpu);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_run_on_node(int node)
+{
+	return numa_run_on_node(node);
+}
 
 #define XIO_HZ_DIR   "/var/tmp/accelio.d"
 #define XIO_HZ_FILE  XIO_HZ_DIR "/hz"
@@ -319,6 +333,7 @@ typedef pthread_once_t		thread_once_t;
 #define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
 #define XIO_ECONNABORTED	ECONNABORTED
 #define XIO_ECONNRESET		ECONNRESET
+#define XIO_ECONNREFUSED        ECONNREFUSED
 
 typedef int socket_t;
 /*---------------------------------------------------------------------------*/
@@ -373,7 +388,9 @@ static inline void xio_env_startup() {
 	/* nothing to do */
 }
 
-
+#ifdef __cplusplus
+}
+#endif
 
 #include <linux/types.h>
 #include <linux/list.h>
@@ -385,7 +402,5 @@ static inline void xio_env_startup() {
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
-
-
 
 #endif /* XIO_ENV_H */

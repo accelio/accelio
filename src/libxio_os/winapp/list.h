@@ -197,7 +197,12 @@ static __inline void list_splice_init(struct list_head *list,
 #else
 #define list_entry(ptr, type, member) \
 	container_of(ptr, type, member)
+#define list_entry2(ptr, ptrtype, member) \
+	(reinterpret_cast<ptrtype>((char *)(ptr)-\
+	(char *)(&(reinterpret_cast<ptrtype>(1)->member)) + 1))
 #endif
+
+
 
 /**
 * list_first_entry - get the first element from a list
@@ -261,9 +266,9 @@ static __inline void list_splice_init(struct list_head *list,
 		pos = list_entry(pos->member.next, typeof(*pos), member))
 #else
 #define list_for_each_entry(pos, head, member) \
-	for (pos = list_entry((head)->next, typeof(pos), member); \
+	for (pos = list_entry2((head)->next, typeof(pos), member); \
 		&pos->member != (head); \
-		pos = list_entry(pos->member.next, typeof(pos), member))
+		pos = list_entry2(pos->member.next, typeof(pos), member))
 #endif
 
 /**
@@ -284,10 +289,10 @@ static __inline void list_splice_init(struct list_head *list,
 #else
 
 #define list_for_each_entry_safe(pos, n, head, member)			 \
-	for (pos = list_entry((head)->next, decltype(pos), member),      \
-		n = list_entry(pos->member.next, decltype(pos), member); \
+	for (pos = list_entry2((head)->next, decltype(pos), member),      \
+		n = list_entry2(pos->member.next, decltype(pos), member); \
 		&(pos->member) != (head); 				 \
-		pos = n, n = list_entry(n->member.next, decltype(n), member))
+		pos = n, n = list_entry2(n->member.next, decltype(n), member))
 #endif
 
 /**
@@ -298,10 +303,10 @@ static __inline void list_splice_init(struct list_head *list,
  * @member:     the name of the list_struct within the struct.
  */
 #define list_for_each_entry_continue(pos, head, member)			\
-	for (pos = list_entry(pos->member.next, typeof(*pos), member),	\
+	for (pos = list_entry2(pos->member.next, typeof(*pos), member),	\
 		     prefetch(pos->member.next);			\
 	     &pos->member != (head);					\
-	     pos = list_entry(pos->member.next, typeof(*pos), member),	\
+	     pos = list_entry2(pos->member.next, typeof(*pos), member), \
 		     prefetch(pos->member.next))
 
 #endif

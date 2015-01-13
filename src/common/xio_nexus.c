@@ -218,7 +218,7 @@ void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
-inline struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
+struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
 {
 	struct xio_task *task = xio_tasks_pool_get(nexus->primary_tasks_pool);
 	task->nexus = nexus;
@@ -2567,7 +2567,7 @@ int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_nexus_set_server(struct xio_nexus *nexus,
+void xio_nexus_set_server(struct xio_nexus *nexus,
 				 struct xio_server *server)
 {
 	nexus->server = server;

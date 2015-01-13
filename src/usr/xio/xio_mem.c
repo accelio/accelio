@@ -42,8 +42,11 @@
 #include "xio_mem.h"
 
 #define HUGE_PAGE_SZ			(2*1024*1024)
-
+#ifndef WIN32
 int			  disable_huge_pages	= 0;
+#else
+int			  disable_huge_pages	= 1; /* bypass hugepages */
+#endif
 int			  allocator_assigned	= 0;
 struct xio_mem_allocator  g_mem_allocator;
 struct xio_mem_allocator *mem_allocator = &g_mem_allocator;

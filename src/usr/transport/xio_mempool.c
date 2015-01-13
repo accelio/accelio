@@ -111,7 +111,7 @@ struct xio_mem_slab {
 	struct list_head		blocks_list;
 
 	size_t				mb_size;	/*memory block size */
-	pthread_spinlock_t		lock;
+	spinlock_t			lock;
 
 	int				init_mb_nr;	/* initial mb
 							   size */
@@ -143,7 +143,7 @@ static inline int decrement_and_test_and_set(combined_t *ptr)
 		_new = old - 2;
 		if (_new == 0)
 			_new = 1; /* claimed be MP */
-	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
+	} while (!xio_sync_bool_compare_and_swap(ptr, old, _new));
 
 	return (old - _new) & 1;
 }
@@ -158,7 +158,7 @@ static inline void clear_lowest_bit(combined_t *ptr)
 	do {
 		old = *ptr;
 		_new = old - 1;
-	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
+	} while (!xio_sync_bool_compare_and_swap(ptr, old, _new));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -171,7 +171,7 @@ static inline void reclaim(struct xio_mem_slab *slab, struct xio_mem_block *p)
 	do {
 		q = slab->free_blocks_list;
 		p->next = q;
-	} while (!__sync_bool_compare_and_swap(&slab->free_blocks_list, q, p));
+	} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list, q, p));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -216,9 +216,9 @@ static struct xio_mem_block *safe_read(struct xio_mem_slab *slab)
 		q = slab->free_blocks_list;
 		if (q == NULL)
 			return NULL;
-		__sync_fetch_and_add(&q->refcnt_claim, 2);
+		xio_sync_fetch_and_add32(&q->refcnt_claim, 2);
 		/* make sure q is still the head */
-		if (__sync_bool_compare_and_swap(&slab->free_blocks_list, q, q))
+		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list, q, q))
 			return q;
 		else
 			safe_release(slab, q);
@@ -237,7 +237,7 @@ static struct xio_mem_block *safe_new_block(struct xio_mem_slab *slab)
 		if (p == NULL)
 			return NULL;
 
-		if (__sync_bool_compare_and_swap(&slab->free_blocks_list,
+		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
 						 p, p->next)) {
 			clear_lowest_bit(&p->refcnt_claim);
 			return p;
@@ -304,8 +304,6 @@ static int xio_mem_slab_free(struct xio_mem_slab *slab)
 			ufree(r);
 		}
 	}
-
-	pthread_spin_destroy(&slab->lock);
 
 	return 0;
 }
@@ -421,7 +419,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	if (slab->pool->safe_mt) {
 		do {
 			qblock->next = slab->free_blocks_list;
-		} while (!__sync_bool_compare_and_swap(&slab->free_blocks_list,
+		} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
 					qblock->next, pblock));
 	} else  {
 		qblock->next = slab->free_blocks_list;
@@ -500,10 +498,10 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 		int ret;
 		if (nodeid == -1) {
 			int cpu = xio_get_cpu();
-			nodeid = numa_node_of_cpu(cpu);
+			nodeid = xio_numa_node_of_cpu(cpu);
 		}
 		/* pin to node */
-		ret = numa_run_on_node(nodeid);
+		ret = xio_numa_run_on_node(nodeid);
 		if (ret)
 			return NULL;
 	}
@@ -603,7 +601,7 @@ retry:
 		block = non_safe_new_block(slab);
 	if (!block) {
 		if (p->safe_mt) {
-			pthread_spin_lock(&slab->lock);
+			spin_lock(&slab->lock);
 		/* we may been blocked on the spinlock while other
 		 * thread resized the pool
 		 */
@@ -620,14 +618,14 @@ retry:
 					index  = -1;
 
 				if (p->safe_mt)
-					pthread_spin_unlock(&slab->lock);
+					spin_unlock(&slab->lock);
 				ret = 0;
 				goto retry;
 			}
 			DEBUG_LOG("resizing slab size:%zd\n", slab->mb_size);
 		}
 		if (p->safe_mt)
-			pthread_spin_unlock(&slab->lock);
+			spin_unlock(&slab->lock);
 	}
 
 	reg_mem->addr	= block->buf;
@@ -724,8 +722,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			new_slab[ix].max_mb_nr = max;
 			new_slab[ix].alloc_quantum_nr = alloc_quantum_nr;
 
-			(void) pthread_spin_init(&new_slab[ix].lock,
-						 PTHREAD_PROCESS_PRIVATE);
+			spin_lock_init(&new_slab[ix].lock);
 			INIT_LIST_HEAD(&new_slab[ix].mem_regions_list);
 			INIT_LIST_HEAD(&new_slab[ix].blocks_list);
 			new_slab[ix].free_blocks_list = NULL;

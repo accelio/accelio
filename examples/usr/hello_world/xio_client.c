@@ -68,11 +68,11 @@ static void process_response(struct session_data *session_data,
 		struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
 		int			inents = vmsg_sglist_nents(&rsp->in);
 
-		printf("message: [%lu] - %s\n",
-		       (rsp->request->sn + 1),
+		printf("message: [%llu] - %s\n",
+			(unsigned long long)(rsp->request->sn + 1),
 		       (char *)rsp->in.header.iov_base);
-		printf("message: [%lu] - %s\n",
-		       (rsp->request->sn + 1),
+		printf("message: [%llu] - %s\n",
+			(unsigned long long)(rsp->request->sn + 1),
 		       (char *)(inents > 0 ? isglist[0].iov_base : NULL));
 		session_data->cnt = 0;
 	}

@@ -38,6 +38,9 @@
 #ifndef XIO_NEXUS_H
 #define XIO_NEXUS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -257,7 +260,7 @@ int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_nexus_set_server(struct xio_nexus *nexus,
+void xio_nexus_set_server(struct xio_nexus *nexus,
 				 struct xio_server *server);
 
 /*---------------------------------------------------------------------------*/
@@ -371,6 +374,10 @@ int xio_nexus_query(struct xio_nexus *nexus,
 		    struct xio_nexus_attr *attr,
 		    int attr_mask);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*XIO_NEXUS_H */
 

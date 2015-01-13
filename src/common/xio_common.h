@@ -38,6 +38,10 @@
 #ifndef XIO_COMMON_H
 #define XIO_COMMON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -311,6 +315,10 @@ void		xio_msg_dump(struct xio_msg *xio_msg);
 /* xio_options.c							     */
 /*---------------------------------------------------------------------------*/
 struct xio_options *xio_get_options(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*XIO_COMMON_H */
 

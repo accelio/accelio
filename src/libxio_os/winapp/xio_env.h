@@ -291,6 +291,7 @@ static inline int xio_clock_gettime(struct timespec *ts)
 #define XIO_WOULDBLOCK              WSAEWOULDBLOCK /* recv    on non-blocking */
 #define XIO_ECONNABORTED            WSAECONNABORTED
 #define XIO_ECONNRESET              WSAECONNRESET
+#define XIO_ECONNREFUSED            WSAECONNREFUSED
 
 
 #define SHUT_RDWR SD_BOTH
@@ -634,5 +635,9 @@ static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
 	assert(gfp == GFP_KERNEL);
 	return strndup(s, len);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* XIO_ENV_H */

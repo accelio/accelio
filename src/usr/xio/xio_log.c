@@ -61,11 +61,12 @@ void xio_vlog(const char *file, unsigned line, const char *function,
 	struct timeval		tv;
 	struct tm		t;
 	char			buf[2048];
-	char			buf2[48];
+	char			buf2[256];
 	int			length = 0;
 	static const char * const level_str[] = {
 		"FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
 	};
+	time_t time1;
 
 	va_start(args, fmt);
 	length = vsnprintf(buf, sizeof(buf), fmt, args);
@@ -73,7 +74,8 @@ void xio_vlog(const char *file, unsigned line, const char *function,
 	buf[length] = 0;
 
 	gettimeofday(&tv, NULL);
-	localtime_r(&tv.tv_sec, &t);
+	time1 = (time_t)tv.tv_sec;
+	localtime_r(&time1, &t);
 
 	short_file = strrchr(file, '/');
 	short_file = (short_file == NULL) ? file : short_file + 1;

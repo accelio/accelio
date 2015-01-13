@@ -57,3 +57,7 @@ Doxyfile
 modules.order
 Module.symvers
 .tmp_versions
+*.vcxproj.filters
+*.vcxproj.user
+*.v12.suo
+*.sdf

@@ -39,6 +39,7 @@
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_tls.h"
+#include "xio_common.h"
 
 
 
