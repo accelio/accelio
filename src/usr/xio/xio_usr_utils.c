@@ -35,7 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <xio_env.h>
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
@@ -158,7 +157,7 @@ EXPORT_SYMBOL(xio_host_port_to_ss);
 /*---------------------------------------------------------------------------*/
 int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 {
-	char		*start;
+	const char	*start;
 	char		host[NI_MAXHOST];
 	char		port[NI_MAXSERV];
 	const char	*p1, *p2;
