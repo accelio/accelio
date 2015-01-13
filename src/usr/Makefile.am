@@ -35,6 +35,9 @@ else
     libxio_version_script =
 endif
 
+install-exec-hook:
+	echo "$(libdir)" > /etc/ld.so.conf.d/libxio.conf
+	/sbin/ldconfig
 
 ###############################################################################
 # THE LIBRARIES TO BUILD
