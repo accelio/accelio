@@ -413,6 +413,13 @@ static inline int xio_set_blocking(socket_t sock, unsigned long mode)
 }
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_pipe(int socks[2], int is_blocking)
+{
+	return pipe2(socks, is_blocking ? 0 : O_NONBLOCK);
+}
+
+
+/*---------------------------------------------------------------------------*/
 static inline socket_t xio_socket_non_blocking(int domain, int type,
 					      int protocol)
 {
@@ -435,6 +442,22 @@ static inline void xio_env_cleanup() {
 static inline void xio_env_startup() {
 	/* nothing to do */
 }
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_timerfd_create()
+{
+	return timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_timerfd_settime(int fd, int flags,
+				      const struct itimerspec *new_value,
+				      struct itimerspec *old_value)
+{
+	return timerfd_settime(fd, flags, new_value, old_value);
+}
+
+
 
 #ifdef __cplusplus
 }

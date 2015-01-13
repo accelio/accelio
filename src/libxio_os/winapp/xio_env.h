@@ -451,6 +451,20 @@ static inline int xio_set_blocking(socket_t sock, unsigned long mode)
 }
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_pipe(socket_t socks[2], int is_blocking)
+{
+	int ret = socketpair(AF_INET, SOCK_STREAM, IPPROTO_TCP, socks);
+	if (ret) return -1;
+	if (!is_blocking)
+		if (xio_set_blocking(socks[0],0)||xio_set_blocking(socks[1],0)){
+			xio_closesocket(socks[0]);
+			xio_closesocket(socks[1]);
+			return -1;
+		}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 static inline socket_t xio_socket_non_blocking(int domain, int type,
 					       int protocol)
 {
@@ -691,6 +705,30 @@ static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
 	assert(gfp == GFP_KERNEL);
 	return strndup(s, len);
 }
+
+
+/*---------------------------------------------------------------------------*/
+/* ****** this section is devoted for not yet supported in Windows ********* */
+/*---------------------------------------------------------------------------*/
+
+static inline int xio_timerfd_create()
+{
+	return 0;
+}
+
+static inline int xio_timerfd_settime(int fd, int flags,
+	const struct itimerspec *new_value,
+	struct itimerspec *old_value)
+{
+	return 0;
+}
+
+static inline int  xio_netlink(struct xio_context *ctx)
+{
+	/* not supported in Windows*/
+	return 0;
+}
+
 
 #ifdef __cplusplus
 }

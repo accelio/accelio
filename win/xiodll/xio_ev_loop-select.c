@@ -38,11 +38,9 @@
 #ifndef WIN32 // Avner TODO - move to OS layer
 #include <unistd.h>
 #include <sys/select.h>
-#define xio_pipe(pfds, psize, textmode) pipe(pfds)
 #else
 #include <Winsock2.h>
 #include <io.h>
-#define xio_pipe(pfds, psize, textmode) _pipe(pfds, psize, textmode)
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -187,204 +185,6 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	return 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/* server_listen							     */
-/*---------------------------------------------------------------------------*/
-static SOCKET server_listen(int portno)
-{
-	SOCKET listen_sock;
-	struct sockaddr_in serv_addr;
-
-	listen_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (listen_sock < 0) {
-		fprintf(stderr, "ERROR opening socket\n");
-		return -1;
-	}
-
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	serv_addr.sin_port = htons(portno);
-	if (bind(listen_sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
-		fprintf(stderr, "ERROR on binding (%d %s)\n", errno, strerror(errno));
-		closesocket(listen_sock);
-		return -1;
-	}
-	if (listen(listen_sock, 1) < 0) {
-		fprintf(stderr, "ERROR on listen\n");
-		closesocket(listen_sock);
-		return -1;
-	}
-	return listen_sock;
-}
-
-/*---------------------------------------------------------------------------*/
-/* server_accept							     */
-/*---------------------------------------------------------------------------*/
-static SOCKET server_accept(SOCKET listen_sock)
-{
-	SOCKET accepted_sock;
-	struct sockaddr_in cli_addr;
-	socklen_t clilen = sizeof(cli_addr);
-
-	accepted_sock = accept(listen_sock, (struct sockaddr *) &cli_addr, &clilen);
-	if (accepted_sock < 0) {
-		fprintf(stderr, "ERROR on accept\n");
-		return -1;
-	}
-	return accepted_sock;
-}
-
-/*---------------------------------------------------------------------------*/
-/* client_connect_async							     */
-/*---------------------------------------------------------------------------*/
-static SOCKET client_connect_async(int portno)
-{
-	int res;
-	SOCKET sock;//socket-fd
-	struct sockaddr_in addr;
-
-	// Create socket
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock < 0) {
-		fprintf(stderr, "Error creating socket (%d %s)\n", errno, strerror(errno));
-		return -1;
-	}
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(portno);
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-	// Set non-blocking
-	xio_set_blocking(sock, 0);
-
-	// Trying to connect with timeout
-	res = connect(sock, (struct sockaddr *)&addr, sizeof(addr));
-	if (res < 0 && errno != EINPROGRESS) {
-		fprintf(stderr, "failure in async connect()\n");
-		closesocket(sock);
-		return -1;
-	}
-
-	return sock; // success !
-}
-
-/*---------------------------------------------------------------------------*/
-/* client_complete_connect							     */
-/*---------------------------------------------------------------------------*/
-static int client_complete_connect(SOCKET sock)
-{
-	int res;
-	fd_set myset;
-	int valopt;
-	socklen_t lon;
-
-	do {
-		FD_ZERO(&myset);
-		FD_SET(sock, &myset);
-		res = select(sock + 1, NULL, &myset, NULL, NULL);
-		if (res > 0) {
-			break; // success
-		}
-		else if (res == 0){ // timeout shouldn't happen - TODO: support timeout
-			fprintf(stderr, "Timeout in select() - Cancelling!\n");
-			return -1;
-		}
-		else if (res < 0 && errno != EINTR) {
-			fprintf(stderr, "Error connecting %d - %s\n", errno, strerror(errno));
-			return -1;
-		}
-	} while (1);
-
-	// res > 0 Socket selected for write
-	lon = sizeof(int);
-	if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)(&valopt), &lon) < 0) {
-		fprintf(stderr, "Error in getsockopt() %d - %s\n", errno, strerror(errno));
-		return -1;
-	}
-	// Check the value returned...
-	if (valopt) {
-		fprintf(stderr, "Error in delayed connection() %d - %s\n", valopt, strerror(valopt));
-		return -1;
-	}
-
-	// Set to blocking mode again...
-	// TODO: consider place and neccessity
-	xio_set_blocking(sock, 1);
-	return 0; // success !
-}
-
-/*---------------------------------------------------------------------------*/
-/* rand_interval							     */
-// based on: http://stackoverflow.com/questions/2509679/how-to-generate-a-random-number-from-within-a-range
-// because just returning r = (rand() % (max+1-min))+min) will produce a biased result
-/*---------------------------------------------------------------------------*/
-static unsigned int rand_interval(unsigned int min, unsigned int max)
-{
-	unsigned int r;
-	const unsigned int range = max - min < RAND_MAX ? max - min : RAND_MAX; // safety, since in MSVC RAND_MAX=32K
-	const unsigned int buckets = RAND_MAX / range;
-	const unsigned int limit = buckets * range;
-	static int first_time = 1;
-	if (first_time) {
-		srand((unsigned)time(NULL));
-		first_time = 0;
-	}
-
-	/* Create equal size buckets all in a row, then fire randomly towards
-	* the buckets until you land in one of them. All buckets are equally
-	* likely. If you land off the end of the line of buckets, try again. */
-	do
-	{
-		r = (unsigned)rand();
-	} while (r >= limit); // safe, unless range > RAND_MAX
-
-	return min + (r / buckets);
-}
-
-/*---------------------------------------------------------------------------*/
-/* my_create_pipe							     */
-/*---------------------------------------------------------------------------*/
-/*static*/ int my_create_pipe(SOCKET fd[2])
-{
-	/*
-		retval = pipe2 (fd, O_NONBLOCK);
-		if (retval != 0) {
-			xio_set_error(errno);
-			ERROR_LOG("pipe2 failed. %m\n");
-			return -1;
-		}
-	//*/
-	int portno;
-	SOCKET listen_sock = INVALID_SOCKET, client_sock = INVALID_SOCKET, accepted_sock = INVALID_SOCKET;
-	int res = -1;
-	do {
-		portno = rand_interval(1024, 49151);
-		listen_sock = server_listen(portno);
-	} while (errno == EADDRINUSE); // bind failure because "Address already in use"
-
-	do {
-		if (listen_sock < 0) break;
-		client_sock = client_connect_async(portno);
-		if (client_sock < 0) break;
-		accepted_sock = server_accept(listen_sock);
-		if (accepted_sock < 0) break;
-		res = client_complete_connect(client_sock);
-	} while (0);
-
-	if (listen_sock >= 0) closesocket(listen_sock);
-
-	if (res < 0) { // error
-		if (client_sock >= 0) closesocket(client_sock);
-		if (accepted_sock >= 0) closesocket(accepted_sock);
-		return -1;
-	}
-
-	fd[0] = client_sock;
-	fd[1] = accepted_sock;
-	return 0;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_create							     */
@@ -410,12 +210,8 @@ void *xio_ev_loop_create()
 	FD_ZERO(&loop->save_wfds);
 
 	/* prepare the wakeup pipe */
-#ifdef WIN32 // Avner TODO - move to OS layer
-//	retval = my_create_pipe(loop->wakeup_fd);
-	retval = socketpair(AF_INET, SOCK_STREAM, IPPROTO_TCP, loop->wakeup_fd);
-#else
-	retval = xio_pipe(loop->wakeup_fd, 256, O_BINARY);
-#endif
+	retval = xio_pipe(loop->wakeup_fd, 1);
+
 	if (retval != 0) {
 		xio_set_error(errno);
 		ERROR_LOG("pipe2 failed. %m\n");

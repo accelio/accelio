@@ -35,7 +35,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <libxio.h>
 #include <xio_os.h>
+#include <xio_env_adv.h>
 
 #include "xio_log.h"
 #include "xio_common.h"
@@ -57,7 +59,7 @@ struct xio_workqueue {
 	struct xio_context		*ctx;
 	struct xio_timers_list		timers_list;
 	int				timer_fd;
-	int				pipe_fd[2];
+	socket_t			pipe_fd[2];
 	volatile uint32_t		flags;
 	uint64_t			deleted_works[MAX_DELETED_WORKS];
 	uint32_t			deleted_works_nr;
@@ -91,7 +93,7 @@ static void set_normalized_timespec(struct timespec *ts,
 		--sec;
 	}
 	ts->tv_sec = sec;
-	ts->tv_nsec = nsec;
+	ts->tv_nsec = (long)nsec;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -122,14 +124,12 @@ static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 		set_normalized_timespec(&new_t.it_value,
 					0, ns_to_expire);
 	}
-
 	/* rearm the timer */
-	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
+	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
 	if (err < 0) {
 		ERROR_LOG("timerfd_settime failed. %m\n");
 		return -1;
 	}
-
 	work_queue->flags |= XIO_WORKQUEUE_TIMER_ARMED;
 
 	return 0;
@@ -146,7 +146,7 @@ static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 	if (!(work_queue->flags & XIO_WORKQUEUE_TIMER_ARMED))
 		return;
 
-	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
+	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
 	if (err < 0)
 		ERROR_LOG("timerfd_settime failed. %m\n");
 
@@ -251,13 +251,15 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	xio_timers_list_init(&work_queue->timers_list);
 	work_queue->ctx = ctx;
 
-	work_queue->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	work_queue->timer_fd = xio_timerfd_create();
 	if (work_queue->timer_fd < 0) {
 		ERROR_LOG("timerfd_create failed. %m\n");
 		goto exit;
 	}
 
-	retval = pipe2(work_queue->pipe_fd, O_NONBLOCK);
+	retval = xio_pipe(work_queue->pipe_fd, 0);
+
+
 	if (retval < 0) {
 		ERROR_LOG("pipe failed. %m\n");
 		goto exit1;
