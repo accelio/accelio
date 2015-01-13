@@ -137,7 +137,6 @@ static inline void xio_numa_free(void *start, size_t size) {
 
 #define xio_tls __declspec(thread)
 
-
 typedef INIT_ONCE thread_once_t;
 static const INIT_ONCE INIT_ONCE_RESET_VALUE = INIT_ONCE_STATIC_INIT;
 #define THREAD_ONCE_INIT     INIT_ONCE_STATIC_INIT
@@ -176,6 +175,9 @@ NOTICE:     if you'll use DllMain here - DO NOT call WSAStartup from DllMain */
 
 #define sum_to_ptr(_ptr, a) ( ((char*)(_ptr)) + (a) )
 
+static inline uint64_t xio_get_current_thread_id() {
+	return GetCurrentThreadId();
+}
 
 /*---------------------------------------------------------------------------*/
 /*------------------- CPU and Clock related things --------------------------*/
@@ -212,6 +214,24 @@ static inline int xio_numa_run_on_node(int node)
 //	assert(0 && "not yet supported");
 	return -1; /* error */
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_cpu - pin to specific cpu					     */
+/*---------------------------------------------------------------------------*/
+static int inline xio_pin_to_cpu(int cpu) {
+	/* not supported yet in Windows */
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_node - pin to the numa node of the cpu			     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_pin_to_node(int cpu) {
+	/* not supported yet in Windows */
+	return 0;
+}
+
+
 
 struct timespec {
 	time_t   tv_sec;        /* seconds */

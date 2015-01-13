@@ -802,3 +802,14 @@ inline int xio_ev_loop_is_stopping(void *loop_hndl)
 {
 	return loop_hndl ? ((struct xio_ev_loop	*)loop_hndl)->stop_loop : 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_reset_stop						     */
+/*---------------------------------------------------------------------------*/
+void xio_ev_loop_reset_stop(void *loop_hndl)
+{
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
+
+	loop->stop_loop = 0;
+}
+

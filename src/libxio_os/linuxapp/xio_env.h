@@ -282,6 +282,51 @@ exit:
 	return hz;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_cpu - pin to specific cpu					     */
+/*---------------------------------------------------------------------------*/
+static int inline xio_pin_to_cpu(int cpu)
+{
+	int		ncpus = numa_num_task_cpus();
+	int		ret;
+	cpu_set_t	cs;
+
+	if (ncpus > CPU_SETSIZE)
+		return -1;
+
+	CPU_ZERO(&cs);
+	CPU_SET(cpu, &cs);
+	if (CPU_COUNT(&cs) == 1)
+		return 0;
+
+	ret = sched_setaffinity(0, sizeof(cs), &cs);
+	if (ret)
+		return -1;
+
+	/* guaranteed to take effect immediately */
+	sched_yield();
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_node - pin to the numa node of the cpu			     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_pin_to_node(int cpu)
+{
+	int node = numa_node_of_cpu(cpu);
+	/* pin to node */
+	int ret = numa_run_on_node(node);
+	if (ret)
+		return -1;
+
+	/* is numa_run_on_node() guaranteed to take effect immediately? */
+	sched_yield();
+
+	return -1;
+}
+
+
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Thread related things --------------------------------*/
@@ -322,6 +367,9 @@ typedef pthread_once_t		thread_once_t;
 #define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
 #define sum_to_ptr(_ptr, a) ((_ptr) + (a))
 
+static inline uint64_t xio_get_current_thread_id() {
+	return (uint64_t)pthread_self();
+}
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Socket related things --------------------------------*/

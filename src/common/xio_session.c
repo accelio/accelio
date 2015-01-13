@@ -1656,7 +1656,7 @@ static void xio_session_pre_teardown(void *_session)
 /*---------------------------------------------------------------------------*/
 /* xio_session_init_teardown						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_session_init_teardown(struct xio_session *session,
+void xio_session_init_teardown(struct xio_session *session,
 				      struct xio_context *ctx,
 				      int close_reason)
 {

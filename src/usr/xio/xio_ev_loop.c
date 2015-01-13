@@ -589,7 +589,7 @@ inline int xio_ev_loop_is_stopping(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_reset_stop						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_ev_loop_reset_stop(void *loop_hndl)
+void xio_ev_loop_reset_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 

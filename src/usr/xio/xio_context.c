@@ -78,52 +78,6 @@ void xio_context_unreg_observer(struct xio_context *ctx,
 EXPORT_SYMBOL(xio_context_unreg_observer);
 
 /*---------------------------------------------------------------------------*/
-/* xio_pin_to_cpu - pin to specific cpu					     */
-/*---------------------------------------------------------------------------*/
-static int xio_pin_to_cpu(int cpu)
-{
-	int		ncpus = numa_num_task_cpus();
-	int		ret;
-	cpu_set_t	cs;
-
-	if (ncpus > CPU_SETSIZE)
-		return -1;
-
-	CPU_ZERO(&cs);
-	CPU_SET(cpu, &cs);
-	if (CPU_COUNT(&cs) == 1)
-		return 0;
-
-	ret = sched_setaffinity(0, sizeof(cs), &cs);
-	if (ret) {
-		xio_set_error(errno);
-		ERROR_LOG("sched_setaffinity failed. %m\n");
-		return -1;
-	}
-	/* guaranteed to take effect immediately */
-	sched_yield();
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_pin_to_node - pin to the numa node of the cpu			     */
-/*---------------------------------------------------------------------------*/
-static int xio_pin_to_node(int cpu)
-{
-	int node = numa_node_of_cpu(cpu);
-	/* pin to node */
-	int ret = numa_run_on_node(node);
-	if (ret)
-		return -1;
-
-	/* is numa_run_on_node() guaranteed to take effect immediately? */
-	sched_yield();
-
-	return -1;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_context_create                                                        */
 /*---------------------------------------------------------------------------*/
 struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
@@ -147,7 +101,11 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	xio_pin_to_cpu(cpu);
 	/* pin to the numa node of the cpu */
 	if (0)
-		xio_pin_to_node(cpu);
+		if (-1 == xio_pin_to_node(cpu)) {
+			xio_set_error(errno);
+			ERROR_LOG("could not set affinity to cpu. %m\n");
+		}
+
 
 
 	/* allocate new context */
@@ -161,9 +119,9 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->run_private	= 0;
 
 	ctx->cpuid		= cpu;
-	ctx->nodeid		= numa_node_of_cpu(cpu);
+	ctx->nodeid		= xio_numa_node_of_cpu(cpu);
 	ctx->polling_timeout	= polling_timeout_us;
-	ctx->worker		= (uint64_t) pthread_self();
+	ctx->worker		= xio_get_current_thread_id();
 
 	if (ctx_attr)
 		ctx->user_context = ctx_attr->user_context;
@@ -467,7 +425,7 @@ EXPORT_SYMBOL(xio_context_run_loop);
 /*---------------------------------------------------------------------------*/
 /* xio_context_stop_loop						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_context_stop_loop(struct xio_context *ctx)
+void xio_context_stop_loop(struct xio_context *ctx)
 {
 	xio_ev_loop_stop(ctx->ev_loop);
 }
