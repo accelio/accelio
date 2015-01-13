@@ -250,7 +250,7 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 			if (retval) {
 				ERROR_LOG(
 				"removing conn handler failed.(errno=%d %m)\n",
-				errno);
+				xio_get_last_socket_error());
 			}
 			list_del(&pconn->conns_list_entry);
 			ufree(pconn);
@@ -358,8 +358,9 @@ int xio_tcp_single_sock_shutdown(struct xio_tcp_socket *sock)
 
 	retval = shutdown(sock->cfd, SHUT_RDWR);
 	if (retval) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	return retval;
@@ -372,10 +373,11 @@ int xio_tcp_single_sock_close(struct xio_tcp_socket *sock)
 {
 	int retval;
 
-	retval = close(sock->cfd);
+	retval = xio_closesocket(sock->cfd);
 	if (retval) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	return retval;
@@ -390,14 +392,16 @@ int xio_tcp_dual_sock_shutdown(struct xio_tcp_socket *sock)
 
 	retval1 = shutdown(sock->cfd, SHUT_RDWR);
 	if (retval1) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	retval2 = shutdown(sock->dfd, SHUT_RDWR);
 	if (retval2) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp shutdown failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	return (retval1 | retval2);
@@ -410,16 +414,18 @@ int xio_tcp_dual_sock_close(struct xio_tcp_socket *sock)
 {
 	int retval1, retval2;
 
-	retval1 = close(sock->cfd);
+	retval1 = xio_closesocket(sock->cfd);
 	if (retval1) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
-	retval2 = close(sock->dfd);
+	retval2 = xio_closesocket(sock->dfd);
 	if (retval2) {
-		xio_set_error(errno);
-		DEBUG_LOG("tcp close failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		DEBUG_LOG("tcp close failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	return (retval1 | retval2);
@@ -609,7 +615,7 @@ int xio_tcp_single_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
 
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 	}
 
 	return retval;
@@ -632,7 +638,7 @@ int xio_tcp_dual_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
 
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		return retval;
 	}
 
@@ -646,7 +652,7 @@ int xio_tcp_dual_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
 
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		xio_context_del_ev_handler(tcp_hndl->base.ctx,
 					   tcp_hndl->sock.cfd);
 	}
@@ -686,8 +692,9 @@ int xio_tcp_socket_create(void)
 
 	sock_fd = xio_socket_non_blocking(AF_INET, SOCK_STREAM, 0);
 	if (sock_fd < 0) {
-		xio_set_error(errno);
-		ERROR_LOG("create socket failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("create socket failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		return sock_fd;
 	}
 
@@ -697,8 +704,9 @@ int xio_tcp_socket_create(void)
 			    (char*)&optval,
 			    sizeof(optval));
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
@@ -709,8 +717,9 @@ int xio_tcp_socket_create(void)
 				    (char *)&optval,
 				    sizeof(int));
 		if (retval) {
-			xio_set_error(errno);
-			ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+			xio_set_error(xio_get_last_socket_error());
+			ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 			goto cleanup;
 		}
 	}
@@ -720,23 +729,25 @@ int xio_tcp_socket_create(void)
 	retval = setsockopt(sock_fd, SOL_SOCKET, SO_SNDBUF,
 			    (char *)&optval, sizeof(optval));
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 	optval = tcp_options.tcp_so_rcvbuf;
 	retval = setsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF,
 			    (char *)&optval, sizeof(optval));
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("setsockopt failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("setsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
 	return sock_fd;
 
 cleanup:
-	close(sock_fd);
+	xio_closesocket(sock_fd);
 	return -1;
 }
 
@@ -765,7 +776,7 @@ int xio_tcp_dual_sock_create(struct xio_tcp_socket *sock)
 
 	sock->dfd = xio_tcp_socket_create();
 	if (sock->dfd < 0) {
-		close(sock->cfd);
+		xio_closesocket(sock->cfd);
 		return -1;
 	}
 	return 0;
@@ -927,8 +938,9 @@ void xio_tcp_handle_pending_conn(int fd,
 			ERROR_LOG("got EOF while establishing connection\n");
 			goto cleanup1;
 		} else {
-			if (errno != EAGAIN) {
-				ERROR_LOG("recv return with errno=%d\n", errno);
+			if (xio_get_last_socket_error() != XIO_EAGAIN) {
+				ERROR_LOG("recv return with errno=%d\n",
+					  xio_get_last_socket_error());
 				goto cleanup1;
 			}
 			return;
@@ -1004,7 +1016,7 @@ void xio_tcp_handle_pending_conn(int fd,
 	list_del(&data_conn->conns_list_entry);
 	if (retval) {
 		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 	}
 	ufree(data_conn);
 
@@ -1015,7 +1027,7 @@ single_sock:
 					    ctl_conn->fd);
 	if (retval) {
 		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 	}
 
 	child_hndl = xio_tcp_transport_create(parent_hndl->transport,
@@ -1060,8 +1072,9 @@ single_sock:
 			     (struct sockaddr *)&child_hndl->base.local_addr,
 			     &len);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 	}
 
 	ev_data.new_connection.child_trans_hndl =
@@ -1081,14 +1094,14 @@ cleanup2:
 	if (retval) {
 		ERROR_LOG(
 		"removing connection handler failed.(errno=%d %m)\n",
-		errno);
+		xio_get_last_socket_error());
 	}
 cleanup3:
 	if (is_single) {
-		close(fd);
+		xio_closesocket(fd);
 	} else {
-		close(cfd);
-		close(dfd);
+		xio_closesocket(cfd);
+		xio_closesocket(dfd);
 	}
 
 	if (child_hndl)
@@ -1135,8 +1148,9 @@ void xio_tcp_new_connection(struct xio_tcp_transport *parent_hndl)
 			 (struct sockaddr *)&pending_conn->sa.sa_stor,
 			 &len);
 	if (retval < 0) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp accept failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp accept failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		ufree(pending_conn);
 		return;
 	}
@@ -1202,8 +1216,9 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		      (struct sockaddr *)&sa.sa_stor,
 		      sa_len);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp bind failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp bind failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		goto exit;
 	}
 
@@ -1212,8 +1227,9 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	retval  = listen(tcp_hndl->sock.cfd,
 			 backlog > 0 ? backlog : MAX_BACKLOG);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp listen failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp listen failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		goto exit;
 	}
 
@@ -1229,8 +1245,9 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 			      (struct sockaddr *)&sa.sa_stor,
 			      (socklen_t *)&sa_len);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("getsockname failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("getsockname failed. (errno=%d %m)\n",
+xio_get_last_socket_error());
 		goto exit;
 	}
 
@@ -1276,7 +1293,7 @@ void xio_tcp_conn_established_helper(int fd,
 					    tcp_hndl->sock.cfd);
 	if (retval) {
 		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
@@ -1286,8 +1303,9 @@ void xio_tcp_conn_established_helper(int fd,
 			    (char*)&so_error,
 			    &len);
 	if (retval) {
-		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
-		so_error = errno;
+		ERROR_LOG("getsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
+		so_error = xio_get_last_socket_error();
 	}
 	if (so_error || error) {
 		DEBUG_LOG("fd=%d connection establishment failed\n",
@@ -1301,7 +1319,7 @@ void xio_tcp_conn_established_helper(int fd,
 	retval = tcp_hndl->sock.ops->add_ev_handlers(tcp_hndl);
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
@@ -1310,9 +1328,9 @@ void xio_tcp_conn_established_helper(int fd,
 			     (struct sockaddr *)&tcp_hndl->base.peer_addr,
 			     &len);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp getpeername failed. (errno=%d %m)\n", errno);
-		so_error = errno;
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp getpeername failed. (errno=%d %m)\n",xio_get_last_socket_error());
+		so_error = xio_get_last_socket_error();
 		goto cleanup;
 	}
 
@@ -1327,7 +1345,7 @@ void xio_tcp_conn_established_helper(int fd,
 	return;
 
 cleanup:
-	if  (so_error == ECONNREFUSED)
+	if  (so_error == XIO_ECONNREFUSED)
 		xio_transport_notify_observer(&tcp_hndl->base,
 					      XIO_TRANSPORT_REFUSED, NULL);
 	else
@@ -1388,7 +1406,7 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 					    tcp_hndl->sock.dfd);
 	if (retval) {
 		ERROR_LOG("removing connection handler failed.(errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
@@ -1398,8 +1416,9 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 			    (char*)&so_error,
 			    &so_error_len);
 	if (retval) {
-		ERROR_LOG("getsockopt failed. (errno=%d %m)\n", errno);
-		so_error = errno;
+		ERROR_LOG("getsockopt failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
+		so_error = xio_get_last_socket_error();
 	}
 	if (so_error ||
 		(events & (XIO_POLLERR | XIO_POLLHUP | XIO_POLLRDHUP))) {
@@ -1419,7 +1438,7 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 			tcp_hndl);
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		goto cleanup;
 	}
 
@@ -1434,7 +1453,7 @@ void xio_tcp_dfd_conn_established_ev_handler(int fd,
 	return;
 
 cleanup:
-	if  (so_error == ECONNREFUSED)
+	if  (so_error == XIO_ECONNREFUSED)
 		xio_transport_notify_observer(&tcp_hndl->base,
 					      XIO_TRANSPORT_REFUSED, NULL);
 	else
@@ -1457,11 +1476,12 @@ static int xio_tcp_connect_helper(int fd, struct sockaddr *sa,
 
 	retval = connect(fd, sa, sa_len);
 	if (retval) {
-		if (errno == EINPROGRESS) {
+		if (xio_get_last_socket_error() == XIO_EINPROGRESS) {
 			/*set iomux for write event*/
 		} else {
-			xio_set_error(errno);
-			ERROR_LOG("tcp connect failed. (errno=%d %m)\n", errno);
+			xio_set_error(xio_get_last_socket_error());
+			ERROR_LOG("tcp connect failed. (errno=%d %m)\n",
+				  xio_get_last_socket_error());
 			return retval;
 		}
 	} else {
@@ -1473,8 +1493,9 @@ static int xio_tcp_connect_helper(int fd, struct sockaddr *sa,
 
 	retval = getsockname(fd, &lsa->sa, &lsa_len);
 	if (retval) {
-		xio_set_error(errno);
-		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n", errno);
+		xio_set_error(xio_get_last_socket_error());
+		ERROR_LOG("tcp getsockname failed. (errno=%d %m)\n",
+			  xio_get_last_socket_error());
 		return retval;
 	}
 
@@ -1515,7 +1536,7 @@ int xio_tcp_single_sock_connect(struct xio_tcp_transport *tcp_hndl,
 			tcp_hndl);
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		return retval;
 	}
 
@@ -1560,7 +1581,7 @@ int xio_tcp_dual_sock_connect(struct xio_tcp_transport *tcp_hndl,
 			tcp_hndl);
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
-			  errno);
+			  xio_get_last_socket_error());
 		return retval;
 	}
 
@@ -1610,9 +1631,9 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 			      (struct sockaddr *)&if_sa.sa_stor,
 			      sa_len);
 		if (retval) {
-			xio_set_error(errno);
+			xio_set_error(xio_get_last_socket_error());
 			ERROR_LOG("tcp bind failed. (errno=%d %m)\n",
-				  errno);
+				  xio_get_last_socket_error());
 			goto exit;
 		}
 	}
@@ -1734,7 +1755,7 @@ static int xio_tcp_transport_init(struct xio_transport *transport)
 static void xio_tcp_release(void)
 {
 	if (cdl_fd >= 0)
-		close(cdl_fd);
+		xio_closesocket(cdl_fd);
 
 	/*ORK todo close everything? see xio_cq_release*/
 }
