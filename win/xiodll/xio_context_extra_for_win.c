@@ -45,7 +45,7 @@ struct xio_delayed_work_struct;
 
 struct xio_workqueue * xio_workqueue_create(struct xio_context *) {
 	/* not yet supported in Windows */
-	return 0;
+	return (struct xio_workqueue *) (-1);
 }
 
 int xio_workqueue_destroy(struct xio_workqueue *) {
