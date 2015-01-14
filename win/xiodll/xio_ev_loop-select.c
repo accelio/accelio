@@ -66,7 +66,7 @@ struct xio_ev_loop {
 	fd_set              readfds,  save_rfds;
 	fd_set              writefds, save_wfds;
 	int                 stop_loop;
-	SOCKET              wakeup_fd[2];
+	socket_t            wakeup_fd[2];
 	int                 deleted_events_nr;
 	struct xio_ev_data *deleted_events[MAX_DELETED_EVENTS];
 	struct list_head    poll_events_list;
@@ -394,11 +394,11 @@ retry:
 
 		// check wakeup is armed to prevent false wakeups
 		if (FD_ISSET(loop->wakeup_fd[0], &loop->readfds)){
-			int val;
+			uint64_t val;
 			num_found++;
 			//FD_CLR(loop->wakeup_fd, &loop->save_rfds);// avner TODO: wakeup is always one shot ??? - always ready for read!!
 			loop->stop_loop = 1;
-			read(loop->wakeup_fd[0], &val, sizeof(val)); // consume it
+			xio_read(loop->wakeup_fd[0], &val, sizeof(val)); // consume it
 		}
 
 		/* loop on list of events/fds */
@@ -507,7 +507,7 @@ int xio_ev_loop_run(void *loop_hndl)
 void xio_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop	*)loop_hndl;
-	int val = 1;
+	uint64_t val = 1;
 	if (loop == NULL)
 		return;
 
@@ -521,7 +521,7 @@ void xio_ev_loop_stop(void *loop_hndl)
 		return;  // wakeup is still armed, probably left loop in previous
 			     // cycle due to other reasons (timeout, events)
 //*/
-	if (sizeof(val) == write(loop->wakeup_fd[1], &val, sizeof(val))) {
+	if (sizeof(val) == xio_write(loop->wakeup_fd[1], &val, sizeof(val))) {
 		xio_set_error(errno);
 		WARN_LOG("failed to write int to wakeup_fd[1]:%d\n", loop->wakeup_fd[1]);
 		// avner: is this WARN or error?

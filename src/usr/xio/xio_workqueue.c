@@ -163,9 +163,9 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 	ssize_t			s;
 
 	/* consume the timer data in fd */
-	s = read(work_queue->timer_fd, &exp, sizeof(exp));
+	s = xio_read(work_queue->timer_fd, &exp, sizeof(exp));
 	if (s < 0) {
-		if (errno != EAGAIN)
+		if (xio_get_last_socket_error() != XIO_EAGAIN)
 			ERROR_LOG("failed to read from timerfd, %m\n");
 		return;
 	}
@@ -197,9 +197,9 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 
 	/* drain the pipe data */
 	while (1) {
-		s = read(work_queue->pipe_fd[0], &exp, sizeof(exp));
+		s = xio_read(work_queue->pipe_fd[0], &exp, sizeof(exp));
 		if (s < 0) {
-			if (errno != EAGAIN)
+			if (xio_get_last_socket_error() != XIO_EAGAIN)
 				ERROR_LOG("failed to read from pipe, %m\n");
 			work_queue->deleted_works_nr = 0;
 			return;
@@ -292,10 +292,10 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	return work_queue;
 
 exit2:
-	close(work_queue->pipe_fd[0]);
-	close(work_queue->pipe_fd[1]);
+	xio_closesocket(work_queue->pipe_fd[0]);
+	xio_closesocket(work_queue->pipe_fd[1]);
 exit1:
-	close(work_queue->timer_fd);
+	xio_closesocket(work_queue->timer_fd);
 exit:
 	ufree(work_queue);
 	return NULL;
@@ -324,9 +324,9 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 
 	xio_timers_list_close(&work_queue->timers_list);
 
-	close(work_queue->pipe_fd[0]);
-	close(work_queue->pipe_fd[1]);
-	close(work_queue->timer_fd);
+	xio_closesocket(work_queue->pipe_fd[0]);
+	xio_closesocket(work_queue->pipe_fd[1]);
+	xio_closesocket(work_queue->timer_fd);
 	ufree(work_queue);
 
 	return retval;
@@ -428,12 +428,12 @@ int xio_workqueue_add_work(struct xio_workqueue *work_queue,
 	work->data	= data;
 	work->flags	|= XIO_WORK_PENDING;
 
-	s = write(work_queue->pipe_fd[1], &exp, sizeof(exp));
+	s = xio_write(work_queue->pipe_fd[1], &exp, sizeof(exp));
 	if (s < 0) {
 		ERROR_LOG("failed to write to pipe, %m\n");
 		return -1;
 	}
-	if (s != sizeof(uint64_t)) {
+	if (s != sizeof(exp)) {
 		ERROR_LOG("failed to write to pipe, %m\n");
 		return -1;
 	}

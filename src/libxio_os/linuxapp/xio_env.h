@@ -388,6 +388,16 @@ typedef int socket_t;
 static inline int xio_closesocket(socket_t sock) {return close(sock);}
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_write(socket_t sock, const void *buf, size_t len) {
+	return write(sock, buf, len);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline ssize_t xio_read(socket_t sock, void *buf, size_t count) {
+	return read(sock, buf, count);
+}
+
+/*---------------------------------------------------------------------------*/
 static inline int xio_get_last_socket_error() {return errno;}
 
 /*---------------------------------------------------------------------------*/

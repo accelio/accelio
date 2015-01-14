@@ -363,6 +363,16 @@ static inline int xio_get_last_socket_error() { return WSAGetLastError(); }
 static inline int xio_closesocket(socket_t sock) {return closesocket(sock);}
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_write(socket_t sock, const void *buf, size_t len) {
+	return send(sock, (const char *)buf, len, 0);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline ssize_t xio_read(socket_t sock, void *buf, size_t count) {
+	return recv(sock, (char *)buf, count, 0);
+}
+
+/*---------------------------------------------------------------------------*/
 /*
 *  based on: http://cantrip.org/socketpair.c
 *
