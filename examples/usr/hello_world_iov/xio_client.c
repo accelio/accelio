@@ -71,7 +71,7 @@ struct session_data {
 };
 
 /*---------------------------------------------------------------------------*/
-/* process_response							     */
+/* msg_vec_init								     */
 /*---------------------------------------------------------------------------*/
 static int msg_vec_init(struct session_data *sdata,
 			int imax_nents, int omax_nents)
@@ -112,6 +112,9 @@ static int msg_vec_init(struct session_data *sdata,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* msg_prep_for_send							     */
+/*---------------------------------------------------------------------------*/
 static void msg_prep_for_send(struct session_data *sdata, struct xio_msg *msg)
 {
 	struct xio_vmsg		*pomsg = &msg->out;
@@ -168,6 +171,9 @@ static void msg_prep_for_send(struct session_data *sdata, struct xio_msg *msg)
 	}
 }
 
+/*---------------------------------------------------------------------------*/
+/* msg_resources_destroy						     */
+/*---------------------------------------------------------------------------*/
 static void msg_resources_destroy(struct session_data *sdata)
 {
 	if (sdata->xbuf.addr) {

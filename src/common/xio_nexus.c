@@ -221,6 +221,8 @@ void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
 {
 	struct xio_task *task = xio_tasks_pool_get(nexus->primary_tasks_pool);
+	if ( task == NULL)
+		return  NULL;
 	task->nexus = nexus;
 	task->trans_hndl = nexus->transport_hndl;
 	return  task;

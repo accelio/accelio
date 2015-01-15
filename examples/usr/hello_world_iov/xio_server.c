@@ -51,6 +51,7 @@
 #define	GATHER			1
 
 int test_disconnect;
+int gather = GATHER;
 
 /* server private data */
 struct server_data {
@@ -69,7 +70,7 @@ struct server_data {
 };
 
 /*---------------------------------------------------------------------------*/
-/* process_response							     */
+/* msg_vec_init								     */
 /*---------------------------------------------------------------------------*/
 static int msg_vec_init(struct server_data *sdata,
 			int imax_nents, int omax_nents)
@@ -110,6 +111,9 @@ static int msg_vec_init(struct server_data *sdata,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* msg_prep_for_send							     */
+/*---------------------------------------------------------------------------*/
 static void msg_prep_for_send(struct server_data *sdata, struct xio_msg *msg)
 {
 	struct xio_vmsg		*pmsg = &msg->out;
@@ -145,6 +149,9 @@ static void msg_prep_for_send(struct server_data *sdata, struct xio_msg *msg)
 	}
 }
 
+/*---------------------------------------------------------------------------*/
+/* msg_resources_destroy						     */
+/*---------------------------------------------------------------------------*/
 static void msg_resources_destroy(struct server_data *sdata)
 {
 	if (sdata->xbuf.addr) {
@@ -316,7 +323,6 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 	int			nents = vmsg_sglist_nents(&msg->in);
 	int			i;
-	int			gather = GATHER;
 
 	/* gather into one buffer */
 	if (gather) {
@@ -433,6 +439,8 @@ int main(int argc, char *argv[])
 		test_disconnect = atoi(argv[4]);
 	else
 		test_disconnect = 0;
+
+	gather = GATHER;
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
