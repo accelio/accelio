@@ -61,3 +61,5 @@ Module.symvers
 *.vcxproj.user
 *.v12.suo
 *.sdf
+Debug
+Release

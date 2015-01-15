@@ -13,8 +13,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LockFree", "LockFreeAdapter
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hello_world_server", "hello_world_server\hello_world_server.vcxproj", "{970DA5AC-6B81-4451-B25E-43E1E68EF168}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{985F798D-AA3B-450B-8EFE-467C97E5DD8A}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "iocp_echo_server", "iocp_echo_server\iocp_echo_server.vcxproj", "{82842612-15CE-4CCD-84FF-4CF4BDA1C24F}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xiodll", "xiodll\xiodll.vcxproj", "{57E1DF48-4438-4D61-B83F-B64F64523ED1}"
@@ -83,18 +81,6 @@ Global
 		{970DA5AC-6B81-4451-B25E-43E1E68EF168}.Release|Win32.Build.0 = Release|Win32
 		{970DA5AC-6B81-4451-B25E-43E1E68EF168}.Release|x64.ActiveCfg = Release|x64
 		{970DA5AC-6B81-4451-B25E-43E1E68EF168}.Release|x64.Build.0 = Release|x64
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|Mixed Platforms.Build.0 = Debug|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|Win32.ActiveCfg = Debug|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|Win32.Build.0 = Debug|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|x64.ActiveCfg = Debug|x64
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Debug|x64.Build.0 = Debug|x64
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|Mixed Platforms.ActiveCfg = Release|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|Mixed Platforms.Build.0 = Release|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|Win32.ActiveCfg = Release|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|Win32.Build.0 = Release|Win32
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|x64.ActiveCfg = Release|x64
-		{985F798D-AA3B-450B-8EFE-467C97E5DD8A}.Release|x64.Build.0 = Release|x64
 		{82842612-15CE-4CCD-84FF-4CF4BDA1C24F}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{82842612-15CE-4CCD-84FF-4CF4BDA1C24F}.Debug|Mixed Platforms.Build.0 = Debug|Win32
 		{82842612-15CE-4CCD-84FF-4CF4BDA1C24F}.Debug|Mixed Platforms.Deploy.0 = Debug|Win32
