@@ -187,12 +187,13 @@ else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 src/tools/usr/";
 	subdirs2="$subdirs2 examples/usr/hello_world";
+	subdirs2="$subdirs2 examples/usr/hello_world_mt";
+	subdirs2="$subdirs2 examples/usr/hello_world_iov";
 	subdirs2="$subdirs2 examples/usr/hello_world_daemon";
 
 if test "$mypj_found_event_headers" == "yes"; then
 	subdirs2="$subdirs2 examples/usr/hello_world_libevent";
 fi
-	subdirs2="$subdirs2 examples/usr/hello_world_mt";
 if test "$enable_raio_build" != "no"; then
 	subdirs2="$subdirs2 examples/usr/raio";
 if test "$enable_fio_build" != "no"; then
@@ -252,6 +253,7 @@ AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([src/tools/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
+AC_CONFIG_FILES([examples/usr/hello_world_iov/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_daemon/Makefile])
 if test "$mypj_found_event_headers" == "yes"; then
 	AC_CONFIG_FILES([examples/usr/hello_world_libevent/Makefile])
