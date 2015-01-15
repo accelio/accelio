@@ -54,8 +54,8 @@ extern struct xio_rdma_options	rdma_options;
 
 #define MAX_SGE				(XIO_MAX_IOV + 1)
 
-#define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
-#define MAX_RECV_WR			256
+#define MAX_SEND_WR			(XIO_MAX_IOV +1)  /* 256 rdma_write + 1 send */
+#define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 
 /* 3 - one for send, one for frwr, one for local invalidate

@@ -57,8 +57,8 @@ extern spinlock_t		dev_list_lock;
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
-#define MAX_RECV_WR			256
+#define MAX_SEND_WR			(XIO_MAX_IOV+1)  /* 256 rdma_write + 1 send */
+#define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 #define MAX_ACKED_CQE			128
 
