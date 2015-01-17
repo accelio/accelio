@@ -54,9 +54,9 @@
 struct xio_ev_loop {
 	int				efd;
 	int				in_dispatch;
-	int				stop_loop;
+	volatile int			stop_loop;
 	int				wakeup_event;
-	int				wakeup_armed;
+	volatile int			wakeup_armed;
 	int				deleted_events_nr;
 	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 	struct list_head		poll_events_list;
@@ -232,7 +232,8 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events)
 	retval = epoll_ctl(loop->efd, EPOLL_CTL_MOD, fd, &ev);
 	if (retval != 0) {
 		xio_set_error(errno);
-		ERROR_LOG("epoll_ctl failed. %m\n");
+		ERROR_LOG("epoll_ctl failed. efd:%d, fd:%d %m\n",
+			  loop->efd, fd);
 	}
 
 	return retval;
@@ -492,7 +493,7 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
-	if (loop == NULL)
+	if (loop == NULL || loop->efd == -1)
 		return;
 
 	if (loop->stop_loop == 1)
@@ -519,6 +520,8 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	if (loop == NULL)
 		return;
 
+	/* mark loop as stopped */
+	loop->stop_loop = 1;
 	list_for_each_entry_safe(tev, tmp_tev, &loop->poll_events_list,
 				 events_list_entry) {
 		xio_ev_loop_del(loop, tev->fd);
