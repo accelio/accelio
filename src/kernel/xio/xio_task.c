@@ -329,3 +329,25 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 	q->params.pool_hooks.context = new_context;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_dump_used						     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_dump_used(struct xio_tasks_pool *q)
+{
+	struct xio_tasks_slab	*pslab;
+	unsigned int		i;
+	char			*pool_name;
+
+	list_for_each_entry(pslab, &q->slabs_list, slabs_list_entry) {
+		for (i = 0; i < pslab->nr; i++)
+			if (pslab->array[i]->tlv_type != 0xdead) {
+				pool_name = q->params.pool_name ?
+					q->params.pool_name :"unknown";
+				ERROR_LOG("pool_name:%s: in use: task:%p, type:0x%x\n",
+					  pool_name,
+					  pslab->array[i],
+					  pslab->array[i]->tlv_type);
+			}
+	}
+}
+

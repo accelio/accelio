@@ -298,7 +298,7 @@ int		xio_uri_get_portal(const char *uri, char *portal,
 int		xio_uri_get_resource(const char *uri, char *resource,
 				     int resource_len);
 
-const char		*xio_uri_get_resource_ptr(const char *uri);
+const char	*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
@@ -322,6 +322,8 @@ size_t		xio_iov_length(const struct xio_iovec *iov,
 unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 void		xio_msg_dump(struct xio_msg *xio_msg);
+
+const char	*xio_proto_str(enum xio_proto proto);
 
 /*---------------------------------------------------------------------------*/
 /* xio_options.c							     */

@@ -129,6 +129,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	for (i = 0; i < alloc_nr; i++) {
 		s->array[i]		= (struct xio_task *)data;
+		s->array[i]->tlv_type	= 0xdead;
 		s->array[i]->ltid	= s->start_idx + i;
 		s->array[i]->magic	= XIO_TASK_MAGIC;
 		s->array[i]->pool	= (void *)q;
@@ -284,6 +285,9 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 				q->params.pool_hooks.context,
 				q, q->dd_data);
 
+	if (q->params.pool_name)
+		kfree(q->params.pool_name);
+
 	ufree(q);
 }
 EXPORT_SYMBOL(xio_tasks_pool_destroy);
@@ -316,3 +320,26 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 	}
 	q->params.pool_hooks.context = new_context;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_dump_used						     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_dump_used(struct xio_tasks_pool *q)
+{
+	struct xio_tasks_slab	*pslab;
+	unsigned int		i;
+	char			*pool_name;
+
+	list_for_each_entry(pslab, &q->slabs_list, slabs_list_entry) {
+		for (i = 0; i < pslab->nr; i++)
+			if (pslab->array[i]->tlv_type != 0xdead) {
+				pool_name = q->params.pool_name ?
+					q->params.pool_name :"unknown";
+				ERROR_LOG("pool_name:%s: in use: task:%p, type:0x%x\n",
+					  pool_name,
+					  pslab->array[i],
+					  pslab->array[i]->tlv_type);
+			}
+	}
+}
+

@@ -123,6 +123,7 @@ struct xio_tasks_pool_hooks {
 
 struct xio_tasks_pool_params {
 	struct xio_tasks_pool_hooks	pool_hooks;
+	char				*pool_name;
 	unsigned int			start_nr;
 	unsigned int			max_nr;
 	unsigned int			alloc_nr;
@@ -172,6 +173,8 @@ static void xio_task_reset(struct xio_task *task)
 	task->state			= XIO_TASK_STATE_INIT;
 	xio_mbuf_reset(&task->mbuf);
 	*/
+
+	task->tlv_type			= 0xdead;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -227,6 +230,11 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context);
 int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q);
 
 /*---------------------------------------------------------------------------*/
+/* xio_tasks_pool_dump_used						     */
+/*---------------------------------------------------------------------------*/
+void xio_tasks_pool_dump_used(struct xio_tasks_pool *q);
+
+/*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_get							     */
 /*---------------------------------------------------------------------------*/
 static inline struct xio_task *xio_tasks_pool_get(struct xio_tasks_pool *q)
@@ -274,10 +282,12 @@ static inline int xio_tasks_pool_free_tasks(
 	if (!q)
 		return 0;
 
-	if (q->curr_used)
+	if (q->curr_used) {
 		ERROR_LOG("tasks inventory: %d/%d = missing:%d\n",
 			  q->curr_alloced - q->curr_used, q->curr_alloced,
 			  q->curr_used);
+		/*xio_tasks_pool_dump_used(q);*/
+	}
 
 	return q->curr_alloced - q->curr_used;
 }

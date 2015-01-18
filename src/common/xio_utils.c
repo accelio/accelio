@@ -459,3 +459,16 @@ inline const char *xio_version(void)
 }
 EXPORT_SYMBOL(xio_version);
 
+/*---------------------------------------------------------------------------*/
+/* xio_proto_str							     */
+/*---------------------------------------------------------------------------*/
+const char *xio_proto_str(enum xio_proto proto)
+{
+	switch (proto) {
+	case XIO_PROTO_RDMA: return "rdma";
+	case XIO_PROTO_TCP: return "tcp";
+	default: return "proto_unknown";
+	}
+}
+EXPORT_SYMBOL(xio_proto_str);
+

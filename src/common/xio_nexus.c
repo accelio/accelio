@@ -871,6 +871,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	struct xio_tasks_pool_ops	*pool_ops;
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
+	char				pool_name[64];
 
 	if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
 		transport_hndl = nexus->new_transport_hndl;
@@ -956,6 +957,12 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
 		pool_ops->task_post_get;
 
+	sprintf(pool_name ,"%s_%s_initial_pool_of_context:%p",
+		(nexus->transport_hndl->is_client) ? "client" : "server",
+		xio_proto_str(proto), ctx);
+
+	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
+
 	/* initialize the tasks pool */
 	ctx->initial_tasks_pool[proto] = xio_tasks_pool_create(&params);
 	if (ctx->initial_tasks_pool[proto] == NULL) {
@@ -994,6 +1001,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	struct xio_tasks_pool_ops	*pool_ops;
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
+	char				pool_name[64];
 
 	proto		= nexus->transport_hndl->proto;
 	ctx		= nexus->transport_hndl->ctx;
@@ -1073,6 +1081,11 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
 				pool_ops->task_post_get;
 
+	sprintf(pool_name ,"%s_%s_primary_pool_of_context:%p",
+		(nexus->transport_hndl->is_client) ? "client" : "server",
+		xio_proto_str(proto), ctx);
+
+	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
 
 	/* initialize the tasks pool */
 	ctx->primary_tasks_pool[proto] = xio_tasks_pool_create(&params);
