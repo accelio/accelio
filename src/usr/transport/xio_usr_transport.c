@@ -188,6 +188,9 @@ char *xio_transport_state_str(enum xio_transport_state state)
 	case XIO_STATE_DESTROYED:
 		return "DESTROYED";
 		break;
+	case XIO_STATE_ERROR:
+		return "ERROR";
+		break;
 	default:
 		return "UNKNOWN";
 		break;
