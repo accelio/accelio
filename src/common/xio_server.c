@@ -114,6 +114,7 @@ static int xio_on_new_message(struct xio_server *server,
 	struct xio_task			*task;
 	uint32_t			tlv_type;
 	struct xio_session_params	params;
+	int				locked = 0;
 
 	if (!server || !nexus || !event_data || !event_data->msg.task) {
 		ERROR_LOG("server [new session]: failed " \
@@ -171,13 +172,29 @@ static int xio_on_new_message(struct xio_server *server,
 		task->session		= session;
 		task->connection	= connection;
 	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
-			/* find the old session */
+		struct xio_session *session1;
+		/* find the old session without lock */
 		session = xio_find_session(event_data->msg.task);
 		if (session == NULL) {
 			ERROR_LOG("server [new connection]: failed " \
-				  "session not found\n");
+				  "session not found. server:%p\n",
+				  server);
+			xio_nexus_close(nexus, NULL);
 			return -1;
 		}
+		/* lock it and retry find */
+		mutex_lock(&session->lock);
+		/* session before destruction - try to lock before continue */
+		session1 = xio_find_session(event_data->msg.task);
+		if (session1 == NULL) {
+			ERROR_LOG("server [new connection]: failed " \
+				  "session not found. server:%p\n",
+				  server);
+			xio_nexus_close(nexus, NULL);
+			mutex_unlock(&session->lock);
+			return -1;
+		}
+		locked = 1;
 		task->session = session;
 
 		DEBUG_LOG("server [new connection]: server:%p, " \
@@ -209,6 +226,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
+
 		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 	} else {
 		ERROR_LOG("server unexpected message\n");
@@ -219,6 +237,8 @@ static int xio_on_new_message(struct xio_server *server,
 	if (session)
 		xio_nexus_notify_observer(nexus, &session->observer,
 					  event, event_data);
+	if (locked)
+		mutex_unlock(&session->lock);
 
 	return 0;
 

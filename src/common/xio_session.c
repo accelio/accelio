@@ -1441,6 +1441,9 @@ int xio_session_destroy(struct xio_session *session)
 	if (session == NULL)
 		return 0;
 
+	xio_ctx_del_work(session->teardown_work_ctx,
+			 &session->teardown_work);
+
 	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
 		ERROR_LOG("xio_session_destroy failed: " \
@@ -1636,21 +1639,29 @@ static void xio_session_pre_teardown(void *_session)
 		reason = session->teardown_reason;
 		break;
 	}
+	mutex_lock(&session->lock);
 
 	spin_lock(&session->connections_list_lock);
 	destroy_session = ((session->connections_nr == 0) &&
 			(session->lead_connection == NULL) &&
 			(session->redir_connection == NULL));
+
+	xio_ctx_del_work(session->teardown_work_ctx,
+			 &session->teardown_work);
+
 	spin_unlock(&session->connections_list_lock);
 
-	/* last chance to teardown */
+		/* last chance to teardown */
 	if (destroy_session) {
-		xio_ctx_del_work(session->teardown_work_ctx,
-				 &session->teardown_work);
+		/* remove the session from cache */
+		xio_sessions_cache_remove(session->session_id);
+		mutex_unlock(&session->lock);
 		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
 		xio_session_notify_teardown(session, session->teardown_reason);
-	}
+	} else
+		mutex_unlock(&session->lock);
+
 }
 
 /*---------------------------------------------------------------------------*/
