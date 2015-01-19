@@ -203,7 +203,7 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 		observer->notify(observer->impl, observable->impl,
 				 event, event_data);
 	else
-		DEBUG_LOG("spurious notification" \
+		DEBUG_LOG("spurious notification " \
 			  "observable:%p, observer:%p\n",
 			  observable, observer);
 }
