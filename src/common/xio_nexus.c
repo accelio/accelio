@@ -2140,18 +2140,13 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		break;
 	default:
 		/* only client shall cause disconnection */
-		if (nexus->transport_hndl->is_client) {
-			retval = xio_ctx_add_delayed_work(
-					nexus->transport_hndl->ctx,
-					XIO_NEXUS_CLOSE_TIMEOUT, nexus,
-					xio_nexus_release_cb,
-					&nexus->close_time_hndl);
-			if (retval)
-				ERROR_LOG("xio_nexus_delayed_close failed\n");
-		} else {
-			/* leave the server nexus alive */
-			kref_init(&nexus->kref);
-		}
+		retval = xio_ctx_add_delayed_work(
+				nexus->transport_hndl->ctx,
+				XIO_NEXUS_CLOSE_TIMEOUT, nexus,
+				xio_nexus_release_cb,
+				&nexus->close_time_hndl);
+		if (retval)
+			ERROR_LOG("xio_nexus_delayed_close failed\n");
 		break;
 	}
 }
