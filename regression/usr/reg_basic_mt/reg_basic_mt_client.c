@@ -84,6 +84,8 @@ struct client_data {
 	int				disconnect_nr;
 	int				nsent;
 	int				nrecv;
+	int				nerror;
+	int				pad;
 	pthread_spinlock_t		lock;
 	pthread_barrier_t		barr;
 	struct thread_data		*tdata;
@@ -286,7 +288,6 @@ static int on_connection_teardown(struct xio_session *session,
 	struct client_data *client_data = (struct client_data *)cb_user_context;
 	struct session_entry *session_entry;
 	struct connection_entry *connection_entry, *tmp_connection_entry;
-	int			found = 0;
 
 	pthread_spin_lock(&client_data->lock);
 	TAILQ_FOREACH(session_entry, &client_data->sessions_list,
@@ -302,7 +303,6 @@ static int on_connection_teardown(struct xio_session *session,
 						     connection_entry,
 						     conns_list_entry);
 					free(connection_entry);
-					found = 1;
 					break;
 				}
 			}
@@ -311,8 +311,7 @@ static int on_connection_teardown(struct xio_session *session,
 	}
 	pthread_spin_unlock(&client_data->lock);
 
-	if (found)
-		xio_connection_destroy(connection);
+	xio_connection_destroy(connection);
 
 	return 0;
 }
@@ -336,6 +335,9 @@ static int on_session_teardown(struct xio_session *session,
 			break;
 		}
 	}
+	DEBUG("client: sent:%d, recv:%d, flushed:%d\n",
+	      client_data->nsent, client_data->nrecv, client_data->nerror);
+
 	pthread_spin_unlock(&client_data->lock);
 
 	return 0;
@@ -395,11 +397,27 @@ static int on_msg_error(struct xio_session *session,
 
 	isglist[0].user_context = NULL;
 	osglist[0].user_context = NULL;
+
+	if (direction == XIO_MSG_DIRECTION_OUT) {
+		fprintf(stderr, "**** [%p] message %lu failed. reason: %s\n",
+		       session, req->sn, xio_strerror(error));
+	} else {
+		xio_release_response(req);
+		fprintf(stderr, "**** [%p] message %lu failed. reason: %s\n",
+		       session, req->request->sn, xio_strerror(error));
+	}
+
+
 	obj_pool_put(tdata->req_pool, req);
 	if (out_reg_mem)
 		obj_pool_put(tdata->out_reg_mem_pool, out_reg_mem);
 	if (in_reg_mem)
 		obj_pool_put(tdata->in_reg_mem_pool, in_reg_mem);
+
+	pthread_spin_lock(&tdata->client_data->lock);
+	tdata->client_data->nerror++;
+	pthread_spin_unlock(&tdata->client_data->lock);
+
 
 	return 0;
 }
@@ -433,13 +451,11 @@ static int on_response(struct xio_session *session,
 		TAILQ_FOREACH(connection_entry,
 			      &session_entry->conns_list,
 			      conns_list_entry) {
-			if (!connection_entry->disconnected)  {
 				DEBUG("client disconnect. session:%p, " \
 				      "connection:%p\n",
 				      session, connection_entry->connection);
 				connection_entry->disconnected = 1;
 				xio_disconnect(connection_entry->connection);
-			}
 		}
 	}
 	if (tdata->client_data->nsent >= tdata->client_data->disconnect_nr) {

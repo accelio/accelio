@@ -58,8 +58,6 @@ struct portals_vec {
 
 struct  connection_entry {
 	struct xio_connection		*connection;
-	int				disconnected;
-	int				pad;
 	TAILQ_ENTRY(connection_entry)	conns_list_entry;
 };
 
@@ -91,8 +89,10 @@ struct server_data {
 	int				client_dlen;
 	int				server_dlen;
 	int				disconnect_nr;
+	volatile int			ncomp;
 	volatile int			nsent;
-	int				disconnect;
+	volatile int			nerror;
+	int				pad;
 	pthread_spinlock_t		lock;
 	TAILQ_HEAD(, session_entry)	sessions_list;
 	pthread_barrier_t		barr;
@@ -224,41 +224,8 @@ static int on_request(struct xio_session *session,
 
 	pthread_spin_lock(&tdata->server_data->lock);
 	tdata->server_data->nsent++;
-
-#if  TEST_DISCONNECT
-	if (tdata->server_data->nsent == tdata->server_data->disconnect_nr) {
-		struct session_entry *session_entry,
-				     *tmp_session_entry;
-		struct connection_entry *connection_entry,
-					*tmp_connection_entry;
-
-		TAILQ_FOREACH_SAFE(session_entry, tmp_session_entry,
-				   &tdata->server_data->sessions_list,
-				   sessions_list_entry) {
-			if (session_entry->session == session) {
-				session_entry->disconnected = 1;
-				TAILQ_FOREACH_SAFE(connection_entry,
-						   tmp_connection_entry,
-						   &session_entry->conns_list,
-						   conns_list_entry) {
-					if (!connection_entry->disconnected) {
-						connection_entry->disconnected
-									   = 1;
-						DEBUG(
-						  "server disconnect. " \
-						  "session:%p, connection:%p\n",
-						  session,
-						  connection_entry->connection);
-						xio_disconnect(
-						  connection_entry->connection);
-					}
-				}
-				break;
-			}
-		}
-	}
-#endif
 	pthread_spin_unlock(&tdata->server_data->lock);
+
 
 	return 0;
 }
@@ -307,6 +274,41 @@ static int on_send_rsp_complete(struct xio_session *session,
 	/* can be safely freed */
 	obj_pool_put(tdata->rsp_pool, rsp);
 
+	pthread_spin_lock(&tdata->server_data->lock);
+	tdata->server_data->ncomp++;
+
+#if  TEST_DISCONNECT
+	if (tdata->server_data->ncomp == tdata->server_data->disconnect_nr) {
+		struct session_entry *session_entry,
+				     *tmp_session_entry;
+		struct connection_entry *connection_entry,
+					*tmp_connection_entry;
+
+		TAILQ_FOREACH_SAFE(session_entry, tmp_session_entry,
+				   &tdata->server_data->sessions_list,
+				   sessions_list_entry) {
+			if ((session_entry->session == session) &&
+			    (session_entry->disconnected == 0)) {
+				session_entry->disconnected = 1;
+				TAILQ_FOREACH_SAFE(connection_entry,
+						   tmp_connection_entry,
+						   &session_entry->conns_list,
+						   conns_list_entry) {
+						DEBUG(
+						  "server disconnect. " \
+						  "session:%p, connection:%p\n",
+						  session,
+						  connection_entry->connection);
+						xio_disconnect(
+						  connection_entry->connection);
+				}
+				break;
+			}
+		}
+	}
+#endif
+	pthread_spin_unlock(&tdata->server_data->lock);
+
 	return 0;
 }
 
@@ -334,6 +336,10 @@ static int on_msg_error(struct xio_session *session,
 	vmsg_sglist_set_nents(&rsp->out, 0);
 
 	obj_pool_put(tdata->rsp_pool, rsp);
+
+	pthread_spin_lock(&tdata->server_data->lock);
+	tdata->server_data->nerror++;
+	pthread_spin_unlock(&tdata->server_data->lock);
 
 	return 0;
 }
@@ -409,17 +415,18 @@ static void *portal_server_cb(void *data)
 	/* detach the server */
 	xio_unbind(server);
 
+cleanup:
+	/* free the context */
+	xio_context_destroy(tdata->ctx);
+
 	obj_pool_free(tdata->rsp_pool, NULL, NULL);
 	if (tdata->server_data->client_dlen)
 		obj_pool_free(tdata->in_reg_mem_pool, NULL, reg_mem_free);
 	if (tdata->server_data->server_dlen)
 		obj_pool_free(tdata->out_reg_mem_pool, NULL, reg_mem_free);
 
-cleanup:
-	/* free the context */
-	xio_context_destroy(tdata->ctx);
 
-	DEBUG("server thread exit\n");
+	DEBUG("portal thread [%d] exit\n", tdata->affinity);
 	return NULL;
 }
 
@@ -437,8 +444,11 @@ static int on_new_connection(struct xio_session *session,
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
 		      sessions_list_entry) {
-
 		if (session_entry->session == session) {
+			if (session_entry->disconnected == 1) {
+				xio_disconnect(connection);
+				break;
+			}
 		connection_entry = (struct connection_entry *)
 					calloc(1, sizeof(*connection_entry));
 			if (connection_entry == NULL)
@@ -446,8 +456,6 @@ static int on_new_connection(struct xio_session *session,
 			connection_entry->connection = connection;
 			TAILQ_INSERT_TAIL(&session_entry->conns_list,
 					  connection_entry, conns_list_entry);
-			if (session_entry->disconnected == 1)
-				xio_disconnect(connection);
 			break;
 		}
 	}
@@ -466,7 +474,6 @@ static int on_connection_teardown(struct xio_session *session,
 	struct server_data *server_data = (struct server_data *)cb_user_context;
 	struct session_entry *session_entry;
 	struct connection_entry *connection_entry, *tmp_connection_entry;
-	int			found = 0;
 
 	pthread_spin_lock(&server_data->lock);
 	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
@@ -483,7 +490,6 @@ static int on_connection_teardown(struct xio_session *session,
 						     connection_entry,
 						     conns_list_entry);
 					free(connection_entry);
-					found = 1;
 					break;
 				}
 			}
@@ -492,8 +498,7 @@ static int on_connection_teardown(struct xio_session *session,
 	}
 	pthread_spin_unlock(&server_data->lock);
 
-	if (found)
-		xio_connection_destroy(connection);
+	xio_connection_destroy(connection);
 
 	return 0;
 }
@@ -517,6 +522,8 @@ static int on_session_teardown(struct xio_session *session,
 			break;
 		}
 	}
+	DEBUG("server: sent:%d, comp:%d, flushed:%d\n",
+	      server_data->nsent, server_data->ncomp, server_data->nerror);
 	pthread_spin_unlock(&server_data->lock);
 
 	return 0;
@@ -684,6 +691,7 @@ int server_main(int argc, char *argv[])
 
 cleanup1:
 	/* free the context */
+
 	xio_context_destroy(server_data->ctx);
 
 	xio_shutdown();

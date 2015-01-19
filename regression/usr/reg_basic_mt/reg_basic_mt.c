@@ -87,10 +87,10 @@ void rand_params(struct program_vars *vars)
 	int client_threads_num;
 
 	time((time_t *)&vars->seed);
-	/*
-	vars->test_num = 1;
-	vars->seed = 1393651986;
-	*/
+
+	vars->test_num = 0;
+	vars->seed = 1421164019;
+
 	srandom(vars->seed);
 
 	do {
