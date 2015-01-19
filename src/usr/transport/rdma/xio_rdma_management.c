@@ -1853,6 +1853,8 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	}
 
 	XIO_OBSERVABLE_DESTROY(&rdma_hndl->base.observable);
+	/* last chance to flush all tasks */
+	xio_rdma_flush_all_tasks(rdma_hndl);
 
 	ufree(rdma_hndl);
 }
@@ -2039,8 +2041,20 @@ notify_err1:
 static void  on_cm_refused(struct rdma_cm_event *ev,
 			   struct xio_rdma_transport *rdma_hndl)
 {
-	DEBUG_LOG("on_cm refused. reason:%s\n",
-		  xio_cm_rej_reason_str(ev->status));
+	DEBUG_LOG("on_cm_refused. rdma_hndl:%p, reason:%s, state:%s\n",
+		  rdma_hndl, xio_cm_rej_reason_str(ev->status),
+		  xio_transport_state_str(rdma_hndl->state));
+
+	/* we get CM_ESTABLISHED and afterward we get cm_refused. It looks like
+	 * cm state machine error.
+	 */
+	if (rdma_hndl->state == XIO_STATE_CONNECTED) {
+		/* one for beacon */
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+		/* one for timedwait_exit */
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+		rdma_hndl->state = XIO_STATE_ERROR;
+	}
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_REFUSED, NULL);
 }
@@ -2059,6 +2073,7 @@ static void  on_cm_established(struct rdma_cm_event *ev,
 	       &rdma_hndl->cm_id->route.addr.src_storage,
 	       sizeof(rdma_hndl->base.local_addr));
 
+	rdma_hndl->state = XIO_STATE_CONNECTED;
 
 	/* one for beacon */
 	kref_get(&rdma_hndl->base.kref);
@@ -2168,8 +2183,8 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 {
 	int retval;
 
-	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
-		  rdma_hndl, rdma_hndl->state);
+	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%s\n",
+		  rdma_hndl, xio_transport_state_str(rdma_hndl->state));
 
 	rdma_hndl->timewait = 0;
 
@@ -2209,6 +2224,7 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 	case XIO_STATE_DISCONNECTED:
 	case XIO_STATE_RECONNECT:
 	case XIO_STATE_DESTROYED:
+	case XIO_STATE_ERROR:
 	break;
 	}
 }
@@ -2241,7 +2257,7 @@ static void on_cm_error(struct rdma_cm_event *ev,
 {
 	int	reason;
 
-	DEBUG_LOG("rdma transport [error] %s, hndl:%p\n",
+	DEBUG_LOG("rdma transport [error] %s, rdma_hndl:%p\n",
 		  rdma_event_str(ev->event), rdma_hndl);
 
 	switch (ev->event) {

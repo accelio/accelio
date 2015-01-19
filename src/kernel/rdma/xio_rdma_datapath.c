@@ -666,7 +666,8 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->state != XIO_STATE_CONNECTED)
+	if (rdma_hndl->state != XIO_STATE_CONNECTED ||
+	    !rdma_hndl->primary_pool_cls.task_lookup)
 		return 0;
 
 	/* Does the local have resources to send message?  */
@@ -3715,8 +3716,6 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	/* now we can calculate  primary pool size */
 	xio_rdma_calc_pool_size(rdma_hndl);
-
-	rdma_hndl->state = XIO_STATE_CONNECTED;
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
