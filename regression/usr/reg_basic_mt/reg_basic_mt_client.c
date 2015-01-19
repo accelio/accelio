@@ -175,6 +175,31 @@ static void msg_obj_init(void *user_context, void *obj)
 }
 
 /*---------------------------------------------------------------------------*/
+/* msg_obj_free								     */
+/*---------------------------------------------------------------------------*/
+static void msg_obj_free(void *user_context, void *obj)
+{
+	struct xio_msg		*req	= (struct xio_msg *)obj;
+	struct xio_iovec_ex	*sglist;
+	struct thread_data	*tdata	= (struct thread_data *)user_context;
+
+	sglist = vmsg_sglist(&req->out);
+	if (sglist[0].user_context) {
+		struct xio_reg_mem *out_reg_mem =
+			(struct xio_reg_mem *)sglist[0].user_context;
+		obj_pool_put(tdata->out_reg_mem_pool, out_reg_mem);
+		sglist[0].user_context= NULL;
+	}
+	sglist = vmsg_sglist(&req->in);
+	if (sglist[0].user_context) {
+		struct xio_reg_mem *in_reg_mem =
+			(struct xio_reg_mem *)sglist[0].user_context;
+		obj_pool_put(tdata->in_reg_mem_pool, in_reg_mem);
+		sglist[0].user_context= NULL;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* worker_thread							     */
 /*---------------------------------------------------------------------------*/
 static void *worker_thread(void *data)
@@ -264,14 +289,14 @@ static void *worker_thread(void *data)
 	/* normal exit phase */
 	DEBUG("client exit signaled\n");
 
-	obj_pool_free(tdata->req_pool, NULL, NULL);
+	/* free the context */
+	xio_context_destroy(tdata->ctx);
+
+	obj_pool_free(tdata->req_pool, tdata, msg_obj_free);
 	if (tdata->client_data->client_dlen)
 		obj_pool_free(tdata->out_reg_mem_pool, NULL, reg_mem_free);
 	if (tdata->client_data->server_dlen)
 		obj_pool_free(tdata->in_reg_mem_pool, NULL, reg_mem_free);
-
-	/* free the context */
-	xio_context_destroy(tdata->ctx);
 
 	DEBUG("client thread exit\n");
 
@@ -389,30 +414,16 @@ static int on_msg_error(struct xio_session *session,
 	struct connection_entry	*conn_entry	=
 				(struct connection_entry *)cb_user_context;
 	struct thread_data	*tdata		= conn_entry->tdata;
-	struct xio_iovec_ex	*osglist = vmsg_sglist(&req->out);
-	struct xio_iovec_ex	*isglist = vmsg_sglist(&req->in);
-
-	struct xio_reg_mem *out_reg_mem = (struct xio_reg_mem *)osglist[0].user_context;
-	struct xio_reg_mem *in_reg_mem = (struct xio_reg_mem *)isglist[0].user_context;
-
-	isglist[0].user_context = NULL;
-	osglist[0].user_context = NULL;
 
 	if (direction == XIO_MSG_DIRECTION_OUT) {
-		fprintf(stderr, "**** [%p] message %lu failed. reason: %s\n",
+		DEBUG("**** [%p] message %lu failed. reason: %s\n",
 		       session, req->sn, xio_strerror(error));
 	} else {
 		xio_release_response(req);
-		fprintf(stderr, "**** [%p] message %lu failed. reason: %s\n",
+		DEBUG("**** [%p] message %lu failed. reason: %s\n",
 		       session, req->request->sn, xio_strerror(error));
 	}
-
-
 	obj_pool_put(tdata->req_pool, req);
-	if (out_reg_mem)
-		obj_pool_put(tdata->out_reg_mem_pool, out_reg_mem);
-	if (in_reg_mem)
-		obj_pool_put(tdata->in_reg_mem_pool, in_reg_mem);
 
 	pthread_spin_lock(&tdata->client_data->lock);
 	tdata->client_data->nerror++;
@@ -438,7 +449,6 @@ static int on_response(struct xio_session *session,
 	struct connection_entry *connection_entry;
 #endif
 	struct xio_reg_mem	*in_reg_mem;
-	struct xio_iovec_ex	*osglist = vmsg_sglist(&rsp->out);
 	struct xio_iovec_ex	*isglist = vmsg_sglist(&rsp->in);
 
 	/* acknowledge xio that response is no longer needed */
@@ -459,19 +469,7 @@ static int on_response(struct xio_session *session,
 		}
 	}
 	if (tdata->client_data->nsent >= tdata->client_data->disconnect_nr) {
-		struct xio_reg_mem *out_reg_mem =
-				(struct xio_reg_mem *)osglist[0].user_context;
-		struct xio_reg_mem *in_reg_mem =
-				(struct xio_reg_mem *)isglist[0].user_context;
-
-		isglist[0].user_context = NULL;
-		osglist[0].user_context = NULL;
 		obj_pool_put(tdata->req_pool, rsp);
-		if (out_reg_mem)
-			obj_pool_put(tdata->out_reg_mem_pool, out_reg_mem);
-		if (in_reg_mem)
-			obj_pool_put(tdata->in_reg_mem_pool, in_reg_mem);
-
 		pthread_spin_unlock(&tdata->client_data->lock);
 		return 0;
 	}
