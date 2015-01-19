@@ -1526,6 +1526,14 @@ static int xio_rdma_primary_pool_slab_pre_create(
 	size_t alloc_sz = alloc_nr*rdma_hndl->membuf_sz;
 	int	retval;
 
+	if (alloc_sz == 0) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("primary_pre_slab_create failed. alloc_nr:%d, "
+			  "membuf_sz:%zu\n",
+			  alloc_nr, rdma_hndl->membuf_sz);
+			return -1;
+
+	}
 	rdma_slab->alloc_nr = alloc_nr;
 	rdma_slab->buf_size = rdma_hndl->membuf_sz;
 
