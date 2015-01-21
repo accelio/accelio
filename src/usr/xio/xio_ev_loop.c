@@ -53,7 +53,7 @@
 /*---------------------------------------------------------------------------*/
 struct xio_ev_loop {
 	int				efd;
-	int				in_dispatch;
+	volatile int			in_dispatch;
 	volatile int			stop_loop;
 	int				wakeup_event;
 	volatile int			wakeup_armed;
