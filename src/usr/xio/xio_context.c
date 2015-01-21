@@ -371,13 +371,22 @@ int xio_query_context(struct xio_context *ctx,
 EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_get_poll_params						     */
+/* xio_context_get_poll_fd						     */
 /*---------------------------------------------------------------------------*/
-int xio_context_get_poll_params(struct xio_context *ctx,
-				struct xio_poll_params *poll_params)
+int xio_context_get_poll_fd(struct xio_context *ctx)
 {
-	return xio_ev_loop_get_poll_params(ctx->ev_loop, poll_params);
+	return xio_ev_loop_get_poll_fd(ctx->ev_loop);
 }
+EXPORT_SYMBOL(xio_context_get_poll_fd);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_poll_wait						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_poll_wait(struct xio_context *ctx, int timeout_ms)
+{
+	return xio_ev_loop_poll_wait(ctx->ev_loop, timeout_ms);
+}
+EXPORT_SYMBOL(xio_context_poll_wait);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_add_ev_handler						     */
@@ -511,4 +520,18 @@ void xio_ctx_remove_event(struct xio_context *ctx, xio_ctx_event_t *evt)
 {
 	xio_ev_loop_remove_event(ctx->ev_loop, evt);
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_poll_completions		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
+{
+	if (ctx->poll_completions_fn)
+		return ctx->poll_completions_fn(ctx->poll_completions_ctx,
+					       timeout_us);
+
+	return 0;
+}
+EXPORT_SYMBOL(xio_context_poll_completions);
+
 

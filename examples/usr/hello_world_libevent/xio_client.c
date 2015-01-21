@@ -45,7 +45,7 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define DISCONNECT_NR		2000000
+#define DISCONNECT_NR		20000000
 
 int test_disconnect;
 
@@ -68,9 +68,9 @@ static inline void timeout_cb(evutil_socket_t fd, short event, void *arg)
 
 static inline void xio_event_handler(int fd, short event, void *arg)
 {
-	struct xio_poll_params  *poll_params = (struct xio_poll_params *)arg;
+	struct xio_context  *ctx = (struct xio_context *)arg;
 
-	poll_params->handler(poll_params->fd, XIO_POLLIN, poll_params->data);
+	xio_context_poll_wait(ctx, 0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -141,11 +141,11 @@ static int on_response(struct xio_session *session,
 	if (test_disconnect) {
 		if (session_data->nrecv == DISCONNECT_NR) {
 			xio_disconnect(session_data->conn);
-			return 0;
+			printf("disconnect\n");
 		}
+		if (session_data->nrecv >= DISCONNECT_NR)
+			return 0;
 	}
-	if (session_data->nsent == DISCONNECT_NR)
-		return 0;
 
 	/* resend the message */
 	xio_send_request(session_data->conn, &session_data->req[i]);
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 	struct event		timeout;
 	struct event		xio_event;
 	struct timeval		tv;
-	struct xio_poll_params  poll_params;
+	int			xio_fd;
 	struct xio_session_params params;
 	struct xio_connection_params cparams;
 
@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
 	session_data.ctx = xio_context_create(NULL, 0, -1);
 
 	/* get poll parameters for libevent */
-	xio_context_get_poll_params(session_data.ctx, &poll_params);
+	xio_fd = xio_context_get_poll_fd(session_data.ctx);
 
 	/* create url to connect to */
 	if (argc > 3)
@@ -259,9 +259,9 @@ int main(int argc, char *argv[])
 	tv.tv_sec = 2;
 	event_add(&timeout, &tv);
 
-	event_assign(&xio_event, session_data.evbase, poll_params.fd,
+	event_assign(&xio_event, session_data.evbase, xio_fd,
 		     EV_READ|EV_PERSIST, xio_event_handler,
-		     (void *)&poll_params);
+		     session_data.ctx);
 
 	/* Add it to the active events, without a timeout */
 	event_add(&xio_event, NULL);

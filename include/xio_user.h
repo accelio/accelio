@@ -169,6 +169,29 @@ struct xio_msg {
 #define XIO_INFINITE			-1
 
 /**
+ * creates xio context - a context object represent concurrency unit
+ *
+ * @param[in] ctx_attr context attributes
+ * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
+ * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
+ *
+ * @return xio context handle, or NULL upon error
+ */
+struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
+				       int polling_timeout_us,
+				       int cpu_hint);
+
+/**
+ * get context poll fd, which can be later passed to an external dispatcher
+ *
+ * @param[in] ctx	  The xio context handle
+ *
+ * @return fd (non-negative) on success, or -1 on error. If an error occurs,
+ *         call xio_errno function to get the failure reason.
+ */
+int xio_context_get_poll_fd(struct xio_context *ctx);
+
+/**
  * @enum xio_ev_loop_events
  * @brief accelio's event dispatcher event types
  */
@@ -191,46 +214,6 @@ enum xio_ev_loop_events {
  * @param[in] data	user private data
  */
 typedef void (*xio_ev_handler_t)(int fd, int events, void *data);
-
-/**
- * @struct xio_poll_params
- * @brief  polling parameters to be used by external dispatcher
- */
-struct xio_poll_params {
-	int			fd;	 /**< the descriptor	              */
-	int			events;	 /**< the types of signals as defined */
-					 /**< in enum xio_ev_loop_events      */
-	xio_ev_handler_t	handler; /**< event handler that handles the  */
-					 /**< event                           */
-	void			*data;	 /**< user private data provided to   */
-					 /**< the handler                     */
-};
-
-/**
- * creates xio context - a context object represent concurrency unit
- *
- * @param[in] ctx_attr context attributes
- * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
- * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
- *
- * @return xio context handle, or NULL upon error
- */
-struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
-				       int polling_timeout_us,
-				       int cpu_hint);
-
-/**
- * get context poll parameters to assign to external dispatcher
- *
- * @param[in] ctx	  The xio context handle
- * @param[in] poll_params Structure with polling parameters
- *			  to be added to external dispatcher
- *
- * @return 0 on success, or -1 on error.  If an error occurs, call
- *	    xio_errno function to get the failure reason.
- */
-int xio_context_get_poll_params(struct xio_context *ctx,
-				struct xio_poll_params *poll_params);
 
 /**
  * add external fd to be used by internal dispatcher
@@ -263,13 +246,21 @@ int xio_context_del_ev_handler(struct xio_context *ctx,
 			       int fd);
 
 /**
- * closes the xio context and free its resources
+ * run event loop for a specified (possibly infinite) amount of time;
+ *
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are continuously invoked
+ * until either the specified timeout period expires or the loop is stopped;
+ *
+ * all events which become pending during that time are handled and the user
+ * callbacks are called as appropriate for those events
  *
  * @param[in] ctx		Pointer to the xio context handle
- * @param[in] timeout_ms	The timeout argument specifies the minimum
- *				number of milliseconds that
- *				xio_context_loop_run will block
- *				before exiting
+ * @param[in] timeout_ms	number of milliseconds to run the loop
+ *				before exiting, if not stopped.
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: run continuously until stopped
  *
  * @return 0 on success, or -1 on error.  If an error occurs, call
  *	    xio_errno function to get the failure reason.
@@ -284,24 +275,50 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 void xio_context_stop_loop(struct xio_context *ctx);
 
 /**
- * attempts to read at least min_nr events and up to nr events
- * from the completion queue associated with connection conn
+ * poll for events for a specified (possibly infinite) amount of time;
  *
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are invoked until the first
+ * successful polling attempt is made;
  *
- * @param[in] conn	The xio connection handle
- * @param[in] min_nr	read at least min_nr events
- * @param[in] nr	read no more then nr events
- * @param[in] timeout   specifies the amount of time to wait for events,
- *			where a NULL timeout waits until at least min_nr
- *			events have been seen.
+ * all events which became pending till then are handled and the user callbacks
+ * are called as appropriate for those events; then the functions exits
  *
- * @return On success,  xio_poll_completions() returns the number of events
- *	    read: 0 if no events are available, or less than min_nr if the
- *	    timeout has elapsed.  the failure return -1.
+ * the number of actual events handled originated by any source of events is
+ * guaranteed to be limited
+ *
+ * @param[in] ctx		Pointer to the xio context handle
+ * @param[in] timeout_ms	number of milliseconds to wait before exiting,
+ *				with or without events handled
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: wait for at least a single event
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
-int xio_poll_completions(struct xio_connection *conn,
-			 long min_nr, long nr,
-			 struct timespec *timeout);
+int xio_context_poll_wait(struct xio_context *ctx, int timeout_ms);
+
+/**
+ * poll for events using direct access to the event signaling resources
+ * (e.g. hw event queues) associated with the context;
+ * polling is performed continuously (by busy-waiting) during the specified
+ * timeout period
+ *
+ * all events which become pending during that time are handled and the user
+ * callbacks are called as appropriate for those events
+ *
+ * as there is no way to interrupt the loop, infinite polling is unsupported;
+ * the polling period may be limited internally by an unspecified value
+ *
+ * @param[in] ctx		Pointer to the xio context handle
+ * @param[in] timeout_us	number of microseconds to poll for events
+ *				0 : just poll instantly, don't busy-wait;
+ *
+ * @return 0 on success, or -1 on error. If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_context_poll_completions(struct xio_context *ctx, int timeout_us);
 
 /*---------------------------------------------------------------------------*/
 /* library initialization routines					     */
@@ -414,8 +431,6 @@ enum xio_mempool_flag {
  * @return pointer to xio_mempool object or NULL upon failure
  */
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
-
-/* for backward compatibility - shall be deprecated in the future */
 
 /**
  * add a slab to current set (setup only)

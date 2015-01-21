@@ -142,17 +142,40 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events);
 int xio_ev_loop_del(void *loop, int fd);
 
 /**
- * get loop poll parameters to assign to external dispatcher
+ * get context poll fd, which can be later passed to an external dispatcher
  *
- * @param[in] loop	  the dispatcher context
- * @param[in] poll_params Structure with polling parameters
- *			  to be added to external dispatcher
+ * @param[in] loop	the dispatcher context
  *
- * @returns success (0), or a (negative) error value
+ * @return fd (non-negative) on success, or -1 on error. If an error occurs,
+ *         call xio_errno function to get the failure reason.
  */
-int xio_ev_loop_get_poll_params(void *loop,
-				struct xio_poll_params *poll_params);
+int xio_ev_loop_get_poll_fd(void *loop);
 
+
+/**
+ * poll for events for a specified (possibly infinite) amount of time;
+ *
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are invoked until the first
+ * successful polling attempt is made;
+ *
+ * all events which became pending till then are handled and the user callbacks
+ * are called as appropriate for those events; then the functions exits
+ *
+ * the number of actual events handled originated by any source of events is
+ * guaranteed to be limited
+ *
+ * @param[in] loop		Pointer to the xio loop handle
+ * @param[in] timeout_ms	number of milliseconds to wait before exiting,
+ *				with or without events handled
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: wait for at least a single event
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_ev_loop_poll_wait(void *loop, int timeout_ms);
 /**
  * initialize event job
  *

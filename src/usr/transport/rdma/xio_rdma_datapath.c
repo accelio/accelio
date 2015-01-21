@@ -1196,6 +1196,56 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_poll_completions						     */
+/*---------------------------------------------------------------------------*/
+void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
+{
+	void				*cq_context;
+	struct ibv_cq			*cq;
+	int				err;
+	struct xio_rdma_transport	*rdma_hndl;
+	int				cq_rearmed = 0;
+
+
+	err = ibv_get_cq_event(tcq->channel, &cq, &cq_context);
+	if (!err) {
+		tcq->cq_events_that_need_ack++;
+		cq_rearmed = 1;
+	} else if (errno != EAGAIN) {
+		/* Just print the log message, if that was a serious problem,
+		   it will express itself elsewhere */
+		ERROR_LOG("failed to retrieve CQ event, cq:%p\n", cq);
+		return;
+	}
+	/* if a poll was previously scheduled, remove it,
+	   as it will be scheduled when necessary */
+	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
+	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
+
+	xio_poll_cq(tcq, MAX_POLL_WC, timeout_us);
+	/* TODO rearm interrupts optimization */
+	if (cq_rearmed == 1) {
+		err = ibv_req_notify_cq(tcq->cq, 0);
+		if (unlikely(err)) {
+			ERROR_LOG("ibv_req_notify_cq failed. (errno=%d %m)\n",
+					errno);
+		}
+	}
+	list_for_each_entry(rdma_hndl,
+			    &tcq->trans_list, trans_list_entry)
+		xio_rdma_idle_handler(rdma_hndl);
+
+	/* accumulate number of cq events that need to
+	 * be acked, and periodically ack them
+	 */
+	if (tcq->cq_events_that_need_ack == MAX_ACKED_CQE/*UINT_MAX*/) {
+		ibv_ack_cq_events(tcq->cq, MAX_ACKED_CQE/*UINT_MAX*/);
+		tcq->cq_events_that_need_ack = 0;
+	}
+}
+
+#if 0
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_poll							     */
 /*---------------------------------------------------------------------------*/
 int xio_rdma_poll(struct xio_transport_base *transport,
@@ -1283,6 +1333,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 
 	return nr_comp;
 }
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_req_header						     */

@@ -64,6 +64,9 @@ enum xio_counters {
 	XIO_STAT_LAST = 16
 };
 
+typedef int (*poll_completions_fn_t)(void *, int );
+
+
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
@@ -82,6 +85,9 @@ struct xio_context {
 
 	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
 	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
+
+	void				*poll_completions_ctx;
+	poll_completions_fn_t		poll_completions_fn;
 
 	int				cpuid;
 	int				nodeid;
@@ -240,6 +246,19 @@ static inline void xio_context_destroy_resume(struct xio_context *ctx)
 			xio_context_stop_loop(ctx);
 	}
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx)
+{
+	ctx->poll_completions_ctx = poll_completions_ctx;
+	ctx->poll_completions_fn =  poll_completions_fn;
+}
+
 
 #endif /*XIO_CONTEXT_H */
 

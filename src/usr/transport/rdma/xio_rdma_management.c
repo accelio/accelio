@@ -496,6 +496,11 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	XIO_OBSERVER_INIT(&tcq->observer, tcq, xio_on_context_event);
 	xio_context_reg_observer(ctx, &tcq->observer);
 
+	xio_context_set_poll_completions_fn(
+		ctx,
+		(poll_completions_fn_t)xio_rdma_poll_completions,
+		tcq);
+
 	return tcq;
 
 cleanup5:
@@ -3405,7 +3410,7 @@ struct xio_transport xio_rdma_transport = {
 	.dup2			= xio_rdma_dup2,
 	.update_task		= xio_rdma_update_task,
 	.send			= xio_rdma_send,
-	.poll			= xio_rdma_poll,
+	.poll			= NULL,
 	.set_opt		= xio_rdma_set_opt,
 	.get_opt		= xio_rdma_get_opt,
 	.cancel_req		= xio_rdma_cancel_req,

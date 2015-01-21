@@ -24,9 +24,11 @@ XIO_1.0 {
 		xio_context_del_ev_handler;
 		xio_context_run_loop;		
 		xio_context_stop_loop;
+		xio_context_poll_wait;
+		xio_context_poll_completions;
 		xio_modify_context;
 		xio_query_context;
-		xio_context_get_poll_params;
+		xio_context_get_poll_fd;
 		xio_session_event_str;		
 		xio_session_create;		
 		xio_session_destroy;
@@ -42,7 +44,6 @@ XIO_1.0 {
 		xio_reject;
 		xio_bind;		
 		xio_unbind;
-		xio_poll_completions;
 		xio_mempool_create;
 		xio_mempool_create_ex;
 		xio_mempool_add_slab;

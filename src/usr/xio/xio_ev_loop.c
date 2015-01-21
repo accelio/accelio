@@ -549,37 +549,29 @@ void xio_ev_loop_destroy(void **loop_hndl)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ev_loop_handler							     */
+/* xio_ev_loop_poll_wait					             */
 /*---------------------------------------------------------------------------*/
-static void xio_ev_loop_handler(int fd, int events, void *data)
-{
-	struct xio_ev_loop	*loop = (struct xio_ev_loop *)data;
-
-	loop->stop_loop = 1;
-	xio_ev_loop_run_helper(loop, 0);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_ev_loop_get_poll_params                                               */
-/*---------------------------------------------------------------------------*/
-int xio_ev_loop_get_poll_params(void *loop_hndl,
-				struct xio_poll_params *poll_params)
+int xio_ev_loop_poll_wait(void *loop_hndl, int timeout_ms)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
-	if (!loop_hndl || !poll_params) {
+	loop->stop_loop = 1;
+	return xio_ev_loop_run_helper(loop, timeout_ms);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_get_poll_fd                                               */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_get_poll_fd(void *loop_hndl)
+{
+	struct xio_ev_loop  *loop = (struct xio_ev_loop *)loop_hndl;
+
+	if (!loop_hndl) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
-
-	poll_params->fd		= loop->efd;
-	poll_params->events	= XIO_POLLIN;
-	poll_params->handler	= xio_ev_loop_handler;
-	poll_params->data	= loop_hndl;
-
-	return 0;
+	return loop->efd;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_is_stopping						     */
