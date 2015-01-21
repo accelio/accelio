@@ -1957,13 +1957,8 @@ static int xio_tcp_initial_pool_slab_pre_create(
 static inline struct xio_task *xio_tcp_initial_task_alloc(
 					struct xio_tcp_transport *tcp_hndl)
 {
-	if (tcp_hndl->initial_pool_cls.task_get) {
-		struct xio_task *task = tcp_hndl->initial_pool_cls.task_get(
-					tcp_hndl->initial_pool_cls.pool);
-		task->trans_hndl = (struct xio_transport_base *)tcp_hndl;
-		return task;
-	}
-	return NULL;
+	return tcp_hndl->initial_pool_cls.task_get(
+				tcp_hndl->initial_pool_cls.pool, tcp_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1972,13 +1967,9 @@ static inline struct xio_task *xio_tcp_initial_task_alloc(
 struct xio_task *xio_tcp_primary_task_alloc(
 					struct xio_tcp_transport *tcp_hndl)
 {
-	if (tcp_hndl->primary_pool_cls.task_get) {
-		struct xio_task *task = tcp_hndl->primary_pool_cls.task_get(
-					tcp_hndl->primary_pool_cls.pool);
-		task->trans_hndl = (struct xio_transport_base *)tcp_hndl;
-		return task;
-	}
-	return NULL;
+	return tcp_hndl->primary_pool_cls.task_get(
+					tcp_hndl->primary_pool_cls.pool,
+					tcp_hndl);
 }
 
 /*---------------------------------------------------------------------------*/

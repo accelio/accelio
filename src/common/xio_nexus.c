@@ -220,11 +220,12 @@ void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
 {
-	struct xio_task *task = xio_tasks_pool_get(nexus->primary_tasks_pool);
+	struct xio_task *task = xio_tasks_pool_get(
+			nexus->primary_tasks_pool, nexus->transport_hndl);
 	if ( task == NULL)
 		return  NULL;
 	task->nexus = nexus;
-	task->trans_hndl = nexus->transport_hndl;
+
 	return  task;
 }
 
@@ -377,18 +378,6 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-
-	task =  xio_tasks_pool_get(nexus->initial_tasks_pool);
-	if (task == NULL) {
-		ERROR_LOG("initial task pool is empty\n");
-		return -1;
-	}
-	task->nexus = nexus;
-	task->tlv_type = XIO_NEXUS_SETUP_REQ;
-	task->omsg = NULL;
-
-	req.version = XIO_VERSION;
-
 	/* when reconnecting before the dup2 send is done via new handle */
 	if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
 		req.flags = XIO_RECONNECT;
@@ -399,7 +388,18 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		req.cid = 0;
 		trans_hndl = nexus->transport_hndl;
 	}
-	task->trans_hndl = trans_hndl;
+
+	task =  xio_tasks_pool_get(nexus->initial_tasks_pool, trans_hndl);
+	if (task == NULL) {
+		ERROR_LOG("initial task pool is empty\n");
+		return -1;
+	}
+	task->nexus = nexus;
+	task->tlv_type = XIO_NEXUS_SETUP_REQ;
+	task->omsg = NULL;
+
+	req.version = XIO_VERSION;
+
 
 	retval = xio_nexus_write_setup_req(task, &req);
 	if (retval)
@@ -575,7 +575,6 @@ send_response:
 	task->tlv_type	= XIO_NEXUS_SETUP_RSP;
 	task->omsg	= NULL;
 	task->nexus	= nexus;
-	task->trans_hndl = nexus->transport_hndl;
 
 	rsp.cid		= cid;
 	rsp.status	= status;
@@ -895,7 +894,7 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task * (*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
@@ -1020,7 +1019,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task * (*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
@@ -1132,7 +1131,7 @@ static int xio_nexus_primary_pool_recreate(struct xio_nexus *nexus)
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task * (*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;

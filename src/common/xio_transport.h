@@ -176,7 +176,7 @@ struct xio_tasks_pool_ops {
 
 struct xio_tasks_pool_cls {
 	void		*pool;
-	struct xio_task * (*task_get)(void *pool);
+	struct xio_task * (*task_get)(void *pool, void *context);
 	void		  (*task_put)(struct xio_task *task);
 
 	struct xio_task	* (*task_lookup)(void *pool, int task_id);

@@ -88,7 +88,7 @@ extern spinlock_t		dev_list_lock;
 			(struct xio_rdma_task *)(xt)->dd_data
 #define XIO_TO_RDMA_HNDL(xt, rh)				\
 		struct xio_rdma_transport *(rh) =		\
-			(struct xio_rdma_transport *)(xt)->trans_hndl
+			(struct xio_rdma_transport *)(xt)->context
 
 
 #ifdef HAVE_MPAGES_EXP
@@ -322,7 +322,7 @@ struct xio_rdma_tasks_slab {
 	void				*data_pool;
 
 	/* memory registration for data */
-	struct ibv_mr			*data_mr;
+	struct xio_mr			*data_mr;
 	struct xio_reg_mem		reg_mem;
 	int				buf_size;
 	int				alloc_nr;

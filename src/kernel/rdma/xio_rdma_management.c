@@ -776,7 +776,6 @@ static int xio_rdma_task_init(struct xio_task *task,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	task->trans_hndl = (struct xio_transport_base *)rdma_hndl;
 	rdma_task->buf = buf;
 
 	if (buf) {
@@ -956,13 +955,8 @@ static int xio_rdma_initial_pool_slab_pre_create(
 static inline struct xio_task *xio_rdma_initial_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->initial_pool_cls.task_get) {
-		struct xio_task *task = rdma_hndl->initial_pool_cls.task_get(
-					rdma_hndl->initial_pool_cls.pool);
-		task->trans_hndl = (struct xio_transport_base *)rdma_hndl;
-		return task;
-	}
-	return NULL;
+	return rdma_hndl->initial_pool_cls.task_get(
+				rdma_hndl->initial_pool_cls.pool, rdma_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -971,13 +965,8 @@ static inline struct xio_task *xio_rdma_initial_task_alloc(
 struct xio_task *xio_rdma_primary_task_alloc(
 					struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->primary_pool_cls.task_get) {
-		struct xio_task *task = rdma_hndl->primary_pool_cls.task_get(
-					rdma_hndl->primary_pool_cls.pool);
-		task->trans_hndl = (struct xio_transport_base *)rdma_hndl;
-		return task;
-	}
-	return NULL;
+	return rdma_hndl->primary_pool_cls.task_get(
+				rdma_hndl->primary_pool_cls.pool, rdma_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1288,9 +1277,6 @@ static int xio_rdma_phantom_pool_slab_init_task(
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	/* set the task to point to hndl */
-	task->trans_hndl = transport_hndl;
-
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
 	ptr += sizeof(struct xio_rdma_task);
@@ -1490,7 +1476,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rkey_tbl *te;
 
-	task->trans_hndl = new_th;
+	task->context = new_th;
 
 	/* if the same device is used then there is no need to remap */
 	if (old_dev == new_dev)

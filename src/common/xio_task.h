@@ -59,12 +59,12 @@ struct xio_tasks_pool;
 struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
+	void			*context;
 	void			*pool;
 	struct xio_task		*sender_task;  /* client only on receiver */
 	struct xio_session	*session;
 	struct xio_connection	*connection;
 	struct xio_nexus	*nexus;
-	struct xio_transport_base *trans_hndl;
 
 	struct xio_mbuf		mbuf;
 	enum xio_task_state	state;		/* task state enum	*/
@@ -227,7 +227,7 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context);
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_alloc_slab						     */
 /*---------------------------------------------------------------------------*/
-int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q);
+int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context);
 
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_dump_used						     */
@@ -237,14 +237,15 @@ void xio_tasks_pool_dump_used(struct xio_tasks_pool *q);
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_get							     */
 /*---------------------------------------------------------------------------*/
-static inline struct xio_task *xio_tasks_pool_get(struct xio_tasks_pool *q)
+static inline struct xio_task *xio_tasks_pool_get(
+		struct xio_tasks_pool *q,  void *context)
 {
 	struct xio_task *t;
 
 	if (unlikely(list_empty(&q->stack))) {
 		if (q->curr_used == q->params.max_nr)
 			return NULL;
-		xio_tasks_pool_alloc_slab(q);
+		xio_tasks_pool_alloc_slab(q, context);
 		if (unlikely(list_empty(&q->stack)))
 			return NULL;
 	}
@@ -256,11 +257,11 @@ static inline struct xio_task *xio_tasks_pool_get(struct xio_tasks_pool *q)
 		q->max_used = q->curr_used;
 
 	kref_init(&t->kref);
-	t->tlv_type = 0xbeef;  /* poison the type */
+	t->tlv_type	= 0xbeef;  /* poison the type */
+	t->context	= context;
 
 	if (q->params.pool_hooks.task_post_get)
-		q->params.pool_hooks.task_post_get(
-				q->params.pool_hooks.context, t);
+		q->params.pool_hooks.task_post_get(context, t);
 
 	return t;
 }

@@ -49,7 +49,7 @@
 /*---------------------------------------------------------------------------*/
 /* xio_tasks_pool_alloc_slab						     */
 /*---------------------------------------------------------------------------*/
-int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
+int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 {
 	int			alloc_nr;
 	size_t			slab_alloc_sz;
@@ -119,7 +119,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	if (q->params.pool_hooks.slab_pre_create) {
 		retval = q->params.pool_hooks.slab_pre_create(
-				q->params.pool_hooks.context,
+				context,
 				alloc_nr,
 				q->dd_data,
 				s->dd_data);
@@ -161,7 +161,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 		if (q->params.pool_hooks.slab_init_task) {
 			retval = q->params.pool_hooks.slab_init_task(
-				q->params.pool_hooks.context,
+				context,
 				q->dd_data,
 				s->dd_data,
 				i,
@@ -177,7 +177,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q)
 
 	if (q->params.pool_hooks.slab_post_create) {
 		retval = q->params.pool_hooks.slab_post_create(
-				q->params.pool_hooks.context,
+				context,
 				q->dd_data,
 				s->dd_data);
 		if (retval)
@@ -230,7 +230,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 
 	if (q->params.start_nr != 0) {
-		xio_tasks_pool_alloc_slab(q);
+		xio_tasks_pool_alloc_slab(q, q->params.pool_hooks.context);
 		if (list_empty(&q->stack)) {
 			ufree(q);
 			return NULL;
@@ -260,7 +260,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 		if (q->params.pool_hooks.slab_uninit_task) {
 			for (i = 0; i < pslab->nr; i++)
 				q->params.pool_hooks.slab_uninit_task(
-						q->params.pool_hooks.context,
+						pslab->array[i]->context,
 						q->dd_data,
 						pslab->dd_data,
 						pslab->array[i]);

@@ -120,7 +120,7 @@ extern struct xio_tcp_options		tcp_options;
 			(struct xio_tcp_task *)(xt)->dd_data
 #define XIO_TO_TCP_HNDL(xt, th)				\
 		struct xio_tcp_transport *(th) =		\
-			(struct xio_tcp_transport *)(xt)->trans_hndl
+			(struct xio_tcp_transport *)(xt)->context
 
 
 

@@ -604,7 +604,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
 		task = ptr_from_int64(wc->wr_id);
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
-		rdma_hndl = (struct xio_rdma_transport *)task->trans_hndl;
+		rdma_hndl = (struct xio_rdma_transport *)task->context;
 	}
 
 	if (wc->status == IB_WC_WR_FLUSH_ERR) {
@@ -1422,7 +1422,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 		/* take new task */
 		tmp_task =
 			xio_tasks_pool_get(
-				rdma_hndl->phantom_tasks_pool);
+				rdma_hndl->phantom_tasks_pool, rdma_hndl);
 		if (!tmp_task) {
 			ERROR_LOG("phantom tasks pool is empty\n");
 			return -1;
@@ -1475,7 +1475,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				/* take new task */
 				tmp_task =
 					xio_tasks_pool_get(
-						rdma_hndl->phantom_tasks_pool);
+						rdma_hndl->phantom_tasks_pool,
+						rdma_hndl);
 				if (!tmp_task) {
 					ERROR_LOG(
 					      "phantom tasks pool is empty\n");
@@ -1547,7 +1548,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 					/* take new task */
 					tmp_task =
 						xio_tasks_pool_get(
-						rdma_hndl->phantom_tasks_pool);
+						rdma_hndl->phantom_tasks_pool,
+						rdma_hndl);
 					if (!tmp_task) {
 						ERROR_LOG(
 						"phantom tasks pool is empty\n");
@@ -1617,7 +1619,8 @@ static int xio_prep_rdma_op(struct xio_task *task,
 				/* take new task */
 				tmp_task =
 					xio_tasks_pool_get(
-						rdma_hndl->phantom_tasks_pool);
+						rdma_hndl->phantom_tasks_pool,
+						rdma_hndl);
 				if (!tmp_task) {
 					ERROR_LOG(
 					       "phantom tasks pool is empty\n");

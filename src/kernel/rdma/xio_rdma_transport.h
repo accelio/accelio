@@ -101,7 +101,7 @@ extern struct xio_rdma_options	rdma_options;
 		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
 #define XIO_TO_RDMA_HNDL(xt, rh)				\
 		struct xio_rdma_transport *(rh) =		\
-			(struct xio_rdma_transport *)(xt)->trans_hndl
+			(struct xio_rdma_transport *)(xt)->context
 
 
 #define xio_prefetch(p)		prefetch(p)
