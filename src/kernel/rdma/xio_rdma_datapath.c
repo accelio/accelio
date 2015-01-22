@@ -3113,7 +3113,14 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 			return -1;
 		}
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			rdma_task->read_sge.mp_sge[i].cache = NULL;
+			/* not required since the application can change
+			 * number of SG entries as part of
+			 * assign_data_in_buf() callback and this SG count
+			 * might not match with rdma_task->req_write_num_sge.
+			 */
+			/*
+			 rdma_task->read_sge.mp_sge[i].cache = NULL;
+			*/
 			if (sge_addr(sgtbl_ops, sg) == NULL) {
 				ERROR_LOG("application has provided " \
 					  "null address\n");
