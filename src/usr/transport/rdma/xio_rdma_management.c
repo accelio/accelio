@@ -803,21 +803,6 @@ static void xio_device_list_release(void)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mr_lookup							     */
-/*---------------------------------------------------------------------------*/
-static inline struct ibv_mr *xio_rdma_mr_lookup(struct xio_mr *tmr,
-						struct xio_device *dev)
-{
-	struct xio_mr_elem *tmr_elem;
-
-	list_for_each_entry(tmr_elem, &tmr->dm_list, dm_list_entry) {
-		if (dev == tmr_elem->dev)
-			return tmr_elem->mr;
-	}
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_cm_channel_down							     */
 /*---------------------------------------------------------------------------*/
 void xio_cm_channel_down(struct kref *kref)
@@ -2738,6 +2723,15 @@ static int xio_rdma_update_task(struct xio_transport_base *trans_hndl,
 	return 0;
 }
 
+static int xio_rdma_update_rkey(struct xio_transport_base *trans_hndl,
+				uint32_t *rkey)
+{
+	struct xio_rdma_transport *rdma_hndl =
+		(struct xio_rdma_transport *)trans_hndl;
+
+	return xio_new_rkey(rdma_hndl, rkey);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_accept		                                             */
 /*---------------------------------------------------------------------------*/
@@ -3422,6 +3416,7 @@ struct xio_transport xio_rdma_transport = {
 	.close			= xio_rdma_close,
 	.dup2			= xio_rdma_dup2,
 	.update_task		= xio_rdma_update_task,
+	.update_rkey		= xio_rdma_update_rkey,
 	.send			= xio_rdma_send,
 	.poll			= NULL,
 	.set_opt		= xio_rdma_set_opt,

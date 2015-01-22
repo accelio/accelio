@@ -240,6 +240,9 @@ struct xio_transport {
 	int	(*update_task)(struct xio_transport_base *trans_hndl,
 			       struct xio_task *task);
 
+	int	(*update_rkey)(struct xio_transport_base *trans_hndl,
+			       uint32_t *rkey);
+
 	int	(*send)(struct xio_transport_base *trans_hndl,
 			struct xio_task *task);
 
@@ -363,4 +366,3 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 
 
 #endif /*XIO_TRANSPORT_H */
-

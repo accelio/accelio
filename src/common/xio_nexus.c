@@ -2575,6 +2575,20 @@ int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_update_rkey						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_update_rkey(struct xio_nexus *nexus,
+			  uint32_t *rkey)
+{
+	if (nexus->transport->update_rkey == NULL)
+		return 0;
+
+	if (nexus->transport->update_rkey(nexus->transport_hndl, rkey))
+		return -1;
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
 void xio_nexus_set_server(struct xio_nexus *nexus,
@@ -2584,4 +2598,3 @@ void xio_nexus_set_server(struct xio_nexus *nexus,
 	if (server)
 		xio_server_reg_observer(server, &nexus->srv_observer);
 }
-

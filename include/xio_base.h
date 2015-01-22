@@ -830,6 +830,44 @@ int xio_send_msg(struct xio_connection *conn,
  */
 int xio_release_msg(struct xio_msg *msg);
 
+/*---------------------------------------------------------------------------*/
+/* XIO rkey management	                                                     */
+/*---------------------------------------------------------------------------*/
+
+struct xio_managed_rkey;
+
+/**
+ * Get raw rkey value from a managed rkey.
+ *
+ * @note	Should only be used with the connection the managed key is
+ *		registered with.
+ *
+ * @param[in] managed_rkey	The managed rkey
+ *
+ * @return raw rkey
+ */
+uint32_t xio_managed_rkey_unwrap(
+	const struct xio_managed_rkey *managed_rkey);
+
+/**
+ * Register a remote rkey with a connection such that it will be automatically
+ * updated on reconnects, failovers, etc.
+ *
+ * @param[in] connection	connection
+ * @param[in] raw_rkey		A raw rkey received through connection from the
+ *				other side.
+ * @return	The managed rkey, or NULL if failed.
+ */
+struct xio_managed_rkey *xio_register_remote_rkey(
+	struct xio_connection *connection, uint32_t raw_rkey);
+
+/**
+ * Unregister a remote rkey from connection such that it will no longer
+ * be automatically updated on reconnects, failovers, etc.
+ *
+ * @param[in] managed_rkey	The managed rkey
+ */
+void xio_unregister_remote_key(struct xio_managed_rkey *managed_rkey);
 
 /*---------------------------------------------------------------------------*/
 /* XIO server API							     */

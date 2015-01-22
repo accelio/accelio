@@ -86,22 +86,6 @@ static void xio_sched_consume_cq(void *data);
 static void xio_sched_poll_cq(void *data);
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_mr_lookup							     */
-/*---------------------------------------------------------------------------*/
-static inline struct ibv_mr *xio_rdma_mr_lookup(struct xio_mr *tmr,
-						struct xio_device *dev)
-{
-	struct xio_mr_elem *tmr_elem;
-	struct list_head *dm_list = &tmr->dm_list;
-
-	list_for_each_entry(tmr_elem,dm_list, dm_list_entry) {
-		if (dev == tmr_elem->dev)
-			return tmr_elem->mr;
-	}
-	return NULL;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_post_recv							     */
 /*---------------------------------------------------------------------------*/
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,

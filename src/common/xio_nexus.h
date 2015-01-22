@@ -361,6 +361,12 @@ static inline void xio_nexus_state_set(struct xio_nexus *nexus,
 int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_update_rkey						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_update_rkey(struct xio_nexus *nexus,
+			  uint32_t *rkey);
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_modify							     */
 /*---------------------------------------------------------------------------*/
 int xio_nexus_modify(struct xio_nexus *nexus,
@@ -380,4 +386,3 @@ int xio_nexus_query(struct xio_nexus *nexus,
 #endif
 
 #endif /*XIO_NEXUS_H */
-

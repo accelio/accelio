@@ -52,5 +52,8 @@ const char *xio_cm_rej_reason_str(int reason);
 
 void xio_validate_ulimit_memlock(void);
 
-#endif /*XIO_RDMA_UTILS_H */
+struct xio_device;
+struct ibv_mr *xio_rdma_mr_lookup(const struct xio_mr *tmr,
+				  const struct xio_device *dev);
 
+#endif /*XIO_RDMA_UTILS_H */

@@ -122,6 +122,12 @@ static struct xio_transition xio_transition_table[][2] = {
 
 static void xio_connection_post_destroy(struct kref *kref);
 
+struct xio_managed_rkey {
+	struct list_head	list_entry;
+	uint32_t		rkey;
+	uint32_t		pad;
+};
+
 /*---------------------------------------------------------------------------*/
 /* xio_connection_next_transit					     */
 /*---------------------------------------------------------------------------*/
@@ -212,6 +218,7 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		memcpy(&connection->ses_ops, &session->ses_ops,
 		       sizeof(session->ses_ops));
 
+		INIT_LIST_HEAD(&connection->managed_rkey_list);
 		INIT_LIST_HEAD(&connection->io_tasks_list);
 		INIT_LIST_HEAD(&connection->post_io_tasks_list);
 		INIT_LIST_HEAD(&connection->pre_send_list);
@@ -639,9 +646,35 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_connection_update_rkeys						     */
+/*---------------------------------------------------------------------------*/
+static int xio_connection_update_rkeys(struct xio_connection *connection)
+{
+	struct xio_managed_rkey* managed_rkey;
+
+	if (!connection->nexus)
+		return 0;
+
+	if (list_empty(&connection->managed_rkey_list))
+		return 0;
+
+	list_for_each_entry(managed_rkey,
+			    &connection->managed_rkey_list,
+			    list_entry) {
+		if (xio_nexus_update_rkey(connection->nexus,
+					  &managed_rkey->rkey)) {
+			ERROR_LOG("update_rkey failed: rkey %u\n",
+				  managed_rkey->rkey);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_connection_restart_tasks						     */
 /*---------------------------------------------------------------------------*/
-int xio_connection_restart_tasks(struct xio_connection *connection)
+static int xio_connection_restart_tasks(struct xio_connection *connection)
 {
 	struct xio_task	*ptask, *pnext_task;
 	int is_req;
@@ -713,7 +746,7 @@ int xio_connection_restart_tasks(struct xio_connection *connection)
 			    &connection->io_tasks_list,
 			    tasks_list_entry) {
 		if (xio_nexus_update_task(connection->nexus, ptask)) {
-			ERROR_LOG("update_task failed: task %p", ptask);
+			ERROR_LOG("update_task failed: task %p\n", ptask);
 			return -1;
 		}
 	}
@@ -878,6 +911,10 @@ int xio_connection_restart(struct xio_connection *connection)
 	int retval;
 
 	retval = xio_connection_flush_msgs(connection);
+	if (retval)
+		return retval;
+
+	retval = xio_connection_update_rkeys(connection);
 	if (retval)
 		return retval;
 
@@ -2628,4 +2665,51 @@ int xio_on_credits_ack_send_comp(struct xio_connection *connection,
 	xio_tasks_pool_put(task);
 
 	return xio_connection_xmit(connection);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_managed_rkey_unwrap						     */
+/*---------------------------------------------------------------------------*/
+uint32_t xio_managed_rkey_unwrap(
+	const struct xio_managed_rkey *managed_rkey)
+{
+	return managed_rkey->rkey;
+}
+EXPORT_SYMBOL(xio_managed_rkey_unwrap);
+
+/*---------------------------------------------------------------------------*/
+/* xio_register_remote_rkey						     */
+/*---------------------------------------------------------------------------*/
+struct xio_managed_rkey *xio_register_remote_rkey(
+	struct xio_connection *connection, uint32_t raw_rkey)
+{
+	struct xio_managed_rkey *managed_rkey = (struct xio_managed_rkey *)
+				kcalloc(1, sizeof(*managed_rkey), GFP_KERNEL);
+	if (managed_rkey == NULL)
+		return NULL;
+
+	managed_rkey->rkey = raw_rkey;
+	list_add(&managed_rkey->list_entry, &connection->managed_rkey_list);
+	return managed_rkey;
+}
+EXPORT_SYMBOL(xio_register_remote_rkey);
+
+/*---------------------------------------------------------------------------*/
+/* xio_unregister_remote_key						     */
+/*---------------------------------------------------------------------------*/
+void xio_unregister_remote_key(struct xio_managed_rkey *managed_rkey)
+{
+	list_del(&managed_rkey->list_entry);
+	kfree(managed_rkey);
+}
+EXPORT_SYMBOL(xio_unregister_remote_key);
+
+/*---------------------------------------------------------------------------*/
+/* xio_req_to_transport_base						     */
+/*---------------------------------------------------------------------------*/
+const struct xio_transport_base *xio_req_to_transport_base(
+	const struct xio_msg *req)
+{
+	struct xio_task *task = container_of(req, struct xio_task, imsg);
+	return task->connection->nexus->transport_hndl;
 }

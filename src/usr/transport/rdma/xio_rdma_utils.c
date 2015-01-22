@@ -229,3 +229,19 @@ void xio_validate_ulimit_memlock(void)
 			 mlock_limit.rlim_cur);
 	}
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_mr_lookup							     */
+/*---------------------------------------------------------------------------*/
+struct ibv_mr *xio_rdma_mr_lookup(const struct xio_mr *tmr,
+				  const struct xio_device *dev)
+{
+	struct xio_mr_elem *tmr_elem;
+	const struct list_head *dm_list = &tmr->dm_list;
+
+	list_for_each_entry(tmr_elem, dm_list, dm_list_entry) {
+		if (dev == tmr_elem->dev)
+			return tmr_elem->mr;
+	}
+	return NULL;
+}

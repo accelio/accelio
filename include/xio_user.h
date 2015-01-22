@@ -428,6 +428,11 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
  */
 int xio_mem_dereg(struct xio_reg_mem *reg_mem);
 
+uint32_t xio_lookup_rkey_by_request(const struct xio_reg_mem *reg_mem,
+				    const struct xio_msg *req);
+uint32_t xio_lookup_rkey_by_response(const struct xio_reg_mem *reg_mem,
+				     const struct xio_msg *rsp);
+
 /**
  * allocate and register memory for RDMA operations
  *

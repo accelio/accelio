@@ -58,7 +58,6 @@
 #include "xio_context.h"
 #include "xio_rdma_transport.h"
 
-
 /*---------------------------------------------------------------------------*/
 /* globals								     */
 /*---------------------------------------------------------------------------*/
@@ -286,6 +285,38 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 	spin_unlock(&dev_list_lock);
 
 	return 0;
+}
+
+/* The following functions is implemented in xio_connection.c,
+ * We prefer not to add an include dependency on xio_connection here */
+struct xio_msg;
+const struct xio_transport_base *xio_req_to_transport_base(
+	const struct xio_msg *req);
+
+static inline const struct xio_device *xio_req_to_device(
+	const struct xio_msg *req)
+{
+	struct xio_rdma_transport *transport = (struct xio_rdma_transport *)
+		xio_req_to_transport_base(req);
+	return transport->tcq->dev;
+}
+
+static inline const struct xio_device *xio_rsp_to_device(
+	const struct xio_msg *rsp)
+{
+	return xio_req_to_device(rsp->request);
+}
+
+uint32_t xio_lookup_rkey_by_request(const struct xio_reg_mem *reg_mem,
+				    const struct xio_msg *req)
+{
+	return xio_rdma_mr_lookup(reg_mem->mr, xio_req_to_device(req))->rkey;
+}
+
+uint32_t xio_lookup_rkey_by_response(const struct xio_reg_mem *reg_mem,
+				     const struct xio_msg *rsp)
+{
+	return xio_rdma_mr_lookup(reg_mem->mr, xio_rsp_to_device(rsp))->rkey;
 }
 
 /*---------------------------------------------------------------------------*/

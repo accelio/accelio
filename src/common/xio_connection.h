@@ -104,6 +104,7 @@ struct xio_connection {
 	xio_delayed_work_handle_t	fin_delayed_work;
 	xio_delayed_work_handle_t	fin_timeout_work;
 
+	struct list_head		managed_rkey_list;
 	struct list_head		io_tasks_list;
 	struct list_head		post_io_tasks_list;
 	struct list_head		pre_send_list;
@@ -239,5 +240,7 @@ int xio_on_credits_ack_send_comp(struct xio_connection *connection,
 int xio_on_credits_ack_recv(struct xio_connection *connection,
 			    struct xio_task *task);
 
-#endif /*XIO_CONNECTION_H */
+const struct xio_transport_base *xio_req_to_transport_base(
+	const struct xio_msg *req);
 
+#endif /*XIO_CONNECTION_H */
