@@ -369,7 +369,7 @@ struct xio_session_params {
 	void			*private_data;  /**< private user data snt to */
 						/**< server upon new session  */
 	size_t			private_data_len; /**< private data length    */
-	char			*uri;		  /**< the uri		      */
+	const char		*uri;		  /**< the uri		      */
 };
 
 
