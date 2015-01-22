@@ -142,6 +142,9 @@ enum xio_status {
 #define XIO_REQUEST			(1 << 1)
 /** message response referred type */
 #define XIO_RESPONSE			(1 << 2)
+
+/** RDMA message family type      */
+#define XIO_RDMA			(1 << 3)
 /** general message family type   */
 #define XIO_MESSAGE			(1 << 4)
 /** one sided message family type */
@@ -156,6 +159,7 @@ enum xio_msg_type {
 	XIO_MSG_TYPE_REQ		= (XIO_MESSAGE | XIO_REQUEST),
 	XIO_MSG_TYPE_RSP		= (XIO_MESSAGE | XIO_RESPONSE),
 	XIO_MSG_TYPE_ONE_WAY		= (XIO_ONE_WAY | XIO_REQUEST),
+	XIO_MSG_TYPE_RDMA		= (XIO_RDMA)
 };
 
 /**
@@ -232,6 +236,24 @@ struct xio_sg_table {
 						    /**< allowed	   */
 
 	void				*sglist;  /**< scatter list	   */
+};
+
+struct xio_sge {
+	uint64_t		addr;		/* virtual address */
+	uint32_t		length;		/* length	   */
+	uint32_t		stag;		/* rkey		   */
+};
+
+/**
+ * @struct xio_rdma_msg
+ * @brief Describes the source/target memory of an RDMA op
+ */
+struct xio_rdma_msg {
+	size_t length;
+	size_t nents;
+	struct xio_sge *rsg_list;
+	int is_read;
+	int pad;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -577,6 +599,19 @@ struct xio_session_ops {
 				       struct xio_msg *msg,
 				       void *conn_user_context);
 
+	/**
+	 * RDMA direct completion notification
+	 *
+	 *  @param[in] session			the session
+	 *  @param[in] msg			the sent message
+	 *  @param[in] conn_user_context	user private data provided on
+	 *					connection creation
+	 *
+	 *  @returns 0
+	 */
+	int (*on_rdma_direct_complete)(struct xio_session *session,
+				       struct xio_msg *msg,
+				       void *conn_user_context);
 };
 
 /**
@@ -815,6 +850,17 @@ int xio_release_response(struct xio_msg *rsp);
  */
 int xio_send_msg(struct xio_connection *conn,
 		 struct xio_msg *msg);
+
+/**
+ * send direct RDMA read/write command
+ *
+ * @param[in] conn	The xio connection handle
+ * @param[in] msg	The message describing the RDMA op
+ *
+ * @returns success (0), or a (negative) error value
+ */
+int xio_send_rdma(struct xio_connection *conn,
+		  struct xio_msg *msg);
 
 /**
  * release one way message resources back to xio when message is no longer

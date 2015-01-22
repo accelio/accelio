@@ -198,12 +198,6 @@ struct xio_options {
 	uint64_t		rcv_queue_depth_bytes;
 };
 
-struct xio_sge {
-	uint64_t		addr;		/* virtual address */
-	uint32_t		length;		/* length	   */
-	uint32_t		stag;		/* rkey		   */
-};
-
 /*---------------------------------------------------------------------------*/
 /* message headers							     */
 /*---------------------------------------------------------------------------*/
@@ -341,4 +335,3 @@ struct xio_options *xio_get_options(void);
 #endif
 
 #endif /*XIO_COMMON_H */
-

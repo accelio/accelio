@@ -129,7 +129,9 @@ enum xio_ib_op_code {
 	XIO_IB_RECV		= 1,
 	XIO_IB_SEND,
 	XIO_IB_RDMA_WRITE,
-	XIO_IB_RDMA_READ
+	XIO_IB_RDMA_READ,
+	XIO_IB_RDMA_WRITE_DIRECT,
+	XIO_IB_RDMA_READ_DIRECT
 };
 
 struct xio_transport_base;

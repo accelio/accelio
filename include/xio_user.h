@@ -134,7 +134,8 @@ struct xio_vmsg {
  */
 struct xio_msg {
 	struct xio_vmsg		in;		/**< incoming side of message */
-	struct xio_vmsg		out;		/**< outgoing side of message */
+	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
+	struct xio_vmsg			out;	/**< outgoing side of message */
 
 	union {
 		uint64_t		sn;	/**< unique message serial    */
@@ -155,7 +156,6 @@ struct xio_msg {
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /**< send list of messages    */
 };
-
 
 /**
  *  helper macros to iterate over scatter lists

@@ -69,6 +69,9 @@ static int xio_on_rsp_recv(struct xio_connection *nexusetion,
 			   struct xio_task *task);
 static int xio_on_ow_req_send_comp(struct xio_connection *connection,
 				   struct xio_task *task);
+static int xio_on_rdma_direct_comp(struct xio_connection *connection,
+				   struct xio_task *task);
+
 static int xio_on_rsp_send_comp(struct xio_connection *connection,
 				struct xio_task *task);
 /*---------------------------------------------------------------------------*/
@@ -838,6 +841,38 @@ exit:
 	return 0;
 }
 
+static int xio_on_rdma_direct_comp(
+		struct xio_connection *connection,
+		struct xio_task *task)
+{
+	struct xio_msg *omsg = task->omsg;
+
+	if (connection->is_flushed) {
+		xio_tasks_pool_put(task);
+		goto xmit;
+	}
+
+	if (!omsg)
+		return 0;
+
+	xio_connection_remove_in_flight(connection, omsg);
+	omsg->flags = task->omsg_flags;
+	connection->tx_queued_msgs--;
+
+	if (connection->ses_ops.on_rdma_direct_complete) {
+		connection->ses_ops.on_rdma_direct_complete(
+				connection->session, omsg,
+				connection->cb_user_context);
+	}
+	xio_tasks_pool_put(task);
+
+xmit:
+	/* now try to send */
+	xio_connection_xmit_msgs(connection);
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_disconnected			                             */
 /*---------------------------------------------------------------------------*/
@@ -1122,6 +1157,9 @@ int xio_on_send_completion(struct xio_session *session,
 	case XIO_ACK_REQ:
 		retval = xio_on_credits_ack_send_comp(connection, task);
 		xmit = 1;
+		break;
+	case XIO_MSG_TYPE_RDMA:
+		retval = xio_on_rdma_direct_comp(connection, task);
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_send_comp(connection, task);

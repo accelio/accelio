@@ -342,7 +342,7 @@ int xio_connection_send(struct xio_connection *connection,
 		is_req			= 1;
 		standalone_receipt	= 1;
 	} else {
-		if (IS_REQUEST(msg->type)) {
+		if (IS_REQUEST(msg->type) || msg->type == XIO_MSG_TYPE_RDMA) {
 			task = xio_nexus_get_primary_task(connection->nexus);
 			if (task == NULL) {
 				ERROR_LOG("tasks pool is empty\n");
@@ -394,48 +394,49 @@ int xio_connection_send(struct xio_connection *connection,
 	    connection->session->ses_ops.on_ow_msg_send_complete)
 		xio_connection_set_ow_send_comp_params(msg);
 
-	hdr.flags		= (uint32_t)msg->flags;
-	hdr.dest_session_id	= connection->session->peer_session_id;
-	if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
-		if (IS_REQUEST(msg->type)) {
-			/*
-			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
+	if (msg->type != XIO_MSG_TYPE_RDMA) {
+		hdr.flags		= (uint32_t)msg->flags;
+		hdr.dest_session_id	= connection->session->peer_session_id;
+		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
+			if (IS_REQUEST(msg->type)) {
+				/*
+				  DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
 				  "peer_credits_msgs:%d\n", __func__,
 				  connection->req_sn, connection->req_exp_sn,
 				  connection->req_ack_sn, connection->credits_msgs,
 				  connection->peer_credits_msgs);
-			*/
-			hdr.sn		= connection->req_sn++;
-			hdr.ack_sn	= connection->req_ack_sn;
-		} else {
-			/*
-			DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
+				*/
+				hdr.sn		= connection->req_sn++;
+				hdr.ack_sn	= connection->req_ack_sn;
+			} else {
+				/*
+				  DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
 				  "peer_credits_msgs:%d\n", __func__,
 				  connection->rsp_sn, connection->rsp_sn,
 				  connection->rsp_exp_sn,
 				  connection->req_ack_sn, connection->credits_msgs,
 				  connection->peer_credits_msgs);
-			*/
-			hdr.sn		= connection->rsp_sn++;
-			hdr.ack_sn	= connection->rsp_ack_sn;
-		}
-		if (connection->enable_flow_control) {
-			hdr.credits_msgs	= connection->credits_msgs;
-			connection->credits_msgs = 0;
-			hdr.credits_bytes	= connection->credits_bytes;
-			connection->credits_bytes = 0;
-			if (!standalone_receipt) {
-				connection->peer_credits_msgs--;
-				connection->peer_credits_bytes -= tx_bytes;
+				*/
+				hdr.sn		= connection->rsp_sn++;
+				hdr.ack_sn	= connection->rsp_ack_sn;
+			}
+			if (connection->enable_flow_control) {
+				hdr.credits_msgs	= connection->credits_msgs;
+				connection->credits_msgs = 0;
+				hdr.credits_bytes	= connection->credits_bytes;
+				connection->credits_bytes = 0;
+				if (!standalone_receipt) {
+					connection->peer_credits_msgs--;
+					connection->peer_credits_bytes -= tx_bytes;
+				}
 			}
 		}
-	}
 #ifdef XIO_SESSION_DEBUG
-	hdr.connection = uint64_from_ptr(connection);
-	hdr.session = uint64_from_ptr(connection->session);
+		hdr.connection = uint64_from_ptr(connection);
+		hdr.session = uint64_from_ptr(connection->session);
 #endif
-	xio_session_write_header(task, &hdr);
-
+		xio_session_write_header(task, &hdr);
+	}
 	/* send it */
 	retval = xio_nexus_send(connection->nexus, task);
 	if (retval != 0) {
@@ -1204,11 +1205,9 @@ int xio_connection_release_read_receipt(struct xio_connection *connection,
 	return 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_send_msg								     */
-/*---------------------------------------------------------------------------*/
-int xio_send_msg(struct xio_connection *connection,
-		 struct xio_msg *msg)
+static int xio_send_typed_msg(struct xio_connection *connection,
+			      struct xio_msg *msg,
+			      enum xio_msg_type msg_type)
 {
 	struct xio_msg_list	reqs_msgq;
 	struct xio_statistics	*stats = &connection->ctx->stats;
@@ -1271,7 +1270,7 @@ int xio_send_msg(struct xio_connection *connection,
 		xio_stat_add(stats, XIO_STAT_TX_BYTES, tx_bytes);
 
 		pmsg->sn = xio_session_get_sn(connection->session);
-		pmsg->type = XIO_ONE_WAY_REQ;
+		pmsg->type = msg_type;
 
 		if (connection->enable_flow_control) {
 			connection->tx_queued_msgs++;
@@ -1299,7 +1298,26 @@ send:
 
 	return retval;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_msg								     */
+/*---------------------------------------------------------------------------*/
+int xio_send_msg(struct xio_connection *connection,
+		 struct xio_msg *msg)
+{
+	return xio_send_typed_msg(connection, msg, XIO_ONE_WAY_REQ);
+}
 EXPORT_SYMBOL(xio_send_msg);
+
+/*---------------------------------------------------------------------------*/
+/* xio_send_rdma							     */
+/*---------------------------------------------------------------------------*/
+int xio_send_rdma(struct xio_connection *connection,
+		  struct xio_msg *msg)
+{
+	return xio_send_typed_msg(connection, msg, XIO_MSG_TYPE_RDMA);
+}
+EXPORT_SYMBOL(xio_send_rdma);
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_xmit_msgs						     */
