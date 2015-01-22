@@ -1669,6 +1669,37 @@ cleanup:
 	return -1;
 }
 
+static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
+{
+	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
+	    rdma_hndl->max_tx_ready_tasks_num) {
+		DEBUG_LOG("over limits reqs_in_flight_nr=%u, rsps_in_flight_nr=%u, max_tx_ready_tasks_num=%u",
+			  rdma_hndl->reqs_in_flight_nr, rdma_hndl->rsps_in_flight_nr,
+			  rdma_hndl->max_tx_ready_tasks_num);
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+
+	if (rdma_hndl->reqs_in_flight_nr >=
+			rdma_hndl->max_tx_ready_tasks_num - 1) {
+		DEBUG_LOG("over limits reqs_in_flight_nr=%u, max_tx_ready_tasks_num=%u",
+			  rdma_hndl->reqs_in_flight_nr,
+			  rdma_hndl->max_tx_ready_tasks_num);
+
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+	/* tx ready is full - refuse request */
+	if (rdma_hndl->tx_ready_tasks_num >=
+			rdma_hndl->max_tx_ready_tasks_num) {
+		DEBUG_LOG("over limits tx_ready_tasks_num=%u, max_tx_ready_tasks_num=%u",
+			  rdma_hndl->tx_ready_tasks_num,
+			  rdma_hndl->max_tx_ready_tasks_num);
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+	return 0;
+}
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_req_header						     */
 /*---------------------------------------------------------------------------*/
@@ -2420,23 +2451,8 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	int			must_send = 0;
 	size_t			sge_len;
 
-	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
-	    rdma_hndl->max_tx_ready_tasks_num) {
-		xio_set_error(EAGAIN);
+	if (verify_send_limits(rdma_hndl))
 		return -1;
-	}
-
-	if (rdma_hndl->reqs_in_flight_nr >=
-	    rdma_hndl->max_tx_ready_tasks_num - 1) {
-		xio_set_error(EAGAIN);
-		return -1;
-	}
-	/* tx ready is full - refuse request */
-	if (rdma_hndl->tx_ready_tasks_num >=
-	    rdma_hndl->max_tx_ready_tasks_num) {
-		xio_set_error(EAGAIN);
-		return -1;
-	}
 
 	/* prepare buffer for RDMA response  */
 	retval = xio_rdma_prep_req_in_data(rdma_hndl, task);
@@ -2567,24 +2583,9 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 
+	if (verify_send_limits(rdma_hndl))
+		return -1;
 
-	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
-	    rdma_hndl->max_tx_ready_tasks_num) {
-		xio_set_error(EAGAIN);
-		return -1;
-	}
-
-	if (rdma_hndl->rsps_in_flight_nr >=
-	    rdma_hndl->max_tx_ready_tasks_num - 1) {
-		xio_set_error(EAGAIN);
-		return -1;
-	}
-	/* tx ready is full - refuse request */
-	if (rdma_hndl->tx_ready_tasks_num >=
-	    rdma_hndl->max_tx_ready_tasks_num) {
-		xio_set_error(EAGAIN);
-		return -1;
-	}
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
