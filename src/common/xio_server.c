@@ -310,7 +310,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 {
 	struct xio_server	*server;
 	int			retval;
-	int			backlog = 0;
+	int			backlog = 4;
 
 	if ((ctx == NULL) || (ops == NULL) || (uri == NULL)) {
 		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
@@ -416,5 +416,3 @@ int xio_unbind(struct xio_server *server)
 	return retval;
 }
 EXPORT_SYMBOL(xio_unbind);
-
-

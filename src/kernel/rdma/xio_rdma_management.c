@@ -2704,7 +2704,6 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		return -1;
 	}
 	rdma_hndl->base.is_client = 0;
-	/* is_server = 1; */
 
 	/* create cm id */
 	rdma_hndl->cm_id = rdma_create_id(xio_handle_cm_event,
@@ -2724,8 +2723,9 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		goto exit2;
 	}
 
-	/* 0 == maximum backlog */
-	retval  = rdma_listen(rdma_hndl->cm_id, 0);
+	/* TODO (Alex): Why was backlog set to 0? */
+	DEBUG_LOG("Calling rdma_listen() for CM with backlog %d\n", backlog);
+	retval = rdma_listen(rdma_hndl->cm_id, backlog);
 	if (retval) {
 		xio_set_error(retval);
 		DEBUG_LOG("rdma_listen failed. (err=%d)\n", retval);
@@ -3043,9 +3043,11 @@ static void xio_add_one(struct ib_device *ib_dev)
 {
 	struct xio_device **xio_devs;
 	int s, e, p;
+	enum rdma_transport_type transport_type = rdma_node_get_transport(
+		ib_dev->node_type);
 
-	/* IB or ROCE */
-	if (rdma_node_get_transport(ib_dev->node_type) != RDMA_TRANSPORT_IB)
+	if (transport_type != RDMA_TRANSPORT_IB &&
+	    transport_type != RDMA_TRANSPORT_IWARP)
 		return;
 
 	if (ib_dev->node_type == RDMA_NODE_IB_SWITCH) {
@@ -3095,9 +3097,11 @@ static void xio_del_one(struct ib_device *ib_dev)
 {
 	struct xio_device **xio_devs;
 	int s, e, p;
+	enum rdma_transport_type transport_type = rdma_node_get_transport(
+		ib_dev->node_type);
 
-	/* IB or ROCE */
-	if (rdma_node_get_transport(ib_dev->node_type) != RDMA_TRANSPORT_IB)
+	if (transport_type != RDMA_TRANSPORT_IB &&
+	    transport_type != RDMA_TRANSPORT_IWARP)
 		return;
 
 	/* xio_del_one is called before the core clients' list is deleted
