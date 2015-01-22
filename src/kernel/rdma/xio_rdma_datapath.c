@@ -1700,6 +1700,52 @@ static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
 	}
 	return 0;
 }
+
+static int kick_send_and_read(struct xio_rdma_transport *rdma_hndl,
+			      struct xio_task *task,
+			      int must_send)
+{
+	int retval = 0;
+
+	/* transmit only if available */
+	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
+	    task->is_control) {
+		must_send = 1;
+	} else {
+		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
+			must_send = 1;
+	}
+
+	/* resource are now available and rdma rd  requests are pending kick
+	 * them
+	 */
+	if (rdma_hndl->kick_rdma_rd) {
+		retval = xio_xmit_rdma_rd(rdma_hndl);
+		if (retval) {
+			retval = xio_errno();
+			if (retval != EAGAIN) {
+				ERROR_LOG("xio_xmit_rdma_rd failed. %s\n",
+					  xio_strerror(retval));
+				return -1;
+			}
+			retval = 0;
+		}
+	}
+
+	if (must_send) {
+		retval = xio_rdma_xmit(rdma_hndl);
+		if (retval) {
+			retval = xio_errno();
+			if (retval != EAGAIN) {
+				ERROR_LOG("xio_xmit_rdma failed. %s\n",
+					  xio_strerror(retval));
+				return -1;
+			}
+			retval = 0;
+		}
+	}
+	return retval;
+}
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_req_header						     */
 /*---------------------------------------------------------------------------*/
@@ -2520,44 +2566,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 
 	rdma_hndl->tx_ready_tasks_num++;
 
-	/* transmit only if  available */
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
-			must_send = 1;
-	}
-	/* resource are now available and rdma rd  requests are pending kick
-	 * them
-	 */
-	if (rdma_hndl->kick_rdma_rd) {
-		retval = xio_xmit_rdma_rd(rdma_hndl);
-		if (retval) {
-			retval = xio_errno();
-			if (retval != EAGAIN) {
-				ERROR_LOG("xio_xmit_rdma_rd failed. %s\n",
-					  xio_strerror(retval));
-				return -1;
-			}
-			retval = 0;
-		}
-	}
-
-	if (must_send) {
-		retval = xio_rdma_xmit(rdma_hndl);
-		if (retval) {
-			retval = xio_errno();
-			if (retval != EAGAIN) {
-				ERROR_LOG("xio_xmit_rdma failed. %s\n",
-					  xio_strerror(retval));
-				return -1;
-			}
-			retval = 0;
-		}
-	}
-
-	return retval;
+	return kick_send_and_read(rdma_hndl, task, must_send);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2724,41 +2733,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 		rdma_hndl->rsp_sig_cnt = 0;
 	}
 
-	/* transmit only if  available */
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tx_window_sz(rdma_hndl) >= SEND_TRESHOLD)
-			must_send = 1;
-	}
-	/* resource are now available and rdma rd  requests are pending kick
-	 * them
-	 */
-	if (rdma_hndl->kick_rdma_rd) {
-		retval = xio_xmit_rdma_rd(rdma_hndl);
-		if (retval) {
-			if (xio_errno() != EAGAIN) {
-				ERROR_LOG("xio_xmit_rdma_rd failed\n");
-				return -1;
-			}
-			retval = 0;
-		}
-	}
-
-	if (must_send) {
-		retval = xio_rdma_xmit(rdma_hndl);
-		if (retval) {
-			if (xio_errno() != EAGAIN) {
-				ERROR_LOG("xio_rdma_xmit failed\n");
-				return -1;
-			}
-			retval = 0;
-		}
-	}
-
-	return retval;
-
+	return kick_send_and_read(rdma_hndl, task, must_send);
 cleanup:
 	xio_set_error(XIO_E_MSG_SIZE);
 	ERROR_LOG("xio_rdma_send_msg failed\n");
