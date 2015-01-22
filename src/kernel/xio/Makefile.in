@@ -6,6 +6,7 @@ mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
 OFED_CFLAGS = @OFED_CFLAGS@
 XIO_SYMVERS = @XIO_SYMVERS@
+PRIVATE_COMMON = .common
 
 NOSTDINC_FLAGS += @OFED_CFLAGS@
 
@@ -64,7 +65,8 @@ uninstall-y:
 	-/sbin/depmod -a
 
 clean:
-	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned ../../common/.*.cmd
+	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-rm -rf $(PRIVATE_COMMON)
 
 distclean: clean
 	rm -f Makefile configure config.status
@@ -94,24 +96,29 @@ xio-objs := \
 	xio_sg_iovptr.o	\
 	xio_sg_scatter.o \
 	xio_sg_table.o	\
-	../../../version.o \
-	../../common/xio_nexus.o \
-	../../common/xio_objpool.o \
-	../../common/xio_nexus_cache.o \
-	../../common/xio_options.o \
-	../../common/xio_session.o \
-	../../common/xio_session_server.o	\
-	../../common/xio_session_client.o	\
-	../../common/xio_transport.o \
-	../../common/xio_connection.o \
-	../../common/xio_error.o \
-	../../common/xio_server.o \
-	../../common/xio_sessions_cache.o \
-	../../common/xio_observer.o \
-	../../common/xio_idr.o \
-	../../common/xio_utils.o
+	$(PRIVATE_COMMON)/version.o \
+	$(PRIVATE_COMMON)/xio_objpool.o \
+	$(PRIVATE_COMMON)/xio_nexus.o \
+	$(PRIVATE_COMMON)/xio_nexus_cache.o \
+	$(PRIVATE_COMMON)/xio_options.o \
+	$(PRIVATE_COMMON)/xio_session.o \
+	$(PRIVATE_COMMON)/xio_session_server.o	\
+	$(PRIVATE_COMMON)/xio_session_client.o	\
+	$(PRIVATE_COMMON)/xio_transport.o \
+	$(PRIVATE_COMMON)/xio_connection.o \
+	$(PRIVATE_COMMON)/xio_error.o \
+	$(PRIVATE_COMMON)/xio_server.o \
+	$(PRIVATE_COMMON)/xio_sessions_cache.o \
+	$(PRIVATE_COMMON)/xio_observer.o \
+	$(PRIVATE_COMMON)/xio_idr.o \
+	$(PRIVATE_COMMON)/xio_utils.o
 
+$(PRIVATE_COMMON):
+	$(mkdir_p) $@
+	cp -ps `pwd`/../../../version.c $@/
+	cp -ps `pwd`/../../common/*.c $@/
+	cp -ps `pwd`/../../common/*.h $@/
 
-all-spec:
+all-spec: $(PRIVATE_COMMON)
 	export NOSTDINC_FLAGS
 	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` @KERNELMAKE_PARAMS@ KBUILD_EXTRA_SYMBOLS=$(XIO_SYMVERS) modules
