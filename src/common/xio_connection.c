@@ -1724,10 +1724,12 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("xio_disconnect failed 'Invalid argument'\n");
 		return -1;
 	}
-	DEBUG_LOG("xio_disconnect. session:%p connection:%p\n",
-		  connection->session, connection);
+	DEBUG_LOG("xio_disconnect. session:%p connection:%p state:%s\n",
+		  connection->session, connection,
+		  xio_connection_state_str(connection->state));
 
-	if (connection->state != XIO_CONNECTION_STATE_ONLINE ||
+	if ((connection->state != XIO_CONNECTION_STATE_ONLINE &&
+	    connection->state != XIO_CONNECTION_STATE_ESTABLISHED) ||
 	    connection->disconnecting) {
 		/* delay the disconnection to when connection become online */
 		connection->disconnecting = 1;
