@@ -1146,10 +1146,9 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	task->state = XIO_TASK_STATE_READ;
 
 	rsp->out.header.iov_len = 0;
-	rsp->out.data_iov.nents = 0;
+	rsp->out.data_tbl.nents = 0;
 	rsp->in.header.iov_len = 0;
-	rsp->in.data_iov.nents = 0;
-
+	rsp->in.data_tbl.nents = 0;
 
 	xio_msg_list_insert_tail(&connection->rsps_msgq, rsp, pdata);
 
@@ -1521,8 +1520,8 @@ int xio_send_fin_req(struct xio_connection *connection)
 	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 
 	/* insert to the tail of the queue */
@@ -1564,8 +1563,8 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 	/* insert to the tail of the queue */
 	xio_msg_list_insert_tail(&connection->rsps_msgq, msg, pdata);
@@ -1604,8 +1603,8 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 	DEBUG_LOG("send fin request. session:%p, connection:%p\n",
 		  connection->session, connection);
@@ -1927,8 +1926,8 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	msg->type		= (enum xio_msg_type)XIO_CONNECTION_HELLO_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
@@ -1956,8 +1955,8 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 	msg->request		= &task->imsg;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 
 	/* we don't want to send all queued messages yet - send directly */
@@ -2605,8 +2604,8 @@ int xio_send_credits_ack(struct xio_connection *connection)
 	msg->type		= (enum xio_msg_type)XIO_ACK_REQ;
 	msg->in.header.iov_len	= 0;
 	msg->out.header.iov_len	= 0;
-	msg->in.data_iov.nents	= 0;
-	msg->out.data_iov.nents	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
 
 	/* insert to the head of the queue */
 	xio_msg_list_insert_tail(&connection->reqs_msgq, msg, pdata);
@@ -2629,5 +2628,3 @@ int xio_on_credits_ack_send_comp(struct xio_connection *connection,
 
 	return xio_connection_xmit(connection);
 }
-
-

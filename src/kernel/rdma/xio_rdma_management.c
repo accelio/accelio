@@ -2836,7 +2836,7 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 		 */
 		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV)
 			return 0;
-		if (vmsg->data_iov.nents)
+		if (vmsg->data_tbl.nents)
 			return 0;
 		/* Just check header */
 		if ((vmsg->header.iov_base != NULL)  &&
@@ -2887,17 +2887,27 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 		/* src/common/xio_session_client.c uses XIO_SGL_TYPE_IOV but len
 		 * should be zero. Note, other types are not supported!
 		 */
-		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV)
+		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV) {
+			ERROR_LOG("Invalid SGL type %d for msg %p\n",
+			      vmsg->sgl_type, msg);
 			return 0;
-		if (vmsg->data_iov.nents)
+		}
+		if (vmsg->data_tbl.nents) {
+			ERROR_LOG("SGL type is XIO_SGL_TYPE_IOV and nents=%u\n",
+			      vmsg->data_tbl.nents);
 			return 0;
+		}
 
 		/* Just check header */
 		if (((vmsg->header.iov_base != NULL)  &&
 		     (vmsg->header.iov_len == 0)) ||
 		    ((vmsg->header.iov_base == NULL)  &&
-		     (vmsg->header.iov_len != 0)))
+		     (vmsg->header.iov_len != 0))) {
+			ERROR_LOG("Bad header for IOV SGL base=%p len=%zu\n",
+			      vmsg->header.iov_base,
+			      vmsg->header.iov_len);
 			return 0;
+		}
 		else
 			return 1;
 	}
@@ -2909,22 +2919,34 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 
 	if ((nents > rdma_options.max_out_iovsz) ||
 	    (nents > max_nents) ||
-	    (max_nents > rdma_options.max_out_iovsz))
+	    (max_nents > rdma_options.max_out_iovsz)) {
+		ERROR_LOG("Bad nents=%u rdma_options.max_out_iovsz=%u max_nents=%u",
+		      nents, rdma_options.max_out_iovsz, max_nents);
 		return 0;
+	}
 
 	if (((vmsg->header.iov_base != NULL)  &&
 	     (vmsg->header.iov_len == 0)) ||
 	    ((vmsg->header.iov_base == NULL)  &&
-	     (vmsg->header.iov_len != 0)))
+	     (vmsg->header.iov_len != 0))) {
+		ERROR_LOG("Bad header base=%p len=%zu\n",
+		      vmsg->header.iov_base,
+		      vmsg->header.iov_len);
 		return 0;
+	}
 
-	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_hdr)
+	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_hdr) {
+		ERROR_LOG("Header is too large %zu>%zu\n", vmsg->header.iov_len,
+		      (size_t)xio_get_options()->max_inline_hdr);
 		return 0;
+	}
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		if ((sge_addr(sgtbl_ops, sge) == NULL) ||
-		    (sge_length(sgtbl_ops, sge) == 0))
+		    (sge_length(sgtbl_ops, sge) == 0)) {
+			ERROR_LOG("Addr is NULL or length is zero for an SGE\n");
 			return 0;
+		}
 	}
 
 	return 1;

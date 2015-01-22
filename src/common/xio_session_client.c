@@ -86,11 +86,8 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
 	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->out.pdata_iov.nents = 0;
-	msg->out.pdata_iov.max_nents = 0;
 	msg->in.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->in.pdata_iov.nents = 0;
-	msg->in.pdata_iov.max_nents = 0;
+	/* All other in/out parameters are zero because of kcalloc anyway */
 
 	msg->type = (enum xio_msg_type)XIO_SESSION_SETUP_REQ;
 
@@ -1061,4 +1058,3 @@ cleanup2:
 	return NULL;
 }
 EXPORT_SYMBOL(xio_connect);
-

@@ -134,7 +134,7 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 
 
 #define xio_sg_table_get(vmsg)	\
-	((void *)&((vmsg)->data_iov))
+	((void *)&((vmsg)->data_tbl))
 
 void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type);
 

@@ -4493,4 +4493,3 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 	return xio_rdma_send_cancel(rdma_hndl, XIO_CANCEL_RSP,
 				    &cancel_hdr, ulp_msg, ulp_msg_sz);
 }
-

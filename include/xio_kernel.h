@@ -95,12 +95,7 @@ struct xio_vmsg {
 	struct xio_iovec	header;	    /**< header's io vector  */
 	enum xio_sgl_type	sgl_type;
 	int			pad;
-	/* Only sg_table is used in the kernel other are ignored!!!*/
-	union {
-		struct xio_sg_iov	data_iov;   /**< iov vector	     */
-		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
-		struct sg_table		data_tbl;   /**< data table	     */
-	};
+	struct sg_table		data_tbl;   /**< data table	     */
 	void			*user_context;	/**< private user data */
 };
 
@@ -171,7 +166,6 @@ struct xio_loop_ops {
 	int (*add_event)(void *loop, struct xio_ev_data *data);
 };
 
-
 /**
  * xio_context - creates xio context - a context is mapped internally to
  *		a cpu core.
@@ -190,7 +184,6 @@ struct xio_context *xio_context_create(unsigned int flags,
 				       struct task_struct *worker,
 				       int polling_timeout,
 				       int cpu_hint);
-
 
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */
