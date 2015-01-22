@@ -203,17 +203,6 @@ enum xio_sgl_type {
 };
 
 /**
- * @struct xio_buf
- * @brief buffer structure
- */
-struct xio_buf {
-	void			*addr;		/**< buffer's memory address */
-	size_t			length;         /**< buffer's memory length  */
-	struct xio_mr		*mr;		/**< rdma specific memory    */
-						/**< region		     */
-};
-
-/**
  * @struct xio_iovec
  * @brief IO vector
  */

@@ -44,6 +44,7 @@
 #ifndef XIO_API_H
 #define XIO_API_H
 
+#include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "xio_predefs.h"
@@ -53,6 +54,20 @@
 extern "C" {
 #endif
 
+
+/**
+ * @struct xio_reg_mem
+ * @brief registered memory buffer descriptor
+ *        used by all allocation and registration methods
+ *        it's the user responsibility to save allocation type and use an
+ *        appropriate free method appropriately
+ */
+struct xio_reg_mem {
+	void		*addr;		/**< buffer's memory address	     */
+	size_t		length;		/**< buffer's memory length	     */
+	struct xio_mr	*mr;		/**< xio specific memory region	     */
+	void		*priv;		/**< xio private data		     */
+};
 
 /*---------------------------------------------------------------------------*/
 /* message data type							     */
@@ -157,7 +172,55 @@ struct xio_msg {
 #define vmsg_sglist_set_nents(vmsg, n)				\
 		 (vmsg)->data_tbl.nents = (n)
 
+static inline void vmsg_sglist_set_by_reg_mem(struct xio_vmsg *vmsg,
+					      const struct xio_reg_mem *reg_mem)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	vmsg_sglist_set_nents(vmsg, 1);
+	sgl[0].iov_base = reg_mem->addr;
+	sgl[0].iov_len = reg_mem->length;
+	sgl[0].mr = reg_mem->mr;
+}
 
+static inline void *vmsg_sglist_one_base(const struct xio_vmsg *vmsg)
+{
+	const struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	return sgl[0].iov_base;
+}
+
+static inline size_t vmsg_sglist_one_len(const struct xio_vmsg *vmsg)
+{
+	const struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	return sgl[0].iov_len;
+}
+
+static inline void vmsg_sglist_set_user_context(struct xio_vmsg *vmsg,
+						void *user_context)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	sgl[0].user_context = user_context;
+}
+
+static inline void *vmsg_sglist_get_user_context(struct xio_vmsg *vmsg)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	return sgl[0].user_context;
+}
+
+static inline int xio_init_vmsg(struct xio_vmsg *vmsg, unsigned int nents)
+{
+	vmsg->sgl_type = XIO_SGL_TYPE_IOV;
+	return 0;
+}
+
+static inline void xio_fini_vmsg(struct xio_vmsg *vmsg)
+{
+}
+
+static inline void xio_reinit_msg(struct xio_msg *msg)
+{
+	memset(msg, 0, sizeof(*msg));
+}
 
 /*---------------------------------------------------------------------------*/
 /* XIO context API							     */
@@ -344,20 +407,6 @@ void xio_shutdown(void);
 /* Memory registration/allocation API					     */
 /*---------------------------------------------------------------------------*/
 /**
- * @struct xio_reg_mem
- * @brief registered memory buffer descriptor
- *        used by all allocation and registration methods
- *        it's the user responsibility to save allocation type and use an
- *        appropriate free method appropriately
- */
-struct xio_reg_mem {
-	void		*addr;		/**< buffer's memory address	     */
-	size_t		length;		/**< buffer's memory length	     */
-	struct xio_mr	*mr;		/**< xio specific memory region	     */
-	void		*priv;		/**< xio private data		     */
-};
-
-/**
  * register pre allocated memory for RDMA operations
  *
  * @param[in] addr	buffer's memory address
@@ -484,4 +533,3 @@ void xio_mempool_free(struct xio_reg_mem *reg_mem);
 
 
 #endif /*XIO_API_H */
-

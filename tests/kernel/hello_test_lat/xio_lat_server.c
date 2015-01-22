@@ -120,7 +120,7 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
-static struct xio_buf		*xbuf;
+static void			*xbuf;
 static struct msg_params	msg_params;
 struct xio_session		*g_session;
 struct xio_connection		*g_connection;
