@@ -178,7 +178,8 @@ static int xio_is_connection_online(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 static int xio_init_ow_msg_pool(struct xio_connection *connection)
 {
-	int i;
+	int		i = 0;
+	struct	xio_msg	*msg;
 
 	connection->msg_array = (struct xio_msg *)
 				vzalloc(MSG_POOL_SZ * sizeof(struct xio_msg));
@@ -189,11 +190,13 @@ static int xio_init_ow_msg_pool(struct xio_connection *connection)
 	}
 
 	xio_msg_list_init(&connection->one_way_msg_pool);
-	for (i = 0; i < MSG_POOL_SZ; i++) {
-		connection->msg_array[i].in.data_iov.max_nents = XIO_IOVLEN;
-		connection->msg_array[i].out.data_iov.max_nents = XIO_IOVLEN;
+	msg = &connection->msg_array[0];
+	while (i++ < MSG_POOL_SZ) {
+		msg->in.data_iov.max_nents = XIO_IOVLEN;
+		msg->out.data_iov.max_nents = XIO_IOVLEN;
 		xio_msg_list_insert_head(&connection->one_way_msg_pool,
-					 &connection->msg_array[i], pdata);
+					 msg, pdata);
+		msg++;
 	}
 
 	return 0;
@@ -1726,7 +1729,8 @@ int xio_disconnect(struct xio_connection *connection)
 	}
 	DEBUG_LOG("xio_disconnect. session:%p connection:%p state:%s\n",
 		  connection->session, connection,
-		  xio_connection_state_str(connection->state));
+		  xio_connection_state_str((enum xio_connection_state)
+					   connection->state));
 
 	if ((connection->state != XIO_CONNECTION_STATE_ONLINE &&
 	    connection->state != XIO_CONNECTION_STATE_ESTABLISHED) ||
