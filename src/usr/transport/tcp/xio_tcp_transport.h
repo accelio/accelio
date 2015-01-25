@@ -139,9 +139,10 @@ PACKED_MEMORY(struct xio_tcp_req_hdr {
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
-	uint16_t		tid;		/* originator identifier*/
+	uint16_t		pad;
+	uint32_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint8_t			pad1[1];
 
 	uint16_t		recv_num_sge;
 	uint16_t		read_num_sge;
@@ -160,9 +161,10 @@ PACKED_MEMORY(struct xio_tcp_rsp_hdr {
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
 	uint16_t		sn;		/* serial number	*/
-	uint16_t		tid;		/* originator identifier*/
+	uint16_t		pad;
+	uint32_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint8_t			pad1[1];
 
 	uint16_t		write_num_sge;
 

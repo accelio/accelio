@@ -1369,7 +1369,7 @@ static int xio_rdma_write_req_header(struct xio_rdma_transport *rdma_hndl,
 	/* sn		shall be coded later */
 	/* ack_sn	shall be coded later */
 	/* credits	shall be coded later */
-	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
+	PACK_LVAL(req_hdr, tmp_req_hdr, tid);
 	tmp_req_hdr->opcode	   = req_hdr->opcode;
 
 	PACK_SVAL(req_hdr, tmp_req_hdr, recv_num_sge);
@@ -1483,7 +1483,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	}
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, credits);
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
+	UNPACK_LVAL(tmp_req_hdr, req_hdr, tid);
 	req_hdr->opcode		= tmp_req_hdr->opcode;
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, recv_num_sge);
@@ -1563,7 +1563,7 @@ static int xio_rdma_write_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	/* sn		shall be coded later */
 	/* ack_sn	shall be coded later */
 	/* credits	shall be coded later */
-	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, tid);
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, tid);
 	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
 	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, write_num_sge);
@@ -1628,7 +1628,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
 	/* ack_sn not used */
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, credits);
-	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, tid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, write_num_sge);

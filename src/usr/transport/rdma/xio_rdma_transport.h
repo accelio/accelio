@@ -159,9 +159,9 @@ struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint16_t		tid;		/* originator identifier*/
+	uint32_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[3];
+	uint8_t			pad[1];
 
 	uint16_t		recv_num_sge;
 	uint16_t		read_num_sge;
@@ -184,9 +184,9 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint16_t		tid;		/* originator identifier*/
+	uint32_t		tid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[3];
+	uint8_t			pad[1];
 
 	uint16_t		write_num_sge;
 	uint16_t		pad1;

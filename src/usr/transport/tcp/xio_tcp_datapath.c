@@ -423,7 +423,7 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_req_hdr->version  = req_hdr->version;
 	tmp_req_hdr->flags    = req_hdr->flags;
 	PACK_SVAL(req_hdr, tmp_req_hdr, req_hdr_len);
-	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
+	PACK_LVAL(req_hdr, tmp_req_hdr, tid);
 	tmp_req_hdr->opcode	   = req_hdr->opcode;
 
 	PACK_SVAL(req_hdr, tmp_req_hdr, recv_num_sge);
@@ -1433,7 +1433,7 @@ static int xio_tcp_write_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_rsp_hdr->version  = rsp_hdr->version;
 	tmp_rsp_hdr->flags    = rsp_hdr->flags;
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, rsp_hdr_len);
-	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, tid);
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, tid);
 	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
 	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, write_num_sge);
@@ -1794,7 +1794,7 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
+	UNPACK_LVAL(tmp_req_hdr, req_hdr, tid);
 	req_hdr->opcode		= tmp_req_hdr->opcode;
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, recv_num_sge);
@@ -1878,7 +1878,7 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
-	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, tid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, write_num_sge);
