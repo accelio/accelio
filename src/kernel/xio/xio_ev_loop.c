@@ -50,6 +50,7 @@
 #include "xio_common.h"
 #include "xio_ev_data.h"
 #include "xio_ev_loop.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 

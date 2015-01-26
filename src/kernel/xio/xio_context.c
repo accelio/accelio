@@ -53,9 +53,13 @@
 #include "xio_idr.h"
 #include "xio_ev_data.h"
 #include "xio_ev_loop.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_mempool.h"
+
+#define MSGPOOL_INIT_NR	8
+#define MSGPOOL_GROW_NR	64
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -138,6 +142,13 @@ struct xio_context *xio_context_create(unsigned int flags,
 		ERROR_LOG("xio_workqueue_init failed.\n");
 		goto cleanup1;
 	}
+	ctx->msg_pool = xio_objpool_create(sizeof(struct xio_msg),
+					   MSGPOOL_INIT_NR, MSGPOOL_GROW_NR);
+	if (!ctx->msg_pool) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("context's msg_pool create failed. %m\n");
+		goto cleanup2;
+	}
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);
@@ -155,7 +166,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		break;
 	default:
 		ERROR_LOG("wrong type. %u\n", flags);
-		goto cleanup2;
+		goto cleanup3;
 	}
 
 	xio_root = xio_debugfs_root();
@@ -165,13 +176,13 @@ struct xio_context *xio_context_create(unsigned int flags,
 		ctx->ctx_dentry = debugfs_create_dir(name, xio_root);
 		if (!ctx->ctx_dentry) {
 			ERROR_LOG("debugfs entry %s create failed\n", name);
-			goto cleanup2;
+			goto cleanup3;
 		}
 	}
 
 	ctx->ev_loop = xio_ev_loop_init(flags, ctx, loop_ops);
 	if (!ctx->ev_loop)
-		goto cleanup3;
+		goto cleanup4;
 
 	ctx->stats.hertz = HZ;
 	/* Initialize default counters' name */
@@ -185,9 +196,12 @@ struct xio_context *xio_context_create(unsigned int flags,
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
-cleanup3:
+cleanup4:
 	debugfs_remove_recursive(ctx->ctx_dentry);
 	ctx->ctx_dentry = NULL;
+
+cleanup3:
+	xio_objpool_destroy(ctx->msg_pool);
 
 cleanup2:
 	xio_workqueue_destroy(ctx->workqueue);
@@ -282,6 +296,7 @@ void xio_context_destroy(struct xio_context *ctx)
 		kfree(ctx->stats.name[i]);
 
 	xio_workqueue_destroy(ctx->workqueue);
+	xio_objpool_destroy(ctx->msg_pool);
 
 	/* can free only xio created loop */
 	if (ctx->flags != XIO_LOOP_USER_LOOP)

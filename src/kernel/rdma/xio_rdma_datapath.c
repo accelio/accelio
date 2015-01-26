@@ -61,6 +61,7 @@
 #include "xio_rdma_utils.h"
 #include "xio_sg_table.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 

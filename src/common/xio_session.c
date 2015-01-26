@@ -50,6 +50,7 @@
 #include "xio_idr.h"
 #include "xio_msg_list.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_nexus.h"

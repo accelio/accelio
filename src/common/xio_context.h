@@ -86,6 +86,9 @@ struct xio_context {
 	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
 	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
 
+	/* pool per connection */
+	struct xio_objpool		*msg_pool;
+
 	void				*poll_completions_ctx;
 	poll_completions_fn_t		poll_completions_fn;
 
@@ -259,6 +262,21 @@ static inline void xio_context_set_poll_completions_fn(
 	ctx->poll_completions_fn =  poll_completions_fn;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_context_msg_pool_get	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void *xio_context_msg_pool_get(struct xio_context *ctx)
+{
+	return xio_objpool_alloc(ctx->msg_pool);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_msg_pool_put	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_msg_pool_put(struct xio_context *ctx)
+{
+	xio_objpool_free(ctx->msg_pool);
+}
 
 #endif /*XIO_CONTEXT_H */
 

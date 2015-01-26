@@ -43,6 +43,7 @@
 #include "xio_common.h"
 #include "xio_observer.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_timers_list.h"
 #include "xio_context.h"

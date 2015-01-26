@@ -51,6 +51,7 @@
 #include "xio_transport.h"
 #include "xio_usr_transport.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_tcp_transport.h"

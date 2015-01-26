@@ -44,6 +44,7 @@
 #include "xio_ev_data.h"
 #include "xio_ev_loop.h"
 #include "xio_idr.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include <xio_env_adv.h>
 #include "xio_timers_list.h"
@@ -52,6 +53,9 @@
 #include "xio_task.h"
 #include "xio_context.h"
 #include "xio_usr_utils.h"
+
+#define MSGPOOL_INIT_NR	8
+#define MSGPOOL_GROW_NR	64
 
 int xio_netlink(struct xio_context *ctx);
 
@@ -131,18 +135,29 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 	ctx->workqueue = xio_workqueue_create(ctx);
 	if (!ctx->workqueue) {
-		xio_set_error(errno);
-		ERROR_LOG("schedwork_queue_init failed. %m\n");
+		xio_set_error(ENOMEM);
+		ERROR_LOG("context's workqueue create failed. %m\n");
 		goto cleanup;
+	}
+	ctx->msg_pool = xio_objpool_create(sizeof(struct xio_msg),
+					   MSGPOOL_INIT_NR, MSGPOOL_GROW_NR);
+	if (!ctx->msg_pool) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("context's msg_pool create failed. %m\n");
+		goto cleanup1;
 	}
 
 	if (-1 == xio_netlink(ctx))
-		goto cleanup;
+		goto cleanup2;
 
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
+cleanup2:
+	xio_objpool_destroy(ctx->msg_pool);
+cleanup1:
+	xio_workqueue_destroy(ctx->workqueue);
 cleanup:
 	ufree(ctx);
 	return NULL;
@@ -231,6 +246,8 @@ void xio_context_destroy(struct xio_context *ctx)
 			free(ctx->stats.name[i]);
 
 	xio_workqueue_destroy(ctx->workqueue);
+
+	xio_objpool_destroy(ctx->msg_pool);
 
 	if (ctx->mempool) {
 		xio_mempool_destroy((struct xio_mempool *)ctx->mempool);

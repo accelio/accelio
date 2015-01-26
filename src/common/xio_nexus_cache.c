@@ -45,6 +45,7 @@
 #include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_observer.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_ev_data.h"
 #include "xio_context.h"

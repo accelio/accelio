@@ -52,6 +52,7 @@
 #include "xio_task.h"
 #include "xio_rdma_utils.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_rdma_transport.h"
