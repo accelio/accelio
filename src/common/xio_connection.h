@@ -99,8 +99,6 @@ struct xio_connection {
 	struct xio_msg_list		in_flight_reqs_msgq;
 	struct xio_msg_list		in_flight_rsps_msgq;
 
-	struct xio_msg			*msg_array;
-	struct xio_msg_list		one_way_msg_pool;
 	xio_work_handle_t		hello_work;
 	xio_work_handle_t		fin_work;
 	xio_delayed_work_handle_t	fin_delayed_work;

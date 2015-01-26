@@ -273,9 +273,9 @@ static inline void *xio_context_msg_pool_get(struct xio_context *ctx)
 /*---------------------------------------------------------------------------*/
 /* xio_context_msg_pool_put	                                             */
 /*---------------------------------------------------------------------------*/
-static inline void xio_context_msg_pool_put(struct xio_context *ctx)
+static inline void xio_context_msg_pool_put(void *obj)
 {
-	xio_objpool_free(ctx->msg_pool);
+	xio_objpool_free(obj);
 }
 
 #endif /*XIO_CONTEXT_H */

@@ -175,47 +175,6 @@ static int xio_is_connection_online(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_init_ow_msg_pool							     */
-/*---------------------------------------------------------------------------*/
-static int xio_init_ow_msg_pool(struct xio_connection *connection)
-{
-	int		i = 0;
-	struct	xio_msg	*msg;
-
-	connection->msg_array = (struct xio_msg *)
-				vzalloc(MSG_POOL_SZ * sizeof(struct xio_msg));
-	if (!connection->msg_array) {
-		ERROR_LOG("failed to allocate ow message pool\n");
-		xio_set_error(ENOMEM);
-		return -1;
-	}
-
-	xio_msg_list_init(&connection->one_way_msg_pool);
-	msg = &connection->msg_array[0];
-	while (i++ < MSG_POOL_SZ) {
-		msg->in.data_iov.max_nents = XIO_IOVLEN;
-		msg->out.data_iov.max_nents = XIO_IOVLEN;
-		xio_msg_list_insert_head(&connection->one_way_msg_pool,
-					 msg, pdata);
-		msg++;
-	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_free_ow_msg_pool							     */
-/*---------------------------------------------------------------------------*/
-static int xio_free_ow_msg_pool(struct xio_connection *connection)
-{
-	xio_msg_list_init(&connection->one_way_msg_pool);
-	vfree(connection->msg_array);
-	connection->msg_array = NULL;
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_connection_create						     */
 /*---------------------------------------------------------------------------*/
 struct xio_connection *xio_connection_create(struct xio_session *session,
@@ -262,8 +221,6 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 
 		xio_msg_list_init(&connection->in_flight_reqs_msgq);
 		xio_msg_list_init(&connection->in_flight_rsps_msgq);
-
-		xio_init_ow_msg_pool(connection);
 
 		kref_init(&connection->kref);
 		list_add_tail(&connection->ctx_list_entry, &ctx->ctx_list);
@@ -593,9 +550,7 @@ static void xio_connection_notify_rsp_msgs_flush(struct xio_connection
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->rsps_msgq, pmsg, pdata);
 		if (pmsg->type == XIO_ONE_WAY_RSP) {
-			xio_msg_list_insert_head(
-					&connection->one_way_msg_pool,
-					pmsg, pdata);
+			xio_context_msg_pool_put(pmsg);
 			continue;
 		}
 
@@ -1179,16 +1134,9 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 	struct xio_task		*task;
 
 
-
-	if (xio_msg_list_empty(&connection->one_way_msg_pool)) {
-		xio_set_error(ENOMEM);
-		ERROR_LOG("one way msg pool is empty\n");
-		return -1;
-	}
 	task = container_of(msg, struct xio_task, imsg);
 
-	rsp = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, rsp, pdata);
+	rsp = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	rsp->type = (enum xio_msg_type)
 		(((unsigned)msg->type & ~XIO_REQUEST) | XIO_RESPONSE);
@@ -1215,7 +1163,7 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 int xio_connection_release_read_receipt(struct xio_connection *connection,
 					struct xio_msg *msg)
 {
-	xio_msg_list_insert_head(&connection->one_way_msg_pool, msg, pdata);
+	xio_context_msg_pool_put(msg);
 	return 0;
 }
 
@@ -1345,7 +1293,6 @@ int xio_connection_close(struct xio_connection *connection)
 
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
-	xio_free_ow_msg_pool(connection);
 	list_del(&connection->ctx_list_entry);
 
 	kfree(connection);
@@ -1569,8 +1516,7 @@ int xio_send_fin_req(struct xio_connection *connection)
 	struct xio_msg *msg;
 	int		retval;
 
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
@@ -1612,9 +1558,7 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 {
 	struct xio_msg *msg;
 
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
-
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_FIN_RSP;
 	msg->request		= &task->imsg;
@@ -1642,7 +1586,7 @@ int xio_send_fin_ack(struct xio_connection *connection, struct xio_task *task)
 int xio_connection_release_fin(struct xio_connection *connection,
 			       struct xio_msg *msg)
 {
-	xio_msg_list_insert_head(&connection->one_way_msg_pool, msg, pdata);
+	xio_context_msg_pool_put(msg);
 
 	return 0;
 }
@@ -1655,8 +1599,7 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	struct xio_msg *msg;
 	int		retval;
 
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_FIN_REQ;
 	msg->in.header.iov_len	= 0;
@@ -1979,8 +1922,7 @@ int xio_connection_send_hello_req(struct xio_connection *connection)
 	DEBUG_LOG("send hello request. session:%p, connection:%p\n",
 		  connection->session, connection);
 
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_CONNECTION_HELLO_REQ;
 	msg->in.header.iov_len	= 0;
@@ -2008,9 +1950,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 	TRACE_LOG("send hello response. session:%p, connection:%p\n",
 		  connection->session, connection);
 
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
-
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_CONNECTION_HELLO_RSP;
 	msg->request		= &task->imsg;
@@ -2034,7 +1974,7 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 static inline void xio_connection_release_hello(
 		struct xio_connection *connection, struct xio_msg *msg)
 {
-	xio_msg_list_insert_head(&connection->one_way_msg_pool, msg, pdata);
+	xio_context_msg_pool_put(msg);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2660,8 +2600,7 @@ int xio_send_credits_ack(struct xio_connection *connection)
 		  connection->sn, connection->exp_sn, connection->ack_sn,
 		  connection->credits_msgs, connection->peer_credits_msgs);
 	*/
-	msg = xio_msg_list_first(&connection->one_way_msg_pool);
-	xio_msg_list_remove(&connection->one_way_msg_pool, msg, pdata);
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_ACK_REQ;
 	msg->in.header.iov_len	= 0;
