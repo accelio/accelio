@@ -128,12 +128,16 @@ static inline void xio_mbuf_dump(struct xio_mbuf *mbuf)
 static inline void xio_mbuf_init(struct xio_mbuf *mbuf, void *buf,
 				 uint32_t buflen, uint32_t datalen)
 {
-	memset(&mbuf->tlv, 0, sizeof(mbuf->tlv));
-	mbuf->buf.head		= buf;
-	mbuf->buf.tail		= sum_to_ptr(buf, buflen);
-	mbuf->buf.buflen	= buflen;
-	mbuf->buf.datalen	= datalen;
+	struct xio_mbuf_buf	*pbuf = &mbuf->buf;
+	struct xio_mbuf_tlv	*tlv = &mbuf->tlv;
+
 	mbuf->curr		= buf;
+	pbuf->head		= buf;
+	pbuf->tail		= sum_to_ptr(buf, buflen);
+	pbuf->buflen		= buflen;
+	pbuf->datalen		= datalen;
+
+	memset(tlv, 0, sizeof(*tlv));
 }
 
 /*---------------------------------------------------------------------------*/

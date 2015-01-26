@@ -1016,16 +1016,20 @@ static void xio_rxd_init(struct xio_work_req *rxd,
 			 void *buf, unsigned size,
 			 struct ibv_mr *srmr)
 {
-	if (size) {
-		rxd->sge[0].addr	= uint64_from_ptr(buf);
-		rxd->sge[0].length	= size;
-		rxd->sge[0].lkey	= srmr->lkey;
-	}
+	struct ibv_recv_wr	*recv_wr = &rxd->recv_wr;
+	struct ibv_sge		*sg_list = rxd->sge;
 
-	rxd->recv_wr.wr_id	= uint64_from_ptr(task);
-	rxd->recv_wr.sg_list	= rxd->sge;
-	rxd->recv_wr.num_sge	= size ? 1 : 0;
-	rxd->recv_wr.next	= NULL;
+	recv_wr->wr_id		= uint64_from_ptr(task);
+	recv_wr->next		= NULL;
+	recv_wr->sg_list	= sg_list;
+	recv_wr->num_sge	= size ? 1 : 0;
+
+	if (size) {
+		/* set the first element */
+		sg_list->addr		= uint64_from_ptr(buf);
+		sg_list->length		= size;
+		sg_list->lkey		= srmr->lkey;
+	}
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1036,17 +1040,22 @@ static void xio_txd_init(struct xio_work_req *txd,
 			 void *buf, unsigned size,
 			 struct ibv_mr *srmr)
 {
-	if (size) {
-		txd->sge[0].addr	= uint64_from_ptr(buf);
-		txd->sge[0].length	= size;
-		txd->sge[0].lkey	= srmr->lkey;
-	}
+	struct ibv_send_wr	*send_wr = &txd->send_wr;
+	struct ibv_sge		*sg_list = txd->sge;
 
-	txd->send_wr.wr_id	= uint64_from_ptr(task);
-	txd->send_wr.next	= NULL;
-	txd->send_wr.sg_list	= txd->sge;
-	txd->send_wr.num_sge	= size ? 1 : 0;
-	txd->send_wr.opcode	= IBV_WR_SEND;
+
+	send_wr->wr_id		= uint64_from_ptr(task);
+	send_wr->next		= NULL;
+	send_wr->sg_list	= sg_list;
+	send_wr->num_sge	= size ? 1 : 0;
+	send_wr->opcode		= IBV_WR_SEND;
+
+	if (size) {
+		/* set the first element */
+		sg_list->addr		= uint64_from_ptr(buf);
+		sg_list->length		= size;
+		sg_list->lkey		= srmr->lkey;
+	}
 
 	/*txd->send_wr.send_flags = IBV_SEND_SIGNALED; */
 }
@@ -1057,11 +1066,14 @@ static void xio_txd_init(struct xio_work_req *txd,
 static void xio_rdmad_init(struct xio_work_req *rdmad,
 			   struct xio_task *task)
 {
-	rdmad->send_wr.wr_id = uint64_from_ptr(task);
-	rdmad->send_wr.sg_list = rdmad->sge;
-	rdmad->send_wr.num_sge = 1;
-	rdmad->send_wr.next = NULL;
-	rdmad->send_wr.send_flags = IBV_SEND_SIGNALED;
+	struct ibv_send_wr	*send_wr = &rdmad->send_wr;
+	struct ibv_sge		*sg_list = rdmad->sge;
+
+	send_wr->wr_id		= uint64_from_ptr(task);
+	send_wr->sg_list	= sg_list;
+	send_wr->num_sge	= 1;
+	send_wr->next		= NULL;
+	send_wr->send_flags	= IBV_SEND_SIGNALED;
 
 	/* to be set before posting:
 	   rdmad->iser_ib_op, rdmad->send_wr.opcode
@@ -1080,8 +1092,8 @@ static void xio_rdma_task_init(struct xio_task *task,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	xio_rxd_init(&rdma_task->rxd, task, buf, size, srmr);
 	xio_txd_init(&rdma_task->txd, task, buf, size, srmr);
+	xio_rxd_init(&rdma_task->rxd, task, buf, size, srmr);
 	xio_rdmad_init(&rdma_task->rdmad, task);
 
 	/* initialize the mbuf */
