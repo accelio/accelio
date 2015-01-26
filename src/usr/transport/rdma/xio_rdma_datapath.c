@@ -2123,12 +2123,17 @@ cleanup:
 	return -1;
 }
 
-static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
+/*---------------------------------------------------------------------------*/
+/* verify_req_send_limits						     */
+/*---------------------------------------------------------------------------*/
+static int verify_req_send_limits(const struct xio_rdma_transport *rdma_hndl)
 {
 	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
 	    rdma_hndl->max_tx_ready_tasks_num) {
-		DEBUG_LOG("over limits reqs_in_flight_nr=%u, rsps_in_flight_nr=%u, max_tx_ready_tasks_num=%u",
-			  rdma_hndl->reqs_in_flight_nr, rdma_hndl->rsps_in_flight_nr,
+		DEBUG_LOG("over limits reqs_in_flight_nr=%u, "\
+			  "rsps_in_flight_nr=%u, max_tx_ready_tasks_num=%u\n",
+			  rdma_hndl->reqs_in_flight_nr,
+			  rdma_hndl->rsps_in_flight_nr,
 			  rdma_hndl->max_tx_ready_tasks_num);
 		xio_set_error(EAGAIN);
 		return -1;
@@ -2136,7 +2141,8 @@ static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
 
 	if (rdma_hndl->reqs_in_flight_nr >=
 			rdma_hndl->max_tx_ready_tasks_num - 1) {
-		DEBUG_LOG("over limits reqs_in_flight_nr=%u, max_tx_ready_tasks_num=%u",
+		DEBUG_LOG("over limits reqs_in_flight_nr=%u, " \
+			  "max_tx_ready_tasks_num=%u\n",
 			  rdma_hndl->reqs_in_flight_nr,
 			  rdma_hndl->max_tx_ready_tasks_num);
 
@@ -2146,7 +2152,8 @@ static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
 	/* tx ready is full - refuse request */
 	if (rdma_hndl->tx_ready_tasks_num >=
 			rdma_hndl->max_tx_ready_tasks_num) {
-		DEBUG_LOG("over limits tx_ready_tasks_num=%u, max_tx_ready_tasks_num=%u",
+		DEBUG_LOG("over limits tx_ready_tasks_num=%u, "\
+			  "max_tx_ready_tasks_num=%u\n",
 			  rdma_hndl->tx_ready_tasks_num,
 			  rdma_hndl->max_tx_ready_tasks_num);
 		xio_set_error(EAGAIN);
@@ -2155,6 +2162,48 @@ static int verify_send_limits(const struct xio_rdma_transport *rdma_hndl)
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* verify_rsp_send_limits						     */
+/*---------------------------------------------------------------------------*/
+static int verify_rsp_send_limits(const struct xio_rdma_transport *rdma_hndl)
+{
+	if (rdma_hndl->reqs_in_flight_nr + rdma_hndl->rsps_in_flight_nr >
+	    rdma_hndl->max_tx_ready_tasks_num) {
+		DEBUG_LOG("over limits reqs_in_flight_nr=%u, "\
+			  "rsps_in_flight_nr=%u, max_tx_ready_tasks_num=%u\n",
+			  rdma_hndl->reqs_in_flight_nr,
+			  rdma_hndl->rsps_in_flight_nr,
+			  rdma_hndl->max_tx_ready_tasks_num);
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+
+	if (rdma_hndl->rsps_in_flight_nr >=
+			rdma_hndl->max_tx_ready_tasks_num - 1) {
+		DEBUG_LOG("over limits rsps_in_flight_nr=%u, " \
+			  "max_tx_ready_tasks_num=%u\n",
+			  rdma_hndl->rsps_in_flight_nr,
+			  rdma_hndl->max_tx_ready_tasks_num);
+
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+	/* tx ready is full - refuse request */
+	if (rdma_hndl->tx_ready_tasks_num >=
+			rdma_hndl->max_tx_ready_tasks_num) {
+		DEBUG_LOG("over limits tx_ready_tasks_num=%u, "\
+			  "max_tx_ready_tasks_num=%u\n",
+			  rdma_hndl->tx_ready_tasks_num,
+			  rdma_hndl->max_tx_ready_tasks_num);
+		xio_set_error(EAGAIN);
+		return -1;
+	}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* kick_send_and_read							     */
+/*---------------------------------------------------------------------------*/
 static int kick_send_and_read(struct xio_rdma_transport *rdma_hndl,
 			      struct xio_task *task,
 			      int must_send)
@@ -2214,7 +2263,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	int			must_send = 0;
 	size_t			sge_len;
 
-	if (verify_send_limits(rdma_hndl))
+	if (verify_req_send_limits(rdma_hndl))
 		return -1;
 
 	/* prepare buffer for RDMA response  */
@@ -2304,7 +2353,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 
-	if (verify_send_limits(rdma_hndl))
+	if (verify_rsp_send_limits(rdma_hndl))
 		return -1;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
