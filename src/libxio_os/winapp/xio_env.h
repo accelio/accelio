@@ -395,7 +395,8 @@ static inline int socketpair(int domain, int type, int protocol,
 	socket_t listener;
 	int e;
 	socklen_t addrlen = sizeof(a.inaddr);
-	DWORD flags = 0; /* was: (make_overlapped ? WSA_FLAG_OVERLAPPED : 0); */
+//	DWORD flags = 0; /* was: (make_overlapped ? WSA_FLAG_OVERLAPPED : 0); */
+	DWORD flags = WSA_FLAG_OVERLAPPED;
 	int reuse = 1;
 
 	if (socks == 0) {
