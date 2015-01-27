@@ -207,6 +207,7 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_ow";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
+	subdirs2="$subdirs2 tests/usr/event_loop_tests";
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 	subdirs2="$subdirs2 regression/usr/reg_basic_mt";
 fi
@@ -269,6 +270,7 @@ AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_ow/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
+AC_CONFIG_FILES([tests/usr/event_loop_tests/Makefile])
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
 
