@@ -186,6 +186,7 @@
     <ClCompile Include="..\..\src\common\xio_idr.c" />
     <ClCompile Include="..\..\src\common\xio_nexus.c" />
     <ClCompile Include="..\..\src\common\xio_nexus_cache.c" />
+    <ClCompile Include="..\..\src\common\xio_objpool.c" />
     <ClCompile Include="..\..\src\common\xio_observer.c" />
     <ClCompile Include="..\..\src\common\xio_options.c" />
     <ClCompile Include="..\..\src\common\xio_server.c" />

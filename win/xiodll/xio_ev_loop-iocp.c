@@ -415,7 +415,7 @@ retry:
 #endif
 	resultOk = GetQueuedCompletionStatusEx(loop->cpl_port, entries, sizeof(entries) / sizeof(entries[0]), &nevent, tmout, TRUE);
 
-	if (unlikely(!resultOk)) {
+	if (unlikely(!resultOk && GetLastError() != WAIT_TIMEOUT)) {
 		int last_error;
 		char buffer[256];
 		last_error = GetLastError();
@@ -424,7 +424,7 @@ retry:
 		xio_set_error(last_error);
 		return -1;
 	}
-	else if (nevent > 0) {
+	else if (resultOk) {
 		/* save the epoll modify in "stop" while dispatching handlers */
 		loop->in_dispatch = 1;
 		for (i = 0; i < nevent; i++) {
@@ -662,6 +662,33 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	loop = NULL;
 }
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_poll_wait                                                     */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_poll_wait(void *loop_hndl, int timeout_ms)
+{
+	struct xio_ev_loop      *loop = (struct xio_ev_loop *)loop_hndl;
+
+	loop->stop_loop = 1;
+	return xio_ev_loop_run_helper(loop, timeout_ms);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_get_poll_fd                                               */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_get_poll_fd(void *loop_hndl)
+{
+	struct xio_ev_loop  *loop = (struct xio_ev_loop *)loop_hndl;
+
+	if (!loop_hndl) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
+	return (int)loop->cpl_port;
+}
+
+#if 0
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_handler							     */
 /*---------------------------------------------------------------------------*/
@@ -693,6 +720,7 @@ int xio_ev_loop_get_poll_params(void *loop_hndl,
 
 	return 0;
 }
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_is_stopping						     */

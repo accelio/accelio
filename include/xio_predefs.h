@@ -40,6 +40,7 @@
 
 #if defined(_WIN32)
 #include <winsock2.h>
+#define inline __inline
 
 #else /* !defined(_WIN32) */
 
