@@ -454,11 +454,10 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_prep_portal							     */
+/* xio_session_fill_portals_array					     */
 /*---------------------------------------------------------------------------*/
-static int xio_prep_portal(struct xio_connection *connection)
+static int xio_session_fill_portals_array(struct xio_session *session)
 {
-	struct xio_session *session = connection->session;
 	char portal[64];
 
 	/* extract portal from uri */
@@ -491,7 +490,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	uint16_t			action = 0;
 	struct xio_session		*session = connection->session;
 	struct xio_new_session_rsp	*rsp = &session->new_ses_rsp;
-	int				retval = 0;
+	int				retval = 0, fill_portals;
 	struct xio_connection		*tmp_connection;
 
 
@@ -511,9 +510,12 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 	switch (action) {
 	case XIO_ACTION_ACCEPT:
+		if (session->portals_array == NULL)  {
+			xio_session_fill_portals_array(session);
+			fill_portals = 1;
+		}
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state is now ONLINE. session:%p\n", session);
-
 		/* notify the upper layer */
 		if (session->ses_ops.on_session_established)
 			session->ses_ops.on_session_established(
@@ -523,9 +525,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		kfree(rsp->private_data);
 		rsp->private_data = NULL;
 
-		if (session->portals_array == NULL)  {
+		if (fill_portals)  {
 			xio_on_connection_hello_rsp_recv(connection, NULL);
-			xio_prep_portal(connection);
 			/* insert the connection into list */
 			xio_session_assign_nexus(session, connection->nexus);
 			session->lead_connection = NULL;
