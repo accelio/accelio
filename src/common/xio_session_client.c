@@ -490,7 +490,7 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	uint16_t			action = 0;
 	struct xio_session		*session = connection->session;
 	struct xio_new_session_rsp	*rsp = &session->new_ses_rsp;
-	int				retval = 0, fill_portals;
+	int				retval = 0, fill_portals = 0;
 	struct xio_connection		*tmp_connection;
 
 
