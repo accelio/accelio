@@ -12,6 +12,7 @@ config.status
 aclocal.m4
 m4/*
 .libs
+.common
 libtool
 ltmain.sh
 compile
@@ -26,6 +27,8 @@ raio_client
 raio_server
 xio_client
 xio_server
+xio_rdma_client
+xio_rdma_server
 xio_bidi_client
 xio_bidi_server
 xio_lat_client
@@ -63,3 +66,6 @@ Module.symvers
 *.sdf
 Debug
 Release
+GPATH
+GRTAGS
+GTAGS

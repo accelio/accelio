@@ -38,6 +38,8 @@
 
 #include "xio_msg.h"
 
+#include <linux/slab.h>
+
 #ifndef roundup
 # define roundup(x, y)  ((((x) + ((y) - 1)) / (y)) * (y))
 #endif /* !defined(roundup) */
@@ -248,4 +250,3 @@ inline void msg_pool_free(struct msg_pool *pool)
 
 	vfree(pool);
 }
-

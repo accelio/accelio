@@ -38,6 +38,8 @@
 #ifndef MSG_API_H
 #define MSG_API_H
 
+#include <linux/version.h>
+
 #include "libxio.h"
 
 struct msg_params {
