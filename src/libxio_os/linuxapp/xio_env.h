@@ -354,6 +354,9 @@ typedef pthread_once_t		thread_once_t;
 	__sync_fetch_and_add((ptr), (value))
 
 /*---------------------------------------------------------------------------*/
+#define XIO_F_ALWAYS_INLINE inline __attribute__ ((always_inline))
+
+/*---------------------------------------------------------------------------*/
 #define LIBRARY_INITIALIZER(f) \
 	static void f(void) __attribute__((constructor)); \
 	static void f(void)

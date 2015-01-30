@@ -70,6 +70,7 @@ typedef int64_t __s64;
 #define likely(x)		__builtin_expect(!!(x), 1)
 #define unlikely(x)		__builtin_expect(!!(x), 0)
 
+#define XIO_F_ALWAYS_INLINE	__forceinline
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/

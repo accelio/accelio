@@ -60,7 +60,6 @@
 #include "xio_rdma_transport.h"
 
 
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
 /*---------------------------------------------------------------------------*/
@@ -692,14 +691,13 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_rx_handler							     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
+static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 			       struct xio_task *task)
 {
+	struct list_head	*task_prev;
 	struct xio_task		*task1, *task2;
 	int			must_send = 0;
 	int			retval;
-	struct list_head	*task_prev;
-
 
 	/* prefetch next buffer */
 	if (likely(task->tasks_list_entry.next !=
@@ -793,7 +791,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_tx_comp_handler						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
+static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 				    struct xio_task *task)
 {
 	struct xio_task		*ptask, *next_ptask;
@@ -867,7 +865,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_rd_comp_handler						     */
 /*---------------------------------------------------------------------------*/
-static void xio_rdma_rd_comp_handler(
+static XIO_F_ALWAYS_INLINE void xio_rdma_rd_comp_handler(
 		struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task)
 {
@@ -944,7 +942,7 @@ static inline void xio_rdma_wr_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
-static inline void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
+static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc, int last_in_rxq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_HNDL(task, rdma_hndl);
@@ -1785,12 +1783,15 @@ static int xio_rdma_write_send_data(
 		struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task)
 {
+	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_mr		*xmr;
+	struct xio_device	*dev = rdma_hndl->tcq->dev;
 	struct ibv_mr		*mr;
+	struct ibv_sge		*sge;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
 	size_t			i;
-	XIO_TO_RDMA_TASK(task, rdma_task);
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -1800,18 +1801,17 @@ static int xio_rdma_write_send_data(
 	/* user provided mr */
 	sg = sge_first(sgtbl_ops, sgtbl);
 	if (sge_mr(sgtbl_ops, sg)) {
-		struct ibv_sge	*sge = &rdma_task->txd.sge[1];
+		sge = &rdma_task->txd.sge[1];
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			if (sge_mr(sgtbl_ops, sg) == NULL) {
+			xmr = (struct xio_mr *)sge_mr(sgtbl_ops, sg);
+			if (xmr == NULL) {
 				ERROR_LOG("failed to find mr on iov\n");
 				goto cleanup;
 			}
 
 			/* get the corresponding key of the
 			 * outgoing adapter */
-			mr = xio_rdma_mr_lookup((struct xio_mr *)
-							sge_mr(sgtbl_ops, sg),
-						rdma_hndl->tcq->dev);
+			mr = xio_rdma_mr_lookup(xmr,dev);
 			if (mr == NULL) {
 				ERROR_LOG("failed to find memory " \
 						"handle\n");
@@ -2257,11 +2257,13 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 			     struct xio_task *task)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	struct xio_work_req	*txd;
+	struct ibv_sge		*sge;
 	uint64_t		payload;
 	size_t			retval;
+	size_t			sge_len;
 	int			i;
 	int			must_send = 0;
-	size_t			sge_len;
 
 	if (verify_req_send_limits(rdma_hndl))
 		return -1;
@@ -2288,9 +2290,12 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		return -1;
 	}
 
+	txd = &rdma_task->txd;
+	sge = &txd->sge[0];
+
 	/* set the length */
-	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
-	sge_len = rdma_task->txd.sge[0].length;
+	sge->length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = sge->length;
 
 	/* validate header */
 	if (XIO_TLV_LEN + payload != sge_len) {
@@ -2300,17 +2305,19 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	xio_task_addref(task);
 
 	/* check for inline */
-	rdma_task->txd.send_wr.send_flags = 0;
+	txd->send_wr.send_flags = 0;
 
-	for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
-		sge_len += rdma_task->txd.sge[i].length;
+	for (i = 1; i < txd->send_wr.num_sge; i++) {
+		sge++;
+		sge_len += sge->length;
+	}
 
 	if (sge_len < (size_t)rdma_hndl->max_inline_data)
-		rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+		txd->send_wr.send_flags |= IBV_SEND_INLINE;
 
 
 	if (IS_FIN(task->tlv_type)) {
-		rdma_task->txd.send_wr.send_flags |= IBV_SEND_FENCE;
+		txd->send_wr.send_flags |= IBV_SEND_FENCE;
 		must_send = 1;
 	}
 
@@ -2318,7 +2325,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		     task->is_control ||
 		     task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP)) {
 		/* avoid race between send completion and response arrival */
-		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
+		txd->send_wr.send_flags |= IBV_SEND_SIGNALED;
 		rdma_hndl->req_sig_cnt = 0;
 	}
 
@@ -2339,19 +2346,20 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_rsp_hdr	rsp_hdr;
+	struct xio_sg_table_ops	*sgtbl_ops;
+	void			*sgtbl;
+	struct xio_work_req	*txd;
 	uint64_t		payload;
 	uint64_t		xio_hdr_len;
 	uint64_t		ulp_hdr_len;
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_imm_len;
 	size_t			retval;
+	size_t			sge_len;
 	int			i;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
-	size_t			sge_len;
 	int			must_send = 0;
 	int			small_zero_copy;
-	struct xio_sg_table_ops	*sgtbl_ops;
-	void			*sgtbl;
 
 	if (verify_rsp_send_limits(rdma_hndl))
 		return -1;
@@ -2453,17 +2461,18 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	if (xio_mbuf_write_tlv(&task->mbuf, task->tlv_type, payload) != 0)
 		goto cleanup;
 
+	txd = &rdma_task->txd;
 	/* set the length */
-	rdma_task->txd.sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
-	sge_len = rdma_task->txd.sge[0].length;
+	txd->sge[0].length = xio_mbuf_get_curr_offset(&task->mbuf);
+	sge_len = txd->sge[0].length;
 
 	/* validate header */
-	if (XIO_TLV_LEN + payload != rdma_task->txd.sge[0].length) {
+	if (XIO_TLV_LEN + payload != sge_len) {
 		ERROR_LOG("header validation failed\n");
 		goto cleanup;
 	}
 
-	rdma_task->txd.send_wr.send_flags = 0;
+	txd->send_wr.send_flags = 0;
 	if (++rdma_hndl->rsp_sig_cnt >= SOFT_CQ_MOD || task->is_control ||
 	    task->omsg->flags & XIO_MSG_FLAG_IMM_SEND_COMP) {
 		rdma_task->txd.send_wr.send_flags |= IBV_SEND_SIGNALED;
@@ -2472,11 +2481,11 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* check for inline */
 	if (rdma_task->ib_op == XIO_IB_SEND) {
-		for (i = 1; i < rdma_task->txd.send_wr.num_sge; i++)
-			sge_len += rdma_task->txd.sge[i].length;
+		for (i = 1; i < txd->send_wr.num_sge; i++)
+			sge_len += txd->sge[i].length;
 
 		if (sge_len < (size_t)rdma_hndl->max_inline_data)
-			rdma_task->txd.send_wr.send_flags |= IBV_SEND_INLINE;
+			txd->send_wr.send_flags |= IBV_SEND_INLINE;
 
 		list_move_tail(&task->tasks_list_entry,
 			       &rdma_hndl->tx_ready_list);

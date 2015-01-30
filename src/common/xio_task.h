@@ -59,14 +59,9 @@ struct xio_tasks_pool;
 struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
-	void			*context;
-	void			*pool;
 	struct xio_task		*sender_task;  /* client only on receiver */
-	struct xio_session	*session;
-	struct xio_connection	*connection;
-	struct xio_nexus	*nexus;
-
 	struct xio_mbuf		mbuf;
+
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
 	uint64_t		stag;		/* session unique tag */
@@ -81,6 +76,12 @@ struct xio_task {
 	uint32_t                magic;
 	int32_t                 status;
 	int32_t                 pad1;
+
+	void			*pool;
+	void			*context;
+	struct xio_session	*session;
+	struct xio_connection	*connection;
+	struct xio_nexus	*nexus;
 
 	struct xio_vmsg		in_receipt;     /* save in of message with */
 						/* receipt */
@@ -301,17 +302,17 @@ static inline struct xio_task *xio_tasks_pool_lookup(
 			struct xio_tasks_pool *q,
 			unsigned int id)
 {
-	struct xio_tasks_slab *slab;
+	struct xio_tasks_slab	*slab;
+	struct xio_task		*task = NULL;
 
 	list_for_each_entry(slab, &q->slabs_list, slabs_list_entry) {
 		if (id >= slab->start_idx && id <= slab->end_idx) {
-			int i = id - slab->start_idx;
-			if (likely(slab->array[i]->ltid == id))
-				return slab->array[i];
-			else
-				return NULL;
+			task = slab->array[id - slab->start_idx];
+			break;
 		}
 	}
+	if (likely(task && task->ltid == id))
+		return task;
 
 	return NULL;
 }
