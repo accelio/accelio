@@ -822,13 +822,14 @@ static int xio_connection_xmit(struct xio_connection *connection)
 			break;
 	}
 
-	if (retval != 0) {
+	if (retval < 0) {
 		xio_set_error(-retval);
 		ERROR_LOG("failed to send message - %s\n",
 			  xio_strerror(-retval));
+		return -1;
+	} else {
+		return 0;
 	}
-
-	return retval ? -1 : 0;
 }
 
 /*---------------------------------------------------------------------------*/
