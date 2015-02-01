@@ -1756,6 +1756,23 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
 	int retval = 0;
+	struct xio_device **xio_devs;
+	struct xio_device *dev;
+
+	/* Find the device on which the connection was established */
+	xio_devs = ib_get_client_data(rdma_hndl->cm_id->device, &xio_client);
+	if (!(xio_devs && xio_devs[rdma_hndl->cm_id->port_num])) {
+		ERROR_LOG("device(%s) port(%d) not registered\n",
+			  rdma_hndl->cm_id->device->name,
+			  rdma_hndl->cm_id->port_num);
+		xio_set_error(ENODEV);
+		goto notify_err0;
+	}
+
+	dev = xio_devs[rdma_hndl->cm_id->port_num];
+	/* increment device reference count */
+	xio_device_get(dev);
+	rdma_hndl->dev = dev;
 
 	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &rdma_hndl->trans_attr_mask)) {
 		rdma_set_service_type(rdma_hndl->cm_id,
@@ -1769,9 +1786,16 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 	if (retval) {
 		xio_set_error(retval);
 		ERROR_LOG("rdma_resolve_route failed. (err=%d)\n", retval);
-		xio_transport_notify_observer_error(&rdma_hndl->base,
-						    xio_errno());
+		goto notify_err1;
 	}
+
+	return;
+
+notify_err1:
+	xio_device_put(dev);
+notify_err0:
+	xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1781,8 +1805,6 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 				 struct rdma_cm_event *ev,
 				 struct xio_rdma_transport *rdma_hndl)
 {
-	struct xio_device **xio_devs;
-	struct xio_device *dev;
 	struct rdma_conn_param		cm_params = {
 		.initiator_depth		= 1,
 		.responder_resources		= 1,
@@ -1791,25 +1813,10 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 	};
 	int	retval = 0;
 
-	/* Find the device on which the connection was established */
-	xio_devs = ib_get_client_data(cm_id->device, &xio_client);
-	if (!(xio_devs && xio_devs[cm_id->port_num])) {
-		ERROR_LOG("device(%s) port(%d) not registerd\n",
-			  cm_id->device->name,
-			  cm_id->port_num);
-		xio_set_error(ENODEV);
-		goto notify_err0;
-	}
-
-	dev = xio_devs[cm_id->port_num];
-	/* increment device reference count */
-	xio_device_get(dev);
-	rdma_hndl->dev = dev;
-
 	retval = xio_qp_create(rdma_hndl);
 	if (retval != 0) {
 		ERROR_LOG("internal logic error in create_endpoint\n");
-		goto notify_err1;
+		goto notify_err0;
 	}
 
 	/*
@@ -1832,7 +1839,7 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 	if (retval != 0) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("rdma_connect failed.\n");
-		goto notify_err2;
+		goto notify_err1;
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
 	rdma_hndl->client_initiator_depth = cm_params.initiator_depth;
@@ -1840,10 +1847,8 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 
 	return;
 
-notify_err2:
-	xio_qp_release(rdma_hndl);
 notify_err1:
-	xio_device_put(dev);
+	xio_qp_release(rdma_hndl);
 notify_err0:
 	xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
 }

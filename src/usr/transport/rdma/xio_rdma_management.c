@@ -614,12 +614,17 @@ static struct xio_device *xio_device_lookup_init(struct ibv_context *verbs)
 {
 	struct xio_device *dev;
 
+	if (verbs == NULL) {
+		xio_set_error(ENODEV);
+		ERROR_LOG("NULL ibv_context\n");
+		return NULL;
+	}
+
 	dev = xio_device_lookup(verbs);
 	if (dev)
-		return dev;
+		goto exit;
 
 	/* Connection on new device */
-
 	TRACE_LOG("Connection via new device %s\n",
 		  ibv_get_device_name(verbs->device));
 
@@ -627,14 +632,14 @@ static struct xio_device *xio_device_lookup_init(struct ibv_context *verbs)
 	if (!dev) {
 		ERROR_LOG("Couldn't allocate device %s\n",
 			  ibv_get_device_name(verbs->device));
-		return NULL;
+		goto cleanup0;
 	}
 
 	/* Update all MR with new device */
 	if (xio_reg_mr_add_dev(dev)) {
 		ERROR_LOG("Couldn't allocate device %s\n",
 			  ibv_get_device_name(verbs->device));
-		goto cleanup;
+		goto cleanup1;
 	}
 
 	/* Add reference count on behalf of the new connection */
@@ -645,10 +650,13 @@ static struct xio_device *xio_device_lookup_init(struct ibv_context *verbs)
 	list_add(&dev->dev_list_entry, &dev_list);
 	spin_unlock(&dev_list_lock);
 
+exit:
 	return dev;
 
-cleanup:
+cleanup1:
 	xio_device_release(dev);
+
+cleanup0:
 	return NULL;
 }
 
@@ -770,6 +778,7 @@ static int xio_device_list_init(void)
 		list_add(&dev->dev_list_entry, &dev_list);
 		pthread_rwlock_unlock(&dev_lock);
 	}
+
 exit:
 	rdma_free_devices(ctx_list);
 
@@ -900,28 +909,11 @@ static int xio_cq_free_slots(struct xio_cq *tcq, int cqe_num)
 /*---------------------------------------------------------------------------*/
 static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 {
-	struct xio_device		*dev;
+	struct	xio_cq			*tcq;
+	struct xio_device		*dev = rdma_hndl->dev;
 	struct ibv_qp_init_attr		qp_init_attr;
 	struct ibv_qp_attr		qp_attr;
-	int				dev_found = 0;
 	int				retval = 0;
-	struct	xio_cq			*tcq;
-
-
-	/* find device */
-	pthread_rwlock_rdlock(&dev_lock);
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		if (dev->verbs == rdma_hndl->cm_id->verbs) {
-			dev_found = 1;
-			break;
-		}
-	}
-	pthread_rwlock_unlock(&dev_lock);
-	if (!dev_found) {
-		xio_set_error(ENODEV);
-		ERROR_LOG("failed to find device\n");
-		return -1;
-	}
 
 	tcq = xio_cq_get(dev, rdma_hndl->base.ctx);
 	if (tcq == NULL) {
@@ -1868,6 +1860,14 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 {
 	int				retval = 0;
 
+	rdma_hndl->dev = xio_device_lookup_init(rdma_hndl->cm_id->verbs);
+	if (!rdma_hndl->dev) {
+		ERROR_LOG("failed find/init device. " \
+			  "rdma_hndl:%p, cm_id->verbs:%p\n", rdma_hndl,
+			  rdma_hndl->cm_id->verbs);
+		goto notify_err0;
+	}
+
 	if (test_bits(XIO_TRANSPORT_ATTR_TOS, &rdma_hndl->trans_attr_mask)) {
 		retval = rdma_set_option(rdma_hndl->cm_id, RDMA_OPTION_ID,
 					 RDMA_OPTION_ID_TOS,
@@ -1886,9 +1886,17 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 	if (retval) {
 		xio_set_error(errno);
 		DEBUG_LOG("rdma_resolve_route failed. (errno=%d %m)\n", errno);
-		xio_transport_notify_observer_error(&rdma_hndl->base,
-						    xio_errno());
+		goto notify_err1;
 	}
+
+	return;
+
+notify_err1:
+	xio_device_put(rdma_hndl->dev);
+
+notify_err0:
+	xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1899,18 +1907,12 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 {
 	int				retval = 0;
 	struct rdma_conn_param		cm_params;
-	struct xio_device		*dev;
 
-	dev = xio_device_lookup_init(rdma_hndl->cm_id->verbs);
-	if (!dev) {
-		ERROR_LOG("failed find/init device\n");
-		goto notify_err0;
-	}
 
 	retval = xio_qp_create(rdma_hndl);
 	if (retval != 0) {
 		ERROR_LOG("internal logic error in create_endpoint\n");
-		goto notify_err1;
+		goto notify_err0;
 	}
 
 	memset(&cm_params, 0 , sizeof(cm_params));
@@ -1936,9 +1938,8 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 	retval = rdma_connect(rdma_hndl->cm_id, &cm_params);
 	if (retval != 0) {
 		xio_set_error(ENOMEM);
-
 		DEBUG_LOG("rdma_connect failed. (errno=%d %m)\n", errno);
-		goto notify_err2;
+		goto notify_err1;
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
 	rdma_hndl->client_initiator_depth = cm_params.initiator_depth;
@@ -1946,10 +1947,8 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 
 	return;
 
-notify_err2:
-	xio_qp_release(rdma_hndl);
 notify_err1:
-	xio_device_put(dev);
+	xio_qp_release(rdma_hndl);
 notify_err0:
 	xio_transport_notify_observer_error(&rdma_hndl->base, xio_errno());
 }
@@ -1998,6 +1997,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	child_hndl->cm_id	= ev->id;
 	/* Parent handle i.e. listener doesn't have a CQ */
 	child_hndl->tcq		= NULL;
+	child_hndl->dev		= dev;
 	ev->id->context		= child_hndl;
 	child_hndl->client_initiator_depth =
 		ev->param.conn.initiator_depth;
@@ -2297,8 +2297,8 @@ void xio_close_handler(void *hndl)
 static void xio_handle_cm_event(struct rdma_cm_event *ev,
 				struct xio_rdma_transport *rdma_hndl)
 {
-	DEBUG_LOG("cm event: [%s], hndl:%p\n",
-		  rdma_event_str(ev->event), rdma_hndl);
+	DEBUG_LOG("cm event: [%s], hndl:%p, status:\n",
+		  rdma_event_str(ev->event), rdma_hndl, ev->status);
 
 	rdma_hndl->handler_nesting++;
 	switch (ev->event) {

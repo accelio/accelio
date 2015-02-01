@@ -424,6 +424,7 @@ struct xio_rdma_transport {
 	struct xio_rdma_setup_msg	setup_rsp;
 
 	/* for reconnect */
+	struct xio_device		*dev;
 	struct xio_rkey_tbl		*rkey_tbl;
 	struct xio_rkey_tbl		*peer_rkey_tbl;
 
