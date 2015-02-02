@@ -92,8 +92,9 @@ static inline struct ibv_mr *xio_rdma_mr_lookup(struct xio_mr *tmr,
 						struct xio_device *dev)
 {
 	struct xio_mr_elem *tmr_elem;
+	struct list_head *dm_list = &tmr->dm_list;
 
-	list_for_each_entry(tmr_elem, &tmr->dm_list, dm_list_entry) {
+	list_for_each_entry(tmr_elem,dm_list, dm_list_entry) {
 		if (dev == tmr_elem->dev)
 			return tmr_elem->mr;
 	}
@@ -691,8 +692,9 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_rx_handler							     */
 /*---------------------------------------------------------------------------*/
-static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
-			       struct xio_task *task)
+static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(
+		struct xio_rdma_transport *rdma_hndl,
+		struct xio_task *task)
 {
 	struct list_head	*task_prev;
 	struct xio_task		*task1, *task2;
@@ -791,8 +793,9 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(struct xio_rdma_transport *rd
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_tx_comp_handler						     */
 /*---------------------------------------------------------------------------*/
-static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
-				    struct xio_task *task)
+static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(
+		struct xio_rdma_transport *rdma_hndl,
+		struct xio_task *task)
 {
 	struct xio_task		*ptask, *next_ptask;
 	struct xio_rdma_task	*rdma_task;
@@ -1779,11 +1782,10 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_send_data						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_write_send_data(
-		struct xio_rdma_transport *rdma_hndl,
-		struct xio_task *task)
+static int xio_rdma_write_send_data(struct xio_task *task)
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
+	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 	struct xio_mr		*xmr;
 	struct xio_device	*dev = rdma_hndl->tcq->dev;
 	struct ibv_mr		*mr;
@@ -1857,16 +1859,16 @@ static int xio_rdma_prep_req_out_data(
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_vmsg		*vmsg = &task->omsg->out;
-	uint64_t		xio_hdr_len;
-	uint64_t		ulp_out_hdr_len;
-	uint64_t		ulp_pad_len = 0;
-	uint64_t		ulp_out_imm_len;
-	size_t			retval;
-	unsigned int		i;
-	int			nents;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
+	uint64_t		xio_hdr_len;
+	uint64_t		ulp_out_imm_len;
+	size_t			retval;
+	uint16_t		ulp_out_hdr_len;
+	uint16_t		ulp_pad_len = 0;
+	unsigned int		i;
+	int			nents;
 	int			tx_by_sr;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
@@ -1930,7 +1932,7 @@ static int xio_rdma_prep_req_out_data(
 
 		/* if there is data, set it to buffer or directly to the sge */
 		if (ulp_out_imm_len) {
-			retval = xio_rdma_write_send_data(rdma_hndl, task);
+			retval = xio_rdma_write_send_data(task);
 			if (retval)
 				return -1;
 		}
@@ -2349,13 +2351,13 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	struct xio_work_req	*txd;
-	uint64_t		payload;
-	uint64_t		xio_hdr_len;
-	uint64_t		ulp_hdr_len;
-	uint64_t		ulp_pad_len = 0;
-	uint64_t		ulp_imm_len;
 	size_t			retval;
 	size_t			sge_len;
+	uint64_t		payload;
+	uint64_t		xio_hdr_len;
+	uint64_t		ulp_imm_len;
+	uint16_t		ulp_hdr_len;
+	uint16_t		ulp_pad_len = 0;
 	int			i;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 	int			must_send = 0;
@@ -2417,7 +2419,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 		/* if there is data, set it to buffer or directly to the sge */
 		if (ulp_imm_len) {
-			retval = xio_rdma_write_send_data(rdma_hndl, task);
+			retval = xio_rdma_write_send_data(task);
 			if (retval)
 				goto cleanup;
 		} else {

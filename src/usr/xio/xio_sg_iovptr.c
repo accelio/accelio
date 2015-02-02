@@ -106,7 +106,7 @@ static inline void xio_sgve_set_mr(struct xio_iovec_ex *sg, void *mr)
 /*---------------------------------------------------------------------------*/
 /* xio_sgve_first							     */
 /*---------------------------------------------------------------------------*/
-static struct xio_iovec_ex *xio_sgve_first(struct xio_sg_iovptr *sgv)
+static inline struct xio_iovec_ex *xio_sgve_first(struct xio_sg_iovptr *sgv)
 {
 	return ((!sgv || sgv->nents == 0) ? NULL : &sgv->sglist[0]);
 }
@@ -114,7 +114,7 @@ static struct xio_iovec_ex *xio_sgve_first(struct xio_sg_iovptr *sgv)
 /*---------------------------------------------------------------------------*/
 /* xio_sgve_last							     */
 /*---------------------------------------------------------------------------*/
-static struct xio_iovec_ex *xio_sgve_last(struct xio_sg_iovptr *sgv)
+static inline struct xio_iovec_ex *xio_sgve_last(struct xio_sg_iovptr *sgv)
 {
 	return ((!sgv || sgv->nents == 0) ?
 		NULL : &sgv->sglist[sgv->nents - 1]);
@@ -123,7 +123,7 @@ static struct xio_iovec_ex *xio_sgve_last(struct xio_sg_iovptr *sgv)
 /*---------------------------------------------------------------------------*/
 /* xio_sgve_next							     */
 /*---------------------------------------------------------------------------*/
-static struct xio_iovec_ex *xio_sgve_next(struct xio_sg_iovptr *sgv,
+static inline struct xio_iovec_ex *xio_sgve_next(struct xio_sg_iovptr *sgv,
 					  struct xio_iovec_ex *sgve)
 {
 	return (!sgv || sgv->nents == 0 ||
@@ -177,7 +177,7 @@ static inline void xio_sgv_set_max_nents(struct xio_sg_iovptr *sgv,
 /*---------------------------------------------------------------------------*/
 /* xio_sgv_empty							     */
 /*---------------------------------------------------------------------------*/
-static int xio_sgv_empty(struct xio_sg_iovptr *sgv)
+static inline int xio_sgv_empty(struct xio_sg_iovptr *sgv)
 {
 	return (!sgv || sgv->nents == 0);
 }
@@ -185,7 +185,7 @@ static int xio_sgv_empty(struct xio_sg_iovptr *sgv)
 /*---------------------------------------------------------------------------*/
 /* xio_sgv_set_length							     */
 /*---------------------------------------------------------------------------*/
-static size_t xio_sgv_length(struct xio_sg_iovptr *sgv)
+static inline size_t xio_sgv_length(struct xio_sg_iovptr *sgv)
 {
 	size_t		sz = 0;
 	uint32_t	i;

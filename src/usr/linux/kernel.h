@@ -84,12 +84,17 @@ static inline void mutex_unlock(struct mutex *mtx)
 	pthread_mutex_unlock(&mtx->lock);
 }
 
+
+typedef volatile int spinlock_t;
+
+#define SPINLOCK_NG
+
+#ifndef SPINLOCK_NG
+
 /*
  * https://idea.popcount.org/2012-09-12-reinventing-spinlocks/
  *
  */
-
-typedef volatile int spinlock_t;
 
 static inline void spin_lock_init(spinlock_t* spinlock)
 {
@@ -125,6 +130,39 @@ static inline void spin_unlock(spinlock_t* spinlock)
 {
 	__sync_lock_release(spinlock);
 }
+#else
+/*DPDK spin lock */
+
+#include <emmintrin.h>
+
+static inline void spin_lock_init(spinlock_t* spinlock)
+{
+	spinlock = 0;
+}
+
+static inline void spin_lock(spinlock_t* spinlock)
+{
+	while (__sync_lock_test_and_set(spinlock, 1))
+		while (*spinlock)
+			_mm_pause();
+}
+
+static inline int spin_try_lock(spinlock_t* spinlock)
+{
+	return (__sync_lock_test_and_set(spinlock, 1) == 0);
+}
+
+static inline int spin_locked(spinlock_t* spinlock)
+{
+	return *spinlock;
+}
+
+static inline void spin_unlock(spinlock_t* spinlock)
+{
+	__sync_lock_release(spinlock);
+}
+
+#endif
 
 static inline char *kstrdup(const char *s, gfp_t gfp)
 {

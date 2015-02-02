@@ -76,6 +76,8 @@
 #include <linux/tcp.h>
 #include <linux/mman.h>
 #include <get_clock.h>
+#include <emmintrin.h>
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -218,6 +220,13 @@ static inline int arch_cache_line_size(void)
 }
 
 */
+/*---------------------------------------------------------------------------*/
+/* xio_pause								     */
+/*---------------------------------------------------------------------------*/
+static inline void xio_pause(void)
+{
+	_mm_pause();
+}
 
 /*---------------------------------------------------------------------------*/
 static inline int xio_numa_node_of_cpu(int cpu)
