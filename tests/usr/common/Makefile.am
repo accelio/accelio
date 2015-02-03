@@ -10,9 +10,10 @@ AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
 # the program to build (the names of the final binaries)
 noinst_LTLIBRARIES = libtestcommon.la
 
-nodist_libtestcommon_la_SOURCES = xio_msg.c \
-				  xio_intf.c \
-				  xio_test_utils.c	
+nodist_libtestcommon_la_SOURCES = xio_msg.c 	\
+				  xio_intf.c	\
+				  xio_thread.c	\
+				  xio_test_utils.c
 
 
 ###############################################################################
