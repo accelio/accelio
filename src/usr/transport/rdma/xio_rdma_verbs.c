@@ -378,6 +378,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 	if (length == 0 || !reg_mem) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("xio_mem_alloc failed. length:%zu\n", length);
+		return -1;
 	}
 
 	access = IBV_ACCESS_LOCAL_WRITE |
