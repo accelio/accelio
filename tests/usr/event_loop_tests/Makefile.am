@@ -11,6 +11,8 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/tests/usr/common @AM_CFLAGS@
 AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lrt \
 	     -L$(top_builddir)/src/usr/
 
+COMMON_TEST_LD = $(top_builddir)/tests/usr/common
+
 ###############################################################################
 # THE PROGRAMS TO BUILD
 ###############################################################################
@@ -19,10 +21,9 @@ AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lrt \
 bin_PROGRAMS = event_loop_tests
 
 # list of sources for the 'xio_perftest' binary
-event_loop_tests_SOURCES =  ../common/xio_test_utils.c	\
-		      event_loop_tests.c
+event_loop_tests_SOURCES =  event_loop_tests.c
 
 # the additional libraries needed to link event_loop_tests
-event_loop_tests_LDADD = 	$(AM_LDFLAGS)
+event_loop_tests_LDADD = $(COMMON_TEST_LD)/libtestcommon.la $(AM_LDFLAGS)
 
 ###############################################################################
