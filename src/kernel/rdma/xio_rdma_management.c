@@ -68,6 +68,9 @@ MODULE_DESCRIPTION("XIO library " \
 	   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+/* The root of xio_rdma debugfs tree */
+static struct dentry *xio_rdma_root;
+
 int xio_rdma_cq_completions;
 module_param_named(cq_completions, xio_rdma_cq_completions, int, 0644);
 MODULE_PARM_DESC(cq_completions, "moderate CQ to N completions if N > 0 (default:disabled)");
@@ -3142,6 +3145,17 @@ static int __init xio_init_module(void)
 {
 	int ret;
 
+	if (debugfs_initialized()) {
+		xio_rdma_root = debugfs_create_dir("xio_rdma", NULL);
+		if (!xio_rdma_root) {
+			pr_err("xio_rdma root debugfs creation failed\n");
+			return -ENOMEM;
+		}
+	} else {
+		xio_rdma_root = NULL;
+		pr_err("debugfs not initialized\n");
+	}
+
 	xio_rdma_transport_constructor();
 
 	g_poptions = xio_get_options();
@@ -3165,7 +3179,15 @@ static void __exit xio_cleanup_module(void)
 	ib_unregister_client(&xio_client);
 
 	xio_rdma_transport_destructor();
+
+	debugfs_remove_recursive(xio_rdma_root);
 }
+
+struct dentry *xio_rdma_debugfs_root(void)
+{
+	return xio_rdma_root;
+}
+
 
 module_init(xio_init_module);
 module_exit(xio_cleanup_module);

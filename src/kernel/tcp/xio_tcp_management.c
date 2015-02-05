@@ -64,6 +64,9 @@ MODULE_AUTHOR("Or Kehati, Eyal Solomon, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO library v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
+/* The root of xio_tcp debugfs tree */
+static struct dentry *xio_tcp_root;
+
 
 #define VALIDATE_SZ(sz)	do {			\
 		if (optlen != (sz)) {		\
@@ -2709,6 +2712,17 @@ static void __exit xio_tcp_transport_destructor(void)
 
 static int __init xio_init_module(void)
 {
+	if (debugfs_initialized()) {
+		xio_tcp_root = debugfs_create_dir("xio_tcp", NULL);
+		if (!xio_tcp_root) {
+			pr_err("xio_tcp root debugfs creation failed\n");
+			return -ENOMEM;
+		}
+	} else {
+		xio_tcp_root = NULL;
+		pr_err("debugfs not initialized\n");
+	}
+
 	xio_tcp_transport_constructor();
 	return 0;
 }
@@ -2716,6 +2730,8 @@ static int __init xio_init_module(void)
 static void __exit xio_cleanup_module(void)
 {
 	xio_tcp_transport_destructor();
+
+	debugfs_remove_recursive(xio_tcp_root);
 }
 
 module_init(xio_init_module);
