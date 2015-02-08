@@ -2124,8 +2124,17 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl,
 
 	/* post an indication that all flush errors were consumed */
 	retval = ibv_post_send(rdma_hndl->qp, &rdma_hndl->beacon, &bad_wr);
-	if (retval) {
-		ERROR_LOG("rdma_hndl %p failed to post beacon", rdma_hndl);
+	if (retval == ENOTCONN) {
+		/* softiwarp returns ENOTCONN right away if the QP is not
+		   in RTS state. */
+		WARN_LOG("rdma_hndl %p failed to post beacon - ignored because "
+			 "the QP is not in RTS state.\n", rdma_hndl);
+		/* for beacon */
+		xio_set_timewait_timer(rdma_hndl);
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
+	} else if (retval) {
+		ERROR_LOG("rdma_hndl %p failed to post beacon %d %d\n",
+			  rdma_hndl, retval, errno);
 		return -1;
 	}
 
