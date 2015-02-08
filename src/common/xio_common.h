@@ -175,6 +175,12 @@ enum xio_msg_flags_ex {
 
 #define test_flag(flag, addr)   (((*addr) & (flag)) == (flag))
 
+
+
+/* header flags */
+#define XIO_HEADER_FLAG_NONE			(0)
+#define XIO_HEADER_FLAG_PEER_WRITE_RSP		(1 << 0)
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/

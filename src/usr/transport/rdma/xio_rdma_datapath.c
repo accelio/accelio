@@ -1689,8 +1689,8 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr.flags		= 0;
 
 
-	if (test_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &task->omsg_flags))
-		set_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &req_hdr.flags);
+	if (test_bits(XIO_MSG_FLAG_PEER_WRITE_RSP, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_PEER_WRITE_RSP, &req_hdr.flags);
 	else if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg_flags))
 		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &req_hdr.flags);
 
@@ -1900,13 +1900,16 @@ static int xio_rdma_prep_req_out_data(
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	/* test for using send/receive or rdma_read */
-	tx_by_sr = (nents <= (rdma_hndl->max_sge - 1) &&
-		    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
-		      rdma_hndl->max_inline_buf_sz) &&
-		     (((int)(ulp_out_imm_len) <=
-			     g_options.max_inline_data) ||
-			    ulp_out_imm_len == 0));
+	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags))
+		tx_by_sr = 0;
+	else
+		/* test for using send/receive or rdma_read */
+		tx_by_sr = (nents <= (rdma_hndl->max_sge - 1) &&
+			    ((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
+			     rdma_hndl->max_inline_buf_sz) &&
+			    (((int)(ulp_out_imm_len) <=
+			      g_options.max_inline_data) ||
+			     ulp_out_imm_len == 0));
 
 	/* The data is outgoing via SEND
 	 * One sge is reserved for the header
@@ -2027,7 +2030,7 @@ static int xio_rdma_prep_req_in_data(
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
 	void				*sg;
-	int				small_zero_copy;
+	int				enforce_write_rsp;
 	int				nents;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->in);
@@ -2052,8 +2055,8 @@ static int xio_rdma_prep_req_in_data(
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
-	small_zero_copy = task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY;
-	if (!small_zero_copy &&
+	enforce_write_rsp = task->omsg_flags & XIO_MSG_FLAG_PEER_WRITE_RSP;
+	if (!enforce_write_rsp &&
 	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
@@ -2361,7 +2364,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	int			i;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 	int			must_send = 0;
-	int			small_zero_copy;
+	int			enforce_write_rsp;
 
 	if (verify_rsp_send_limits(rdma_hndl))
 		return -1;
@@ -2379,9 +2382,9 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len += (rdma_task->req_recv_num_sge +
 			rdma_task->req_read_num_sge)*sizeof(struct xio_sge);
 
-	small_zero_copy = (task->imsg_flags &&
+	enforce_write_rsp = (task->imsg_flags &&
 			   (task->imsg_flags &
-			    XIO_HEADER_FLAG_SMALL_ZERO_COPY));
+			    XIO_HEADER_FLAG_PEER_WRITE_RSP));
 
 	if (rdma_hndl->max_inline_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
@@ -2398,7 +2401,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	 * One sge is reserved for the header
 	 */
 	if ((ulp_imm_len == 0) ||
-	    (!small_zero_copy &&
+	    (!enforce_write_rsp &&
 	     (tbl_nents(sgtbl_ops, sgtbl) <= (size_t)(rdma_hndl->max_sge - 1)) &&
 	     ((xio_hdr_len + ulp_hdr_len /*+ data_alignment*/ + ulp_imm_len)
 				< (uint64_t)rdma_hndl->max_inline_buf_sz))) {

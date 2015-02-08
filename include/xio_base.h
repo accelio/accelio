@@ -174,10 +174,11 @@ enum xio_msg_direction {
  */
 enum xio_msg_flags {
 	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = (1<<0), /**< request read receipt    */
-	XIO_MSG_FLAG_SMALL_ZERO_COPY	  = (1<<1), /**< zero copy for transfers */
-	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1<<2), /**< request an immediate    */
+	XIO_MSG_FLAG_PEER_WRITE_RSP	  = (1<<1), /**< force peer to rdma write*/
+	XIO_MSG_FLAG_PEER_READ_REQ	  = (1<<2), /**< force peer to rdma read */
+	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1<<3), /**< request an immediate    */
 						    /**< send completion         */
-	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1<<3), /**< last in batch	      */
+	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1<<4), /**< last in batch	         */
 
 	/* [1<<10 and above - reserved for library usage] */
 };

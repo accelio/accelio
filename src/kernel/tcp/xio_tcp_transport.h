@@ -64,11 +64,6 @@ extern struct xio_tcp_options		tcp_options;
 
 #define xio_prefetch(p)			prefetch(p)
 
-/* header flags */
-#define XIO_HEADER_FLAG_NONE		0x00
-#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
-
-
 
 #ifndef PAGE_SHIFT
 #define PAGE_SHIFT			12

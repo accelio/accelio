@@ -340,6 +340,7 @@ static int on_response(struct xio_session *session,
 	} else {
 		/* try to send it */
 		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
+		msg->flags = XIO_MSG_FLAG_PEER_READ_REQ;
 		if (xio_send_request(test_params->connection, msg) == -1) {
 			if (xio_errno() != EAGAIN)
 				printf("**** [%p] Error - xio_send_request " \

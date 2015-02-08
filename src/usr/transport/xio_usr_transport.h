@@ -70,10 +70,6 @@
 
 #define xio_prefetch(p)            __builtin_prefetch(p)
 
-/* header flags */
-#define XIO_HEADER_FLAG_NONE		0x00
-#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
-
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */

@@ -109,10 +109,6 @@ extern struct xio_rdma_options	rdma_options;
 #define XIO_FRWR_LI_WRID		0xffffffffffffffffULL
 #define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
-/* header flags */
-#define XIO_HEADER_FLAG_NONE		0x00
-#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
-
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
