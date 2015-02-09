@@ -1900,7 +1900,7 @@ static int xio_rdma_prep_req_out_data(
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags))
+	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
 		tx_by_sr = 0;
 	else
 		/* test for using send/receive or rdma_read */

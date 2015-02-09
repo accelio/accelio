@@ -2320,6 +2320,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
 	/* calculate headers */
 	ulp_out_hdr_len	= vmsg->header.iov_len;
@@ -2329,7 +2330,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	xio_hdr_len += sizeof(struct xio_rdma_req_hdr);
 	xio_hdr_len += sizeof(struct xio_sge)*(rdma_task->recv_num_sge +
 					       rdma_task->read_num_sge +
-					       tbl_nents(sgtbl_ops, sgtbl));
+					       nents);
 
 
 	/*
@@ -2343,7 +2344,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags))
+	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
 		tx_by_sr = 0;
 	else
 		/* test for using send/receive or rdma_read */
