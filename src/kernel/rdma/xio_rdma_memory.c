@@ -564,7 +564,7 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  */
 
 static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
-			      struct ib_device *ibdev, u64 *pages,
+			      struct ib_device *ibdev, struct ib_fast_reg_page_list *data_frpl,
 			      int *offset, int *data_size)
 {
 	struct scatterlist *sg, *sgl = mdesc->sgt.sgl;
@@ -572,6 +572,7 @@ static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 	unsigned long total_sz = 0;
 	unsigned int dma_len;
 	int i, new_chunk, cur_page, last_ent = mdesc->nents - 1;
+	u64 *pages = data_frpl->page_list;
 
 	/* compute the offset of first element */
 	*offset = (u64) sgl[0].offset & ~PAGE_MASK;
@@ -598,6 +599,11 @@ static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 		   which might be unaligned */
 		page = chunk_start & PAGE_MASK;
 		do {
+			if (cur_page >= data_frpl->max_page_list_len) {
+				ERROR_LOG("Overflowing page list array. cur_page = %d, max = %u, tot sz=%lu\n",
+						cur_page, data_frpl->max_page_list_len, total_sz);
+				break;
+			}
 			pages[cur_page++] = page;
 			page += PAGE_SIZE;
 		} while (page < end_addr);
@@ -729,6 +735,7 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 				  "err=%d\n", ret);
 			goto err;
 		}
+		desc->data_frpl->max_page_list_len = XIO_MAX_IOV + 1;
 
 		desc->data_mr = ib_alloc_fast_reg_mr(dev->pd, XIO_MAX_IOV + 1);
 		if (IS_ERR(desc->data_mr)) {
@@ -882,7 +889,7 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	page_list_len = xio_sg_to_page_vec(mdesc, dev->ib_dev,
-					   fdesc->data_frpl->page_list,
+					   fdesc->data_frpl,
 					   &offset, &data_size);
 
 	if (page_list_len * PAGE_SIZE < data_size) {

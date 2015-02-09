@@ -1620,7 +1620,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			} else {
 				sg = sg_next(sg);
 			}
-			liov++;
+			liov = sg_next(liov);
 			rlen	-= llen;
 			raddr	+= llen;
 			laddr = uint64_from_ptr(sg_virt(liov));
@@ -1663,7 +1663,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			l++;
 			if ((l == lsize) || (r == rsize))
 				break;
-			liov++;
+			liov = sg_next(liov);
 
 			task_idx--;
 			/* Is this the last task */
@@ -2432,8 +2432,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	int			tx_by_sr;
-	int			nents;
-
+	uint32_t		nents;
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
@@ -3319,7 +3318,7 @@ static int xio_sched_rdma_rd_req(struct xio_rdma_transport *rdma_hndl,
 				      rdma_hndl->max_sge,
 				      &tasks_used);
 	if (retval) {
-		ERROR_LOG("failed to validate input iovecs\n");
+		ERROR_LOG("failed to validate input iovecs, rlen=%zu, llen=%zu\n", rlen, llen);
 		ERROR_LOG("rdma read is ignored\n");
 		task->status = XIO_E_MSG_INVALID;
 		return -1;

@@ -122,7 +122,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			tot_len += llen;
 			if (l == lsize)
 				break;
-			liov++;
+			liov = sg_next(liov);
 			k++;
 			if (k == max_sge - 1) {
 				/* reached last index */
@@ -135,7 +135,7 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 			llen	= liov->length;
 		} else {
 			l++;
-			liov++;
+			liov = sg_next(liov);
 			r++;
 			tot_len	+= llen;
 			if ((l == lsize) || (r == rsize))
@@ -153,7 +153,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	/* not enough buffers to complete */
 	if (tot_len < op_size) {
 		*tasks_used = 0;
-		ERROR_LOG("iovec exhausted\n");
+		ERROR_LOG("iovec exhausted, tot=%d, op=%d, max_sge=%d\n", tot_len, op_size, max_sge);
+		ERROR_LOG("rsize=%zu, lents=%zu\n", rsize, lnents);
 		return -1;
 	}
 
