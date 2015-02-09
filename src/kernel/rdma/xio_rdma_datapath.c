@@ -2316,6 +2316,8 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	int			tx_by_sr;
+	int			nents;
+
 	/*int			data_alignment = DEF_DATA_ALIGNMENT;*/
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);

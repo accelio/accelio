@@ -631,7 +631,7 @@ static int xio_tcp_prep_req_out_data(
 	xio_hdr_len += sizeof(struct xio_tcp_req_hdr);
 	xio_hdr_len += sizeof(struct xio_sge)*(tcp_task->recv_num_sge +
 					       tcp_task->read_num_sge +
-					       );
+					       nents);
 
 	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
 		tx_by_sr = 0;
