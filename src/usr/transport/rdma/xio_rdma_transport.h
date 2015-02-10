@@ -367,7 +367,6 @@ struct xio_rdma_transport {
 
 		/* rx parameters */
 	int				rq_depth;	 /* max rcv allowed  */
-	int				actual_rq_depth; /* max rcv allowed  */
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
 	uint16_t			sim_peer_credits;  /* simulates the peer
@@ -379,7 +378,7 @@ struct xio_rdma_transport {
 							     peer sends */
 	uint16_t			peer_credits;
 
-	uint16_t			pad;
+	uint16_t			pad[3];
 
 	/* fast path params */
 	int				rdma_rd_req_in_flight;
