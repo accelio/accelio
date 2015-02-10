@@ -118,7 +118,8 @@ enum xio_msg_flags_ex {
 #define XIO_CONNECTION_HELLO		(1 << 9)	/*  0x200 */
 #define XIO_FIN				(1 << 10)	/*  0x400 */
 #define XIO_CANCEL			(1 << 11)	/*  0x800 */
-#define XIO_ACK				(1 << 12)
+#define XIO_ACK				(1 << 12)	/*  0x1000 */
+#define XIO_RDMA_READ			(1 << 13)
 
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
@@ -137,11 +138,12 @@ enum xio_msg_flags_ex {
 #define XIO_CONNECTION_HELLO_REQ (XIO_CONNECTION_HELLO | XIO_REQUEST)
 #define XIO_CONNECTION_HELLO_RSP (XIO_CONNECTION_HELLO | XIO_RESPONSE)
 #define XIO_ACK_REQ		(XIO_ACK | XIO_REQUEST)
-
+#define XIO_RDMA_READ_ACK	(XIO_RDMA_READ | XIO_RESPONSE)
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
 #define IS_RESPONSE(type)		((type) & XIO_RESPONSE)
 #define IS_NOP(type)			((type) & XIO_NOP)
+#define IS_RDMA_RD_ACK(type)		((type) & XIO_RDMA_READ)
 #define IS_MESSAGE(type)		((type) & XIO_MESSAGE)
 #define IS_SESSION_SETUP(type)		((type) & XIO_SESSION_SETUP)
 #define IS_NEXUS_SETUP(type)		((type) & XIO_NEXUS_SETUP)

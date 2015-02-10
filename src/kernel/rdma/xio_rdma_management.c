@@ -855,17 +855,24 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 		xio_transport_flush_task_list(&rdma_hndl->in_flight_list);
 	}
 
-	if (!list_empty(&rdma_hndl->rdma_rd_in_flight_list)) {
-		TRACE_LOG("rdma_rd_in_flight_list not empty!\n");
+	if (!list_empty(&rdma_hndl->rdma_rd_req_in_flight_list)) {
+		TRACE_LOG("rdma_rd_req_in_flight_list not empty!\n");
 		xio_transport_flush_task_list(
-				&rdma_hndl->rdma_rd_in_flight_list);
+				&rdma_hndl->rdma_rd_req_in_flight_list);
 	}
-
-	if (!list_empty(&rdma_hndl->rdma_rd_list)) {
-		TRACE_LOG("rdma_rd_list not empty!\n");
-		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_list);
+	if (!list_empty(&rdma_hndl->rdma_rd_req_list)) {
+		TRACE_LOG("rdma_rd_req_list not empty!\n");
+		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_req_list);
 	}
-
+	if (!list_empty(&rdma_hndl->rdma_rd_rsp_in_flight_list)) {
+		TRACE_LOG("rdma_rd_rsp_in_flight_list not empty!\n");
+		xio_transport_flush_task_list(
+				&rdma_hndl->rdma_rd_rsp_in_flight_list);
+	}
+	if (!list_empty(&rdma_hndl->rdma_rd_rsp_list)) {
+		TRACE_LOG("rdma_rd_rsp_list not empty!\n");
+		xio_transport_flush_task_list(&rdma_hndl->rdma_rd_rsp_list);
+	}
 	if (!list_empty(&rdma_hndl->tx_comp_list)) {
 		TRACE_LOG("tx_comp_list not empty!\n");
 		xio_transport_flush_task_list(&rdma_hndl->tx_comp_list);
@@ -887,8 +894,10 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 		xio_transport_flush_task_list(&rdma_hndl->rx_list);
 	}
 
-	rdma_hndl->kick_rdma_rd = 0;
-	rdma_hndl->rdma_in_flight = 0;
+	rdma_hndl->kick_rdma_rd_req = 0;
+	rdma_hndl->kick_rdma_rd_rsp = 0;
+	rdma_hndl->rdma_rd_req_in_flight = 0;
+	rdma_hndl->rdma_rd_rsp_in_flight = 0;
 	rdma_hndl->reqs_in_flight_nr = 0;
 	rdma_hndl->rsps_in_flight_nr = 0;
 	rdma_hndl->tx_ready_tasks_num = 0;
@@ -2328,12 +2337,14 @@ static struct xio_transport_base *xio_rdma_open(
 
 	INIT_LIST_HEAD(&rdma_hndl->trans_list_entry);
 	INIT_LIST_HEAD(&rdma_hndl->in_flight_list);
-	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_in_flight_list);
+	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_req_in_flight_list);
+	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_rsp_in_flight_list);
 	INIT_LIST_HEAD(&rdma_hndl->tx_ready_list);
 	INIT_LIST_HEAD(&rdma_hndl->tx_comp_list);
 	INIT_LIST_HEAD(&rdma_hndl->rx_list);
 	INIT_LIST_HEAD(&rdma_hndl->io_list);
-	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_list);
+	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_req_list);
+	INIT_LIST_HEAD(&rdma_hndl->rdma_rd_rsp_list);
 
 	XIO_OBSERVABLE_INIT(&rdma_hndl->base.observable, rdma_hndl);
 	if (observer)

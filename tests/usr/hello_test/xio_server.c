@@ -53,8 +53,8 @@
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
 #define XIO_DEF_TRANSPORT	"rdma"
-#define XIO_DEF_HEADER_SIZE	32
-#define XIO_DEF_DATA_SIZE	32
+#define XIO_DEF_HEADER_SIZE	0
+#define XIO_DEF_DATA_SIZE	0
 #define XIO_DEF_CPU		0
 #define XIO_DEF_IOV_LEN		1
 #define XIO_TEST_VERSION	"1.0.0"

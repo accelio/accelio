@@ -113,6 +113,7 @@ struct test_params {
 	uint16_t		finite_run;
 	uint16_t		padding[3];
 	uint64_t		disconnect_nr;
+	struct xio_reg_mem	reg_mem;
 };
 
 
@@ -388,6 +389,30 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
+#define XIO_READ_BUF_LEN	(4*1024*1024)
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct test_params *test_params = (struct test_params *)cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	int			nents = vmsg_sglist_nents(&msg->in);
+	int i;
+
+	if (test_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &test_params->reg_mem);
+
+	for (i = 0; i < nents; i++) {
+		sglist[i].iov_base = test_params->reg_mem.addr;
+	        sglist[i].mr = test_params->reg_mem.mr;
+	}
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -396,7 +421,8 @@ static struct xio_session_ops ses_ops = {
 	.on_session_established		=  on_session_established,
 	.on_msg_delivered		=  on_msg_delivered,
 	.on_msg				=  on_response,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
 
 /*---------------------------------------------------------------------------*/
@@ -683,7 +709,6 @@ int send_chained(struct test_params *test_params)
 		msg_pool_put(test_params->pool, msg);
 		return -1;
 	}
-
 	test_params->nsent += nsent;
 
 	return 0;
@@ -808,6 +833,9 @@ int main(int argc, char *argv[])
 	xio_context_destroy(test_params.ctx);
 
 	msg_pool_free(test_params.pool);
+
+	if (test_params.reg_mem.addr)
+		xio_mem_free(&test_params.reg_mem);
 
 cleanup:
 	msg_api_free(&test_params.msg_params);

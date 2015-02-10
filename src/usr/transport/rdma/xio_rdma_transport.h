@@ -161,7 +161,7 @@ struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint32_t		tid;		/* originator identifier*/
+	uint32_t		ltid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[1];
 
@@ -186,17 +186,18 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint32_t		tid;		/* originator identifier*/
+	uint32_t		rtid;		/* originator identifier*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[1];
 
 	uint16_t		write_num_sge;
-	uint16_t		pad1;
 	uint32_t		status;		/* status		*/
+	uint32_t		ltid;		/* local task id	*/
+
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 
@@ -218,6 +219,11 @@ struct __attribute__((__packed__)) xio_nop_hdr {
 	uint8_t			opcode;		/* opcode for peers	*/
 	uint8_t			flags;		/* not used		*/
 	uint16_t		pad;
+};
+
+struct __attribute__((__packed__)) xio_rdma_read_ack_hdr {
+	uint16_t		hdr_len;	 /* req header length	*/
+	uint32_t		rtid;		 /* remote task id	*/
 };
 
 struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
@@ -354,10 +360,12 @@ struct xio_rdma_transport {
 	struct list_head		in_flight_list;
 	struct list_head		rx_list;
 	struct list_head		io_list;
-	struct list_head		rdma_rd_list;
-	struct list_head		rdma_rd_in_flight_list;
+	struct list_head		rdma_rd_req_list;
+	struct list_head		rdma_rd_req_in_flight_list;
+	struct list_head		rdma_rd_rsp_list;
+	struct list_head		rdma_rd_rsp_in_flight_list;
 
-	/* rx parameters */
+		/* rx parameters */
 	int				rq_depth;	 /* max rcv allowed  */
 	int				actual_rq_depth; /* max rcv allowed  */
 	int				rqe_avail;	 /* recv queue elements
@@ -374,18 +382,20 @@ struct xio_rdma_transport {
 	uint16_t			pad;
 
 	/* fast path params */
-	int				rdma_in_flight;
+	int				rdma_rd_req_in_flight;
+	int				rdma_rd_rsp_in_flight;
 	int				sqe_avail;
 	enum xio_transport_state	state;
 
 	/* tx parameters */
-	size_t				max_inline_buf_sz;
-	int				kick_rdma_rd;
+	int				kick_rdma_rd_req;
+	int				kick_rdma_rd_rsp;
 	int				reqs_in_flight_nr;
 	int				rsps_in_flight_nr;
 	int				tx_ready_tasks_num;
 	int				max_tx_ready_tasks_num;
 	int				max_inline_data;
+	size_t				max_inline_buf_sz;
 	int				max_sge;
 	uint16_t			req_sig_cnt;
 	uint16_t			rsp_sig_cnt;
