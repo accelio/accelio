@@ -3744,7 +3744,7 @@ static void init_lsg_list(struct xio_rdma_transport *rdma_hndl,
 		mr = xio_rdma_mr_lookup((struct xio_mr *)sge_mr(sgtbl_ops, sg),
 					rdma_hndl->tcq->dev);
 		lsg_list[i].stag = mr->lkey;
-		llen += lsg_list[i].length;
+		*llen += lsg_list[i].length;
 	}
 }
 
