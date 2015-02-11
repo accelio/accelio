@@ -41,7 +41,6 @@
 #include "xio_common.h"
 #include "xio_protocol.h"
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_proto							     */
 /*---------------------------------------------------------------------------*/
@@ -53,7 +52,7 @@ int xio_uri_get_proto(const char *uri, char *proto, int proto_len)
 	int  i;
 
 	end = strstr(uri, "://");
-	if (end == NULL)
+	if (!end)
 		return -1;
 
 	p = start;
@@ -77,15 +76,13 @@ const char *xio_uri_get_resource_ptr(const char *uri)
 	const char *start;
 	const char *p1, *p2 = NULL;
 
-
 	start = strstr(uri, "://");
-	if (start == NULL)
+	if (!start)
 		return NULL;
-
 
 	if (*(start+3) == '[') {  /* IPv6 */
 		p1 = strstr(start + 4, "]:");
-		if (p1 == NULL)
+		if (!p1)
 			return NULL;
 		p2 = strchr(p1 + 2, '/');
 
@@ -99,15 +96,17 @@ const char *xio_uri_get_resource_ptr(const char *uri)
 		p1--;
 	}
 
-	return (p2 == NULL) ? NULL : p2;
+	return p2;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_uri_get_portal							     */
 /*---------------------------------------------------------------------------*/
 int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 {
 	const char *res = xio_uri_get_resource_ptr(uri);
-	int len = (res == NULL) ? strlen(uri) : (size_t)(res - uri);
+	int len = (!res) ? strlen(uri) : (size_t)(res - uri);
+
 	if (len < portal_len) {
 		strncpy(portal, uri, len);
 		portal[len] = 0;
@@ -123,8 +122,10 @@ int xio_uri_get_portal(const char *uri, char *portal, int portal_len)
 int xio_uri_get_resource(const char *uri, char *resource, int resource_len)
 {
 	const char *res = xio_uri_get_resource_ptr(uri);
-	if (res != NULL) {
+
+	if (res) {
 		int  len = strlen(res);
+
 		if (len < resource_len) {
 			strcpy(resource, res);
 			return 0;
@@ -180,7 +181,6 @@ EXPORT_SYMBOL(xio_read_tlv);
 #define GETIOVLEN(_iov)              ((_iov)->iov_len)
 #endif
 
-
 /*---------------------------------------------------------------------------*/
 /* memclonev								     */
 /*---------------------------------------------------------------------------*/
@@ -221,7 +221,6 @@ size_t memclonev_ex(struct xio_iovec_ex *dst, int dsize,
 
 	return sz;
 }
-
 
 /*
  * Total number of bytes covered by an iovec.
@@ -278,9 +277,7 @@ void *xio_memcpy(void* dest, const void* src, size_t count)
 	}
 	return dest;
 }
-
 */
-
 
 /**
  * memcpyv

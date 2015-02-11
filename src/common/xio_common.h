@@ -83,16 +83,15 @@ void xio_set_error(int errnum);
 enum xio_msg_flags_ex {
 	/* [below 1<<10 - reserved for application usage] */
 	/* [above 1<<10 - reserved for library usage] */
-	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = (1 << 10), /**< immediate receipt  */
-	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = (1 << 11), /**< read receipt first */
-	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = (1 << 12), /**< read receipt last  */
+	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = BIT(10), /**< immediate receipt  */
+	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = BIT(11), /**< read receipt first */
+	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = BIT(12), /**< read receipt last  */
 };
 
 #define xio_clear_ex_flags(flag) \
 	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
 			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))
-
 
 #define xio_app_receipt_request(rq) \
 	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
@@ -106,21 +105,19 @@ enum xio_msg_flags_ex {
 	(((rq)->flags & XIO_MSG_FLAG_EX_RECEIPT_LAST) == \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST)
 
-
 /**
  *  TLV types
  */
 #define XIO_NOP				1
 
-#define XIO_CREDIT			(1 << 6)	/*  0x40  */
-#define XIO_NEXUS_SETUP			(1 << 7)	/*  0x80  */
-#define XIO_SESSION_SETUP		(1 << 8)	/*  0x100 */
-#define XIO_CONNECTION_HELLO		(1 << 9)	/*  0x200 */
-#define XIO_FIN				(1 << 10)	/*  0x400 */
-#define XIO_CANCEL			(1 << 11)	/*  0x800 */
-#define XIO_ACK				(1 << 12)	/*  0x1000 */
-#define XIO_RDMA_READ			(1 << 13)
-
+#define XIO_CREDIT			BIT(6)	/*  0x40  */
+#define XIO_NEXUS_SETUP			BIT(7)	/*  0x80  */
+#define XIO_SESSION_SETUP		BIT(8)	/*  0x100 */
+#define XIO_CONNECTION_HELLO		BIT(9)	/*  0x200 */
+#define XIO_FIN				BIT(10)	/*  0x400 */
+#define XIO_CANCEL			BIT(11)	/*  0x800 */
+#define XIO_ACK				BIT(12)	/*  0x1000 */
+#define XIO_RDMA_READ			BIT(13)
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
@@ -154,7 +151,6 @@ enum xio_msg_flags_ex {
 #define	IS_APPLICATION_MSG(type) \
 		  (IS_MESSAGE(type) || IS_ONE_WAY(type))
 
-
 /**
  *  TLV magic
  */
@@ -177,11 +173,9 @@ enum xio_msg_flags_ex {
 
 #define test_flag(flag, addr)   (((*addr) & (flag)) == (flag))
 
-
-
 /* header flags */
 #define XIO_HEADER_FLAG_NONE			(0)
-#define XIO_HEADER_FLAG_PEER_WRITE_RSP		(1 << 0)
+#define XIO_HEADER_FLAG_PEER_WRITE_RSP		BIT(0)
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -247,7 +241,6 @@ PACKED_MEMORY(struct xio_nexus_setup_req {
 	uint16_t		flags;
 	uint32_t		cid;
 });
-
 
 PACKED_MEMORY(struct xio_nexus_setup_rsp {
 	uint32_t		cid;

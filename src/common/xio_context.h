@@ -38,7 +38,6 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
-
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
 #define xio_ctx_event_t xio_ev_data_t
@@ -64,8 +63,7 @@ enum xio_counters {
 	XIO_STAT_LAST = 16
 };
 
-typedef int (*poll_completions_fn_t)(void *, int );
-
+typedef int (*poll_completions_fn_t)(void *, int);
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */
@@ -212,12 +210,10 @@ void xio_ctx_add_event(struct xio_context *ctx,
 void xio_ctx_remove_event(struct xio_context *ctx,
 			  xio_ctx_event_t *evt);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_context_is_loop_stopping						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_is_loop_stopping(struct xio_context *ctx);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_modify_ev_handler					     */

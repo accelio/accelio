@@ -50,7 +50,6 @@
 /*---------------------------------------------------------------------------*/
 static LIST_HEAD(transports_list);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_reg_transport							     */
 /*---------------------------------------------------------------------------*/
@@ -92,6 +91,7 @@ struct xio_transport *xio_get_transport(const char *name)
 	/* lazy initialization of transport */
 	if (transport->init) {
 		int retval = transport->init(transport);
+
 		if (retval != 0) {
 			ERROR_LOG("%s transport initialization failed.\n",
 				  name);
@@ -133,6 +133,7 @@ int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
 				struct xio_task *task, int *is_assigned)
 {
 	union xio_transport_event_data event_data = {};
+
 	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(trans_hndl,

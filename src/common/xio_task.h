@@ -38,7 +38,6 @@
 #ifndef XIO_TASK_H
 #define XIO_TASK_H
 
-
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,
 	XIO_TASK_STATE_DELIVERED,

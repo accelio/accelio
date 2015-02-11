@@ -190,14 +190,14 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 {
 		struct xio_connection *connection;
 
-		if ((ctx == NULL) || (session == NULL)) {
+		if (!ctx  || !session) {
 			xio_set_error(EINVAL);
 			return NULL;
 		}
 
 		connection = (struct xio_connection *)
 				kcalloc(1, sizeof(*connection), GFP_KERNEL);
-		if (connection == NULL) {
+		if (!connection) {
 			xio_set_error(ENOMEM);
 			return NULL;
 		}
@@ -291,7 +291,6 @@ int xio_connection_send(struct xio_connection *connection,
 	int			standalone_receipt = 0;
 	int			is_control;
 
-
 	/* is control message */
 	is_control = !IS_APPLICATION_MSG(msg->type);
 
@@ -308,24 +307,24 @@ int xio_connection_send(struct xio_connection *connection,
 			tbl_length(sgtbl_ops, sgtbl);
 
 		/* message does not fit into remote queue */
-		if (connection->session->peer_rcv_queue_depth_bytes < tx_bytes) {
-				ERROR_LOG("message length %zd is bigger then peer " \
-				  "receive queue size %llu\n", tx_bytes,
-				  connection->session->peer_rcv_queue_depth_bytes);
+		if (connection->session->peer_rcv_queue_depth_bytes <
+		    tx_bytes) {
+			ERROR_LOG(
+			    "message length %zd is bigger then peer " \
+			    "receive queue size %llu\n", tx_bytes,
+			    connection->session->peer_rcv_queue_depth_bytes);
 			return -XIO_E_PEER_QUEUE_SIZE_MISMATCH;
 		}
 
 		if (connection->peer_credits_bytes < tx_bytes)
 			return -EAGAIN;
-
 	}
-
 
 	if (IS_RESPONSE(msg->type) &&
 	    (xio_app_receipt_request(msg) == XIO_MSG_FLAG_EX_RECEIPT_FIRST)) {
 		/* this is a receipt message */
 		task = xio_nexus_get_primary_task(connection->nexus);
-		if (task == NULL) {
+		if (!task) {
 			ERROR_LOG("tasks pool is empty\n");
 			return -ENOMEM;
 		}
@@ -344,7 +343,7 @@ int xio_connection_send(struct xio_connection *connection,
 	} else {
 		if (IS_REQUEST(msg->type) || msg->type == XIO_MSG_TYPE_RDMA) {
 			task = xio_nexus_get_primary_task(connection->nexus);
-			if (task == NULL) {
+			if (!task) {
 				ERROR_LOG("tasks pool is empty\n");
 				return -ENOMEM;
 			}
@@ -375,7 +374,6 @@ int xio_connection_send(struct xio_connection *connection,
 	if (xio_mbuf_tlv_start(&task->mbuf) != 0)
 		goto cleanup;
 
-
 	task->tlv_type		= msg->type;
 	task->session		= connection->session;
 	task->stag		= uint64_from_ptr(task->session);
@@ -399,35 +397,23 @@ int xio_connection_send(struct xio_connection *connection,
 		hdr.dest_session_id	= connection->session->peer_session_id;
 		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
 			if (IS_REQUEST(msg->type)) {
-				/*
-				  DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
-				  "peer_credits_msgs:%d\n", __func__,
-				  connection->req_sn, connection->req_exp_sn,
-				  connection->req_ack_sn, connection->credits_msgs,
-				  connection->peer_credits_msgs);
-				*/
 				hdr.sn		= connection->req_sn++;
 				hdr.ack_sn	= connection->req_ack_sn;
 			} else {
-				/*
-				  DEBUG_LOG("[%s] sn:%d exp:%d, ack:%d, credits_msgs:%d, " \
-				  "peer_credits_msgs:%d\n", __func__,
-				  connection->rsp_sn, connection->rsp_sn,
-				  connection->rsp_exp_sn,
-				  connection->req_ack_sn, connection->credits_msgs,
-				  connection->peer_credits_msgs);
-				*/
 				hdr.sn		= connection->rsp_sn++;
 				hdr.ack_sn	= connection->rsp_ack_sn;
 			}
 			if (connection->enable_flow_control) {
-				hdr.credits_msgs	= connection->credits_msgs;
+				hdr.credits_msgs =
+						connection->credits_msgs;
 				connection->credits_msgs = 0;
-				hdr.credits_bytes	= connection->credits_bytes;
+				hdr.credits_bytes =
+						connection->credits_bytes;
 				connection->credits_bytes = 0;
 				if (!standalone_receipt) {
 					connection->peer_credits_msgs--;
-					connection->peer_credits_bytes -= tx_bytes;
+					connection->peer_credits_bytes -=
+						tx_bytes;
 				}
 			}
 		}
@@ -446,9 +432,10 @@ int xio_connection_send(struct xio_connection *connection,
 				connection->credits_msgs = hdr.credits_msgs;
 				connection->credits_bytes = hdr.credits_bytes;
 				if (!standalone_receipt &&
-						connection->enable_flow_control) {
+				    connection->enable_flow_control) {
 					connection->peer_credits_msgs++;
-					connection->peer_credits_bytes += tx_bytes;
+					connection->peer_credits_bytes +=
+						tx_bytes;
 				}
 			}
 		}
@@ -461,7 +448,6 @@ cleanup:
 		xio_tasks_pool_put(task);
 	else
 		list_move(&task->tasks_list_entry, &connection->io_tasks_list);
-
 
 	return -rc;
 }
@@ -484,27 +470,26 @@ static int xio_connection_flush_msgs(struct xio_connection *connection)
 		else
 			xio_msg_list_insert_tail(&connection->reqs_msgq,
 						 pmsg, pdata);
-		if ((pmsg->type == XIO_MSG_TYPE_REQ) ||
-		    (pmsg->type == XIO_ONE_WAY_REQ)) {
-			if (connection->enable_flow_control) {
-				struct xio_sg_table_ops	*sgtbl_ops;
-				void			*sgtbl;
-				size_t			tx_bytes;
 
-				sgtbl	  = xio_sg_table_get(&pmsg->out);
-				sgtbl_ops = (struct xio_sg_table_ops *)
-					xio_sg_table_ops_get(pmsg->out.sgl_type);
-				tx_bytes  = pmsg->out.header.iov_len +
-					        tbl_length( sgtbl_ops, sgtbl);
+		if (connection->enable_flow_control &&
+		    (pmsg->type == XIO_MSG_TYPE_REQ ||
+		     pmsg->type == XIO_ONE_WAY_REQ)) {
+			struct xio_sg_table_ops	*sgtbl_ops;
+			void			*sgtbl;
+			size_t			tx_bytes;
 
-				connection->tx_queued_msgs--;
-				connection->tx_bytes -= tx_bytes;
+			sgtbl	  = xio_sg_table_get(&pmsg->out);
+			sgtbl_ops = (struct xio_sg_table_ops *)
+				xio_sg_table_ops_get(pmsg->out.sgl_type);
+			tx_bytes  = pmsg->out.header.iov_len +
+				tbl_length(sgtbl_ops, sgtbl);
 
-				if (connection->tx_queued_msgs < 0)
-					ERROR_LOG("tx_queued_msgs:%d\n",
-						  connection->tx_queued_msgs);
+			connection->tx_queued_msgs--;
+			connection->tx_bytes -= tx_bytes;
 
-			}
+			if (connection->tx_queued_msgs < 0)
+				ERROR_LOG("tx_queued_msgs:%d\n",
+					  connection->tx_queued_msgs);
 		}
 	}
 
@@ -651,7 +636,7 @@ int xio_connection_flush_tasks(struct xio_connection *connection)
 /*---------------------------------------------------------------------------*/
 static int xio_connection_update_rkeys(struct xio_connection *connection)
 {
-	struct xio_managed_rkey* managed_rkey;
+	struct xio_managed_rkey *managed_rkey;
 
 	if (!connection->nexus)
 		return 0;
@@ -765,46 +750,47 @@ static inline int xio_connection_xmit_inl(
 		void (*flush_msgq)(struct xio_connection *, enum xio_status),
 		int *retry_cnt)
 {
-	int retval = 0;
-
+	int retval = 0, rc = 0;
 	struct xio_msg *msg = xio_msg_list_first(msgq);
-	if (msg != NULL) {
-		retval = xio_connection_send(connection, msg);
-		if (retval) {
-			if (retval == -EAGAIN) {
-				(*retry_cnt)++;
-				return 1;
-			} else if (retval == -ENOMSG) {
-				/* message error was notified */
-				DEBUG_LOG("xio_connection_send failed.\n");
-				/* while error drain the messages */
-				*retry_cnt = 0;
-				return 0;
-			} else if (retval == -XIO_E_PEER_QUEUE_SIZE_MISMATCH) {
-				/* message larger then remote receive
-				 * queue - flush all messages */
-				(*flush_msgq)(connection,
-					      (enum xio_status)-retval);
-				(*retry_cnt)++;
-				return 1;
-			} else  {
-				xio_msg_list_remove(msgq, msg, pdata);
-				return -1;
-			}
-		} else {
-			*retry_cnt = 0;
-			xio_msg_list_remove(msgq, msg, pdata);
-			if (IS_APPLICATION_MSG(msg->type)) {
-				xio_msg_list_insert_tail(
-						in_flight_msgq, msg,
-						pdata);
-			}
-		}
-	} else {
+
+	if (!msg) {
 		(*retry_cnt)++;
+		return rc;
 	}
 
-	return 0;
+	retval = xio_connection_send(connection, msg);
+	if (retval) {
+		if (retval == -EAGAIN) {
+			(*retry_cnt)++;
+			return 1;
+		} else if (retval == -ENOMSG) {
+			/* message error was notified */
+			DEBUG_LOG("xio_connection_send failed.\n");
+			/* while error drain the messages */
+			*retry_cnt = 0;
+			rc = 0;
+		} else if (retval == -XIO_E_PEER_QUEUE_SIZE_MISMATCH) {
+			/* message larger then remote receive
+			 * queue - flush all messages */
+			(*flush_msgq)(connection,
+				      (enum xio_status)-retval);
+			(*retry_cnt)++;
+			rc = 1;
+		} else  {
+			xio_msg_list_remove(msgq, msg, pdata);
+			rc = -1;
+		}
+	} else {
+		*retry_cnt = 0;
+		xio_msg_list_remove(msgq, msg, pdata);
+		if (IS_APPLICATION_MSG(msg->type)) {
+			xio_msg_list_insert_tail(
+					in_flight_msgq, msg,
+					pdata);
+		}
+	}
+
+	return rc;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -819,7 +805,6 @@ static int xio_connection_xmit(struct xio_connection *connection)
 	struct xio_msg_list *msgq2, *in_flight_msgq2;
 	void (*flush_msgq1)(struct xio_connection *, enum xio_status);
 	void (*flush_msgq2)(struct xio_connection *, enum xio_status);
-
 
 	if (connection->send_req_toggle == 0) {
 		msgq1		= &connection->reqs_msgq;
@@ -836,7 +821,6 @@ static int xio_connection_xmit(struct xio_connection *connection)
 		in_flight_msgq2	= &connection->in_flight_reqs_msgq;
 		flush_msgq2	= &xio_connection_notify_req_msgs_flush;
 	}
-
 
 	while (retry_cnt < 2) {
 		retval = xio_connection_xmit_inl(connection,
@@ -934,7 +918,6 @@ int xio_connection_restart(struct xio_connection *connection)
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_send_request							     */
 /*---------------------------------------------------------------------------*/
@@ -951,7 +934,7 @@ int xio_send_request(struct xio_connection *connection,
 	int			retval = 0;
 	int			valid;
 
-	if (connection  == NULL || msg == NULL) {
+	if (!connection || !msg) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
@@ -1011,7 +994,6 @@ int xio_send_request(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
-
 
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
@@ -1145,8 +1127,6 @@ int xio_send_response(struct xio_msg *msg)
 			connection->credits_msgs++;
 			connection->credits_bytes += bytes;
 		}
-
-
 		xio_msg_list_insert_tail(&connection->rsps_msgq, pmsg, pdata);
 
 		pmsg = pmsg->next;
@@ -1171,7 +1151,6 @@ int xio_connection_send_read_receipt(struct xio_connection *connection,
 {
 	struct xio_msg		*rsp;
 	struct xio_task		*task;
-
 
 	task = container_of(msg, struct xio_task, imsg);
 
@@ -1332,7 +1311,6 @@ int xio_connection_xmit_msgs(struct xio_connection *connection)
 	return -1;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
@@ -1390,7 +1368,7 @@ int xio_release_response(struct xio_msg *msg)
 
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
-		if (task->sender_task == NULL) {
+		if (!task->sender_task) {
 			/* do not release response in responder */
 			xio_set_error(EINVAL);
 			return -1;
@@ -1435,7 +1413,6 @@ int xio_release_response(struct xio_msg *msg)
 			       &connection->post_io_tasks_list);
 
 		xio_release_response_task(task);
-
 
 		pmsg = pmsg->next;
 	}
@@ -1552,7 +1529,6 @@ static void xio_fin_req_timeout(void *data)
 
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
-
 	if (!connection->disable_notify)
 		xio_session_notify_connection_teardown(connection->session,
 						       connection);
@@ -1561,7 +1537,6 @@ static void xio_fin_req_timeout(void *data)
 exit:
 	kref_put(&connection->kref, xio_connection_post_destroy);
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_send_fin_req							     */
@@ -1578,7 +1553,6 @@ int xio_send_fin_req(struct xio_connection *connection)
 	msg->out.header.iov_len	= 0;
 	msg->in.data_tbl.nents	= 0;
 	msg->out.data_tbl.nents	= 0;
-
 
 	/* insert to the tail of the queue */
 	xio_msg_list_insert_tail(&connection->reqs_msgq, msg, pdata);
@@ -1732,7 +1706,7 @@ int xio_disconnect(struct xio_connection *connection)
 					   connection->state));
 
 	if ((connection->state != XIO_CONNECTION_STATE_ONLINE &&
-	    connection->state != XIO_CONNECTION_STATE_ESTABLISHED) ||
+	     connection->state != XIO_CONNECTION_STATE_ESTABLISHED) ||
 	    connection->disconnecting) {
 		/* delay the disconnection to when connection become online */
 		connection->disconnecting = 1;
@@ -1762,7 +1736,6 @@ int xio_cancel_request(struct xio_connection *connection,
 	struct xio_msg *pmsg, *tmp_pmsg;
 	uint64_t	stag;
 	struct xio_session_cancel_hdr hdr;
-
 
 	/* search the tx */
 	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
@@ -2014,7 +1987,6 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 	msg->in.data_tbl.nents	= 0;
 	msg->out.data_tbl.nents	= 0;
 
-
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
 	if (retval == -EAGAIN)
@@ -2056,7 +2028,6 @@ static void xio_connection_post_destroy(struct kref *kref)
 		  session, connection, connection->nexus,
 		  session->connections_nr);
 
-
 	/* remove the connection from the session's connections list */
 	if (connection->nexus) {
 		xio_connection_flush_tasks(connection);
@@ -2081,8 +2052,8 @@ static void xio_connection_post_destroy(struct kref *kref)
 		tmp_connection = connection;
 	}
 	destroy_session = ((session->connections_nr == 0) &&
-			(session->lead_connection == NULL) &&
-			(session->redir_connection == NULL));
+			   !session->lead_connection &&
+			   !session->redir_connection);
 	spin_unlock(&session->connections_list_lock);
 	retval = xio_connection_close(tmp_connection);
 
@@ -2106,7 +2077,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 	int			found;
 	struct xio_session	*session;
 
-	if (connection == NULL) {
+	if (!connection) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
@@ -2142,7 +2113,6 @@ int xio_connection_destroy(struct xio_connection *connection)
 							connection->state));
 		xio_set_error(EPERM);
 		return -1;
-		break;
 	}
 	/* if there is any delayed timeout -  stop it.
 	 * users may call this function at any stage
@@ -2305,7 +2275,6 @@ static void xio_close_time_wait(void *data)
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
-
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
@@ -2336,7 +2305,6 @@ static void xio_handle_last_ack(void *data)
 
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
-
 
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
@@ -2554,7 +2522,6 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 	connection->peer_credits_bytes = session->peer_rcv_queue_depth_bytes;
 	connection->credits_bytes = 0;
 
-
 	/* delayed disconnect request should be done now */
 	if (connection->state == XIO_CONNECTION_STATE_INIT &&
 	    connection->disconnecting) {
@@ -2609,7 +2576,6 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 				connection->session->peer_rcv_queue_depth_bytes;
 		connection->credits_bytes = 0;
 
-
 		TRACE_LOG("session state is now ONLINE. session:%p\n",
 			  connection->session);
 
@@ -2649,12 +2615,6 @@ int xio_send_credits_ack(struct xio_connection *connection)
 {
 	struct xio_msg *msg;
 
-	/*
-	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits_msgs:%d, peer_credits_msgs:%d\n",
-		  __func__,
-		  connection->sn, connection->exp_sn, connection->ack_sn,
-		  connection->credits_msgs, connection->peer_credits_msgs);
-	*/
 	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
 
 	msg->type		= (enum xio_msg_type)XIO_ACK_REQ;
@@ -2703,7 +2663,7 @@ struct xio_managed_rkey *xio_register_remote_rkey(
 {
 	struct xio_managed_rkey *managed_rkey = (struct xio_managed_rkey *)
 				kcalloc(1, sizeof(*managed_rkey), GFP_KERNEL);
-	if (managed_rkey == NULL)
+	if (!managed_rkey)
 		return NULL;
 
 	managed_rkey->rkey = raw_rkey;
@@ -2729,5 +2689,6 @@ const struct xio_transport_base *xio_req_to_transport_base(
 	const struct xio_msg *req)
 {
 	struct xio_task *task = container_of(req, struct xio_task, imsg);
+
 	return task->connection->nexus->transport_hndl;
 }

@@ -199,7 +199,7 @@ struct xio_transport {
 	int	(*context_shutdown)(struct xio_transport_base *trans_hndl,
 				    struct xio_context *ctx);
 
-	/* task pools managment */
+	/* task pools management */
 	void	(*get_pools_setup_ops)(
 				struct xio_transport_base *trans_hndl,
 				struct xio_tasks_pool_ops **initial_pool_ops,
@@ -210,11 +210,12 @@ struct xio_transport {
 				 struct xio_tasks_pool_cls *primary_pool_cls);
 
 	/* connection */
-	struct xio_transport_base *(*open)(struct xio_transport *self,
-					   struct xio_context *ctx,
-					   struct xio_observer *observer,
-					   uint32_t trans_attr_mask,
-					   struct xio_transport_init_attr *attr);
+	struct xio_transport_base *(*open)(
+				struct xio_transport *self,
+				struct xio_context *ctx,
+				struct xio_observer *observer,
+				uint32_t trans_attr_mask,
+				struct xio_transport_init_attr *attr);
 
 	int	(*connect)(struct xio_transport_base *trans_hndl,
 			   const char *portal_uri,
@@ -310,6 +311,7 @@ static inline void xio_transport_notify_observer_error(
 				int reason)
 {
 	union xio_transport_event_data ev_data = {};
+
 	ev_data.error.reason = (enum xio_status)reason;
 
 	xio_observable_notify_all_observers(&trans_hndl->observable,
@@ -363,6 +365,5 @@ int xio_rdma_cancel_req(struct xio_transport_base *transport,
 int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			struct xio_task *task, enum xio_status result,
 			void *ulp_msg, size_t ulp_msg_sz);
-
 
 #endif /*XIO_TRANSPORT_H */

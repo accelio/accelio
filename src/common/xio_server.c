@@ -138,7 +138,7 @@ static int xio_on_new_message(struct xio_server *server,
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
 		session = xio_session_create(&params);
-		if (session == NULL) {
+		if (!session) {
 			ERROR_LOG("server [new session]: failed " \
 				"  allocating session failed\n");
 			return -1;
@@ -176,7 +176,7 @@ static int xio_on_new_message(struct xio_server *server,
 		struct xio_session *session1;
 		/* find the old session without lock */
 		session = xio_find_session(event_data->msg.task);
-		if (session == NULL) {
+		if (!session) {
 			ERROR_LOG("server [new connection]: failed " \
 				  "session not found. server:%p\n",
 				  server);
@@ -187,7 +187,7 @@ static int xio_on_new_message(struct xio_server *server,
 		mutex_lock(&session->lock);
 		/* session before destruction - try to lock before continue */
 		session1 = xio_find_session(event_data->msg.task);
-		if (session1 == NULL) {
+		if (!session1) {
 			ERROR_LOG("server [new connection]: failed " \
 				  "session not found. server:%p\n",
 				  server);
@@ -312,7 +312,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	int			retval;
 	int			backlog = 4;
 
-	if ((ctx == NULL) || (ops == NULL) || (uri == NULL)) {
+	if (!ctx  || !ops || !uri) {
 		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
 			  ctx, ops, uri);
 		xio_set_error(EINVAL);
@@ -324,7 +324,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	/* create the server */
 	server = (struct xio_server *)
 			kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
-	if (server == NULL) {
+	if (!server) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -343,7 +343,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
 
 	server->listener = xio_nexus_open(ctx, uri, NULL, 0, 0, NULL);
-	if (server->listener == NULL) {
+	if (!server->listener) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
@@ -396,7 +396,7 @@ int xio_unbind(struct xio_server *server)
 	int retval = 0;
 	int found;
 
-	if (server == NULL)
+	if (!server)
 		return -1;
 
 	found = xio_idr_lookup_uobj(usr_idr, server);

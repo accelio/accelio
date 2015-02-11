@@ -38,7 +38,6 @@
 #ifndef XIO_HASH_H
 #define XIO_HASH_H
 
-
 struct  xio_key_ptr {
 	void  *id;
 };
@@ -69,6 +68,7 @@ struct  xio_key_str {
 static inline unsigned int int8_hash(uint8_t key8)
 {
 	unsigned int key = key8;
+
 	key += ~(key << 15);
 	key ^= (key >> 10);
 	key += (key << 3);
@@ -84,6 +84,7 @@ static inline unsigned int int8_hash(uint8_t key8)
 static inline unsigned int int16_hash(uint16_t key16)
 {
 	unsigned int key = key16;
+
 	key += ~(key << 15);
 	key ^= (key >> 10);
 	key += (key << 3);
@@ -126,6 +127,7 @@ static inline unsigned int int64_hash(uint64_t key)
 static inline unsigned int str_hash(const char *s)
 {
 	unsigned int key = 0;
+
 	while (*s)
 		key = key*37 + *s++;
 
@@ -195,7 +197,6 @@ static inline void xio_int64_cp(
 {
 	dst->id = src->id;
 }
-
 
 static inline int xio_ptr_cmp(
 		const struct xio_key_ptr *k1,

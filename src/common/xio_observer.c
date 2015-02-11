@@ -51,7 +51,7 @@ struct xio_observer *xio_observer_create(void *impl, notify_fn_t notify)
 
 	observer = (struct xio_observer *)
 			kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
-	if (observer == NULL) {
+	if (!observer) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -82,7 +82,7 @@ struct xio_observable *xio_observable_create(void *impl)
 
 	observable = (struct xio_observable *)
 			kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
-	if (observable == NULL) {
+	if (!observable) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -152,7 +152,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 
 	observer_node = (struct xio_observer_node *)kcalloc(1,
 				sizeof(struct xio_observer_node), GFP_KERNEL);
-	if (observer_node == NULL) {
+	if (!observer_node) {
 		xio_set_error(ENOMEM);
 		return;
 	}
@@ -175,7 +175,6 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 				   struct xio_observer *observer)
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
-
 
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,

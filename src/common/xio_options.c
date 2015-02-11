@@ -86,7 +86,7 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 {
 	switch (optname) {
 	case XIO_OPTNAME_LOG_FN:
-		if (optlen == 0 && optval == NULL)
+		if (optlen == 0 && !optval)
 			return xio_set_log_fn(NULL);
 		else if (optlen == sizeof(xio_log_fn))
 			return xio_set_log_fn((xio_log_fn)optval);
@@ -95,7 +95,6 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		if (optlen != sizeof(enum xio_log_level))
 			return -1;
 		return xio_set_log_level(*((enum xio_log_level *)optval));
-		break;
 	case XIO_OPTNAME_DISABLE_HUGETBL:
 		xio_disable_huge_pages(*((int *)optval));
 		return 0;
@@ -186,35 +185,29 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		g_options.reconnect = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_ENABLE_FLOW_CONTROL:
 		g_options.enable_flow_control = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_msgs = (int)*((uint64_t *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_msgs = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
 		if (*((int32_t *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
 		if (*((int32_t *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_INLINE_HEADER:
 		if (optlen != sizeof(int))
 			break;
@@ -222,7 +215,6 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			break;
 		g_options.max_inline_hdr = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_INLINE_DATA:
 		if (optlen != sizeof(int))
 			break;
@@ -230,7 +222,6 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			break;
 		g_options.max_inline_data = *((int *)optval);
 		return 0;
-		break;
 	default:
 		break;
 	}
@@ -250,17 +241,14 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*((enum xio_log_level *)optval) = xio_get_log_level();
 		*optlen = sizeof(enum xio_log_level);
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		*optlen = sizeof(int);
 		*((int *)optval) = g_options.max_in_iovsz;
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_OUT_IOVLEN:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.max_in_iovsz;
 		 return 0;
-		 break;
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.reconnect;

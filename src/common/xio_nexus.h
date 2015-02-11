@@ -260,8 +260,7 @@ int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-void xio_nexus_set_server(struct xio_nexus *nexus,
-				 struct xio_server *server);
+void xio_nexus_set_server(struct xio_nexus *nexus, struct xio_server *server);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_reg_observer						     */
@@ -379,7 +378,6 @@ int xio_nexus_modify(struct xio_nexus *nexus,
 int xio_nexus_query(struct xio_nexus *nexus,
 		    struct xio_nexus_attr *attr,
 		    int attr_mask);
-
 
 #ifdef __cplusplus
 }

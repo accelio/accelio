@@ -80,12 +80,14 @@ struct xio_session {
 	uint64_t			peer_rcv_queue_depth_bytes;
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;
+
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
 
 	struct xio_msg			*setup_req;
 	struct xio_observer		observer;
 
 	enum xio_session_type		type;
+
 	volatile enum xio_session_state	state;
 
 	struct xio_new_session_rsp	new_ses_rsp;

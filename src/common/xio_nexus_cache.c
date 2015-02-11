@@ -54,7 +54,6 @@
 #include "xio_nexus.h"
 #include "xio_nexus_cache.h"
 
-
 static HT_HEAD(, xio_nexus, HASHTABLE_PRIME_SMALL)  nexus_cache;
 static spinlock_t cs_lock;
 
@@ -69,7 +68,7 @@ static int nexus_cache_add(struct xio_nexus *nexus, int nexus_id)
 	};
 
 	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);
-	if (c != NULL)
+	if (c)
 		return -1;
 
 	HT_INSERT(&nexus_cache, &key, nexus, nexus_htbl);
@@ -88,7 +87,7 @@ int xio_nexus_cache_remove(int nexus_id)
 	spin_lock(&cs_lock);
 	key.id = nexus_id;
 	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);
-	if (c == NULL) {
+	if (!c) {
 		spin_unlock(&cs_lock);
 		return -1;
 	}
@@ -145,12 +144,12 @@ struct xio_nexus *xio_nexus_cache_find(struct xio_nexus_query_params *query)
 	HT_FOREACH(nexus, &nexus_cache, nexus_htbl) {
 		if (nexus->transport_hndl->portal_uri) {
 			if ((strcmp(nexus->transport_hndl->portal_uri,
-				query->portal_uri) != 0) ||
+				    query->portal_uri) != 0) ||
 			    (nexus->transport_hndl->ctx != query->ctx))
 				continue;
 
 			tos_enabled = test_bits(XIO_NEXUS_ATTR_TOS,
-					        &nexus->trans_attr_mask);
+						&nexus->trans_attr_mask);
 			if (tos_enabled != query->tos_enabled)
 				continue;
 			if (tos_enabled && nexus->trans_attr.tos != query->tos)

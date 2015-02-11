@@ -495,5 +495,6 @@ static inline int xio_timerfd_settime(int fd, int flags,
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
+#include <linux/bitops.h>
 
 #endif /* XIO_ENV_H */

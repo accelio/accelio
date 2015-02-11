@@ -57,13 +57,11 @@ enum xio_connection_state {
 #define		SEND_ACK	0x0001
 #define		SEND_FIN	0x0002
 
-
 struct xio_transition {
 	int				valid;
 	enum xio_connection_state	next_state;
 	int				send_flags;
 };
-
 
 struct xio_connection {
 	struct xio_nexus		*nexus;

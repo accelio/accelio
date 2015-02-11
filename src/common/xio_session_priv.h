@@ -136,7 +136,6 @@ struct xio_connection *xio_session_find_connection_by_ctx(
 		struct xio_session *session,
 		struct xio_context *ctx);
 
-
 /* Server API */
 
 /*---------------------------------------------------------------------------*/
@@ -170,7 +169,6 @@ struct xio_msg *xio_session_write_reject_rsp(
 /*---------------------------------------------------------------------------*/
 int xio_on_setup_rsp_send_comp(struct xio_connection *connection,
 			       struct xio_task *task);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_server_nexus_established					     */
@@ -221,13 +219,11 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 int xio_on_setup_rsp_recv(struct xio_connection *connection,
 			  struct xio_task *task);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_on_fin_rsp_recv				                             */
 /*---------------------------------------------------------------------------*/
 int xio_on_fin_rsp_recv(struct xio_connection *connection,
 			struct xio_task *task);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_refused							     */
@@ -235,7 +231,6 @@ int xio_on_fin_rsp_recv(struct xio_connection *connection,
 int xio_on_nexus_refused(struct xio_session *session,
 			 struct xio_nexus *nexus,
 			 union xio_nexus_event_data *event_data);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_client_nexus_established					     */

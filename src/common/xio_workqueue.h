@@ -68,7 +68,6 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
 int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
 				   xio_delayed_work_handle_t *work);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_workqueue_add_work						     */
 /*---------------------------------------------------------------------------*/

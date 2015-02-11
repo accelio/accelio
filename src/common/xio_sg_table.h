@@ -132,7 +132,6 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	     (__i) < tbl_nents((ops), (sgtbl));			\
 	     (__i)++, (sg) = sge_next((ops), (sgtbl), (sg)))
 
-
 #define xio_sg_table_get(vmsg)	\
 	((void *)&((vmsg)->data_tbl))
 
