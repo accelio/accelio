@@ -1673,7 +1673,7 @@ static struct xio_transport_base *xio_tcp_open(
 		return NULL;
 	}
 	if (attr && trans_attr_mask) {
-		memcpy(&tcp_hndl->trans_attr, attr, sizeof(attr));
+		memcpy(&tcp_hndl->trans_attr, attr, sizeof(*attr));
 		tcp_hndl->trans_attr_mask = trans_attr_mask;
 	}
 
