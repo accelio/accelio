@@ -47,7 +47,6 @@
 #define cpusmask_test_bit(nr, addr)	(*(addr) & (1ULL << (nr)))
 #define cpusmask_set_bit(nr, addr)	(*(addr) |=  (1ULL << (nr)))
 
-
 /*---------------------------------------------------------------------------*/
 /* intf_master_name							     */
 /*---------------------------------------------------------------------------*/
@@ -195,8 +194,7 @@ int main(int argc, char *argv[])
 	printf("---------------------------------------------------");
 	printf("-------------------------------------------------\n");
 
-
-	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			if (!(ifa->ifa_flags & IFF_UP))
@@ -228,6 +226,7 @@ int main(int argc, char *argv[])
 			sprintf(flags, "%s %s", flags, "RUNNING");
 		if (ifa->ifa_flags & IFF_SLAVE) {
 			char master[256];
+
 			intf_master_name(ifa->ifa_name, master);
 			sprintf(flags, "%s %s - [%s]", flags, "SLAVE", master);
 		}

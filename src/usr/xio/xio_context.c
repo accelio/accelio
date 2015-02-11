@@ -110,11 +110,9 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 			ERROR_LOG("could not set affinity to cpu. %m\n");
 		}
 
-
-
 	/* allocate new context */
 	ctx = (struct xio_context *)ucalloc(1, sizeof(struct xio_context));
-	if (ctx == NULL) {
+	if (!ctx) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
 		return NULL;
@@ -149,7 +147,6 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 
 	if (-1 == xio_netlink(ctx))
 		goto cleanup2;
-
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
@@ -201,9 +198,8 @@ void xio_context_destroy(struct xio_context *ctx)
 	int i;
 	int found;
 
-	if (ctx == NULL)
+	if (!ctx)
 		return;
-
 
 	found = xio_idr_lookup_uobj(usr_idr, ctx);
 	if (found) {
@@ -236,7 +232,8 @@ void xio_context_destroy(struct xio_context *ctx)
 	xio_observable_unreg_all_observers(&ctx->observable);
 
 	if (ctx->netlink_sock) {
-		int fd = (int)(long) ctx->netlink_sock;
+		int fd = (int)(long)ctx->netlink_sock;
+
 		xio_ev_loop_del(ctx->ev_loop, fd);
 		close(fd);
 		ctx->netlink_sock = NULL;
@@ -550,5 +547,4 @@ int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
 	return 0;
 }
 EXPORT_SYMBOL(xio_context_poll_completions);
-
 

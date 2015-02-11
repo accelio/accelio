@@ -53,8 +53,6 @@
 #include "xio_tcp_transport.h"
 #include "xio_mem.h"
 
-
-
 extern struct xio_tcp_options tcp_options;
 
 /*---------------------------------------------------------------------------*/
@@ -220,15 +218,14 @@ static void xio_tcp_read_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_tcp_setup_msg));
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_send_setup_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 				  struct xio_task *task)
 {
-	uint16_t payload;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	uint16_t payload;
 	struct xio_tcp_setup_msg  req;
 
 	DEBUG_LOG("xio_tcp_send_setup_req\n");
@@ -271,8 +268,8 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 				  struct xio_task *task)
 {
-	uint16_t payload;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	uint16_t payload;
 	struct xio_tcp_setup_msg *rsp = &tcp_hndl->setup_rsp;
 
 	DEBUG_LOG("xio_tcp_send_setup_rsp\n");
@@ -319,6 +316,7 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 
 	if (tcp_hndl->base.is_client) {
 		struct xio_task *sender_task = NULL;
+
 		if (!list_empty(&tcp_hndl->in_flight_list))
 			sender_task = list_first_entry(
 					&tcp_hndl->in_flight_list,
@@ -399,12 +397,12 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task,
 				    struct xio_tcp_req_hdr *req_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	struct xio_sge			sge;
 	size_t				hdr_len;
 	uint32_t			i;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
 	void				*sg;
@@ -412,8 +410,6 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 	sgtbl		= xio_sg_table_get(&task->omsg->in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->in.sgl_type);
-
-
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -495,8 +491,8 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 				   uint64_t ulp_imm_len,
 				   uint32_t status)
 {
-	struct xio_tcp_req_hdr	req_hdr;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	struct xio_tcp_req_hdr	req_hdr;
 
 	if (!IS_REQUEST(task->tlv_type)) {
 		ERROR_LOG("unknown message type\n");
@@ -653,7 +649,8 @@ static int xio_tcp_prep_req_out_data(
 	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
 		tx_by_sr = 0;
 	else
-		tx_by_sr = (((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
+		tx_by_sr = (((ulp_out_hdr_len + ulp_out_imm_len +
+			      xio_hdr_len) <=
 			     tcp_hndl->max_inline_buf_sz) &&
 			     (((int)(ulp_out_imm_len) <=
 			       g_options.max_inline_data) ||
@@ -697,7 +694,7 @@ static int xio_tcp_prep_req_out_data(
 					sge_length(sgtbl_ops, sg);
 			}
 		} else {
-			if (tcp_hndl->tcp_mempool == NULL) {
+			if (!tcp_hndl->tcp_mempool) {
 				xio_set_error(XIO_E_NO_BUFS);
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
@@ -838,6 +835,7 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 	int			found = 0;
 	int			removed = 0;
 	struct xio_task		*task = (struct xio_task *)xio_task;
+
 	XIO_TO_TCP_HNDL(task, tcp_hndl);
 
 	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->in_flight_list,
@@ -960,7 +958,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			++batch_count;
 			if (batch_count != batch_nr &&
 			    batch_count != tcp_hndl->tx_ready_tasks_num &&
-			    next_task != NULL &&
+			    next_task &&
 			    next_tcp_task->txd.stage
 			    <= XIO_TCP_TX_IN_SEND_CTL) {
 				task = next_task;
@@ -1051,7 +1049,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			++batch_count;
 			if (batch_count != batch_nr &&
 			    batch_count != tcp_hndl->tx_ready_tasks_num &&
-			    next_task != NULL &&
+			    next_task &&
 			    (next_tcp_task->txd.stage ==
 			    XIO_TCP_TX_IN_SEND_DATA) &&
 			    (next_tcp_task->txd.msg.msg_iovlen +
@@ -1246,7 +1244,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 					sge_length(sgtbl_ops, sg);
 			}
 		} else {
-			if (tcp_hndl->tcp_mempool == NULL) {
+			if (!tcp_hndl->tcp_mempool) {
 				xio_set_error(XIO_E_NO_BUFS);
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
@@ -1410,9 +1408,10 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
-        } else {
-                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
-        }
+	} else {
+		xio_ctx_add_event(tcp_hndl->base.ctx,
+				  &tcp_hndl->flush_tx_event);
+	}
 
 	return retval;
 }
@@ -1424,11 +1423,11 @@ static int xio_tcp_write_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task,
 				    struct xio_tcp_rsp_hdr *rsp_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1543,12 +1542,11 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
-
 	/* user did not provided mr */
 	sg = sge_first(sgtbl_ops, sgtbl);
-	if (sge_mr(sgtbl_ops, sg) == NULL &&
+	if (!sge_mr(sgtbl_ops, sg) &&
 	    tcp_options.enable_mr_check) {
-		if (tcp_hndl->tcp_mempool == NULL) {
+		if (!tcp_hndl->tcp_mempool) {
 			xio_set_error(XIO_E_NO_BUFS);
 			ERROR_LOG("message /read/write failed - " \
 				  "library's memory pool disabled\n");
@@ -1648,7 +1646,6 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->out.sgl_type);
-
 
 	/* calculate headers */
 	ulp_hdr_len	= task->omsg->out.header.iov_len;
@@ -1758,7 +1755,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			retval = 0;
 		}
 	} else {
-                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+		xio_ctx_add_event(tcp_hndl->base.ctx,
+				  &tcp_hndl->flush_tx_event);
 	}
 
 	return retval;
@@ -1776,17 +1774,16 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 				   struct xio_task *task,
 				   struct xio_tcp_req_hdr *req_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = (struct xio_tcp_req_hdr *)
 			xio_mbuf_get_curr_ptr(&task->mbuf);
-
 
 	req_hdr->version  = tmp_req_hdr->version;
 	req_hdr->flags    = tmp_req_hdr->flags;
@@ -1861,11 +1858,11 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				   struct xio_task *task,
 				   struct xio_tcp_rsp_hdr *rsp_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1920,6 +1917,7 @@ static int xio_tcp_assign_in_buf(struct xio_tcp_transport *tcp_hndl,
 				 struct xio_task *task, int *is_assigned)
 {
 	union xio_transport_event_data event_data = {};
+
 	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
@@ -1950,7 +1948,7 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 
 	while (xio_recv->tot_iov_byte_len) {
 		while (tcp_hndl->tmp_rx_buf_len == 0) {
-			retval = recv(fd, (char*)tcp_hndl->tmp_rx_buf,
+			retval = recv(fd, (char *)tcp_hndl->tmp_rx_buf,
 				      TMP_RX_BUF_SIZE, 0);
 			if (retval > 0) {
 				tcp_hndl->tmp_rx_buf_len = retval;
@@ -1968,21 +1966,20 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 						   xio_get_last_socket_error());
 						return -1;
 					}
-				}
-				else if (xio_get_last_socket_error() ==
-							XIO_ECONNRESET
-					|| xio_get_last_socket_error() ==
-							XIO_ECONNABORTED) {
+				} else if (xio_get_last_socket_error() ==
+						XIO_ECONNRESET ||
+					   xio_get_last_socket_error() ==
+						XIO_ECONNABORTED) {
 					xio_set_error(
 						   xio_get_last_socket_error());
 					DEBUG_LOG("recv failed.(errno=%d)\n",
-						xio_get_last_socket_error());
+						  xio_get_last_socket_error());
 					return 0;
 				} else {
 					xio_set_error(
 						   xio_get_last_socket_error());
 					ERROR_LOG("recv failed.(errno=%d)\n",
-						xio_get_last_socket_error());
+						  xio_get_last_socket_error());
 					return -1;
 				}
 			}
@@ -2038,8 +2035,9 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 				} else {
 					xio_recv->msg.msg_iov[i].iov_len -=
 							(retval - tmp_bytes);
-					inc_ptr(xio_recv->msg.msg_iov[i].iov_base,
-							retval - tmp_bytes);
+					inc_ptr(
+					  xio_recv->msg.msg_iov[i].iov_base,
+					  retval - tmp_bytes);
 					xio_recv->msg.msg_iov =
 						&xio_recv->msg.msg_iov[i];
 					xio_recv->msg.msg_iovlen -= i;
@@ -2054,23 +2052,23 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 		} else {
 			if (xio_get_last_socket_error() == XIO_EAGAIN) {
 				if (!block) {
-					xio_set_error(xio_get_last_socket_error());
+					xio_set_error(
+						xio_get_last_socket_error());
 					return -1;
 				}
 			} else if (xio_get_last_socket_error() ==
-							XIO_ECONNRESET ||
- 				   xio_get_last_socket_error() ==
-							XIO_ECONNABORTED) {
+				   XIO_ECONNRESET ||
+				   xio_get_last_socket_error() ==
+				   XIO_ECONNABORTED) {
 				xio_set_error(xio_get_last_socket_error());
 				DEBUG_LOG("recvmsg failed. (errno=%d)\n",
 					  xio_get_last_socket_error());
 				return 0;
-			} else {
-				xio_set_error(xio_get_last_socket_error());
-				ERROR_LOG("recvmsg failed. (errno=%d)\n",
-					  xio_get_last_socket_error());
-				return -1;
 			}
+			xio_set_error(xio_get_last_socket_error());
+			ERROR_LOG("recvmsg failed. (errno=%d)\n",
+				  xio_get_last_socket_error());
+			return -1;
 		}
 	}
 
@@ -2122,7 +2120,6 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
-
 
 	/* responder side got request for rdma read */
 
@@ -2180,13 +2177,13 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			if (sge_mr(sgtbl_ops, sg) == NULL) {
+			if (!sge_mr(sgtbl_ops, sg)) {
 				ERROR_LOG("application has not provided mr\n");
 				ERROR_LOG("tcp read is ignored\n");
 				task->status = XIO_E_NO_USER_MR;
 				return -1;
 			}
-			if (sge_addr(sgtbl_ops, sg) == NULL) {
+			if (!sge_addr(sgtbl_ops, sg)) {
 				ERROR_LOG("application has provided " \
 					  "null address\n");
 				ERROR_LOG("tcp read is ignored\n");
@@ -2196,11 +2193,15 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			llen += sge_length(sgtbl_ops, sg);
 			vec_size++;
 			if (llen > rlen) {
-				sge_set_length(sgtbl_ops, sg, rlen - (llen - sge_length(sgtbl_ops, sg)));
-				tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
+				sge_set_length(sgtbl_ops, sg, rlen -
+					       (llen -
+						sge_length(sgtbl_ops, sg)));
+				tcp_task->req_write_sge[i].length =
+						sge_length(sgtbl_ops, sg);
 				break;
 			}
-			tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
+			tcp_task->req_write_sge[i].length =
+						sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
 			ERROR_LOG("application provided too small iovec\n");
@@ -2215,7 +2216,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 		tcp_task->req_write_num_sge = vec_size;
 		tbl_set_nents(sgtbl_ops, sgtbl, vec_size);
 	} else {
-		if (tcp_hndl->tcp_mempool == NULL) {
+		if (!tcp_hndl->tcp_mempool) {
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
 				task->status = XIO_E_NO_BUFS;
@@ -2282,8 +2283,8 @@ cleanup:
 static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 				      struct xio_task *task)
 {
-	int			retval = 0;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	int			retval = 0;
 	struct xio_tcp_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
@@ -2291,7 +2292,6 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
-
 
 	/* read header */
 	retval = xio_tcp_read_req_header(tcp_hndl, task, &req_hdr);
@@ -2356,7 +2356,6 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 			tbl_set_nents(sgtbl_ops, sgtbl, 1);
 			sg = sge_first(sgtbl_ops, sgtbl);
 
-
 			sge_set_addr(sgtbl_ops, sg,
 				     sum_to_ptr(ulp_hdr,
 						imsg->in.header.iov_len +
@@ -2387,7 +2386,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	return 0;
 
 cleanup:
-	retval = xio_errno(); // no need get_last_socket_error()
+	retval = xio_errno(); /* no need get_last_socket_error() */
 	ERROR_LOG("xio_tcp_on_recv_req failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
 	xio_transport_notify_observer_error(&tcp_hndl->base, retval);
@@ -2434,11 +2433,11 @@ static int xio_tcp_on_recv_req_data(struct xio_tcp_transport *tcp_hndl,
 static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				      struct xio_task *task)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	int			retval = 0;
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
 	unsigned int		i;
 	struct xio_sg_table_ops	*isgtbl_ops;
@@ -2563,11 +2562,11 @@ cleanup:
 static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	union xio_transport_event_data event_data;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
 	unsigned int		i;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
 	struct xio_sg_table_ops	*isgtbl_ops;
 	void			*isgtbl;
@@ -2588,6 +2587,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 	if (omsg->in.header.iov_base) {
 		/* copy header to user buffers */
 		size_t hdr_len = 0;
+
 		if (imsg->in.header.iov_len > omsg->in.header.iov_len)  {
 			hdr_len = omsg->in.header.iov_len;
 			task->status = XIO_E_MSG_SIZE;
@@ -2671,7 +2671,8 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 						i++) {
 					xio_mempool_free(
 						&tcp_sender_task->read_sge[i]);
-					tcp_sender_task->read_sge[i].priv = NULL;
+					tcp_sender_task->read_sge[i].priv =
+						NULL;
 				}
 				tcp_sender_task->read_num_sge = 0;
 			} else {
@@ -2840,11 +2841,11 @@ static int xio_tcp_on_recv_cancel_rsp_header(
 		struct xio_tcp_transport *tcp_hndl,
 		struct xio_task *task)
 {
-	int			retval = 0;
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
-	XIO_TO_TCP_TASK(task, tcp_task);
+	int			retval = 0;
 
 	/* read the response header */
 	retval = xio_tcp_read_rsp_header(tcp_hndl, task, &rsp_hdr);
@@ -2874,7 +2875,7 @@ static int xio_tcp_on_recv_cancel_rsp_header(
 static int xio_tcp_on_recv_cancel_req_data(struct xio_tcp_transport *tcp_hndl,
 					   struct xio_task *task)
 {
-	struct  xio_tcp_cancel_hdr cancel_hdr;
+	struct xio_tcp_cancel_hdr cancel_hdr;
 	struct xio_msg		*imsg;
 	void			*buff;
 	uint16_t		ulp_msg_sz;
@@ -2916,11 +2917,11 @@ static int xio_tcp_on_recv_cancel_req_header(
 		struct xio_tcp_transport *tcp_hndl,
 		struct xio_task *task)
 {
-	int			retval = 0;
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
+	int			retval = 0;
 
 	/* read header */
 	retval = xio_tcp_read_req_header(tcp_hndl, task, &req_hdr);
@@ -2945,7 +2946,7 @@ static int xio_tcp_on_recv_cancel_req_header(
 	return 0;
 
 cleanup:
-	retval = xio_errno(); // no need get_last_socket_error()
+	retval = xio_errno(); /* no need get_last_socket_error() */
 	ERROR_LOG("recv_cancel_req_header failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
 	xio_transport_notify_observer_error(&tcp_hndl->base, retval);
@@ -2989,7 +2990,6 @@ static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->dummy_msg.out.header.iov_base = ucalloc(1, ulp_hdr_len);
 	tcp_hndl->dummy_msg.out.header.iov_len = ulp_hdr_len;
 
-
 	/* write the message */
 	/* get the pointer */
 	buff = tcp_hndl->dummy_msg.out.header.iov_base;
@@ -3002,7 +3002,7 @@ static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
 	inc_ptr(buff, xio_write_uint32(cancel_hdr->result, 0,
 				       (uint8_t *)buff));
 	inc_ptr(buff, xio_write_uint16((uint16_t)(ulp_msg_sz), 0,
-					(uint8_t *)buff));
+				       (uint8_t *)buff));
 	inc_ptr(buff, xio_write_array((const uint8_t *)ulp_msg, ulp_msg_sz, 0,
 				      (uint8_t *)buff));
 
@@ -3151,7 +3151,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		++batch_count;
 		++tmp_count;
 
-		if (batch_count != batch_nr && next_rxd_work != NULL &&
+		if (batch_count != batch_nr && next_rxd_work &&
 		    (next_rxd_work->msg.msg_iovlen + tcp_hndl->tmp_work.msg_len)
 		    < IOV_MAX) {
 			task = next_task;
@@ -3216,7 +3216,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				break;
 			default:
 				task->last_in_rxq =
-				    (IS_APPLICATION_MSG( task->tlv_type) &&
+				    (IS_APPLICATION_MSG(task->tlv_type) &&
 				     (i == 0));
 				if (IS_REQUEST(task->tlv_type)) {
 					retval =
@@ -3304,7 +3304,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			    tcp_hndl->state == XIO_STATE_DISCONNECTED) {
 				task_next =
 					xio_tcp_primary_task_alloc(tcp_hndl);
-				if (task_next == NULL) {
+				if (!task_next) {
 					ERROR_LOG(
 						"primary task pool is empty\n");
 					exit = 1;
@@ -3417,8 +3417,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 	retval = tcp_hndl->sock.ops->rx_data_handler(tcp_hndl, batch_nr);
 	if (retval < 0)
 		return retval;
-	else
-		count = retval;
+	count = retval;
 
 	/* No need - using flush_tx work*/
 	/*if (tcp_hndl->tx_ready_tasks_num) {
@@ -3492,6 +3491,7 @@ int xio_tcp_cancel_req(struct xio_transport_base *transport,
 	union xio_transport_event_data	event_data;
 	struct xio_tcp_task		*tcp_task;
 	struct xio_tcp_cancel_hdr	cancel_hdr = {};
+
 	cancel_hdr.hdr_len = sizeof(cancel_hdr);
 
 	/* look in the tx_ready */
@@ -3588,8 +3588,8 @@ int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
 	struct xio_tcp_transport *tcp_hndl =
 		(struct xio_tcp_transport *)transport;
 	struct xio_tcp_task	*tcp_task;
-
 	struct  xio_tcp_cancel_hdr cancel_hdr = {};
+
 	cancel_hdr.hdr_len	= sizeof(cancel_hdr);
 	cancel_hdr.result	= result;
 

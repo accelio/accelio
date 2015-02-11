@@ -45,7 +45,6 @@ struct xio_tcp_transport;
 /*---------------------------------------------------------------------------*/
 extern double				g_mhz;
 
-
 /* definitions */
 #define NUM_TASKS			54400 /* 100 * (MAX_SEND_WR +
 					      * MAX_RECV_WR + EXTRA_RQE)
@@ -82,8 +81,6 @@ extern double				g_mhz;
 #define XIO_TO_TCP_HNDL(xt, th)				\
 		struct xio_tcp_transport *(th) =		\
 			(struct xio_tcp_transport *)(xt)->context
-
-
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -130,7 +127,6 @@ struct xio_tcp_options {
 	int			tcp_dual_sock;
 	int			pad;
 };
-
 
 #define XIO_TCP_REQ_HEADER_VERSION	1
 

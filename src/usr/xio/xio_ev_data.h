@@ -38,7 +38,6 @@
 #ifndef XIO_EV_DATA_H
 #define XIO_EV_DATA_H
 
-
 struct xio_ev_data;
 
 typedef void (*xio_event_handler_t)(void *data);

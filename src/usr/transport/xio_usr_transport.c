@@ -54,8 +54,6 @@
 #include "xio_workqueue.h"
 #include "xio_context.h"
 
-
-
 #ifndef HAVE_INFINIBAND_VERBS_H
 
 /*---------------------------------------------------------------------------*/
@@ -65,7 +63,7 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
 	static struct xio_mr dummy_mr;
 
-	if (addr == NULL || !reg_mem) {
+	if (!addr || !reg_mem) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
@@ -106,7 +104,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 	xio_mem_register(reg_mem->addr, length, reg_mem);
 	if (!reg_mem->mr) {
 		ERROR_LOG("xio_reg_mr failed. addr:%p, length:%d\n",
-			 reg_mem->addr, length, access);
+			  reg_mem->addr, length, access);
 
 		goto cleanup1;
 	}
@@ -167,34 +165,24 @@ char *xio_transport_state_str(enum xio_transport_state state)
 	switch (state) {
 	case XIO_STATE_INIT:
 		return "INIT";
-		break;
 	case XIO_STATE_LISTEN:
 		return "LISTEN";
-		break;
 	case XIO_STATE_CONNECTING:
 		return "CONNECTING";
-		break;
 	case XIO_STATE_CONNECTED:
 		return "CONNECTED";
-		break;
 	case XIO_STATE_DISCONNECTED:
 		return "DISCONNECTED";
-		break;
 	case XIO_STATE_RECONNECT:
 		return "RECONNECT";
-		break;
 	case XIO_STATE_CLOSED:
 		return "CLOSED";
-		break;
 	case XIO_STATE_DESTROYED:
 		return "DESTROYED";
-		break;
 	case XIO_STATE_ERROR:
 		return "ERROR";
-		break;
 	default:
 		return "UNKNOWN";
-		break;
 	}
 
 	return NULL;

@@ -61,6 +61,7 @@ struct xio_workqueue {
 	struct xio_timers_list		timers_list;
 	int				timer_fd;
 	socket_t			pipe_fd[2];
+
 	volatile uint32_t		flags;
 	uint64_t			deleted_works[MAX_DELETED_WORKS];
 	uint32_t			deleted_works_nr;
@@ -105,7 +106,6 @@ static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 	struct itimerspec new_t = { {0, 0}, {0, 0} };
 	int		  err;
 	int64_t		  ns_to_expire;
-
 
 	if (work_queue->flags & XIO_WORKQUEUE_IN_POLL)
 		return 0;
@@ -175,7 +175,6 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 		return;
 	}
 
-
 	work_queue->flags |= XIO_WORKQUEUE_IN_POLL;
 	xio_timers_list_expire(&work_queue->timers_list);
 	xio_timers_list_lock(&work_queue->timers_list);
@@ -194,7 +193,6 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 	ssize_t			s;
 	xio_work_handle_t	*work;
 	unsigned int		i, found = 0;
-
 
 	/* drain the pipe data */
 	while (1) {
@@ -244,7 +242,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	int			retval;
 
 	work_queue = (struct xio_workqueue *)ucalloc(1, sizeof(*work_queue));
-	if (work_queue == NULL) {
+	if (!work_queue) {
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
 	}
@@ -259,7 +257,6 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	}
 
 	retval = xio_pipe(work_queue->pipe_fd, 0);
-
 
 	if (retval < 0) {
 		ERROR_LOG("pipe failed. %m\n");

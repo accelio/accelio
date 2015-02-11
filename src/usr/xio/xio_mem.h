@@ -50,7 +50,6 @@ extern void free_huge_pages(void *ptr);
 extern void *xio_numa_alloc(size_t bytes, int node);
 extern void xio_numa_free_ptr(void *ptr);
 
-
 static inline void xio_disable_huge_pages(int disable)
 {
 	if (disable_huge_pages)
@@ -61,7 +60,7 @@ static inline void xio_disable_huge_pages(int disable)
 static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator)
 {
 	if (allocator_assigned) {
-//		xio_set_error(EPERM);
+		/* xio_set_error(EPERM);*/
 		return -1;
 	}
 	memcpy(mem_allocator, allocator, sizeof(*allocator));
@@ -73,8 +72,10 @@ static inline int xio_set_mem_allocator(struct xio_mem_allocator *allocator)
 static inline void *ucalloc(size_t nmemb, size_t size)
 {
 	void *ptr;
+
 	if (allocator_assigned && mem_allocator->allocate) {
-		ptr = mem_allocator->allocate(nmemb*size, mem_allocator->user_context);
+		ptr = mem_allocator->allocate(nmemb*size,
+					      mem_allocator->user_context);
 		if (ptr)
 			memset(ptr, 0, nmemb*size);
 	} else {
@@ -86,7 +87,8 @@ static inline void *ucalloc(size_t nmemb, size_t size)
 static inline void *umalloc(size_t size)
 {
 	if (allocator_assigned && mem_allocator->allocate)
-		return mem_allocator->allocate(size, mem_allocator->user_context);
+		return mem_allocator->allocate(size,
+					       mem_allocator->user_context);
 	else
 		return malloc(size);
 }
@@ -94,8 +96,10 @@ static inline void *umalloc(size_t size)
 static inline void *umemalign(size_t boundary, size_t size)
 {
 	void *ptr;
+
 	if (allocator_assigned && mem_allocator->memalign) {
-		ptr = mem_allocator->memalign(boundary, size, mem_allocator->user_context);
+		ptr = mem_allocator->memalign(boundary, size,
+					      mem_allocator->user_context);
 	} else {
 		if (xio_memalign(&ptr, boundary, size) != 0)
 			return NULL;
@@ -119,8 +123,10 @@ static inline void ufree(void *ptr)
 static inline void *umalloc_huge_pages(size_t size)
 {
 	void *ptr;
+
 	if (allocator_assigned && mem_allocator->malloc_huge_pages) {
-		ptr = mem_allocator->malloc_huge_pages(size, mem_allocator->user_context);
+		ptr = mem_allocator->malloc_huge_pages(
+				size, mem_allocator->user_context);
 		if (ptr)
 			memset(ptr, 0, size);
 	} else {
@@ -129,11 +135,11 @@ static inline void *umalloc_huge_pages(size_t size)
 	return ptr;
 }
 
-
 static inline void ufree_huge_pages(void *ptr)
 {
 	if (allocator_assigned && mem_allocator->free_huge_pages)
-		mem_allocator->free_huge_pages(ptr, mem_allocator->user_context);
+		mem_allocator->free_huge_pages(ptr,
+					       mem_allocator->user_context);
 	else
 		free_huge_pages(ptr);
 }
@@ -141,7 +147,8 @@ static inline void ufree_huge_pages(void *ptr)
 static inline void *unuma_alloc(size_t size, int node)
 {
 	if (allocator_assigned && mem_allocator->numa_alloc)
-		return mem_allocator->numa_alloc(size, node, mem_allocator->user_context);
+		return mem_allocator->numa_alloc(size, node,
+						 mem_allocator->user_context);
 	else
 		return xio_numa_alloc(size, node);
 }
@@ -149,7 +156,8 @@ static inline void *unuma_alloc(size_t size, int node)
 static inline void unuma_free(void *ptr)
 {
 	if (allocator_assigned && mem_allocator->numa_free)
-		mem_allocator->numa_free(ptr, mem_allocator->user_context);
+		mem_allocator->numa_free(ptr,
+					 mem_allocator->user_context);
 	else
 		xio_numa_free_ptr(ptr);
 }

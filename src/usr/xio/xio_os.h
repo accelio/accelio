@@ -40,7 +40,8 @@
 
 #include <stddef.h>
 
-static inline int	xio_memalign(void **memptr, size_t alignment, size_t size);
+static inline int	xio_memalign(void **memptr, size_t alignment,
+				     size_t size);
 static inline void	xio_memfree(void *memptr);
 static inline long	xio_get_page_size(void);
 static inline void	*xio_mmap(size_t length);

@@ -104,7 +104,7 @@ static double sample_get_cpu_mhz(void)
 
 	for (i = 0; i < MEASUREMENTS; ++i) {
 		tx = x[i];
-		ty = (double) y[i];
+		ty = (double)y[i];
 		sx += tx;
 		sy += ty;
 		sxx += tx * tx;
@@ -190,7 +190,6 @@ double get_core_freq(void)
 	FILE *f;
 	char buf[256];
 	unsigned long khz = 0;
-	int rc;
 
 	cpu = xio_get_cpu();
 	if (cpu < 0) {
@@ -209,8 +208,9 @@ double get_core_freq(void)
 	}
 
 	while (fgets(buf, sizeof(buf), f)) {
-		rc = sscanf(buf, "%lu", &khz);
-		if (rc != 1) {
+		errno = 0;
+		khz = strtol(buf, NULL, 0);
+		if (errno) {
 			fclose(f);
 			/* perror("Can't read cpufreq"); */
 			return 0;

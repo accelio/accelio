@@ -65,7 +65,6 @@ static LIST_HEAD(mr_list);
 static spinlock_t mr_list_lock;
 static uint32_t mr_num; /* checkpatch doesn't like initializing static vars */
 
-
 /*---------------------------------------------------------------------------*/
 /* ibv_wc_opcode_str	                                                     */
 /*---------------------------------------------------------------------------*/
@@ -136,7 +135,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 	struct ibv_mr	   *mr;
 	int retval;
 	struct ibv_exp_reg_mr_in reg_mr_in;
-	int alloc_mr = (*addr == NULL);
+	int alloc_mr = !(*addr);
 
 	reg_mr_in.pd = dev->pd;
 	reg_mr_in.addr = *addr;
@@ -155,7 +154,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 		return NULL;
 	}
 	mr_elem = (struct xio_mr_elem *)ucalloc(1, sizeof(*mr_elem));
-	if (mr_elem == NULL)
+	if (!mr_elem)
 		goto  cleanup;
 
 	mr_elem->dev = dev;
@@ -187,7 +186,8 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
 		struct xio_transport *transport = xio_get_transport("rdma");
-		if (transport == NULL) {
+
+		if (!transport) {
 			ERROR_LOG("invalid protocol. proto: rdma\n");
 			xio_set_error(XIO_E_ADDR_ERROR);
 			return NULL;
@@ -204,7 +204,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	spin_unlock(&dev_list_lock);
 
 	tmr = (struct xio_mr *)ucalloc(1, sizeof(*tmr));
-	if (tmr == NULL) {
+	if (!tmr) {
 		xio_set_error(errno);
 		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
 		goto cleanup2;
@@ -218,7 +218,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	spin_lock(&dev_list_lock);
 	list_for_each_entry(dev, &dev_list, dev_list_entry) {
 		tmr_elem = xio_reg_mr_ex_dev(dev, addr, length, access);
-		if (tmr_elem == NULL) {
+		if (!tmr_elem) {
 			xio_set_error(errno);
 			spin_unlock(&dev_list_lock);
 			goto cleanup1;
@@ -232,7 +232,6 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 		}
 	}
 	spin_unlock(&dev_list_lock);
-
 
 	/* For dynamically discovered devices */
 	tmr->addr   = *addr;
@@ -334,7 +333,7 @@ int xio_reg_mr_add_dev(struct xio_device *dev)
 		tmr_elem = xio_reg_mr_ex_dev(dev,
 					     &tmr->addr, tmr->length,
 					     tmr->access);
-		if (tmr_elem == NULL) {
+		if (!tmr_elem) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			spin_unlock(&mr_list_lock);
@@ -346,7 +345,6 @@ int xio_reg_mr_add_dev(struct xio_device *dev)
 	}
 	spin_unlock(&mr_list_lock);
 	spin_unlock(&dev_list_lock);
-
 
 	return 0;
 
@@ -361,7 +359,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
-	if (addr == NULL || length == 0) {
+	if (!addr || length == 0) {
 		xio_set_error(EINVAL);
 		return -1;
 	}
@@ -369,7 +367,7 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 			     IBV_ACCESS_LOCAL_WRITE |
 			     IBV_ACCESS_REMOTE_WRITE|
 			     IBV_ACCESS_REMOTE_READ);
-	if (reg_mem->mr  == NULL)
+	if (!reg_mem->mr)
 		return -1;
 
 	reg_mem->addr	= addr;

@@ -36,12 +36,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 /* sg represents xio_sg_iovptr; */
 #include "libxio.h"
 #include <xio_env.h>
 #include "xio_sg_table.h"
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_sgve_set_buf							     */
@@ -124,11 +122,10 @@ static inline struct xio_iovec_ex *xio_sgve_last(struct xio_sg_iovptr *sgv)
 /* xio_sgve_next							     */
 /*---------------------------------------------------------------------------*/
 static inline struct xio_iovec_ex *xio_sgve_next(struct xio_sg_iovptr *sgv,
-					  struct xio_iovec_ex *sgve)
+						 struct xio_iovec_ex *sgve)
 {
 	return (!sgv || sgv->nents == 0 ||
-		(sgve == &sgv->sglist[sgv->nents - 1]))
-			? NULL : ++sgve;
+		(sgve == &sgv->sglist[sgv->nents - 1]) ? NULL : ++sgve);
 }
 
 /*---------------------------------------------------------------------------*/

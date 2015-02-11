@@ -39,14 +39,11 @@
 #include "libxio.h"
 #include "xio_log.h"
 
-
 void xio_vlog(const char *file, unsigned line, const char *function,
 	      unsigned level, const char *fmt, ...);
 
 enum xio_log_level	xio_logging_level = XIO_LOG_LEVEL_ERROR;
 xio_log_fn		xio_vlog_fn = xio_vlog;
-
-
 
 #define LOG_TIME_FMT "%04d/%02d/%02d-%02d:%02d:%02d.%05ld"
 
@@ -78,7 +75,7 @@ void xio_vlog(const char *file, unsigned line, const char *function,
 	localtime_r(&time1, &t);
 
 	short_file = strrchr(file, '/');
-	short_file = (short_file == NULL) ? file : short_file + 1;
+	short_file = (!short_file) ? file : short_file + 1;
 
 	snprintf(buf2, sizeof(buf2), "%s:%u", short_file, line);
 	/*
@@ -87,12 +84,11 @@ void xio_vlog(const char *file, unsigned line, const char *function,
 		tv.tv_sec, tv.tv_usec, buf2, level_str[level], buf);
 	*/
 	fprintf(stderr,
-		"["LOG_TIME_FMT"] %-28s [%-5s] - %s",
+		"[" LOG_TIME_FMT "] %-28s [%-5s] - %s",
 		t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
 		t.tm_hour, t.tm_min, t.tm_sec, tv.tv_usec,
 		buf2,
 		level_str[level], buf);
-
 
 	fflush(stderr);
 }
@@ -105,12 +101,11 @@ void xio_read_logging_level(void)
 	char *val = getenv("XIO_TRACE");
 	int level  = 0;
 
-	if (val == NULL)
+	if (!val)
 		return;
 
 	level  = atoi(val);
 	if (level >= XIO_LOG_LEVEL_FATAL && level <= XIO_LOG_LEVEL_TRACE)
 		xio_logging_level = (enum xio_log_level)level;
 }
-
 

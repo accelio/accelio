@@ -38,13 +38,11 @@
 #ifndef XIO_ENV_H
 #define XIO_ENV_H
 
-
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/
 /*---------------------------------------------------------------------------*/
-#define PACKED_MEMORY( __Declaration__ ) \
-		__Declaration__ __attribute__((__packed__))
-
+#define PACKED_MEMORY(__declaration__) \
+		__declaration__ __attribute__((__packed__))
 
 /*---------------------------------------------------------------------------*/
 #define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
@@ -74,6 +72,5 @@
 #define XIO_ECONNABORTED	ECONNABORTED
 #define XIO_ECONNRESET		ECONNRESET
 #define XIO_ECONNREFUSED        ECONNREFUSED
-
 
 #endif /* XIO_ENV_H */

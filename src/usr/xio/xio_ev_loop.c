@@ -53,6 +53,7 @@
 /*---------------------------------------------------------------------------*/
 struct xio_ev_loop {
 	int				efd;
+
 	volatile int			in_dispatch;
 	volatile int			stop_loop;
 	int				wakeup_event;
@@ -69,6 +70,7 @@ struct xio_ev_loop {
 static inline uint32_t epoll_to_xio_poll_events(uint32_t epoll_events)
 {
 	uint32_t xio_events = 0;
+
 	if (epoll_events & EPOLLIN)
 		xio_events |= XIO_POLLIN;
 	if (epoll_events & EPOLLOUT)
@@ -84,7 +86,6 @@ static inline uint32_t epoll_to_xio_poll_events(uint32_t epoll_events)
 	if (epoll_events & EPOLLERR)
 		xio_events |= XIO_POLLERR;
 
-
 	return xio_events;
 }
 
@@ -94,6 +95,7 @@ static inline uint32_t epoll_to_xio_poll_events(uint32_t epoll_events)
 static inline uint32_t xio_to_epoll_poll_events(uint32_t xio_events)
 {
 	uint32_t epoll_events = 0;
+
 	if (xio_events & XIO_POLLIN)
 		epoll_events |= EPOLLIN;
 	if (xio_events & XIO_POLLOUT)
@@ -125,7 +127,6 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 
 	memset(&ev, 0, sizeof(ev));
 	ev.events = xio_to_epoll_poll_events(events);
-
 
 	if (fd != loop->wakeup_event) {
 		tev = (struct xio_ev_data *)ucalloc(1, sizeof(*tev));
@@ -249,7 +250,7 @@ void *xio_ev_loop_create()
 	eventfd_t		val = 1;
 
 	loop = (struct xio_ev_loop *)ucalloc(1, sizeof(struct xio_ev_loop));
-	if (loop == NULL) {
+	if (!loop) {
 		xio_set_error(errno);
 		ERROR_LOG("calloc failed. %m\n");
 		return NULL;
@@ -355,7 +356,20 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 	return work_remains;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_deleted_event_lookup					     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_ev_loop_deleted_event_lookup(struct xio_ev_loop *loop,
+						   struct xio_ev_data *tev)
+{
+	int j;
 
+	for (j = 0; j < loop->deleted_events_nr; j++) {
+		if (loop->deleted_events[j] == tev)
+			return 1;
+	}
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_run_helper                                                    */
@@ -363,7 +377,7 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 static inline int xio_ev_loop_run_helper(void *loop_hndl, int timeout)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
-	int			nevent = 0, i, j, found = 0;
+	int			nevent = 0, i, found = 0;
 	struct epoll_event	events[1024];
 	struct xio_ev_data	*tev;
 	int			work_remains;
@@ -390,32 +404,27 @@ retry:
 			xio_set_error(errno);
 			ERROR_LOG("epoll_wait failed. %m\n");
 			return -1;
-		} else {
-			goto retry;
 		}
+		goto retry;
 	} else if (nevent > 0) {
 		/* save the epoll modify in "stop" while dispatching handlers */
 		loop->in_dispatch = 1;
 		for (i = 0; i < nevent; i++) {
 			tev = (struct xio_ev_data *)events[i].data.ptr;
-			if (likely(tev != NULL)) {
+			if (likely(tev)) {
 				/* look for deleted event handlers */
 				if (unlikely(loop->deleted_events_nr)) {
-					for (j = 0; j < loop->deleted_events_nr;
-							j++) {
-						if (loop->deleted_events[j] ==
-						    tev) {
-							found = 1;
-							break;
-						}
-					}
-					if (found) {
-						found = 0;
-						continue;
-					}
+					found =
+					  xio_ev_loop_deleted_event_lookup(
+								   loop, tev);
+					if (found)
+						break;
+
+					continue;
 				}
 				out_events =
-					epoll_to_xio_poll_events(events[i].events);
+					epoll_to_xio_poll_events(
+							events[i].events);
 				/* (fd != loop->wakeup_event) */
 				tev->handler(tev->fd, out_events,
 						tev->data);
@@ -493,7 +502,7 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 
-	if (loop == NULL || loop->efd == -1)
+	if (!loop || loop->efd == -1)
 		return;
 
 	if (loop->stop_loop == 1)
@@ -517,7 +526,7 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	struct xio_ev_loop *loop = *(struct xio_ev_loop **)loop_hndl;
 	struct xio_ev_data	*tev, *tmp_tev;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	/* mark loop as stopped */

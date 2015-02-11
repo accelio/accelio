@@ -96,7 +96,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 				strcpy(port, "0");
 		} else {
 			tp = strrchr(cp, ':');
-			if (tp == NULL) {
+			if (!tp) {
 				strcpy(host, cp);
 				strcpy(port, "0");
 			}  else {
@@ -124,7 +124,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
 		return -1;
 	}
-	if (result == NULL) {
+	if (!result) {
 		ERROR_LOG("unresolved address\n");
 		return -1;
 	}
@@ -169,12 +169,12 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
-	if (start == NULL)
+	if (!start)
 		return -1;
 
 	if (*(start+3) == '[') {  /* IPv6 */
 		p1 = strstr(start + 3, "]:");
-		if (p1 == NULL)
+		if (!p1)
 			return -1;
 
 		len = p1-(start+4);
@@ -182,7 +182,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 		host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
-		if (p2 == NULL) {
+		if (!p2) {
 			strcpy(port, p1 + 2);
 		} else {
 			len = (p2-1)-(p1+2);
@@ -201,9 +201,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				return  -1;
 		}
 
-		if (p2 == NULL) { /* no resource */
+		if (!p2) { /* no resource */
 			p1 = strrchr(uri, ':');
-			if (p1 == NULL || p1 == start)
+			if (!p1 || p1 == start)
 				return -1;
 			strcpy(port, (p1 + 1));
 		} else {
@@ -229,7 +229,6 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	}
 	/*printf("host:%s port:%s\n", host, port); */
 
-
 	/* Obtain address(es) matching host/port */
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family		= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
@@ -245,7 +244,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
 		return -1;
 	}
-	if (result == NULL) {
+	if (!result) {
 		ERROR_LOG("unresolved address\n");
 		return -1;
 	}
@@ -269,7 +268,6 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 }
 EXPORT_SYMBOL(xio_uri_to_ss);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_msg_dump								     */
 /*---------------------------------------------------------------------------*/
@@ -289,7 +287,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
 		ERROR_LOG("response:%p, serial number:%lld\n",
 			  xio_msg->request,
-			  ((xio_msg->request) ? xio_msg->request->sn : (uint64_t)-1));
+			  ((xio_msg->request) ?
+			   xio_msg->request->sn : (uint64_t)-1));
 
 	sgtbl		= xio_sg_table_get(&xio_msg->in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -347,5 +346,4 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	ERROR_LOG("*******************************************************\n");
 }
 EXPORT_SYMBOL(xio_msg_dump);
-
 

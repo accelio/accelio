@@ -42,7 +42,6 @@
 #include "xio_mem.h"
 #include "xio_usr_utils.h"
 
-
 /* Accelio's default mempool profile (don't expose it) */
 #define XIO_MEM_SLABS_NR	4
 
@@ -65,9 +64,6 @@
 #define _1M_MIN_NR		0
 #define _1M_MAX_NR		(1024*24)
 #define _1M_ALLOC_NR		128
-
-
-
 
 struct xio_mempool_config g_mempool_config = {
 	XIO_MEM_SLABS_NR,
@@ -94,6 +90,7 @@ struct xio_mem_block {
 	void				*buf;
 	struct xio_mem_block		*next;
 	combined_t			refcnt_claim;
+
 	volatile int			refcnt;
 	struct list_head		blocks_list_entry;
 };
@@ -171,7 +168,8 @@ static inline void reclaim(struct xio_mem_slab *slab, struct xio_mem_block *p)
 	do {
 		q = slab->free_blocks_list;
 		p->next = q;
-	} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list, q, p));
+	} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+						 q, p));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -214,14 +212,14 @@ static struct xio_mem_block *safe_read(struct xio_mem_slab *slab)
 
 	while (1) {
 		q = slab->free_blocks_list;
-		if (q == NULL)
+		if (!q)
 			return NULL;
 		xio_sync_fetch_and_add32(&q->refcnt_claim, 2);
 		/* make sure q is still the head */
-		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list, q, q))
+		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+						   q, q))
 			return q;
-		else
-			safe_release(slab, q);
+		safe_release(slab, q);
 	}
 }
 
@@ -234,16 +232,15 @@ static struct xio_mem_block *safe_new_block(struct xio_mem_slab *slab)
 
 	while (1) {
 		p = safe_read(slab);
-		if (p == NULL)
+		if (!p)
 			return NULL;
 
 		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
-						 p, p->next)) {
+						   p, p->next)) {
 			clear_lowest_bit(&p->refcnt_claim);
 			return p;
-		} else {
-			safe_release(slab, p);
 		}
+		safe_release(slab, p);
 	}
 }
 
@@ -254,7 +251,7 @@ static struct xio_mem_block *non_safe_new_block(struct xio_mem_slab *slab)
 {
 	struct xio_mem_block *p;
 
-	if (slab->free_blocks_list == NULL)
+	if (!slab->free_blocks_list)
 		return NULL;
 
 	p = slab->free_blocks_list;
@@ -288,6 +285,7 @@ static int xio_mem_slab_free(struct xio_mem_slab *slab)
 			list_del(&r->mem_region_entry);
 			if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
 				struct xio_reg_mem   reg_mem;
+
 				reg_mem.mr = r->omr;
 				xio_mem_dereg(&reg_mem);
 			}
@@ -343,7 +341,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	region_alloc_sz = sizeof(*region) +
 		nr_blocks*sizeof(struct xio_mem_block);
 	buf = (char *)ucalloc(region_alloc_sz, sizeof(uint8_t));
-	if (buf == NULL)
+	if (!buf)
 		return NULL;
 
 	/* region */
@@ -364,16 +362,17 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 		region->buf = umemalign(64, data_alloc_sz);
 	}
 
-	if (region->buf == NULL) {
+	if (!region->buf) {
 		ufree(region);
 		return NULL;
 	}
 
 	if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
 		struct xio_reg_mem reg_mem;
+
 		xio_mem_register(region->buf, data_alloc_sz, &reg_mem);
 		region->omr = reg_mem.mr;
-		if (region->omr == NULL) {
+		if (!region->omr) {
 			if (slab->pool->flags &
 					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
 				ufree_huge_pages(region->buf);
@@ -419,7 +418,8 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	if (slab->pool->safe_mt) {
 		do {
 			qblock->next = slab->free_blocks_list;
-		} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+		} while (!xio_sync_bool_compare_and_swap(
+					&slab->free_blocks_list,
 					qblock->next, pblock));
 	} else  {
 		qblock->next = slab->free_blocks_list;
@@ -496,8 +496,10 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 
 	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
 		int ret;
+
 		if (nodeid == -1) {
 			int cpu = xio_get_cpu();
+
 			nodeid = xio_numa_node_of_cpu(cpu);
 		}
 		/* pin to node */
@@ -507,7 +509,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 	}
 
 	p = (struct xio_mempool *)ucalloc(1, sizeof(struct xio_mempool));
-	if (p == NULL)
+	if (!p)
 		return NULL;
 
 	p->nodeid = nodeid;
@@ -570,7 +572,6 @@ static inline int size2index(struct xio_mempool *p, size_t sz)
 	return (i == p->slabs_nr) ? -1 : (int)i;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_mempool_alloc							     */
 /*---------------------------------------------------------------------------*/
@@ -611,7 +612,7 @@ retry:
 		}
 		if (!block) {
 			block = xio_mem_slab_resize(slab, 1);
-			if (block == NULL) {
+			if (!block) {
 				if (++index == (int)p->slabs_nr ||
 				    (p->flags &
 				     XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB))
@@ -684,7 +685,7 @@ void xio_mempool_free(struct xio_reg_mem *reg_mem)
 /*---------------------------------------------------------------------------*/
 int xio_mempool_add_slab(struct xio_mempool *p,
 			 size_t size, size_t min, size_t max,
-		         size_t alloc_quantum_nr)
+			 size_t alloc_quantum_nr)
 {
 	struct xio_mem_slab	*new_slab;
 	struct xio_mem_block	*block;
@@ -707,7 +708,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 	/* expand */
 	new_slab = (struct xio_mem_slab *)ucalloc(p->slabs_nr + 2,
 						  sizeof(struct xio_mem_slab));
-	if (new_slab == NULL) {
+	if (!new_slab) {
 		xio_set_error(ENOMEM);
 		return -1;
 	}
@@ -727,7 +728,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			INIT_LIST_HEAD(&new_slab[ix].blocks_list);
 			new_slab[ix].free_blocks_list = NULL;
 			if (new_slab[ix].init_mb_nr) {
-				(void) xio_mem_slab_resize(
+				(void)xio_mem_slab_resize(
 					&new_slab[ix], 0);
 			}
 			/* src adjust */

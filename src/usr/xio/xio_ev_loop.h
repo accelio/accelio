@@ -38,7 +38,6 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */
 /*									     */
@@ -150,7 +149,6 @@ int xio_ev_loop_del(void *loop, int fd);
  *         call xio_errno function to get the failure reason.
  */
 int xio_ev_loop_get_poll_fd(void *loop);
-
 
 /**
  * poll for events for a specified (possibly infinite) amount of time;

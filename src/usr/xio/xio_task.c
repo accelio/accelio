@@ -95,7 +95,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	} else {
 		buf = umemalign(64, tot_sz);
 	}
-	if (buf == NULL) {
+	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed\n");
 		return -1;
@@ -184,8 +184,6 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 		if (retval)
 			goto cleanup;
 	}
-
-
 	return retval;
 
 cleanup:
@@ -209,7 +207,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 	/* pool */
 	buf = (char *)ucalloc(sizeof(*q)+params->pool_dd_data_sz, 1);
-	if (buf == NULL) {
+	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed\n");
 		return NULL;
@@ -229,7 +227,6 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 		q->params.pool_hooks.pool_pre_create(
 				q->params.pool_hooks.context, q, q->dd_data);
 
-
 	if (q->params.start_nr != 0) {
 		xio_tasks_pool_alloc_slab(q, q->params.pool_hooks.context);
 		if (list_empty(&q->stack)) {
@@ -240,7 +237,6 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	if (q->params.pool_hooks.pool_post_create)
 		q->params.pool_hooks.pool_post_create(
 				q->params.pool_hooks.context, q, q->dd_data);
-
 
 	return q;
 }
@@ -286,8 +282,7 @@ void xio_tasks_pool_destroy(struct xio_tasks_pool *q)
 				q->params.pool_hooks.context,
 				q, q->dd_data);
 
-	if (q->params.pool_name)
-		kfree(q->params.pool_name);
+	kfree(q->params.pool_name);
 
 	ufree(q);
 }
@@ -335,8 +330,9 @@ void xio_tasks_pool_dump_used(struct xio_tasks_pool *q)
 		for (i = 0; i < pslab->nr; i++)
 			if (pslab->array[i]->tlv_type != 0xdead) {
 				pool_name = q->params.pool_name ?
-					q->params.pool_name :"unknown";
-				ERROR_LOG("pool_name:%s: in use: task:%p, type:0x%x\n",
+					q->params.pool_name : "unknown";
+				ERROR_LOG("pool_name:%s: in use: task:%p, " \
+					  "type:0x%x\n",
 					  pool_name,
 					  pslab->array[i],
 					  pslab->array[i]->tlv_type);

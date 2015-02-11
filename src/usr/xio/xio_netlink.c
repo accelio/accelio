@@ -140,14 +140,13 @@ static void xio_stats_handler(int fd, int events, void *data)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_netlink                                                        */
+/* xio_netlink								     */
 /*---------------------------------------------------------------------------*/
 int xio_netlink(struct xio_context *ctx)
 {
 	struct sockaddr_nl		nladdr;
 	int				fd;
 	socklen_t			addr_len;
-
 
 	/* only root can bind netlink socket */
 	if (geteuid() != 0) {
@@ -201,12 +200,11 @@ int xio_netlink(struct xio_context *ctx)
 		goto cleanup;
 	}
 
-
 	DEBUG_LOG("netlink socket bind to port %u\n",
-		nladdr.nl_pid);
+		  nladdr.nl_pid);
 
 	xio_ev_loop_add(ctx->ev_loop, fd, XIO_POLLIN,
-		xio_stats_handler, ctx);
+			xio_stats_handler, ctx);
 
 	ctx->stats.hertz = g_mhz * 1000000.0 + 0.5;
 	/* Init default counters' name */
@@ -224,5 +222,4 @@ cleanup:
 	close(fd);
 	return -1;
 }
-
 

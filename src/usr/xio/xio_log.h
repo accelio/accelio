@@ -98,7 +98,7 @@ static inline enum xio_log_level xio_get_log_level(void)
 
 static inline int xio_set_log_fn(xio_log_fn fn)
 {
-	if (fn == NULL)
+	if (!fn)
 		xio_vlog_fn = xio_vlog;
 	else
 		xio_vlog_fn = fn;

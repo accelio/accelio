@@ -57,7 +57,8 @@ extern spinlock_t		dev_list_lock;
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_SEND_WR			(XIO_MAX_IOV+1)  /* 256 rdma_write + 1 send */
+					/* 256 rdma_write + 1 send */
+#define MAX_SEND_WR			(XIO_MAX_IOV+1)
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 #define MAX_ACKED_CQE			128
@@ -75,7 +76,7 @@ extern spinlock_t		dev_list_lock;
 
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
-#define SEND_TRESHOLD			8
+#define SEND_THRESHOLD			8
 
 #define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
@@ -89,7 +90,6 @@ extern spinlock_t		dev_list_lock;
 #define XIO_TO_RDMA_HNDL(xt, rh)				\
 		struct xio_rdma_transport *(rh) =		\
 			(struct xio_rdma_transport *)(xt)->context
-
 
 #ifdef HAVE_MPAGES_EXP
 #    define IBV_XIO_ACCESS_ALLOCATE_MR		IBV_EXP_ACCESS_ALLOCATE_MR
@@ -125,7 +125,6 @@ static inline struct ibv_mr *ibv_xio_reg_mr(struct ibv_exp_reg_mr_in *in)
 }
 #endif
 
-
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
@@ -138,7 +137,6 @@ enum xio_ib_op_code {
 	XIO_IB_RDMA_WRITE_DIRECT,
 	XIO_IB_RDMA_READ_DIRECT
 };
-
 
 struct xio_transport_base;
 struct xio_rdma_transport;
@@ -370,7 +368,7 @@ struct xio_rdma_transport {
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
 	uint16_t			sim_peer_credits;  /* simulates the peer
-							    * credits managment
+							    * credits management
 							    * to control nop
 							    * sends
 							    */
@@ -472,14 +470,10 @@ struct xio_dev_tdata {
 	void				*async_loop;
 };
 
-
 /* xio_rdma_verbs.c */
 void xio_mr_list_init(void);
 int xio_mr_list_free(void);
 const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode);
-
-
-
 
 void xio_cq_event_handler(int fd, int events, void *data);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
@@ -515,6 +509,7 @@ static inline void xio_device_get(struct xio_device *dev)
 {
 	kref_get(&dev->kref);
 }
+
 void xio_rdma_close_cb(struct kref *kref);
 
 void xio_device_down(struct kref *kref);
@@ -542,7 +537,6 @@ int xio_dereg_mr_by_dev(struct xio_device *dev);
 /*---------------------------------------------------------------------------*/
 int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 			  struct xio_rkey_tbl **htbl, uint16_t *len);
-
 
 void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us);
 

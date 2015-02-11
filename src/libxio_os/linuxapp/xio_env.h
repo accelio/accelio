@@ -78,7 +78,6 @@
 #include <get_clock.h>
 #include <emmintrin.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -86,39 +85,43 @@ extern "C" {
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/
 /*---------------------------------------------------------------------------*/
-#define PACKED_MEMORY( __Declaration__ ) \
-		__Declaration__ __attribute__((__packed__))
+#define PACKED_MEMORY(__declaration__) \
+		__declaration__ __attribute__((__packed__))
 
 /*---------------------------------------------------------------------------*/
-static inline int xio_memalign(void **memptr, size_t alignment, size_t size){
+static inline int xio_memalign(void **memptr, size_t alignment, size_t size)
+{
 	return posix_memalign(memptr, alignment, size);
 }
 
 /*---------------------------------------------------------------------------*/
-static inline void xio_memfree(void *memptr){
+static inline void xio_memfree(void *memptr)
+{
 	free(memptr);
 }
 
 /*---------------------------------------------------------------------------*/
 static inline long xio_get_page_size(void)
 {
-	static long page_size = 0;
+	static long page_size;
 
-	if (!page_size) {
+	if (!page_size)
 		page_size = sysconf(_SC_PAGESIZE);
-	}
+
 	return page_size;
 }
 
 /*---------------------------------------------------------------------------*/
-static inline void *xio_mmap(size_t length){
+static inline void *xio_mmap(size_t length)
+{
 	return mmap(NULL, length, PROT_READ | PROT_WRITE,
 		    MAP_PRIVATE | MAP_ANONYMOUS |
 		    MAP_POPULATE | MAP_HUGETLB, -1, 0);
 }
 
 /*---------------------------------------------------------------------------*/
-static inline int xio_munmap(void *addr, size_t length){
+static inline int xio_munmap(void *addr, size_t length)
+{
 	return munmap(addr, length);
 }
 
@@ -129,7 +132,8 @@ static inline void *xio_numa_alloc_onnode(size_t size, int node)
 }
 
 /*---------------------------------------------------------------------------*/
-static inline void xio_numa_free(void *start, size_t size) {
+static inline void xio_numa_free(void *start, size_t size)
+{
 	numa_free(start, size);
 }
 
@@ -138,11 +142,11 @@ static inline void xio_numa_free(void *start, size_t size) {
 /*---------------------------------------------------------------------------*/
 static inline long xio_get_num_processors(void)
 {
-	static long num_processors = 0;
+	static long num_processors;
 
-	if (!num_processors) {
+	if (!num_processors)
 		num_processors = sysconf(_SC_NPROCESSORS_CONF);
-	}
+
 	return num_processors;
 }
 
@@ -156,7 +160,8 @@ struct getcpu_cache {
 	unsigned long blob[128 / sizeof(long)];
 };
 
-typedef long (*vgetcpu_fn)(unsigned *cpu, unsigned *node, struct getcpu_cache *tcache);
+typedef long (*vgetcpu_fn)(unsigned *cpu,
+			   unsigned *node, struct getcpu_cache *tcache);
 static vgetcpu_fn vgetcpu;
 
 static inline int init_vgetcpu(void)
@@ -165,17 +170,17 @@ static inline int init_vgetcpu(void)
 
 	dlerror();
 	vdso = dlopen("linux-vdso.so.1", RTLD_LAZY);
-	if (vdso == NULL)
+	if (!vdso)
 		return -1;
 	vgetcpu = (vgetcpu_fn)dlsym(vdso, "__vdso_getcpu");
 	dlclose(vdso);
-	return vgetcpu == NULL ? -1 : 0;
+	return !vgetcpu ? -1 : 0;
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_get_cpu								     */
 /*---------------------------------------------------------------------------*/
-static inline unsigned xio_get_cpu()
+static inline unsigned xio_get_cpu(void)
 {
 	static int first = 1;
 	unsigned cpu;
@@ -192,7 +197,7 @@ static inline unsigned xio_get_cpu()
 		vgetcpu = NULL;
 		return sched_getcpu();
 	}
-	vgetcpu(&cpu, NULL, NULL) ;
+	vgetcpu(&cpu, NULL, NULL);
 	return cpu;
 }
 
@@ -243,7 +248,6 @@ static inline int xio_numa_run_on_node(int node)
 #define XIO_HZ_DIR   "/var/tmp/accelio.d"
 #define XIO_HZ_FILE  XIO_HZ_DIR "/hz"
 
-
 /*---------------------------------------------------------------------------*
  * xio_get_cpu_mhz							     *
  *									     *
@@ -253,7 +257,7 @@ static inline int xio_numa_run_on_node(int node)
  *---------------------------------------------------------------------------*/
 static inline double xio_get_cpu_mhz(void)
 {
-	char	size[32]= { 0 };
+	char	size[32] = {0};
 	double	hz = 0;
 	int	fd;
 	ssize_t ret;
@@ -280,7 +284,7 @@ try_create:
 	if (fd < 0)
 		goto exit;
 
-	sprintf(size,"%f", hz);
+	sprintf(size, "%f", hz);
 	ret = write(fd, size, sizeof(size));
 	if (ret < 0)
 		goto close_and_exit;
@@ -294,7 +298,7 @@ exit:
 /*---------------------------------------------------------------------------*/
 /* xio_pin_to_cpu - pin to specific cpu					     */
 /*---------------------------------------------------------------------------*/
-static int inline xio_pin_to_cpu(int cpu)
+static inline int xio_pin_to_cpu(int cpu)
 {
 	int		ncpus = numa_num_task_cpus();
 	int		ret;
@@ -326,6 +330,7 @@ static inline int xio_pin_to_node(int cpu)
 	int node = numa_node_of_cpu(cpu);
 	/* pin to node */
 	int ret = numa_run_on_node(node);
+
 	if (ret)
 		return -1;
 
@@ -334,8 +339,6 @@ static inline int xio_pin_to_node(int cpu)
 
 	return -1;
 }
-
-
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Thread related things --------------------------------*/
@@ -363,23 +366,24 @@ typedef pthread_once_t		thread_once_t;
 	__sync_fetch_and_add((ptr), (value))
 
 /*---------------------------------------------------------------------------*/
-#define XIO_F_ALWAYS_INLINE inline __attribute__ ((always_inline))
+#define XIO_F_ALWAYS_INLINE inline __attribute__((always_inline))
 
 /*---------------------------------------------------------------------------*/
 #define LIBRARY_INITIALIZER(f) \
-	static void f(void) __attribute__((constructor)); \
+	static void f(void)__attribute__((constructor)); \
 	static void f(void)
 
 /*---------------------------------------------------------------------------*/
 #define LIBRARY_FINALIZER(f) \
-	static void f(void) __attribute__((destructor)); \
+	static void f(void)__attribute__((destructor)); \
 	static void f(void)
 
 /*---------------------------------------------------------------------------*/
 #define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
 #define sum_to_ptr(_ptr, a) ((_ptr) + (a))
 
-static inline uint64_t xio_get_current_thread_id() {
+static inline uint64_t xio_get_current_thread_id(void)
+{
 	return (uint64_t)pthread_self();
 }
 
@@ -397,20 +401,28 @@ static inline uint64_t xio_get_current_thread_id() {
 
 typedef int socket_t;
 /*---------------------------------------------------------------------------*/
-static inline int xio_closesocket(socket_t sock) {return close(sock);}
+static inline int xio_closesocket(socket_t sock)
+{
+	return close(sock);
+}
 
 /*---------------------------------------------------------------------------*/
-static inline int xio_write(socket_t sock, const void *buf, size_t len) {
+static inline int xio_write(socket_t sock, const void *buf, size_t len)
+{
 	return write(sock, buf, len);
 }
 
 /*---------------------------------------------------------------------------*/
-static inline ssize_t xio_read(socket_t sock, void *buf, size_t count) {
+static inline ssize_t xio_read(socket_t sock, void *buf, size_t count)
+{
 	return read(sock, buf, count);
 }
 
 /*---------------------------------------------------------------------------*/
-static inline int xio_get_last_socket_error() {return errno;}
+static inline int xio_get_last_socket_error(void)
+{
+	return errno;
+}
 
 /*---------------------------------------------------------------------------*/
 /* enables or disables the blocking mode for the socket
@@ -418,19 +430,20 @@ static inline int xio_get_last_socket_error() {return errno;}
    If mode = 0, non-blocking mode is enabled. */
 static inline int xio_set_blocking(socket_t sock, unsigned long mode)
 {
-	long arg;
-	if ((arg = fcntl(sock, F_GETFL, NULL)) < 0) {
+	long arg = fcntl(sock, F_GETFL, NULL);
+
+	if (arg < 0)
 		return -1;
-	}
-	if (mode) { /* blocking */
+
+	if (mode)  /* blocking */
 		arg &= (~O_NONBLOCK);
-	}
-	else { /* non blocking */
+
+	else  /* non blocking */
 		arg |= O_NONBLOCK;
-	}
-	if (fcntl(sock, F_SETFL, arg) < 0) {
+
+	if (fcntl(sock, F_SETFL, arg) < 0)
 		return -1;
-	}
+
 	return 0;
 }
 
@@ -440,10 +453,9 @@ static inline int xio_pipe(int socks[2], int is_blocking)
 	return pipe2(socks, is_blocking ? 0 : O_NONBLOCK);
 }
 
-
 /*---------------------------------------------------------------------------*/
 static inline socket_t xio_socket_non_blocking(int domain, int type,
-					      int protocol)
+					       int protocol)
 {
 	return socket(domain, type | SOCK_NONBLOCK, protocol);
 }
@@ -456,17 +468,19 @@ static inline socket_t xio_socket_non_blocking(int domain, int type,
 	accept4(sockfd, addr, addrlen, SOCK_NONBLOCK)
 
 /*---------------------------------------------------------------------------*/
-static inline void xio_env_cleanup() {
+static inline void xio_env_cleanup(void)
+{
 	/* nothing to do */
 }
 
 /*---------------------------------------------------------------------------*/
-static inline void xio_env_startup() {
+static inline void xio_env_startup(void)
+{
 	/* nothing to do */
 }
 
 /*---------------------------------------------------------------------------*/
-static inline int xio_timerfd_create()
+static inline int xio_timerfd_create(void)
 {
 	return timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
 }
@@ -478,8 +492,6 @@ static inline int xio_timerfd_settime(int fd, int flags,
 {
 	return timerfd_settime(fd, flags, new_value, old_value);
 }
-
-
 
 #ifdef __cplusplus
 }

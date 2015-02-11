@@ -38,7 +38,6 @@
 #ifndef XIO_COMMON_TRANSPORT_H
 #define XIO_COMMON_TRANSPORT_H
 
-
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
 #define DEF_DATA_ALIGNMENT		0
@@ -67,9 +66,7 @@
 		}				\
 	} while (0)
 
-
 #define xio_prefetch(p)            __builtin_prefetch(p)
-
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -105,14 +102,15 @@ static inline int16_t before(uint16_t seq1, uint16_t seq2)
 {
 	return (int16_t)(seq1 - seq2) < 0;
 }
+
 #define after(seq2, seq1)       before(seq1, seq2)
 
 static inline int16_t before_eq(uint16_t seq1, uint16_t seq2)
 {
 	return (int16_t)(seq1 - seq2) <= 0;
 }
-#define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
+#define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
 /* is s2<=s1<s3 ? */
 static inline int16_t between(uint16_t seq1, uint16_t seq2, uint16_t seq3)

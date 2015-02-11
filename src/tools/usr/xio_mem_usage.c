@@ -67,62 +67,61 @@
 
 #define PRINT_SIZE(type) \
 { \
-    int i; \
-    printf("    sizeof(%s)%n = ", #type, &i); \
-    while (i++ < 48) { \
-        printf("."); \
-    } \
-    printf(" %6lu\n", sizeof(type)); \
+	int i; \
+	       \
+	printf("    sizeof(%s)%n = ", #type, &i); \
+	while (i++ < 48) { \
+		printf("."); \
+	} \
+	printf(" %6lu\n", sizeof(type)); \
 }
-
 
 int main(int argc, char **argv)
 {
-    printf("\nAPI and Core:\n");
-    PRINT_SIZE(struct xio_context);
-    PRINT_SIZE(struct xio_connection);
-    PRINT_SIZE(struct xio_session);
-    PRINT_SIZE(struct xio_msg);
-    PRINT_SIZE(struct xio_mr);
-    PRINT_SIZE(struct xio_task);
-    PRINT_SIZE(struct xio_nexus);
+	printf("\nAPI and Core:\n");
+	PRINT_SIZE(struct xio_context);
+	PRINT_SIZE(struct xio_connection);
+	PRINT_SIZE(struct xio_session);
+	PRINT_SIZE(struct xio_msg);
+	PRINT_SIZE(struct xio_mr);
+	PRINT_SIZE(struct xio_task);
+	PRINT_SIZE(struct xio_nexus);
 
-    printf("\nProtocol layer:\n");
-    PRINT_SIZE(struct xio_sge);
-    PRINT_SIZE(struct xio_tlv);
-    PRINT_SIZE(struct xio_session_hdr);
-    PRINT_SIZE(struct xio_session_cancel_hdr);
-    PRINT_SIZE(struct xio_nexus_setup_req);
-    PRINT_SIZE(struct xio_nexus_setup_rsp);
+	printf("\nProtocol layer:\n");
+	PRINT_SIZE(struct xio_sge);
+	PRINT_SIZE(struct xio_tlv);
+	PRINT_SIZE(struct xio_session_hdr);
+	PRINT_SIZE(struct xio_session_cancel_hdr);
+	PRINT_SIZE(struct xio_nexus_setup_req);
+	PRINT_SIZE(struct xio_nexus_setup_rsp);
 
 #ifdef HAVE_INFINIBAND_VERBS_H
-    printf("\nRDMA Transport:\n");
-    PRINT_SIZE(struct xio_rdma_setup_msg);
-    PRINT_SIZE(struct xio_rdma_cancel_hdr);
-    PRINT_SIZE(struct xio_rdma_req_hdr);
-    PRINT_SIZE(struct xio_rdma_rsp_hdr);
-    PRINT_SIZE(struct xio_nop_hdr);
-    PRINT_SIZE(struct xio_rdma_task);
-    PRINT_SIZE(struct xio_cq);
-    PRINT_SIZE(struct xio_device);
-    PRINT_SIZE(struct xio_rdma_transport);
-    PRINT_SIZE(struct xio_cm_channel);
-    PRINT_SIZE(struct xio_work_req);
+	printf("\nRDMA Transport:\n");
+	PRINT_SIZE(struct xio_rdma_setup_msg);
+	PRINT_SIZE(struct xio_rdma_cancel_hdr);
+	PRINT_SIZE(struct xio_rdma_req_hdr);
+	PRINT_SIZE(struct xio_rdma_rsp_hdr);
+	PRINT_SIZE(struct xio_nop_hdr);
+	PRINT_SIZE(struct xio_rdma_task);
+	PRINT_SIZE(struct xio_cq);
+	PRINT_SIZE(struct xio_device);
+	PRINT_SIZE(struct xio_rdma_transport);
+	PRINT_SIZE(struct xio_cm_channel);
+	PRINT_SIZE(struct xio_work_req);
 #endif
 
-    printf("\nTCP Transport:\n");
-    PRINT_SIZE(struct xio_tcp_connect_msg);
-    PRINT_SIZE(struct xio_tcp_pending_conn);
-    PRINT_SIZE(struct xio_tcp_setup_msg);
-    PRINT_SIZE(struct xio_tcp_cancel_hdr);
-    PRINT_SIZE(struct xio_tcp_req_hdr);
-    PRINT_SIZE(struct xio_tcp_rsp_hdr);
-    PRINT_SIZE(struct xio_tcp_task);
-    PRINT_SIZE(struct xio_tcp_transport);
-    PRINT_SIZE(struct xio_tcp_work_req);
+	printf("\nTCP Transport:\n");
+	PRINT_SIZE(struct xio_tcp_connect_msg);
+	PRINT_SIZE(struct xio_tcp_pending_conn);
+	PRINT_SIZE(struct xio_tcp_setup_msg);
+	PRINT_SIZE(struct xio_tcp_cancel_hdr);
+	PRINT_SIZE(struct xio_tcp_req_hdr);
+	PRINT_SIZE(struct xio_tcp_rsp_hdr);
+	PRINT_SIZE(struct xio_tcp_task);
+	PRINT_SIZE(struct xio_tcp_transport);
+	PRINT_SIZE(struct xio_tcp_work_req);
 
-    printf("\n");
-    return 0;
+	printf("\n");
+	return 0;
 }
-
 

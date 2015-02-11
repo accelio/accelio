@@ -50,6 +50,7 @@ struct xio_timers_list_entry {
 typedef struct xio_work_struct {
 	void			(*function)(void *data);
 	void			*data;
+
 	volatile uint32_t	flags;
 	uint32_t		pad;
 } xio_work_handle_t;
