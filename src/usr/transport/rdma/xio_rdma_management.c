@@ -502,9 +502,7 @@ cleanup5:
 	if (retval)
 		ERROR_LOG("ibv_destroy_cq failed. (errno=%d %m)\n", errno);
 cleanup4:
-	xio_context_del_ev_handler(
-			ctx,
-			tcq->channel->fd);
+	(void)xio_context_del_ev_handler(ctx, tcq->channel->fd);
 cleanup3:
 	retval = ibv_destroy_comp_channel(tcq->channel);
 	if (retval)
@@ -802,7 +800,7 @@ void xio_cm_channel_down(struct kref *kref)
 	pthread_rwlock_wrlock(&cm_lock);
 	list_del(&channel->channels_list_entry);
 	pthread_rwlock_unlock(&cm_lock);
-	xio_context_del_ev_handler(channel->ctx, channel->cm_channel->fd);
+	(void)xio_context_del_ev_handler(channel->ctx, channel->cm_channel->fd);
 	rdma_destroy_event_channel(channel->cm_channel);
 	ufree(channel);
 }

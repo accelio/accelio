@@ -101,7 +101,7 @@ int xio_idr_lookup_uobj(struct xio_idr *idr, void *uobj)
 	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
 	spin_unlock(&idr->lock);
 
-	return idr ? 1 : 0;
+	return idr_entry ? 1 : 0;
 }
 
 /*---------------------------------------------------------------------------*/

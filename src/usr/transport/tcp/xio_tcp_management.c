@@ -653,8 +653,8 @@ int xio_tcp_dual_sock_add_ev_handlers(struct xio_tcp_transport *tcp_hndl)
 	if (retval) {
 		ERROR_LOG("setting connection handler failed. (errno=%d %m)\n",
 			  xio_get_last_socket_error());
-		xio_context_del_ev_handler(tcp_hndl->base.ctx,
-					   tcp_hndl->sock.cfd);
+		(void)xio_context_del_ev_handler(tcp_hndl->base.ctx,
+						 tcp_hndl->sock.cfd);
 	}
 
 	return retval;

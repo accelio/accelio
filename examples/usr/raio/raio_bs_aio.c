@@ -406,8 +406,8 @@ static void raio_bs_aio_exit(struct raio_bs *dev)
 {
 	struct raio_bs_aio_info *info = (struct raio_bs_aio_info *)dev->dd;
 
-	xio_context_del_ev_handler((struct xio_context *)dev->ctx,
-				   info->evt_fd);
+	(void)xio_context_del_ev_handler((struct xio_context *)dev->ctx,
+					 info->evt_fd);
 	close(info->evt_fd);
 	io_destroy(info->ctx);
 }
