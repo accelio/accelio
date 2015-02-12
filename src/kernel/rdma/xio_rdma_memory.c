@@ -73,7 +73,6 @@
 #define IS_PAGE_ALIGNED(ptr)	(((PAGE_SIZE-1) & (uintptr_t)(ptr)) == 0)
 #endif
 
-
 struct fast_reg_descriptor {
 	struct llist_node		llist_entry;
 	/* For fast registration - FRWR */
@@ -523,10 +522,8 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 	return 0;
 }
 
-
 void xio_free_dummy_pool(struct xio_rdma_transport *rdma_hndl)
 {
-	return;
 }
 
 int xio_create_dummy_pool(struct xio_rdma_transport *rdma_hndl)
@@ -538,7 +535,6 @@ void xio_unreg_mem_dummy(struct xio_rdma_transport *rdma_hndl,
 			 struct xio_mem_desc *desc,
 			 enum dma_data_direction cmd_dir)
 {
-	return;
 }
 
 int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
@@ -564,7 +560,8 @@ int xio_reg_rdma_mem_dummy(struct xio_rdma_transport *rdma_hndl,
  */
 
 static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
-			      struct ib_device *ibdev, struct ib_fast_reg_page_list *data_frpl,
+			      struct ib_device *ibdev,
+			      struct ib_fast_reg_page_list *data_frpl,
 			      int *offset, int *data_size)
 {
 	struct scatterlist *sg, *sgl = mdesc->sgt.sgl;
@@ -575,7 +572,7 @@ static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 	u64 *pages = data_frpl->page_list;
 
 	/* compute the offset of first element */
-	*offset = (u64) sgl[0].offset & ~PAGE_MASK;
+	*offset = (u64)sgl[0].offset & ~PAGE_MASK;
 
 	new_chunk = 1;
 	cur_page  = 0;
@@ -600,8 +597,12 @@ static int xio_sg_to_page_vec(struct xio_mem_desc *mdesc,
 		page = chunk_start & PAGE_MASK;
 		do {
 			if (cur_page >= data_frpl->max_page_list_len) {
-				ERROR_LOG("Overflowing page list array. cur_page = %d, max = %u, tot sz=%lu\n",
-						cur_page, data_frpl->max_page_list_len, total_sz);
+				ERROR_LOG("Overflowing page list " \
+					  "array. cur_page = %d, " \
+					  "max = %u, tot sz=%lu\n",
+					  cur_page,
+					  data_frpl->max_page_list_len,
+					  total_sz);
 				break;
 			}
 			pages[cur_page++] = page;
@@ -854,6 +855,7 @@ static struct fast_reg_descriptor *get_fdesc(
 
 	return fdesc;
 }
+
 /**
  * xio_reg_rdma_mem_frwr - Registers memory intended for RDMA,
  * using Fast Registration WR (if possible) obtaining rkey and va
@@ -947,6 +949,7 @@ void xio_copy_vmsg_to_buffer(struct xio_vmsg *vmsg,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sge;
+
 	sgtbl		= xio_sg_table_get(vmsg);
 	sgtbl_ops	= xio_sg_table_ops_get(vmsg->sgl_type);
 
@@ -974,9 +977,8 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 		if (vmsg->data_tbl.nents) {
 			*nents = 0;
 			return -EINVAL;
-		} else {
-			goto done;
 		}
+		goto done;
 	case XIO_SGL_TYPE_SCATTERLIST:
 		break;
 	default:
@@ -1020,10 +1022,9 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 		if (vmsg->data_tbl.nents) {
 			*nents = 0;
 			return -EINVAL;
-		} else {
-			memset(sgt, 0, sizeof(*sgt));
-			goto done;
 		}
+		memset(sgt, 0, sizeof(*sgt));
+		goto done;
 	case XIO_SGL_TYPE_SCATTERLIST:
 		break;
 	default:

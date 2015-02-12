@@ -36,11 +36,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 /* sg represents xio_sg_iovptr; */
 #include "libxio.h"
 #include "xio_sg_table.h"
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_sgve_set_buf							     */

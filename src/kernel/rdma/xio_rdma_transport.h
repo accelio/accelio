@@ -38,12 +38,10 @@
 #ifndef XIO_RDMA_TRANSPORT_H
 #define XIO_RDMA_TRANSPORT_H
 
-
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
 extern struct xio_rdma_options	rdma_options;
-
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -54,7 +52,8 @@ extern struct xio_rdma_options	rdma_options;
 
 #define MAX_SGE				(XIO_MAX_IOV + 1)
 
-#define MAX_SEND_WR			(XIO_MAX_IOV +1)  /* 256 rdma_write + 1 send */
+/* 256 rdma_write + 1 send */
+#define MAX_SEND_WR			(XIO_MAX_IOV + 1)
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 
@@ -81,13 +80,13 @@ extern struct xio_rdma_options	rdma_options;
 
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
-#define SEND_TRESHOLD			8
+#define SEND_THRESHOLD			8
 
 #ifndef PAGE_SHIFT
 #define PAGE_SHIFT			12
 #endif
 #ifndef PAGE_SIZE
-#define PAGE_SIZE			(1UL << PAGE_SHIFT)
+#define PAGE_SIZE			BIT(PAGE_SHIFT)
 #endif
 #ifndef PAGE_MASK
 #define PAGE_MASK			(~(PAGE_SIZE-1))
@@ -96,13 +95,11 @@ extern struct xio_rdma_options	rdma_options;
 #define USECS_IN_SEC			1000000
 #define NSECS_IN_USEC			1000
 
-
 #define XIO_TO_RDMA_TASK(xt, rt) \
 		struct xio_rdma_task *rt = (struct xio_rdma_task *)(xt)->dd_data
 #define XIO_TO_RDMA_HNDL(xt, rh)				\
 		struct xio_rdma_transport *(rh) =		\
 			(struct xio_rdma_transport *)(xt)->context
-
 
 #define xio_prefetch(p)		prefetch(p)
 
@@ -220,7 +217,6 @@ struct __attribute__((__packed__)) xio_rdma_read_ack_hdr {
 	uint16_t		hdr_len;	 /* req header length	*/
 	uint32_t		rtid;		 /* remote task id	*/
 };
-
 
 struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
 	uint16_t		hdr_len;	 /* req header length	*/
@@ -418,7 +414,6 @@ struct xio_rdma_transport {
 	struct list_head		rdma_rd_rsp_list;
 	struct list_head		rdma_rd_rsp_in_flight_list;
 
-
 	/* rx parameters */
 	int				rq_depth;	 /* max rcv allowed  */
 	int				actual_rq_depth; /* max rcv allowed  */
@@ -529,7 +524,6 @@ static inline s16 before_eq(u16 seq1, u16 seq2)
 }
 #define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
-
 /* is s2<=s1<s3 ? */
 static inline s16 between(u16 seq1, u16 seq2, u16 seq3)
 {
@@ -549,14 +543,12 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 	return retval;
 }
 
-
 /* xio_rdma_verbs.c */
 void xio_mr_list_init(void);
 int xio_mr_list_free(void);
 const char *xio_ib_wc_opcode_str(enum ib_wc_opcode opcode);
 const char *xio_ib_wc_status_str(enum ib_wc_status status);
 const char *xio_rdma_event_str(enum rdma_cm_event_type event);
-
 
 /* xio_rdma_datapath.c */
 void xio_data_ev_handler(int fd, int events, void *user_context);
@@ -568,7 +560,6 @@ int xio_rdma_send(struct xio_transport_base *transport,
 int xio_rdma_poll(struct xio_transport_base *transport,
 		  long min_nr, long max_nr,
 		  struct timespec *ts_timeout);
-
 
 /* xio_rdma_management.c */
 void xio_rdma_close_cb(struct kref *kref);

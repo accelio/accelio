@@ -81,13 +81,11 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	sgtbl		= &vmsg->data_tbl;
 	lnents		= sgtbl->nents;
 
-
 	if (lnents > XIO_MAX_IOV || lnents == 0) {
 		WARN_LOG("IOV size %zu\n", lnents);
 		*tasks_used = 0;
 		return -EINVAL;
 	}
-
 
 	lsize = lnents;
 	liov  = sgtbl->sgl;
@@ -153,7 +151,8 @@ int xio_validate_rdma_op(struct xio_vmsg *vmsg,
 	/* not enough buffers to complete */
 	if (tot_len < op_size) {
 		*tasks_used = 0;
-		ERROR_LOG("iovec exhausted, tot=%d, op=%d, max_sge=%d\n", tot_len, op_size, max_sge);
+		ERROR_LOG("iovec exhausted, tot=%d, op=%d, max_sge=%d\n",
+			  tot_len, op_size, max_sge);
 		ERROR_LOG("rsize=%zu, lents=%zu\n", rsize, lnents);
 		return -1;
 	}
@@ -237,5 +236,4 @@ const char *xio_cm_rej_reason_str(int reason)
 		return "Unknown error";
 	};
 }
-
 

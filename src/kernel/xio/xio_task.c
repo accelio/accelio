@@ -94,7 +94,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 
 	tot_len = PAGE_ALIGN(slab_alloc_sz + tasks_alloc_sz);
 	buf = vmalloc(tot_len);
-	if (buf == NULL) {
+	if (!buf) {
 		xio_set_error(ENOMEM);
 		return -1;
 	}
@@ -218,7 +218,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 
 	/* pool */
 	buf = kzalloc(sizeof(*q)+params->pool_dd_data_sz, GFP_KERNEL);
-	if (buf == NULL) {
+	if (!buf) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -342,8 +342,9 @@ void xio_tasks_pool_dump_used(struct xio_tasks_pool *q)
 		for (i = 0; i < pslab->nr; i++)
 			if (pslab->array[i]->tlv_type != 0xdead) {
 				pool_name = q->params.pool_name ?
-					q->params.pool_name :"unknown";
-				ERROR_LOG("pool_name:%s: in use: task:%p, type:0x%x\n",
+					q->params.pool_name : "unknown";
+				ERROR_LOG("pool_name:%s: in use: task:%p, " \
+					  "type:0x%x\n",
 					  pool_name,
 					  pslab->array[i],
 					  pslab->array[i]->tlv_type);

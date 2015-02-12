@@ -38,20 +38,19 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-
 /*---------------------------------------------------------------------------*/
 /* defines								     */
 /*---------------------------------------------------------------------------*/
 
 #define XIO_EV_LOOP_WAKE	1
-#define XIO_EV_LOOP_STOP	(1 << 1)
-#define XIO_EV_LOOP_DOWN	(1 << 2)
-#define XIO_EV_LOOP_SCHED	(1 << 3)
-#define XIO_EV_LOOP_IN_HANDLER	(1 << 4)
-#define XIO_EV_LOOP_ACTIVE	(1 << 5)
+#define XIO_EV_LOOP_STOP	BIT(1)
+#define XIO_EV_LOOP_DOWN	BIT(2)
+#define XIO_EV_LOOP_SCHED	BIT(3)
+#define XIO_EV_LOOP_IN_HANDLER	BIT(4)
+#define XIO_EV_LOOP_ACTIVE	BIT(5)
 
 #define XIO_EV_HANDLER_PENDING	1
-#define XIO_EV_HANDLER_ENABLED	(1 << 1)
+#define XIO_EV_HANDLER_ENABLED	BIT(1)
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -65,6 +64,7 @@ struct xio_ev_loop {
 	int (*is_stopping)(void *loop_hndl);
 	int  (*add_event)(void *loop_hndl, struct xio_ev_data *data);
 	unsigned long	flags;
+
 	volatile unsigned long	states;
 	union {
 		wait_queue_head_t wait;
@@ -99,7 +99,6 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
  * @param[in] loop_hndl		Handle to event loop
  */
 void xio_ev_loop_destroy(void *loop);
-
 
 #endif
 

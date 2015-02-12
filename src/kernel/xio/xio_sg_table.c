@@ -36,7 +36,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"

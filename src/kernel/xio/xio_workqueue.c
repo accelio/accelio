@@ -71,7 +71,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	char queue_name[64];
 
 	workqueue = kmalloc(sizeof(*workqueue), GFP_KERNEL);
-	if (workqueue == NULL) {
+	if (!workqueue) {
 		ERROR_LOG("kmalloc failed.\n");
 		return NULL;
 	}
@@ -162,8 +162,6 @@ static void xio_uwork_add_event(struct xio_uwork *uwork)
 	ev_data->data    = uwork;
 
 	xio_context_add_event(uwork->ctx, ev_data);
-
-	return;
 }
 
 static void xio_dwork_callback(struct work_struct *workp)
@@ -207,7 +205,6 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
 			clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 			*uwork->deleted = 1;
-			return 0;
 		} else {
 			/* It is O.K. to arm a work and then to cancel it but
 			 * waiting for it will create a lockout situation.
@@ -230,8 +227,8 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			 * containing a work, e.g. nexus, connection, ...
 			 */
 			xio_context_disable_event(&uwork->ev_data);
-			return 0;
 		}
+		return 0;
 	}
 
 	/* work may be on event handler */

@@ -43,7 +43,6 @@
 /*---------------------------------------------------------------------------*/
 extern struct xio_tcp_options		tcp_options;
 
-
 /* definitions */
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
@@ -64,20 +63,17 @@ extern struct xio_tcp_options		tcp_options;
 
 #define xio_prefetch(p)			prefetch(p)
 
-
 #ifndef PAGE_SHIFT
 #define PAGE_SHIFT			12
 #endif
 #ifndef PAGE_SIZE
-#define PAGE_SIZE			(1UL << PAGE_SHIFT)
+#define PAGE_SIZE			BIT(PAGE_SHIFT)
 #endif
 #ifndef PAGE_MASK
 #define PAGE_MASK			(~(PAGE_SIZE-1))
 #endif
 
-
 /* TCP transport */
-
 
 #define NUM_TASKS			54400 /* 100 * (MAX_SEND_WR +
 					      * MAX_RECV_WR + EXTRA_RQE)
@@ -116,8 +112,6 @@ extern struct xio_tcp_options		tcp_options;
 #define XIO_TO_TCP_HNDL(xt, th)				\
 		struct xio_tcp_transport *(th) =		\
 			(struct xio_tcp_transport *)(xt)->context
-
-
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -175,7 +169,6 @@ struct xio_tcp_options {
 	int			tcp_dual_sock;
 	int			pad;
 };
-
 
 #define XIO_TCP_REQ_HEADER_VERSION	1
 
@@ -251,8 +244,6 @@ struct xio_tcp_work_req {
 };
 
 struct xio_tcp_task {
-//	struct xio_tcp_transport	*tcp_hndl;
-
 	enum xio_tcp_op_code		tcp_op;
 
 	uint32_t			recv_num_sge;
@@ -322,7 +313,7 @@ struct xio_socket {
 };
 
 #define XIO_SOCK_ESTABLISH_CTL	1
-#define XIO_SOCK_ESTABLISH_DATA	(1 << 1)
+#define XIO_SOCK_ESTABLISH_DATA	BIT(1)
 
 struct xio_tcp_socket {
 	struct xio_socket		ctl;
@@ -414,7 +405,6 @@ struct xio_tcp_transport {
 	xio_ctx_event_t			disconnect_event;
 };
 
-
 /*
  * The next routines deal with comparing 16 bit unsigned integers
  * and worry about wrap-around (automatic with unsigned arithmetic).
@@ -431,7 +421,6 @@ static inline s16 before_eq(u16 seq1, u16 seq2)
 	return (s16)(seq1 - seq2) <= 0;
 }
 #define after_eq(seq2, seq1)       before_eq(seq1, seq2)
-
 
 /* is s2<=s1<s3 ? */
 static inline s16 between(u16 seq1, u16 seq2, u16 seq3)
@@ -451,10 +440,6 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 
 	return retval;
 }
-
-
-
-
 
 int xio_tcp_send(struct xio_transport_base *transport,
 		 struct xio_task *task);

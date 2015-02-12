@@ -51,6 +51,7 @@ struct xio_uwork {
 	struct xio_context *ctx;
 	void	(*function)(void *data);
 	void	*data;
+
 	volatile unsigned long flags;
 	int	*deleted;
 	struct completion complete;

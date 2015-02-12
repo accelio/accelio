@@ -73,6 +73,7 @@ typedef __socklen_t socklen_t;
 static inline int __atomic_add_unless(atomic_t *v, int a, int u)
 {
 	int c, old;
+
 	c = atomic_read(v);
 	while (c != u && (old = atomic_cmpxchg(v, c, c + a)) != c)
 		c = old;
@@ -98,7 +99,8 @@ static inline void sg_unmark_end(struct scatterlist *sg)
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) && !(defined RHEL_MAJOR && RHEL_MAJOR >= 7)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0) && \
+	!(defined RHEL_MAJOR && RHEL_MAJOR >= 7)
 /**
  * llist_reverse_order - reverse order of a llist chain
  * @head:       first item of the list to be reversed
@@ -112,6 +114,7 @@ static inline struct llist_node *llist_reverse_order(struct llist_node *head)
 
 	while (head) {
 		struct llist_node *tmp = head;
+
 		head = head->next;
 		tmp->next = new_head;
 		new_head = tmp;
@@ -137,9 +140,9 @@ static inline struct llist_node *llist_reverse_order(struct llist_node *head)
 static inline char *strerror(int errnum)
 {
 	static char buf[64];
+
 	sprintf(buf, "errno(%d)", errnum);
 	return buf;
 };
-
 
 #endif /* XIO_OS_H */

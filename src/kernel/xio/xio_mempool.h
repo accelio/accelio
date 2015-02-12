@@ -90,7 +90,6 @@ struct xio_mem_desc {
 #define XIO_1M_MAX_NR		1024
 #define XIO_1M_ALLOC_NR		128
 
-
 struct xio_mempool *xio_mempool_create(void);
 void xio_mempool_destroy(struct xio_mempool *mpool);
 

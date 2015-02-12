@@ -92,7 +92,7 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 	char queue_name[64];
 
 	loop = kzalloc(sizeof(*loop), GFP_KERNEL);
-	if (loop == NULL) {
+	if (!loop) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmalloc failed. %m\n");
 		goto cleanup0;
@@ -171,7 +171,7 @@ void xio_ev_loop_destroy(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	if (test_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states)) {
@@ -329,7 +329,6 @@ static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event)
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* priv_ev_loop_run_thread						     */
 /*---------------------------------------------------------------------------*/
@@ -424,8 +423,6 @@ stopped:
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
 		complete(&loop->complete);
 	clear_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
-
-	return;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -486,7 +483,7 @@ int priv_ev_loop_run(void *loop_hndl)
 
 	switch (loop->flags) {
 	case XIO_LOOP_GIVEN_THREAD:
-		if (loop->ctx->worker != (uint64_t) get_current()) {
+		if (loop->ctx->worker != (uint64_t)get_current()) {
 			ERROR_LOG("worker kthread(%p) is not current(%p).\n",
 				  (void *)loop->ctx->worker, get_current());
 			goto cleanup0;
@@ -542,7 +539,7 @@ void priv_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
@@ -555,7 +552,7 @@ void priv_ev_loop_stop_thread(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
@@ -570,7 +567,7 @@ int priv_ev_is_loop_stopping(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return 0;
 
 	return test_bit(XIO_EV_LOOP_STOP, &loop->states);

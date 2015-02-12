@@ -122,7 +122,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 
 	/* allocate new context */
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-	if (ctx == NULL) {
+	if (!ctx) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kzalloc failed\n");
 		goto cleanup0;
@@ -158,7 +158,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		break;
 	case XIO_LOOP_GIVEN_THREAD:
 		set_cpus_allowed_ptr(worker, cpumask_of(cpu_hint));
-		ctx->worker = (uint64_t) worker;
+		ctx->worker = (uint64_t)worker;
 		break;
 	case XIO_LOOP_TASKLET:
 		break;
@@ -366,10 +366,10 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 	return retval;
 }
 
-
 int xio_context_run_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->run(ev_loop->loop_object);
 }
 EXPORT_SYMBOL(xio_context_run_loop);
@@ -377,6 +377,7 @@ EXPORT_SYMBOL(xio_context_run_loop);
 void xio_context_stop_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	ev_loop->stop(ev_loop->loop_object);
 }
 EXPORT_SYMBOL(xio_context_stop_loop);
@@ -384,6 +385,7 @@ EXPORT_SYMBOL(xio_context_stop_loop);
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->add_event(ev_loop->loop_object, data);
 }
 EXPORT_SYMBOL(xio_context_add_event);
@@ -391,6 +393,7 @@ EXPORT_SYMBOL(xio_context_add_event);
 int xio_context_is_loop_stopping(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->is_stopping(ev_loop->loop_object);
 }
 
