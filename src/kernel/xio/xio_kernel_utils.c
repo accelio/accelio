@@ -134,7 +134,8 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 		len = p1-(start+4);
 		host = kstrndup((char *)(start + 4), len, GFP_KERNEL);
-		host[len] = 0;
+		if (host)
+			host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
 		if (!p2) {
@@ -180,7 +181,8 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 		/* extract the address */
 		host = kstrndup((char *)(start + 3), len, GFP_KERNEL);
-		host[len] = 0;
+		if (host)
+			host[len] = 0;
 	}
 
 	/* debug */

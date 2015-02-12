@@ -40,6 +40,7 @@
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/inet.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
 #include <asm/atomic.h>
 #else
@@ -220,7 +221,7 @@ static int on_new_session(struct xio_session *session,
 			  void *cb_user_context)
 {
 	struct test_params *test_params = cb_user_context;
-	char ip[48];
+	char ip[INET6_ADDRSTRLEN+1];
 
 	pr_info("**** [%p] on_new_session :%s:%d\n", session,
 	       get_ip((struct sockaddr *)&req->src_addr, ip),

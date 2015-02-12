@@ -1217,8 +1217,9 @@ single_sock:
 cleanup:
 	if (is_single)
 		ctl_conn = pending_conn;
-
-	xio_tcp_restore_callbacks_from(ctl_sock, &parent_hndl->socket.ctl);
+	if (ctl_sock)
+		xio_tcp_restore_callbacks_from(ctl_sock,
+					       &parent_hndl->socket.ctl);
 	xio_tcp_pending_conn_remove_handler(ctl_conn);
 	sock_release(ctl_sock);
 

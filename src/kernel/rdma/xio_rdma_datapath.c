@@ -2016,14 +2016,12 @@ static int xio_rdma_perform_direct_rdma(struct xio_rdma_transport *rdma_hndl,
 	int			tasks_used = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
-	void			*sg;
 
 	if (unlikely(verify_req_send_limits(rdma_hndl)))
 		return -1;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
-	sg		= sge_first(sgtbl_ops, sgtbl);
 
 	llen = tbl_length(sgtbl_ops, sgtbl);
 
@@ -3357,10 +3355,12 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			hdr_len = omsg->in.header.iov_len;
 			task->status = XIO_E_SUCCESS;
 		}
-		if (hdr_len)
+		if (hdr_len && imsg->in.header.iov_base)
 			memcpy(omsg->in.header.iov_base,
 			       imsg->in.header.iov_base,
 			       hdr_len);
+		else
+			*((char *)omsg->in.header.iov_base) = 0;
 
 		omsg->in.header.iov_len = hdr_len;
 	} else {
@@ -3744,11 +3744,9 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 	int		tasks_used = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
-	void			*sg;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
-	sg		= sge_first(sgtbl_ops, sgtbl);
 
 	llen = tbl_length(sgtbl_ops, sgtbl);
 
@@ -4184,7 +4182,6 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	if (rdma_hndl->base.is_client) {
 		struct xio_task *sender_task = NULL;
-		struct xio_rdma_task *rdma_sender_task;
 
 		if (!list_empty(&rdma_hndl->in_flight_list))
 			sender_task = list_first_entry(
@@ -4198,8 +4195,12 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 			ERROR_LOG("could not find sender task\n");
 
 		task->sender_task = sender_task;
-		rdma_sender_task = task->sender_task->dd_data;
-		xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
+		if (sender_task && sender_task->dd_data) {
+			struct xio_rdma_task *rdma_sender_task;
+
+			rdma_sender_task = task->sender_task->dd_data;
+			xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
+		}
 		xio_rdma_read_setup_msg(rdma_hndl, task, rsp);
 		/* get the initial credits */
 		rdma_hndl->peer_credits += rsp->credits;

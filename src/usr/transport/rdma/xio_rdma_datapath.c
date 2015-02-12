@@ -2920,7 +2920,7 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 			hdr_len = imsg->in.header.iov_len;
 			task->status = XIO_E_SUCCESS;
 		}
-		if (hdr_len)
+		if (hdr_len && imsg->in.header.iov_base)
 			memcpy(omsg->in.header.iov_base,
 			       imsg->in.header.iov_base,
 			       hdr_len);

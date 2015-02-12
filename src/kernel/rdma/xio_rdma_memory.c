@@ -715,8 +715,8 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 
 	init_llist_head(&frwr->pool);
 	frwr->pool_size = 0;
-	/* There can be only max_tx_ready_tasks_num simultaniously inflight
-	 * request tasks at any given time, each of wich may need both RDMA
+	/* There can be only max_tx_ready_tasks_num simultaneously inflight
+	 * request tasks at any given time, each of which may need both RDMA
 	 * read and write (both data form server to client may be big)
 	 */
 	for (i = 0; i < rdma_hndl->max_tx_ready_tasks_num * 2; i++) {
@@ -734,6 +734,7 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 			ret = PTR_ERR(desc->data_frpl);
 			ERROR_LOG("Failed to allocate ib_fast_reg_page_list " \
 				  "err=%d\n", ret);
+			kfree(desc);
 			goto err;
 		}
 		desc->data_frpl->max_page_list_len = XIO_MAX_IOV + 1;
@@ -744,6 +745,7 @@ int xio_create_frwr_pool(struct xio_rdma_transport *rdma_hndl)
 			ERROR_LOG("Failed to allocate ib_fast_reg_mr err=%d\n",
 				  ret);
 			ib_free_fast_reg_page_list(desc->data_frpl);
+			kfree(desc);
 			goto err;
 		}
 		desc->valid = true;

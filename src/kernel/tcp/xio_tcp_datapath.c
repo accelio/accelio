@@ -584,7 +584,6 @@ static int xio_tcp_write_send_data(
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
-	sg = sge_first(sgtbl_ops, sgtbl);
 	for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 		tcp_task->txd.msg_iov[i+1].iov_base = sge_addr(sgtbl_ops, sg);
 		tcp_task->txd.msg_iov[i+1].iov_len = sge_length(sgtbl_ops, sg);
@@ -668,7 +667,6 @@ static int xio_tcp_prep_req_out_data(
 	} else {
 		tcp_task->tcp_op = XIO_TCP_READ;
 
-		sg = sge_first(sgtbl_ops, sgtbl);
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			tcp_task->write_sge[i].addr = sge_addr(sgtbl_ops, sg);
 			tcp_task->write_sge[i].cache = NULL;

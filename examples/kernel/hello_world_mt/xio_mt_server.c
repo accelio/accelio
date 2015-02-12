@@ -495,7 +495,7 @@ int xio_server_main(void *data)
 	}
 
 	sdata = kzalloc(sizeof(*sdata), GFP_KERNEL);
-	if (!data) {
+	if (!sdata) {
 		printk("server_data allocation failed\n");
 		ret = -ENOMEM;
 		goto cleanup0;
