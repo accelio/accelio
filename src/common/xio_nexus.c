@@ -86,6 +86,7 @@ static void xio_nexus_on_transport_closed(struct xio_nexus *nexus,
 static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
+static void xio_nexus_destroy_handler(void *nexus_);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_server_reconnect		                                     */
@@ -1330,6 +1331,9 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 		ERROR_LOG("failed to setup initial pool\n");
 		goto cleanup;
 	}
+	xio_ctx_init_event(&nexus->destroy_event,
+			   xio_nexus_destroy_handler,
+			   nexus);
 
 	TRACE_LOG("nexus: [new] ptr:%p, transport_hndl:%p\n", nexus,
 		  nexus->transport_hndl);
@@ -1438,6 +1442,16 @@ static void xio_nexus_on_transport_established(struct xio_nexus *nexus,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_destroy_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_destroy_handler(void *nexus_)
+{
+	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
+
+	xio_nexus_release(nexus);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_on_transport_disconnected				             */
 /*---------------------------------------------------------------------------*/
 static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
@@ -1476,7 +1490,8 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 				XIO_NEXUS_EVENT_DISCONNECTED,
 				&event_data);
 	} else {
-		xio_nexus_release(nexus);
+		xio_ctx_add_event(nexus->transport_hndl->ctx,
+				  &nexus->destroy_event);
 	}
 }
 
@@ -1725,6 +1740,8 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 {
 	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
+	xio_ctx_remove_event(nexus->transport_hndl->ctx,
+			     &nexus->destroy_event);
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,
 					  &nexus->srv_observer);
@@ -1908,6 +1925,9 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
 		goto cleanup;
 	}
+	xio_ctx_init_event(&nexus->destroy_event,
+			   xio_nexus_destroy_handler,
+			   nexus);
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 

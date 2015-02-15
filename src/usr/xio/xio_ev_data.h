@@ -51,8 +51,8 @@ typedef struct xio_ev_data {
 		xio_event_handler_t	event_handler;
 	};
 	union {
-		volatile int		fd;
-		volatile int		scheduled;
+		int			fd;
+		int			scheduled;
 	};
 	int				reserved;
 	void				*data;

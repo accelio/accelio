@@ -336,8 +336,11 @@ void xio_ev_loop_remove_event(void *loop, struct xio_ev_data *evt)
 /*---------------------------------------------------------------------------*/
 static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 {
-	struct list_head *last_sched;
-	struct xio_ev_data *tev, *tevn;
+	struct list_head	*last_sched;
+	struct list_head	*events_list_entry;
+	struct xio_ev_data	*tev, *tevn;
+	xio_event_handler_t	event_handler;
+	void			*event_data;
 	int work_remains = 0;
 
 	if (!list_empty(&loop->events_list)) {
@@ -346,8 +349,14 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 		list_for_each_entry_safe(tev, tevn, &loop->events_list,
 					 events_list_entry) {
 			xio_ev_loop_remove_event(loop, tev);
-			tev->event_handler(tev->data);
-			if (&tev->events_list_entry == last_sched)
+			/* copy the relevant fields tev can be freed in
+			 * callback
+			 */
+			event_handler		= tev->event_handler;
+			event_data		= tev->data;
+			events_list_entry	= &tev->events_list_entry;
+			event_handler(event_data);
+			if (events_list_entry == last_sched)
 				break;
 		}
 		if (!list_empty(&loop->events_list))
