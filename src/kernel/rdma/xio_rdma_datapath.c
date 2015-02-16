@@ -237,6 +237,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	struct xio_rdma_task	*rdma_task = NULL;
 	struct xio_work_req	*first_wr = NULL;
 	struct xio_work_req	*curr_wr = NULL;
+	struct xio_work_req	*last_wr = NULL;
 	struct xio_work_req	*prev_wr = &rdma_hndl->dummy_wr;
 	uint16_t		tx_window;
 	uint16_t		window;
@@ -317,6 +318,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 			/* prev wr will be linked to the RDMA */
 			curr_wr = &rdma_task->rdmad;
+			last_wr = &rdma_task->txd;
+
 			curr_wr->send_wr.next = &rdma_task->txd.send_wr;
 			req_nr++;
 		} else if (rdma_task->ib_op == XIO_IB_RDMA_WRITE_DIRECT) {
@@ -324,19 +327,22 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 				break;
 			xio_prep_rdma_wr_send_req(task, rdma_hndl,
 						  NULL /*no next*/,
-						  1 /* signalled */);
+						  1 /* signaled */);
 			curr_wr = &rdma_task->rdmad;
+			last_wr = curr_wr;
 		} else if (rdma_task->ib_op == XIO_IB_RDMA_READ_DIRECT) {
 			if (req_nr >= window)
 				break;
 			xio_prep_rdma_rd_send_req(task, rdma_hndl,
-						  1 /* signalled */);
+						  1 /* signaled */);
 			curr_wr = &rdma_task->rdmad;
+			last_wr = curr_wr;
 		} else {
 			if (req_nr >= window)
 				break;
 			/* prev wr will be linked to the send */
 			curr_wr = &rdma_task->txd;
+			last_wr = curr_wr;
 		}
 		if (rdma_task->ib_op != XIO_IB_RDMA_WRITE_DIRECT &&
 		    rdma_task->ib_op != XIO_IB_RDMA_READ_DIRECT) {
@@ -364,7 +370,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 
 		prev_wr->send_wr.next = &curr_wr->send_wr;
-		prev_wr = curr_wr;
+		prev_wr = last_wr;
 
 		req_nr++;
 		rdma_hndl->tx_ready_tasks_num--;
