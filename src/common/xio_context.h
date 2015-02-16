@@ -40,7 +40,6 @@
 
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
-#define xio_ctx_event_t xio_ev_data_t
 
 #define XIO_PROTO_LAST  2	/* from enum xio_proto */
 /*---------------------------------------------------------------------------*/
@@ -192,23 +191,19 @@ int xio_ctx_del_work(struct xio_context *ctx,
 		     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_init_event							     */
-/*---------------------------------------------------------------------------*/
-void xio_ctx_init_event(xio_ctx_event_t *evt,
-			void (*event_handler)(void *data),
-			void *data);
-
-/*---------------------------------------------------------------------------*/
 /* xio_ctx_add_event							     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_add_event(struct xio_context *ctx,
-		       xio_ctx_event_t *evt);
+int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *evt);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_remove_event							     */
+/* xio_context_disable_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_remove_event(struct xio_context *ctx,
-			  xio_ctx_event_t *evt);
+void xio_context_disable_event(struct xio_ev_data *evt);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_is_pending_event						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_is_pending_event(struct xio_ev_data *evt);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_is_loop_stopping						     */

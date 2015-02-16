@@ -38,33 +38,6 @@
 #ifndef XIO_CONTEXT_PRIV_H_
 #define XIO_CONTEXT_PRIV_H_
 
-/*
- * Suspend the current handler run.
- * Note: Not protected against a race. Another thread may reactivate the event.
- */
-/*---------------------------------------------------------------------------*/
-/* xio_context_disable_event	                                             */
-/*---------------------------------------------------------------------------*/
-static inline void xio_context_disable_event(struct xio_ev_data *data)
-{
-	clear_bit(XIO_EV_HANDLER_ENABLED, &data->states);
-}
-
-/*
- * Check if the event is pending.
- * Return true if the event is pending in any list.
- * Return false once the event is removed from the list in order to be executed.
- * (When inside the event handler, the event is no longer pending)
- * Note: Not protected against a race. Another thread may reactivate the event.
- */
-/*---------------------------------------------------------------------------*/
-/* xio_context_is_pending_event	                                             */
-/*---------------------------------------------------------------------------*/
-static inline int xio_context_is_pending_event(struct xio_ev_data *data)
-{
-	return test_bit(XIO_EV_HANDLER_PENDING, &data->states);
-}
-
 struct xio_mempool *xio_mempool_get(struct xio_context *ctx);
 
 #endif /* XIO_CONTEXT_PRIV_H_ */

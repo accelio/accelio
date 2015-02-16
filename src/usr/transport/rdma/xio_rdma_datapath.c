@@ -1253,9 +1253,12 @@ static void xio_rearm_completions(struct xio_cq *tcq)
 			  errno);
 	}
 
-	xio_ctx_init_event(&tcq->consume_cq_event_data,
-			   xio_sched_consume_cq, tcq);
-	xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
+	memset(&tcq->consume_cq_event, 0,
+	       sizeof(tcq->consume_cq_event));
+	tcq->consume_cq_event.handler	= xio_sched_consume_cq;
+	tcq->consume_cq_event.data	= tcq;
+
+	xio_context_add_event(tcq->ctx, &tcq->consume_cq_event);
 
 	tcq->num_delayed_arm = 0;
 }
@@ -1279,13 +1282,15 @@ static void xio_poll_cq_armable(struct xio_cq *tcq)
 		return;
 	}
 
-	if (err == 0 && (++tcq->num_delayed_arm == MAX_NUM_DELAYED_ARM))
+	if (err == 0 && (++tcq->num_delayed_arm == MAX_NUM_DELAYED_ARM)) {
 		/* no more completions on cq, give up and arm the interrupts */
 		xio_rearm_completions(tcq);
-	else {
-		xio_ctx_init_event(&tcq->poll_cq_event_data,
-				   xio_sched_poll_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->poll_cq_event_data);
+	} else {
+		memset(&tcq->poll_cq_event, 0, sizeof(tcq->poll_cq_event));
+		tcq->poll_cq_event.handler = xio_sched_poll_cq;
+		tcq->poll_cq_event.data	= tcq;
+
+		xio_context_add_event(tcq->ctx, &tcq->poll_cq_event);
 	}
 }
 
@@ -1311,9 +1316,12 @@ static void xio_sched_consume_cq(void *data)
 
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (err > 0) {
-		xio_ctx_init_event(&tcq->consume_cq_event_data,
-				   xio_sched_consume_cq, tcq);
-		xio_ctx_add_event(tcq->ctx, &tcq->consume_cq_event_data);
+		memset(&tcq->consume_cq_event, 0,
+		       sizeof(tcq->consume_cq_event));
+		tcq->consume_cq_event.handler = xio_sched_consume_cq;
+		tcq->consume_cq_event.data    = tcq;
+
+		xio_context_add_event(tcq->ctx, &tcq->consume_cq_event);
 	}
 }
 
@@ -1356,8 +1364,8 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 
 	/* if a poll was previously scheduled, remove it,
 	   as it will be scheduled when necessary */
-	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
-	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
+	xio_context_disable_event(&tcq->poll_cq_event);
+	xio_context_disable_event(&tcq->consume_cq_event);
 
 	xio_poll_cq_armable(tcq);
 
@@ -1393,8 +1401,8 @@ void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 	}
 	/* if a poll was previously scheduled, remove it,
 	   as it will be scheduled when necessary */
-	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
-	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
+	xio_context_disable_event(&tcq->poll_cq_event);
+	xio_context_disable_event(&tcq->consume_cq_event);
 
 	xio_poll_cq(tcq, MAX_POLL_WC, timeout_us);
 	/* TODO rearm interrupts optimization */

@@ -823,7 +823,7 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 
 	tcp_hndl->state = XIO_STATE_DISCONNECTED;
 
-	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1177,7 +1177,7 @@ handle_completions:
 		tcp_hndl->tx_comp_cnt = 0;
 	}
 
-	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+	xio_context_disable_event(&tcp_hndl->flush_tx_event);
 
 	return retval < 0 ? retval : 0;
 }
@@ -1409,8 +1409,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			retval = 0;
 		}
 	} else {
-		xio_ctx_add_event(tcp_hndl->base.ctx,
-				  &tcp_hndl->flush_tx_event);
+		xio_context_add_event(tcp_hndl->base.ctx,
+				      &tcp_hndl->flush_tx_event);
 	}
 
 	return retval;
@@ -1755,8 +1755,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			retval = 0;
 		}
 	} else {
-		xio_ctx_add_event(tcp_hndl->base.ctx,
-				  &tcp_hndl->flush_tx_event);
+		xio_context_add_event(tcp_hndl->base.ctx,
+				      &tcp_hndl->flush_tx_event);
 	}
 
 	return retval;

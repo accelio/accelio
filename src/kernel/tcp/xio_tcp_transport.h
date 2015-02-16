@@ -280,7 +280,7 @@ struct xio_tcp_task {
 	 */
 	struct xio_sge			*rsp_write_sge;
 
-	xio_ctx_event_t			comp_event;
+	struct xio_ev_data		comp_event;
 };
 
 struct xio_tcp_tasks_slab {
@@ -399,10 +399,10 @@ struct xio_tcp_transport {
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[UIO_MAXIOV];
 
-	xio_ctx_event_t                 flush_tx_event;
-	xio_ctx_event_t			ctl_rx_event;
-	xio_ctx_event_t			data_rx_event;
-	xio_ctx_event_t			disconnect_event;
+	struct xio_ev_data		flush_tx_event;
+	struct xio_ev_data		ctl_rx_event;
+	struct xio_ev_data		data_rx_event;
+	struct xio_ev_data		disconnect_event;
 };
 
 /*

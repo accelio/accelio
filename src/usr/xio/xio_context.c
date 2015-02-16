@@ -509,30 +509,28 @@ int xio_ctx_del_work(struct xio_context *ctx,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_init_event							     */
+/* xio_context_add_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_init_event(
-		xio_ctx_event_t *evt,
-		void (*event_handler)(void *data),
-		void *data)
+int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
-	xio_ev_loop_init_event(evt, event_handler, data);
+	xio_ev_loop_add_event(ctx->ev_loop, data);
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_add_event							     */
+/* xio_context_disable_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_add_event(struct xio_context *ctx, xio_ctx_event_t *evt)
+void xio_context_disable_event(struct xio_ev_data *data)
 {
-	xio_ev_loop_add_event(ctx->ev_loop, evt);
+	xio_ev_loop_remove_event(data);
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_remove_event							     */
+/* xio_context_is_pending_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_remove_event(struct xio_context *ctx, xio_ctx_event_t *evt)
+int xio_context_is_pending_event(struct xio_ev_data *data)
 {
-	xio_ev_loop_remove_event(ctx->ev_loop, evt);
+	return  xio_ev_loop_is_pending_event(data);
 }
 
 /*---------------------------------------------------------------------------*/

@@ -136,7 +136,7 @@ int xio_ev_loop_add(void *loop_hndl, int fd, int events,
 			return -1;
 		}
 		tev->data	= data;
-		tev->handler	= handler;
+		tev->ev_handler	= handler;
 		tev->fd		= fd;
 
 		list_add(&tev->events_list_entry, &loop->poll_events_list);
@@ -300,7 +300,7 @@ cleanup:
 void xio_ev_loop_init_event(struct xio_ev_data *evt,
 			    xio_event_handler_t event_handler, void *data)
 {
-	evt->event_handler = event_handler;
+	evt->handler = event_handler;
 	evt->scheduled = 0;
 	evt->data = data;
 	INIT_LIST_HEAD(&evt->events_list_entry);
@@ -323,12 +323,20 @@ void xio_ev_loop_add_event(void *_loop, struct xio_ev_data *evt)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_remove_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ev_loop_remove_event(void *loop, struct xio_ev_data *evt)
+void xio_ev_loop_remove_event(struct xio_ev_data *evt)
 {
 	if (evt->scheduled) {
 		evt->scheduled = 0;
 		list_del_init(&evt->events_list_entry);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ev_loop_is_pending_event						     */
+/*---------------------------------------------------------------------------*/
+int xio_ev_loop_is_pending_event(struct xio_ev_data *evt)
+{
+	return evt->scheduled;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -348,11 +356,11 @@ static int xio_ev_loop_exec_scheduled(struct xio_ev_loop *loop)
 		last_sched = loop->events_list.prev;
 		list_for_each_entry_safe(tev, tevn, &loop->events_list,
 					 events_list_entry) {
-			xio_ev_loop_remove_event(loop, tev);
+			xio_ev_loop_remove_event(tev);
 			/* copy the relevant fields tev can be freed in
 			 * callback
 			 */
-			event_handler		= tev->event_handler;
+			event_handler		= tev->handler;
 			event_data		= tev->data;
 			events_list_entry	= &tev->events_list_entry;
 			event_handler(event_data);
@@ -435,7 +443,7 @@ retry:
 					epoll_to_xio_poll_events(
 							events[i].events);
 				/* (fd != loop->wakeup_event) */
-				tev->handler(tev->fd, out_events,
+				tev->ev_handler(tev->fd, out_events,
 						tev->data);
 			} else {
 				/* wakeup event auto-removed from epoll
@@ -547,7 +555,7 @@ void xio_ev_loop_destroy(void **loop_hndl)
 
 	list_for_each_entry_safe(tev, tmp_tev, &loop->events_list,
 				 events_list_entry) {
-		xio_ev_loop_remove_event(loop, tev);
+		xio_ev_loop_remove_event(tev);
 	}
 
 	/* free deleted event handlers */

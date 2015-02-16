@@ -390,6 +390,35 @@ int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 }
 EXPORT_SYMBOL(xio_context_add_event);
 
+/*
+ * Suspend the current handler run.
+ * Note: Not protected against a race. Another thread may reactivate the event.
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_disable_event	                                             */
+/*---------------------------------------------------------------------------*/
+void xio_context_disable_event(struct xio_ev_data *data)
+{
+	clear_bit(XIO_EV_HANDLER_ENABLED, &data->states);
+}
+EXPORT_SYMBOL(xio_context_disable_event);
+
+/*
+ * Check if the event is pending.
+ * Return true if the event is pending in any list.
+ * Return false once the event is removed from the list in order to be executed.
+ * (When inside the event handler, the event is no longer pending)
+ * Note: Not protected against a race. Another thread may reactivate the event.
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_is_pending_event	                                             */
+/*---------------------------------------------------------------------------*/
+int xio_context_is_pending_event(struct xio_ev_data *data)
+{
+	return test_bit(XIO_EV_HANDLER_PENDING, &data->states);
+}
+EXPORT_SYMBOL(xio_context_is_pending_event);
+
 int xio_context_is_loop_stopping(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;

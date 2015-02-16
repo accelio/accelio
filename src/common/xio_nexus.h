@@ -169,7 +169,7 @@ struct xio_nexus {
 	char				*out_if_addr;
 	uint32_t			trans_attr_mask;
 	struct xio_transport_init_attr	trans_attr;
-	xio_ctx_event_t			destroy_event;
+	struct xio_ev_data		destroy_event;
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };

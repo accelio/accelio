@@ -315,8 +315,8 @@ static void xio_cq_down(struct kref *kref)
 	if (!list_empty(&tcq->trans_list))
 		ERROR_LOG("rdma_hndl memory leakage\n");
 
-	xio_ctx_remove_event(tcq->ctx, &tcq->consume_cq_event_data);
-	xio_ctx_remove_event(tcq->ctx, &tcq->poll_cq_event_data);
+	xio_context_disable_event(&tcq->consume_cq_event);
+	xio_context_disable_event(&tcq->poll_cq_event);
 
 	xio_context_unreg_observer(tcq->ctx, &tcq->observer);
 
@@ -1789,11 +1789,9 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 				 &rdma_hndl->timewait_timeout_work);
 
-	xio_ctx_remove_event(rdma_hndl->base.ctx,
-			     &rdma_hndl->ev_data_timewait_exit);
+	xio_context_disable_event(&rdma_hndl->timewait_exit_event);
 
-	xio_ctx_remove_event(rdma_hndl->base.ctx,
-			     &rdma_hndl->ev_data_close);
+	xio_context_disable_event(&rdma_hndl->close_event);
 
 	xio_observable_unreg_all_observers(&rdma_hndl->base.observable);
 
@@ -2314,11 +2312,13 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 		 * rdma_hndl->handler_nesting > 0. We return one to ensure that
 		 * cma_ib_handler will call
 		 */
-		xio_ctx_init_event(&rdma_hndl->ev_data_timewait_exit,
-				   on_cm_timewait_exit, (void *)rdma_hndl);
+		memset(&rdma_hndl->timewait_exit_event, 0,
+		       sizeof(rdma_hndl->timewait_exit_event));
+		rdma_hndl->timewait_exit_event.handler = on_cm_timewait_exit;
+		rdma_hndl->timewait_exit_event.data = rdma_hndl;
 
-		xio_ctx_add_event(rdma_hndl->base.ctx,
-				  &rdma_hndl->ev_data_timewait_exit);
+		xio_context_add_event(rdma_hndl->base.ctx,
+				      &rdma_hndl->timewait_exit_event);
 		break;
 
 	case RDMA_CM_EVENT_MULTICAST_JOIN:
@@ -2349,12 +2349,14 @@ static void xio_handle_cm_event(struct rdma_cm_event *ev,
 		/* user space code calls here, xio_rdma_post_close which may
 		 * call rdma_destroy_id which is not allowed in an handler
 		 */
-		xio_ctx_init_event(&rdma_hndl->ev_data_close,
-				   xio_close_handler, (void *)rdma_hndl);
+		memset(&rdma_hndl->close_event, 0,
+		       sizeof(rdma_hndl->close_event));
+		rdma_hndl->close_event.handler	= xio_close_handler;
+		rdma_hndl->close_event.data	= rdma_hndl;
 
 		/* tell "poller mechanism" */
-		xio_ctx_add_event(rdma_hndl->base.ctx,
-				  &rdma_hndl->ev_data_close);
+		xio_context_add_event(rdma_hndl->base.ctx,
+				      &rdma_hndl->close_event);
 	}
 }
 

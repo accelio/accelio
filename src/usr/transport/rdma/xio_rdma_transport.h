@@ -283,8 +283,8 @@ struct xio_cq  {
 	struct ibv_comp_channel		*channel;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
-	xio_ctx_event_t			consume_cq_event_data;
-	xio_ctx_event_t			poll_cq_event_data;
+	struct xio_ev_data		consume_cq_event;
+	struct xio_ev_data		poll_cq_event;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
 	int32_t				cq_events_that_need_ack;
@@ -448,8 +448,8 @@ struct xio_rdma_transport {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
-	struct xio_ev_data		ev_data_close;
-	struct xio_ev_data		ev_data_timewait_exit;
+	struct xio_ev_data		close_event;
+	struct xio_ev_data		timewait_exit_event;
 	xio_delayed_work_handle_t	timewait_timeout_work;
 	struct ibv_send_wr		beacon;
 	struct xio_task			beacon_task;

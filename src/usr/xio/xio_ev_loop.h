@@ -174,19 +174,6 @@ int xio_ev_loop_get_poll_fd(void *loop);
  *	    xio_errno function to get the failure reason.
  */
 int xio_ev_loop_poll_wait(void *loop, int timeout_ms);
-/**
- * initialize event job
- *
- * @param[in] evt	  the scheduled event data
- * @param[in] sched_handler callback function to call when event
- *			  is scheduled
- * @param[in] data	  user private data to pass to callback
- *
- * @returns none
- */
-void xio_ev_loop_init_event(struct xio_ev_data *evt,
-			    xio_event_handler_t event_handler,
-			    void *data);
 
 /**
  * add event job to scheduled events queue
@@ -202,13 +189,20 @@ void xio_ev_loop_add_event(void *loop,
 /**
  * remove event from events queue
  *
- * @param[in] loop	  the dispatcher context
  * @param[in] evt	  the scheduled event data
  *
  * @returns none
  */
-void xio_ev_loop_remove_event(void *loop,
-			      struct xio_ev_data *evt);
+void xio_ev_loop_remove_event(struct xio_ev_data *evt);
+
+/**
+ * check whether event is pending
+ *
+ * @param[in] evt	  the event data
+ *
+ * @returns 1 if pending, 0 if not pending
+ */
+int xio_ev_loop_is_pending_event(struct xio_ev_data *evt);
 
 #endif
 
