@@ -597,11 +597,17 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 		TRACE_LOG("beacon rdma_hndl:%p\n", rdma_hndl);
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 		return;
+	} else if (task && task->dd_data == ptr_from_int64(XIO_FRWR_LI_WRID)) {
+		rdma_hndl = container_of(task,
+					 struct xio_rdma_transport,
+					 frwr_task);
+		rdma_hndl->sqe_avail++;
+		return;
 	} else {
 		task = NULL;
 	}
 
-	if (wc->wr_id && wc->wr_id != XIO_FRWR_LI_WRID) {
+	if (wc->wr_id) {
 		task = ptr_from_int64(wc->wr_id);
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
 		rdma_hndl = rdma_task->rdma_hndl;
@@ -994,7 +1000,17 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 {
 	struct xio_task			*task = ptr_from_int64(wc->wr_id);
 	XIO_TO_RDMA_TASK(task, rdma_task);
-	struct xio_rdma_transport	*rdma_hndl = rdma_task->rdma_hndl;
+	struct xio_rdma_transport	*rdma_hndl;
+
+	if (task && task->dd_data == ptr_from_int64(XIO_FRWR_LI_WRID)) {
+                rdma_hndl = container_of(task,
+                                         struct xio_rdma_transport,
+                                         frwr_task);
+                rdma_hndl->sqe_avail++;
+                return;
+        }
+
+	rdma_hndl  = rdma_task->rdma_hndl;
 
 	/*
 	TRACE_LOG("received opcode :%s byte_len [%u]\n",
@@ -1015,6 +1031,9 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 		break;
 	case IB_WC_RDMA_WRITE:
 		xio_rdma_wr_comp_handler(rdma_hndl, task);
+		break;
+	case IB_WC_LOCAL_INV:
+	case IB_WC_FAST_REG_MR:
 		break;
 	default:
 		ERROR_LOG("unknown opcode :%s [0x%x]\n",
@@ -2413,6 +2432,12 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 		xio_set_error(EAGAIN);
 		return -1;
 	}
+
+	if (rdma_hndl->sqe_avail < 2) {
+		ERROR_LOG("rdma_hndl=%p, no sqe_avail=%d\n", rdma_hndl, rdma_hndl->sqe_avail);
+		xio_set_error(EAGAIN);
+                return -1;
+        }
 
 	/* prepare buffer for RDMA response  */
 	retval = xio_rdma_prep_req_in_data(rdma_hndl, task);

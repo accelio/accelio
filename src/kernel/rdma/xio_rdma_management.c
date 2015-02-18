@@ -583,7 +583,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.qp_type		 = IB_QPT_RC;
 	qp_init_attr.send_cq		 = tcq->cq;
 	qp_init_attr.recv_cq		 = tcq->cq;
-	qp_init_attr.cap.max_send_wr	 = MAX_SEND_WR;
+	qp_init_attr.cap.max_send_wr	 = 5*MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr	 = MAX_RECV_WR + EXTRA_RQE;
 	qp_init_attr.cap.max_inline_data = MAX_INLINE_DATA;
 	qp_init_attr.cap.max_send_sge	 = min(rdma_options.max_out_iovsz + 1,
@@ -607,7 +607,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->dev		= dev;
 	rdma_hndl->tcq		= tcq;
 	rdma_hndl->qp		= rdma_hndl->cm_id->qp;
-	rdma_hndl->sqe_avail	= MAX_SEND_WR;
+	rdma_hndl->sqe_avail	= 5*MAX_SEND_WR;
 
 	rdma_hndl->beacon_task.dd_data = ptr_from_int64(XIO_BEACON_WRID);
 	rdma_hndl->beacon.wr_id	 = uint64_from_ptr(&rdma_hndl->beacon_task);
@@ -2294,6 +2294,7 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->max_inline_buf_sz	=
 				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
 
+	rdma_hndl->frwr_task.dd_data = ptr_from_int64(XIO_FRWR_LI_WRID);
 
 	INIT_LIST_HEAD(&rdma_hndl->trans_list_entry);
 	INIT_LIST_HEAD(&rdma_hndl->in_flight_list);

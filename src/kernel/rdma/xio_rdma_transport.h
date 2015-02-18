@@ -58,8 +58,8 @@ extern struct xio_rdma_options	rdma_options;
 #define MAX_RECV_WR			256
 #define EXTRA_RQE			32
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
-#define CQE_ALLOC_SIZE			(10*MAX_SEND_WR)
+#define MAX_CQE_PER_QP			(5*MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
+#define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define DEF_DATA_ALIGNMENT		0
 #define SEND_BUF_SZ			9216
@@ -488,6 +488,7 @@ struct xio_rdma_transport {
 	};
 	struct ib_send_wr		beacon;
 	struct xio_task			beacon_task;
+	struct xio_task			frwr_task;
 	uint32_t			trans_attr_mask;
 	struct xio_transport_attr	trans_attr;
 };

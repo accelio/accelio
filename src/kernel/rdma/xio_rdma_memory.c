@@ -777,7 +777,7 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 		/* don't send signaled */
 		memset(&inv_wr, 0, sizeof(inv_wr));
 		inv_wr.opcode = IB_WR_LOCAL_INV;
-		inv_wr.wr_id = XIO_FRWR_LI_WRID;
+		inv_wr.wr_id = uint64_from_ptr(&rdma_hndl->frwr_task);
 		inv_wr.ex.invalidate_rkey = fdesc->data_mr->rkey;
 		/* Bump the key */
 		key = (u8)(fdesc->data_mr->rkey & 0x000000FF);
@@ -785,14 +785,17 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 		/* send two work requests */
 		wr = &inv_wr;
 		wr->next = &fastreg_wr;
+		inv_wr.send_flags = IB_SEND_SIGNALED;
+		rdma_hndl->sqe_avail--;
 	} else {
 		wr = &fastreg_wr;
 	}
-
+	rdma_hndl->sqe_avail--;
 	/* Prepare FASTREG WR */
 	memset(&fastreg_wr, 0, sizeof(fastreg_wr));
 	fastreg_wr.opcode = IB_WR_FAST_REG_MR;
-	fastreg_wr.wr_id = XIO_FRWR_LI_WRID;
+	fastreg_wr.send_flags = IB_SEND_SIGNALED;
+	fastreg_wr.wr_id = uint64_from_ptr(&rdma_hndl->frwr_task);
 	fastreg_wr.wr.fast_reg.iova_start =
 				fdesc->data_frpl->page_list[0] + offset;
 	fastreg_wr.wr.fast_reg.page_list = fdesc->data_frpl;
@@ -866,6 +869,12 @@ int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 	/* if there a single dma entry, fail to dummy */
 	if (mdesc->nents == 1)
 		return xio_reg_rdma_mem_dummy(rdma_hndl, mdesc, cmd_dir);
+
+	/* if not enough sqe for post_send */
+	if (rdma_hndl->sqe_avail < 2) {
+		ERROR_LOG("no rdma_hndl->sqe_avail=%d\n", rdma_hndl->sqe_avail);
+		return xio_reg_rdma_mem_dummy(rdma_hndl, mdesc, cmd_dir);
+	}
 
 	aligned_len = xio_data_buf_aligned_len(mdesc, ibdev);
 	if (aligned_len != mdesc->nents)
