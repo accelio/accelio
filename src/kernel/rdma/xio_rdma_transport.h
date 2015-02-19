@@ -152,7 +152,7 @@ struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint32_t		ltid;		/* originator identifier*/
+	uint32_t		ltid;		/* local task id	*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[1];
 
@@ -177,7 +177,7 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint32_t		rtid;		/* originator identifier*/
+	uint32_t		rtid;		/* remote task id	*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad[1];
 

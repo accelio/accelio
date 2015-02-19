@@ -178,16 +178,17 @@ struct __attribute__((__packed__)) xio_tcp_req_hdr {
 	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		pad;
-	uint32_t		tid;		/* originator identifier*/
+
+	uint32_t		ltid;		/* local task id	*/
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad1[1];
-
 	uint16_t		recv_num_sge;
+
 	uint16_t		read_num_sge;
 	uint16_t		write_num_sge;
-
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
+
 	uint32_t		remain_data_len;/* remaining data length */
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
@@ -200,17 +201,19 @@ struct __attribute__((__packed__)) xio_tcp_rsp_hdr {
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
 	uint16_t		sn;		/* serial number	*/
 	uint16_t		pad;
-	uint16_t		tid;		/* originator identifier*/
+
+	uint32_t		ltid;		/* local task id 	*/
+	uint32_t		rtid;		/* remote task id	*/
+
 	uint8_t			opcode;		/* opcode  for peers	*/
 	uint8_t			pad1[1];
-
 	uint16_t		write_num_sge;
-
 	uint32_t		status;		/* status		*/
+
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 

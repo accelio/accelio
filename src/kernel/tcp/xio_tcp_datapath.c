@@ -441,7 +441,7 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_req_hdr->version  = req_hdr->version;
 	tmp_req_hdr->flags    = req_hdr->flags;
 	PACK_SVAL(req_hdr, tmp_req_hdr, req_hdr_len);
-	PACK_LVAL(req_hdr, tmp_req_hdr, tid);
+	PACK_LVAL(req_hdr, tmp_req_hdr, ltid);
 	tmp_req_hdr->opcode	   = req_hdr->opcode;
 
 	PACK_SVAL(req_hdr, tmp_req_hdr, recv_num_sge);
@@ -525,7 +525,7 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 	/* fill request header */
 	req_hdr.version		= XIO_TCP_REQ_HEADER_VERSION;
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
-	req_hdr.tid		= task->ltid;
+	req_hdr.ltid		= task->ltid;
 	req_hdr.opcode		= tcp_task->tcp_op;
 	req_hdr.flags		= 0;
 
@@ -1329,7 +1329,8 @@ static int xio_tcp_write_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_rsp_hdr->version  = rsp_hdr->version;
 	tmp_rsp_hdr->flags    = rsp_hdr->flags;
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, rsp_hdr_len);
-	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, tid);
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, ltid);
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, rtid);
 	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
 	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, write_num_sge);
@@ -1382,7 +1383,8 @@ static int xio_tcp_prep_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	/* fill response header */
 	rsp_hdr.version		= XIO_TCP_RSP_HEADER_VERSION;
 	rsp_hdr.rsp_hdr_len	= sizeof(rsp_hdr);
-	rsp_hdr.tid		= task->rtid;
+	rsp_hdr.rtid		= task->rtid;
+	rsp_hdr.ltid		= task->ltid;
 	rsp_hdr.opcode		= tcp_task->tcp_op;
 	rsp_hdr.flags		= XIO_HEADER_FLAG_NONE;
 	rsp_hdr.write_num_sge	= tcp_task->rsp_write_num_sge;
@@ -1638,7 +1640,7 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
-	UNPACK_LVAL(tmp_req_hdr, req_hdr, tid);
+	UNPACK_LVAL(tmp_req_hdr, req_hdr, ltid);
 	req_hdr->opcode		= tmp_req_hdr->opcode;
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, recv_num_sge);
@@ -1721,7 +1723,8 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
-	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, tid);
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, rtid);
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, ltid);
 	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, write_num_sge);
@@ -2140,7 +2143,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	/* save originator identifier */
-	task->rtid		= req_hdr.tid;
+	task->rtid		= req_hdr.ltid;
 	task->imsg_flags	= req_hdr.flags;
 
 	imsg		= &task->imsg;
@@ -2287,7 +2290,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 
 	/* find the sender task */
 	task->sender_task =
-		xio_tcp_primary_task_lookup(tcp_hndl, rsp_hdr.tid);
+		xio_tcp_primary_task_lookup(tcp_hndl, rsp_hdr.rtid);
+	task->rtid       = rsp_hdr.ltid;
 
 	tcp_sender_task = task->sender_task->dd_data;
 
