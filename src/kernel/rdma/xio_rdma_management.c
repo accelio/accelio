@@ -586,7 +586,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.qp_type		 = IB_QPT_RC;
 	qp_init_attr.send_cq		 = tcq->cq;
 	qp_init_attr.recv_cq		 = tcq->cq;
-	qp_init_attr.cap.max_send_wr	 = MAX_SEND_WR;
+	qp_init_attr.cap.max_send_wr	 = 5*MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr	 = MAX_RECV_WR + EXTRA_RQE;
 	qp_init_attr.cap.max_inline_data = MAX_INLINE_DATA;
 	qp_init_attr.cap.max_send_sge	 = min(rdma_options.max_out_iovsz + 1,
@@ -610,7 +610,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->dev		= dev;
 	rdma_hndl->tcq		= tcq;
 	rdma_hndl->qp		= rdma_hndl->cm_id->qp;
-	rdma_hndl->sqe_avail	= MAX_SEND_WR;
+	rdma_hndl->sqe_avail	= 5*MAX_SEND_WR;
 
 	rdma_hndl->beacon_task.dd_data = ptr_from_int64(XIO_BEACON_WRID);
 	rdma_hndl->beacon.wr_id	 = uint64_from_ptr(&rdma_hndl->beacon_task);
@@ -1530,6 +1530,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 
 	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped) {
 		int used_fast;
+		unsigned int sqe_used = 0;
 		/* was FRWR/FMR in use */
 		if (rdma_task->read_sge.mem_reg.mem_h) {
 			te = &new_hndl->rkey_tbl[new_hndl->rkey_tbl_size];
@@ -1539,7 +1540,8 @@ static int xio_rdma_primary_pool_slab_remap_task(
 			used_fast = 0;
 		}
 		xio_remap_desc(old_hndl, new_hndl, &rdma_task->read_sge,
-			       DMA_FROM_DEVICE);
+			       DMA_FROM_DEVICE, &sqe_used);
+		rdma_task->sqe_used += sqe_used;
 		if (used_fast) {
 			if (!rdma_task->read_sge.mem_reg.mem_h) {
 				ERROR_LOG("Fast re-reg from device failed\n");
@@ -1552,6 +1554,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 
 	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped) {
 		int used_fast;
+		unsigned int sqe_used = 0;
 		/* was FRWR/FMR in use */
 		if (rdma_task->write_sge.mem_reg.mem_h) {
 			te = &new_hndl->rkey_tbl[new_hndl->rkey_tbl_size];
@@ -1561,7 +1564,8 @@ static int xio_rdma_primary_pool_slab_remap_task(
 			used_fast = 0;
 		}
 		xio_remap_desc(old_hndl, new_hndl, &rdma_task->write_sge,
-			       DMA_TO_DEVICE);
+			       DMA_TO_DEVICE, &sqe_used);
+		rdma_task->sqe_used += sqe_used;
 		if (used_fast) {
 			if (!rdma_task->write_sge.mem_reg.mem_h) {
 				ERROR_LOG("Fast re-reg tom device failed\n");
@@ -2323,6 +2327,8 @@ static struct xio_transport_base *xio_rdma_open(
 					  max_xio_hdr;
 	rdma_hndl->max_inline_buf_sz	=
 				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
+
+	rdma_hndl->frwr_task.dd_data = ptr_from_int64(XIO_FRWR_LI_WRID);
 
 	INIT_LIST_HEAD(&rdma_hndl->trans_list_entry);
 	INIT_LIST_HEAD(&rdma_hndl->in_flight_list);

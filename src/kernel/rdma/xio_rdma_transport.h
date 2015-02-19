@@ -57,9 +57,9 @@ extern struct xio_rdma_options	rdma_options;
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 
-/* 3 - one for send, one for frwr, one for local invalidate
+/*  - one for send, (one for frwr, one for local invalidate) x (r1 + w1)
  */
-#define MAX_CQE_PER_QP			(3*MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
+#define MAX_CQE_PER_QP			(5*MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
 #define DEF_DATA_ALIGNMENT		0
@@ -256,7 +256,7 @@ struct xio_rdma_task {
 	u32				read_num_sge;
 	u32				write_num_sge;
 	u32				recv_num_sge;
-	u32				pad0;
+	u32				sqe_used;
 	struct xio_mem_desc		read_sge;
 	struct xio_mem_desc		write_sge;
 
@@ -344,7 +344,8 @@ struct xio_fastreg_ops {
 	void	(*free_rdma_reg_res)(struct xio_rdma_transport *rdma_hndl);
 	int	(*reg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
 				struct xio_mem_desc *desc,
-				enum dma_data_direction cmd_dir);
+				enum dma_data_direction cmd_dir,
+				unsigned int *sqe_used);
 	void	(*unreg_rdma_mem)(struct xio_rdma_transport *rdma_hndl,
 				  struct xio_mem_desc *desc,
 				  enum dma_data_direction cmd_dir);
@@ -503,6 +504,7 @@ struct xio_rdma_transport {
 	};
 	struct ib_send_wr		beacon;
 	struct xio_task			beacon_task;
+	struct xio_task			frwr_task;
 	uint32_t			trans_attr_mask;
 	struct xio_transport_attr	trans_attr;
 };
@@ -516,12 +518,14 @@ static inline s16 before(u16 seq1, u16 seq2)
 {
 	return (s16)(seq1 - seq2) < 0;
 }
+
 #define after(seq2, seq1)       before(seq1, seq2)
 
 static inline s16 before_eq(u16 seq1, u16 seq2)
 {
 	return (s16)(seq1 - seq2) <= 0;
 }
+
 #define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
 /* is s2<=s1<s3 ? */
@@ -586,12 +590,14 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 
 int xio_map_desc(struct xio_rdma_transport *rdma_hndl,
 		 struct xio_mem_desc *desc,
-		 enum dma_data_direction direction);
+		 enum dma_data_direction direction,
+		 unsigned int *sqe_used);
 
 int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 		   struct xio_rdma_transport *rdma_nhndl,
 		   struct xio_mem_desc *desc,
-		   enum dma_data_direction direction);
+		   enum dma_data_direction direction,
+		   unsigned int *sqe_used);
 
 void xio_reinit_header(struct xio_rdma_task *rdma_task, size_t len);
 
