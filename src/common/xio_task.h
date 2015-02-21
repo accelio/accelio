@@ -161,7 +161,7 @@ struct xio_tasks_pool {
 /*---------------------------------------------------------------------------*/
 /* xio_task_reset							     */
 /*---------------------------------------------------------------------------*/
-static void xio_task_reset(struct xio_task *task)
+static inline void xio_task_reset(struct xio_task *task)
 {
 	/* user responsibility to reset after receive */
 	/*
@@ -319,4 +319,3 @@ static inline struct xio_task *xio_tasks_pool_lookup(
 }
 
 #endif
-
