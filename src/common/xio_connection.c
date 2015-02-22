@@ -2352,8 +2352,10 @@ int xio_on_fin_ack_recv(struct xio_connection *connection,
 
 	if (!transition->valid) {
 		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
-			  "state:%d\n",
-			  connection->session, connection, connection->state);
+			  "state:%s\n",
+			  connection->session, connection,
+			  xio_connection_state_str((enum xio_connection_state)
+						   connection->state));
 		retval = -1;
 		goto cleanup;
 	}
@@ -2405,8 +2407,11 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 						 0 /*fin*/);
 
 	if (!transition->valid) {
-		ERROR_LOG("invalid transition. session:%p, connection:%p\n",
-			  connection->session, connection);
+		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
+			  "state:%s\n",
+			  connection->session, connection,
+			  xio_connection_state_str((enum xio_connection_state)
+						   connection->state));
 		return -1;
 	}
 	/* flush all pending requests */
@@ -2438,6 +2443,14 @@ int xio_on_fin_ack_send_comp(struct xio_connection *connection,
 	transition = xio_connection_next_transit((enum xio_connection_state)
 							connection->state,
 						 0 /*fin*/);
+	if (!transition->valid) {
+		ERROR_LOG("invalid transition. session:%p, connection:%p, " \
+			  "state:%s\n",
+			  connection->session, connection,
+			  xio_connection_state_str((enum xio_connection_state)
+						   connection->state));
+		return -1;
+	}
 
 	DEBUG_LOG("connection %p state change: current_state:%s, " \
 		  "next_state:%s\n",
