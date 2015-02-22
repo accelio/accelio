@@ -91,6 +91,9 @@ static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task);
 static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task);
+static int xio_rdma_on_direct_rdma_comp(struct xio_rdma_transport *rdma_hndl,
+					struct xio_task *task,
+					enum xio_wc_op op);
 static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 				struct xio_task *task);
 static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl);
@@ -381,10 +384,13 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			rdma_hndl->credits = 0;
 			rdma_hndl->peer_credits--;
 		}
-		if (IS_REQUEST(task->tlv_type))
+		if (IS_REQUEST(task->tlv_type) ||
+		    task->tlv_type == XIO_MSG_TYPE_RDMA)
 			rdma_hndl->reqs_in_flight_nr++;
-		else
+		else if (IS_RESPONSE(task->tlv_type))
 			rdma_hndl->rsps_in_flight_nr++;
+		else
+			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
 
 		prev_wr->send_wr.next = &curr_wr->send_wr;
 		prev_wr = last_wr;
@@ -933,6 +939,8 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 	int			removed = 0;
 	struct xio_work_req	*txd, *rdmad;
 
+	/* If we got a completion, it means all the previous tasks should've
+	   been sent by now - due to ordering */
 	list_for_each_entry_safe(ptask, next_ptask, &rdma_hndl->in_flight_list,
 				 tasks_list_entry) {
 		list_move_tail(&ptask->tasks_list_entry,
@@ -946,7 +954,6 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		xio_unmap_tx_work_req(rdma_hndl->dev, txd);
 
 		rdma_hndl->sqe_avail++;
-
 		rdma_hndl->sqe_avail += rdma_task->sqe_used;
 		rdma_task->sqe_used = 0;
 
@@ -955,6 +962,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 			xio_tasks_pool_put(ptask);
 			continue;
 		}
+
 		/* rdma wr utilizes two wqe but appears only once in the
 		 * in flight list
 		 */
@@ -994,10 +1002,19 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		} else if (IS_NOP(ptask->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_tasks_pool_put(ptask);
+		} else if (ptask->tlv_type == XIO_MSG_TYPE_RDMA) {
+			rdma_hndl->reqs_in_flight_nr--;
+			rdmad = &rdma_task->rdmad;
+			if (rdma_task->ib_op == XIO_IB_RDMA_WRITE_DIRECT) {
+				xio_unmap_txmad_work_req(rdma_hndl->dev, rdmad);
+				xio_rdma_on_direct_rdma_comp(rdma_hndl, ptask,
+							     XIO_WC_OP_RDMA_WRITE);
+				xio_tasks_pool_put(ptask);
+			}
 		} else {
-			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
+			ERROR_LOG("unexpected task %p tlv %u type:0x%x id:%d " \
 				  "magic:0x%x\n",
-				  ptask, rdma_task->ib_op,
+				  ptask, ptask->tlv_type, rdma_task->ib_op,
 				  ptask->ltid, ptask->magic);
 			continue;
 		}
@@ -1026,6 +1043,52 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
+/* unmap_rdma_rd_task							     */
+/*---------------------------------------------------------------------------*/
+static void unmap_rdma_rd_task(struct xio_rdma_transport *rdma_hndl,
+			       struct xio_task *task)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+	if (rdma_task->rdmad.mapped)
+		xio_unmap_rxmad_work_req(rdma_hndl->dev,
+					 &rdma_task->rdmad);
+
+	if (rdma_task->read_sge.nents &&
+	    rdma_task->read_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+			       DMA_FROM_DEVICE);
+
+	if (rdma_task->write_sge.nents &&
+	    rdma_task->write_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+			       DMA_TO_DEVICE);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_rd_req_comp_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_direct_rdma_rd_comp_handler(struct xio_rdma_transport *rdma_hndl,
+					    struct xio_task *task)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	rdma_hndl->sqe_avail++;
+	rdma_hndl->sqe_avail += rdma_task->sqe_used;
+	rdma_task->sqe_used = 0;
+
+	if (rdma_task->phantom_idx == 0) {
+		rdma_hndl->reqs_in_flight_nr--;
+		xio_rdma_on_direct_rdma_comp(rdma_hndl, task,
+					     XIO_WC_OP_RDMA_READ);
+
+		unmap_rdma_rd_task(rdma_hndl, task);
+	} else {
+		xio_tasks_pool_put(task);
+		xio_xmit_rdma_rd_req(rdma_hndl);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_rdma_rd_req_comp_handler						     */
 /*---------------------------------------------------------------------------*/
 static void xio_rdma_rd_req_comp_handler(struct xio_rdma_transport *rdma_hndl,
@@ -1036,24 +1099,13 @@ static void xio_rdma_rd_req_comp_handler(struct xio_rdma_transport *rdma_hndl,
 	struct xio_transport_base	*transport =
 					(struct xio_transport_base *)rdma_hndl;
 
-	if (rdma_task->ib_op != XIO_IB_RDMA_READ_DIRECT)
-		rdma_hndl->rdma_rd_req_in_flight--;
+	rdma_hndl->rdma_rd_req_in_flight--;
+
 	rdma_hndl->sqe_avail++;
 	rdma_hndl->sqe_avail += rdma_task->sqe_used;
 	rdma_task->sqe_used = 0;
 
 	if (rdma_task->phantom_idx == 0) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_READ_DIRECT) {
-			rdma_hndl->reqs_in_flight_nr--;
-			event_data.msg.op = XIO_WC_OP_SEND;
-			event_data.msg.task = task;
-			xio_transport_notify_observer(
-					&rdma_hndl->base,
-					XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-					&event_data);
-			return;
-		}
-
 		if (task->state == XIO_TASK_STATE_CANCEL_PENDING) {
 			TRACE_LOG("[%d] - **** message is canceled\n",
 				  rdma_task->sn);
@@ -1071,19 +1123,7 @@ static void xio_rdma_rd_req_comp_handler(struct xio_rdma_transport *rdma_hndl,
 
 		xio_xmit_rdma_rd_req(rdma_hndl);
 
-		if (rdma_task->rdmad.mapped)
-			xio_unmap_rxmad_work_req(rdma_hndl->dev,
-						 &rdma_task->rdmad);
-
-		if (rdma_task->read_sge.nents &&
-		    rdma_task->read_sge.mapped)
-			xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
-				       DMA_FROM_DEVICE);
-
-		if (rdma_task->write_sge.nents &&
-		    rdma_task->write_sge.mapped)
-			xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
-				       DMA_TO_DEVICE);
+		unmap_rdma_rd_task(rdma_hndl, task);
 
 		/* fill notification event */
 		event_data.msg.op	= XIO_WC_OP_RECV;
@@ -1134,24 +1174,13 @@ static void xio_rdma_rd_rsp_comp_handler(struct xio_rdma_transport *rdma_hndl,
 	struct xio_transport_base	*transport =
 					(struct xio_transport_base *)rdma_hndl;
 
-	if (rdma_task->ib_op != XIO_IB_RDMA_READ_DIRECT)
-		rdma_hndl->rdma_rd_rsp_in_flight--;
+	rdma_hndl->rdma_rd_rsp_in_flight--;
+
 	rdma_hndl->sqe_avail++;
 	rdma_hndl->sqe_avail += rdma_task->sqe_used;
 	rdma_task->sqe_used = 0;
 
 	if (rdma_task->phantom_idx == 0) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_READ_DIRECT) {
-			rdma_hndl->rsps_in_flight_nr--;
-			event_data.msg.op = XIO_WC_OP_SEND;
-			event_data.msg.task = task;
-			xio_transport_notify_observer(
-					&rdma_hndl->base,
-					XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-					&event_data);
-			return;
-		}
-
 		if (task->state == XIO_TASK_STATE_CANCEL_PENDING) {
 			TRACE_LOG("[%d] - **** message is canceled\n",
 				  rdma_task->sn);
@@ -1172,16 +1201,7 @@ static void xio_rdma_rd_rsp_comp_handler(struct xio_rdma_transport *rdma_hndl,
 
 		xio_xmit_rdma_rd_rsp(rdma_hndl);
 
-		if (rdma_task->rdmad.mapped)
-			xio_unmap_rxmad_work_req(rdma_hndl->dev,
-						 &rdma_task->rdmad);
-		if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
-			xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
-				       DMA_FROM_DEVICE);
-
-		if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
-			xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
-				       DMA_TO_DEVICE);
+		unmap_rdma_rd_task(rdma_hndl, task);
 
 		/* copy from task->in to sender_task->in */
 		xio_rdma_post_recv_rsp(task);
@@ -1225,45 +1245,6 @@ static void xio_rdma_rd_rsp_comp_handler(struct xio_rdma_transport *rdma_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_wr_comp_handler						     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_rdma_wr_comp_handler(
-					struct xio_rdma_transport *rdma_hndl,
-					struct xio_task *task)
-{
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	union xio_transport_event_data	event_data;
-
-	if (rdma_task->ib_op != XIO_IB_RDMA_WRITE_DIRECT)
-		return;
-
-	rdma_hndl->sqe_avail++;
-	rdma_hndl->sqe_avail += rdma_task->sqe_used;
-	rdma_task->sqe_used = 0;
-
-	if (rdma_task->phantom_idx == 0) {
-		rdma_hndl->reqs_in_flight_nr--;
-		event_data.msg.op = XIO_WC_OP_SEND;
-		event_data.msg.task = task;
-		xio_transport_notify_observer(
-				&rdma_hndl->base,
-				XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-				&event_data);
-		return;
-	}
-
-	xio_tasks_pool_put(task);
-	if (rdma_hndl->kick_rdma_rd_req)
-		xio_xmit_rdma_rd_req(rdma_hndl);
-
-	if (rdma_hndl->kick_rdma_rd_rsp)
-		xio_xmit_rdma_rd_rsp(rdma_hndl);
-
-	if (rdma_hndl->tx_ready_tasks_num)
-		xio_rdma_xmit(rdma_hndl);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
@@ -1283,17 +1264,19 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IB_WC_SEND:
+	case IB_WC_RDMA_WRITE:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_RDMA_READ:
 		task->last_in_rxq = last_in_rxq;
 		if (IS_REQUEST(task->tlv_type))
 			xio_rdma_rd_req_comp_handler(rdma_hndl, task);
-		else
+		else if (IS_RESPONSE(task->tlv_type))
 			xio_rdma_rd_rsp_comp_handler(rdma_hndl, task);
-		break;
-	case IB_WC_RDMA_WRITE:
-		xio_rdma_wr_comp_handler(rdma_hndl, task);
+		else if (task->tlv_type == XIO_MSG_TYPE_RDMA)
+			xio_direct_rdma_rd_comp_handler(rdma_hndl, task);
+		else
+			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
 		break;
 	case IB_WC_LOCAL_INV:
 	case IB_WC_FAST_REG_MR:
@@ -2563,7 +2546,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	struct xio_rdma_req_hdr	req_hdr;
 
 	if (!IS_REQUEST(task->tlv_type)) {
-		ERROR_LOG("unknown message type\n");
+		ERROR_LOG("unknown message type %u\n", task->tlv_type);
 		return -1;
 	}
 
@@ -3355,6 +3338,25 @@ static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_EVENT_SEND_COMPLETION,
 				      &event_data);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_on_direct_rdma_comp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_on_direct_rdma_comp(struct xio_rdma_transport *rdma_hndl,
+					struct xio_task *task,
+					enum xio_wc_op op)
+{
+	union xio_transport_event_data event_data;
+
+	event_data.msg.op = op;
+	event_data.msg.task = task;
+	xio_transport_notify_observer(
+		&rdma_hndl->base,
+		XIO_TRANSPORT_EVENT_DIRECT_RDMA_COMPLETION,
+		&event_data);
 
 	return 0;
 }

@@ -72,6 +72,9 @@ static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task);
 static int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 				     struct xio_task *task);
+static int xio_rdma_on_direct_rdma_comp(struct xio_rdma_transport *rdma_hndl,
+					struct xio_task *task,
+					enum xio_wc_op op);
 static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 				struct xio_task *task);
 static int xio_rdma_on_recv_cancel_req(struct xio_rdma_transport *rdma_hndl,
@@ -323,10 +326,13 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			rdma_hndl->credits = 0;
 			rdma_hndl->peer_credits--;
 		}
-		if (IS_REQUEST(task->tlv_type))
+		if (IS_REQUEST(task->tlv_type) || task->tlv_type == XIO_MSG_TYPE_RDMA) {
 			rdma_hndl->reqs_in_flight_nr++;
-		else
+		} else if (IS_RESPONSE(task->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr++;
+		} else {
+			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
+		}
 
 		prev_wr->send_wr.next = &curr_wr->send_wr;
 		prev_wr = last_wr;
@@ -840,6 +846,8 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(
 	int			found = 0;
 	int			removed = 0;
 
+	/* If we got a completion, it means all the previous tasks should've
+	   been sent by now - due to ordering */
 	list_for_each_entry_safe(ptask, next_ptask, &rdma_hndl->in_flight_list,
 				 tasks_list_entry) {
 		list_move_tail(&ptask->tasks_list_entry,
@@ -854,6 +862,7 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(
 			xio_tasks_pool_put(ptask);
 			continue;
 		}
+
 		/* rdma wr utilizes two wqe but appears only once in the
 		 * in flight list
 		 */
@@ -875,10 +884,17 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(
 		} else if (IS_NOP(ptask->tlv_type)) {
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_tasks_pool_put(ptask);
+		} else if (ptask->tlv_type == XIO_MSG_TYPE_RDMA) {
+			if (rdma_task->ib_op == XIO_IB_RDMA_WRITE_DIRECT) {
+				rdma_hndl->reqs_in_flight_nr--;
+				xio_rdma_on_direct_rdma_comp(rdma_hndl, ptask,
+							     XIO_WC_OP_RDMA_WRITE);
+				xio_tasks_pool_put(ptask);
+			}
 		} else {
-			ERROR_LOG("unexpected task %p type:0x%x id:%d " \
+			ERROR_LOG("unexpected task %p tlv %u type:0x%x id:%d " \
 				  "magic:0x%x\n",
-				  ptask, rdma_task->ib_op,
+				  ptask, ptask->tlv_type, rdma_task->ib_op,
 				  ptask->ltid, ptask->magic);
 			continue;
 		}
@@ -909,6 +925,26 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_tx_comp_handler(
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_rd_req_comp_handler						     */
 /*---------------------------------------------------------------------------*/
+static void xio_direct_rdma_rd_comp_handler(struct xio_rdma_transport *rdma_hndl,
+					    struct xio_task *task)
+{
+	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	rdma_hndl->sqe_avail++;
+
+	if (rdma_task->phantom_idx == 0) {
+		rdma_hndl->reqs_in_flight_nr--;
+		xio_rdma_on_direct_rdma_comp(rdma_hndl, task,
+					     XIO_WC_OP_RDMA_READ);
+	} else {
+		xio_tasks_pool_put(task);
+		xio_xmit_rdma_rd_req(rdma_hndl);
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_rd_req_comp_handler						     */
+/*---------------------------------------------------------------------------*/
 static XIO_F_ALWAYS_INLINE void xio_rdma_rd_req_comp_handler(
 		struct xio_rdma_transport *rdma_hndl,
 		struct xio_task *task)
@@ -918,22 +954,10 @@ static XIO_F_ALWAYS_INLINE void xio_rdma_rd_req_comp_handler(
 	struct xio_transport_base	*transport =
 					(struct xio_transport_base *)rdma_hndl;
 
-	if (rdma_task->ib_op != XIO_IB_RDMA_READ_DIRECT)
-		rdma_hndl->rdma_rd_req_in_flight--;
-
+	rdma_hndl->rdma_rd_req_in_flight--;
 	rdma_hndl->sqe_avail++;
 
 	if (rdma_task->phantom_idx == 0) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_READ_DIRECT) {
-			rdma_hndl->reqs_in_flight_nr--;
-			event_data.msg.op = XIO_WC_OP_SEND;
-			event_data.msg.task = task;
-			xio_transport_notify_observer(
-					&rdma_hndl->base,
-					XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-					&event_data);
-			return;
-		}
 		if (task->state == XIO_TASK_STATE_CANCEL_PENDING) {
 			TRACE_LOG("[%d] - **** message is canceled\n",
 				  rdma_task->sn);
@@ -998,23 +1022,11 @@ static XIO_F_ALWAYS_INLINE void xio_rdma_rd_rsp_comp_handler(
 	struct xio_transport_base	*transport =
 					(struct xio_transport_base *)rdma_hndl;
 
-	if (rdma_task->ib_op != XIO_IB_RDMA_READ_DIRECT)
-		rdma_hndl->rdma_rd_rsp_in_flight--;
-
+	ERROR_LOG("***** rdma_hndl %p task %p tlv 0x%x\n", rdma_hndl, task, task->tlv_type);
+	rdma_hndl->rdma_rd_rsp_in_flight--;
 	rdma_hndl->sqe_avail++;
 
 	if (rdma_task->phantom_idx == 0) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_READ_DIRECT) {
-			rdma_hndl->rsps_in_flight_nr--;
-			event_data.msg.op = XIO_WC_OP_SEND;
-			event_data.msg.task = task;
-			xio_transport_notify_observer(
-					&rdma_hndl->base,
-					XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-					&event_data);
-			return;
-		}
-
 		if (task->state == XIO_TASK_STATE_CANCEL_PENDING) {
 			TRACE_LOG("[%d] - **** message is canceled\n",
 				  rdma_task->sn);
@@ -1074,43 +1086,6 @@ static XIO_F_ALWAYS_INLINE void xio_rdma_rd_rsp_comp_handler(
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_wr_comp_handler						     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_rdma_wr_comp_handler(
-		struct xio_rdma_transport *rdma_hndl,
-		struct xio_task *task)
-{
-	XIO_TO_RDMA_TASK(task, rdma_task);
-	union xio_transport_event_data	event_data;
-
-	if (rdma_task->ib_op != XIO_IB_RDMA_WRITE_DIRECT)
-		return;
-
-	rdma_hndl->sqe_avail++;
-
-	if (rdma_task->phantom_idx == 0) {
-		rdma_hndl->reqs_in_flight_nr--;
-		event_data.msg.op = XIO_WC_OP_SEND;
-		event_data.msg.task = task;
-		xio_transport_notify_observer(
-				&rdma_hndl->base,
-				XIO_TRANSPORT_EVENT_SEND_COMPLETION,
-				&event_data);
-		return;
-	}
-
-	xio_tasks_pool_put(task);
-	if (rdma_hndl->kick_rdma_rd_req)
-		xio_xmit_rdma_rd_req(rdma_hndl);
-
-	if (rdma_hndl->kick_rdma_rd_rsp)
-		xio_xmit_rdma_rd_rsp(rdma_hndl);
-
-	if (rdma_hndl->tx_ready_tasks_num)
-		xio_rdma_xmit(rdma_hndl);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
 static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
@@ -1130,6 +1105,7 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
+	case IBV_WC_RDMA_WRITE:
 	case IBV_WC_SEND:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
@@ -1137,11 +1113,12 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 		task->last_in_rxq = last_in_rxq;
 		if (IS_REQUEST(task->tlv_type))
 			xio_rdma_rd_req_comp_handler(rdma_hndl, task);
-		else
+		else if (IS_RESPONSE(task->tlv_type))
 			xio_rdma_rd_rsp_comp_handler(rdma_hndl, task);
-		break;
-	case IBV_WC_RDMA_WRITE:
-		xio_rdma_wr_comp_handler(rdma_hndl, task);
+		else if (task->tlv_type == XIO_MSG_TYPE_RDMA)
+			xio_direct_rdma_rd_comp_handler(rdma_hndl, task);
+		else
+			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
 		break;
 	default:
 		ERROR_LOG("unknown opcode :%s [%x]\n",
@@ -2105,6 +2082,7 @@ static int xio_rdma_prep_rsp_out_data(
 
 			tbl_set_nents(sgtbl_ops, sgtbl, 0);
 #else
+			ERROR_LOG("************** ASK RDMA READ? %p\n", rdma_task);
 			/* the data is outgoing via SEND but the peer will do
 			 * RDMA_READ */
 			rdma_task->ib_op = XIO_IB_RDMA_READ;
@@ -2817,6 +2795,26 @@ int xio_rdma_on_req_send_comp(struct xio_rdma_transport *rdma_hndl,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_on_direct_rdma_comp						     */
+/*---------------------------------------------------------------------------*/
+static int xio_rdma_on_direct_rdma_comp(struct xio_rdma_transport *rdma_hndl,
+					struct xio_task *task,
+					enum xio_wc_op op)
+{
+	union xio_transport_event_data event_data;
+
+	event_data.msg.op = op;
+	event_data.msg.task = task;
+	xio_transport_notify_observer(
+		&rdma_hndl->base,
+		XIO_TRANSPORT_EVENT_DIRECT_RDMA_COMPLETION,
+		&event_data);
+
+	return 0;
+}
+
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_post_recv_rsp						     */

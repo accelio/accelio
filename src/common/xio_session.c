@@ -69,9 +69,6 @@ static int xio_on_rsp_recv(struct xio_connection *nexusetion,
 			   struct xio_task *task);
 static int xio_on_ow_req_send_comp(struct xio_connection *connection,
 				   struct xio_task *task);
-static int xio_on_rdma_direct_comp(struct xio_connection *connection,
-				   struct xio_task *task);
-
 static int xio_on_rsp_send_comp(struct xio_connection *connection,
 				struct xio_task *task);
 /*---------------------------------------------------------------------------*/
@@ -870,11 +867,19 @@ exit:
 	return 0;
 }
 
-static int xio_on_rdma_direct_comp(
-		struct xio_connection *connection,
-		struct xio_task *task)
+int xio_on_rdma_direct_comp(struct xio_session *session,
+			    struct xio_nexus *nexus,
+			    union xio_nexus_event_data *event_data)
 {
+	struct xio_task	*task  = event_data->msg.task;
 	struct xio_msg *omsg = task->omsg;
+	struct xio_connection *connection = task->connection;
+
+	if (unlikely(task->tlv_type != XIO_MSG_TYPE_RDMA)) {
+		ERROR_LOG("Unexpected message type %u\n",
+			  task->tlv_type);
+		return 0;
+	}
 
 	if (connection->is_flushed) {
 		xio_tasks_pool_put(task);
@@ -1004,7 +1009,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 				task->omsg,
 				task->connection->cb_user_context);
 
-	if (IS_REQUEST(task->tlv_type))
+	if (IS_REQUEST(task->tlv_type) || task->tlv_type == XIO_MSG_TYPE_RDMA)
 		xio_tasks_pool_put(task);
 	else
 		xio_release_response_task(task);
@@ -1181,9 +1186,6 @@ int xio_on_send_completion(struct xio_session *session,
 	case XIO_ACK_REQ:
 		retval = xio_on_credits_ack_send_comp(connection, task);
 		xmit = 1;
-		break;
-	case XIO_MSG_TYPE_RDMA:
-		retval = xio_on_rdma_direct_comp(connection, task);
 		break;
 	case XIO_FIN_REQ:
 		retval = xio_on_fin_req_send_comp(connection, task);

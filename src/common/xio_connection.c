@@ -358,7 +358,7 @@ int xio_connection_send(struct xio_connection *connection,
 
 			list_move_tail(&task->tasks_list_entry,
 				       &connection->pre_send_list);
-		} else {
+		} else if (IS_RESPONSE(msg->type)) {
 			task = container_of(msg->request,
 					    struct xio_task, imsg);
 
@@ -366,6 +366,9 @@ int xio_connection_send(struct xio_connection *connection,
 				       &connection->pre_send_list);
 
 			hdr.serial_num	= msg->request->sn;
+		} else {
+			ERROR_LOG("Unknown message type %u\n", msg->type);
+			return -EINVAL;
 		}
 	}
 	/* reset the task mbuf */
@@ -400,9 +403,13 @@ int xio_connection_send(struct xio_connection *connection,
 			if (IS_REQUEST(msg->type)) {
 				hdr.sn		= connection->req_sn++;
 				hdr.ack_sn	= connection->req_ack_sn;
-			} else {
+			} else if (IS_RESPONSE(msg->type)) {
 				hdr.sn		= connection->rsp_sn++;
 				hdr.ack_sn	= connection->rsp_ack_sn;
+			} else {
+				ERROR_LOG("unknown message type %u\n",
+					  msg->type);
+				return -EINVAL;
 			}
 			if (connection->enable_flow_control) {
 				hdr.credits_msgs =
@@ -711,7 +718,8 @@ static int xio_connection_restart_tasks(struct xio_connection *connection)
 				/* this is a receipt message */
 				is_req = 1;
 			else
-				is_req = IS_REQUEST(ptask->tlv_type);
+				is_req = IS_REQUEST(ptask->tlv_type) ||
+					(ptask->tlv_type == XIO_MSG_TYPE_RDMA);
 
 			if (is_req)
 				xio_tasks_pool_put(ptask);
@@ -860,12 +868,16 @@ int xio_connection_remove_in_flight(struct xio_connection *connection,
 	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
-	if (IS_REQUEST(msg->type))
+	if (IS_REQUEST(msg->type) || msg->type == XIO_MSG_TYPE_RDMA)
 		xio_msg_list_remove(
-				&connection->in_flight_reqs_msgq, msg, pdata);
-	 else
+			&connection->in_flight_reqs_msgq, msg, pdata);
+	else if (IS_RESPONSE(msg->type))
 		xio_msg_list_remove(
-				&connection->in_flight_rsps_msgq, msg, pdata);
+			&connection->in_flight_rsps_msgq, msg, pdata);
+	else {
+		ERROR_LOG("unexpected message type %u\n", msg->type);
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -879,12 +891,16 @@ int xio_connection_remove_msg_from_queue(struct xio_connection *connection,
 	if (!IS_APPLICATION_MSG(msg->type))
 		return 0;
 
-	if (IS_REQUEST(msg->type))
+	if (IS_REQUEST(msg->type) || msg->type == XIO_MSG_TYPE_RDMA)
 		xio_msg_list_remove(
 				&connection->reqs_msgq, msg, pdata);
-	else
+	else if (IS_RESPONSE(msg->type))
 		xio_msg_list_remove(
 				&connection->rsps_msgq, msg, pdata);
+	else {
+		ERROR_LOG("unexpected message type %u\n", msg->type);
+		return -EINVAL;
+	}
 
 	return 0;
 }

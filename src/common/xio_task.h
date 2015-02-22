@@ -290,7 +290,7 @@ static inline int xio_tasks_pool_free_tasks(
 		ERROR_LOG("tasks inventory: %d/%d = missing:%d\n",
 			  q->curr_alloced - q->curr_used, q->curr_alloced,
 			  q->curr_used);
-		/*xio_tasks_pool_dump_used(q);*/
+		xio_tasks_pool_dump_used(q);
 	}
 
 	return q->curr_alloced - q->curr_used;

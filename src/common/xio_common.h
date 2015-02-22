@@ -270,6 +270,8 @@ enum xio_wc_op {
 	XIO_WC_OP_UNKNOWN,
 	XIO_WC_OP_RECV,
 	XIO_WC_OP_SEND,
+	XIO_WC_OP_RDMA_READ,
+	XIO_WC_OP_RDMA_WRITE,
 };
 
 /*---------------------------------------------------------------------------*/

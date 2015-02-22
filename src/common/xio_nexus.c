@@ -1556,8 +1556,11 @@ static int xio_nexus_on_new_message(struct xio_nexus *nexus,
 	default:
 		if (IS_REQUEST(task->tlv_type))
 			retval = xio_nexus_on_recv_req(nexus, task);
-		else
+		else if (IS_RESPONSE(task->tlv_type))
 			retval = xio_nexus_on_recv_rsp(nexus, task);
+		else
+			ERROR_LOG("unexpected message type %u\n",
+				  task->tlv_type);
 		break;
 	};
 
@@ -1588,7 +1591,7 @@ static int xio_nexus_on_send_completion(struct xio_nexus *nexus,
 		retval = 0;
 		break;
 	default:
-		retval  = xio_nexus_on_send_msg_comp(nexus, task);
+		retval = xio_nexus_on_send_msg_comp(nexus, task);
 		break;
 	};
 
@@ -1599,6 +1602,27 @@ static int xio_nexus_on_send_completion(struct xio_nexus *nexus,
 	}
 
 	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_on_direct_rdma_completion					     */
+/*---------------------------------------------------------------------------*/
+static int xio_nexus_on_direct_rdma_completion(
+	struct xio_nexus *nexus,
+	union xio_transport_event_data *event_data)
+{
+	struct xio_task	*task = event_data->msg.task;
+	union xio_nexus_event_data nexus_event_data;
+
+	nexus_event_data.msg.task = task;
+	nexus_event_data.msg.op = event_data->msg.op;
+
+	xio_observable_notify_observer(
+			&nexus->observable,
+			&task->session->observer,
+			XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION,
+			&nexus_event_data);
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1699,11 +1723,10 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 */
 		xio_nexus_on_send_completion(nexus, ev_data);
 		break;
+	case XIO_TRANSPORT_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_nexus_on_direct_rdma_completion(nexus, ev_data);
+		break;
 	case XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF:
-/*
-		DEBUG_LOG("nexus: [notification] - assign in buffer. " \
-			 "nexus:%p, transport:%p\n", observer, sender);
-*/
 		xio_nexus_on_assign_in_buf(nexus, ev_data);
 		break;
 	case XIO_TRANSPORT_EVENT_MESSAGE_ERROR:

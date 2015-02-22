@@ -612,6 +612,9 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 */
 		xio_on_send_completion(session, nexus, event_data);
 		break;
+	case XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_on_rdma_direct_comp(session, nexus, event_data);
+		break;
 	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
 			 "session:%p, nexus:%p\n", observer, sender);

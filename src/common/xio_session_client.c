@@ -751,7 +751,6 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 {
 	struct xio_session	*session = (struct xio_session *)observer;
 	struct xio_nexus	*nexus	= (struct xio_nexus *)sender;
-	int			retval  = 0;
 	union xio_nexus_event_data *event_data =
 			(union xio_nexus_event_data *)_event_data;
 
@@ -768,6 +767,9 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 			 "session:%p, nexus:%p\n", observer, sender);
 */
 		xio_on_send_completion(session, nexus, event_data);
+		break;
+	case XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_on_rdma_direct_comp(session, nexus, event_data);
 		break;
 	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
@@ -828,7 +830,7 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 		break;
 	}
 
-	return retval;
+	return 0;
 }
 
 static inline void xio_session_refuse_connection(void *conn)
