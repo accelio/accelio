@@ -42,14 +42,14 @@
 /* defines								     */
 /*---------------------------------------------------------------------------*/
 
-#define XIO_EV_LOOP_WAKE	1
+#define XIO_EV_LOOP_WAKE	BIT(0)
 #define XIO_EV_LOOP_STOP	BIT(1)
 #define XIO_EV_LOOP_DOWN	BIT(2)
 #define XIO_EV_LOOP_SCHED	BIT(3)
 #define XIO_EV_LOOP_IN_HANDLER	BIT(4)
 #define XIO_EV_LOOP_ACTIVE	BIT(5)
 
-#define XIO_EV_HANDLER_PENDING	1
+#define XIO_EV_HANDLER_PENDING	BIT(0)
 #define XIO_EV_HANDLER_ENABLED	BIT(1)
 
 /*---------------------------------------------------------------------------*/
