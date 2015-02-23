@@ -53,15 +53,17 @@
 /*---------------------------------------------------------------------------*/
 struct xio_ev_loop {
 	int				efd;
+	/* flags */
+	volatile uint32_t		in_dispatch:1;
+	volatile uint32_t		stop_loop:1;
+	volatile uint32_t		wakeup_armed:1;
+	volatile uint32_t		pad:29;
 
-	volatile int			in_dispatch;
-	volatile int			stop_loop;
 	int				wakeup_event;
-	volatile int			wakeup_armed;
 	int				deleted_events_nr;
-	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 	struct list_head		poll_events_list;
 	struct list_head		events_list;
+	struct xio_ev_data		*deleted_events[MAX_DELETED_EVENTS];
 };
 
 /*---------------------------------------------------------------------------*/
