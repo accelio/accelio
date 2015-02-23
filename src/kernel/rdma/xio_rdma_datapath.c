@@ -2440,7 +2440,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 
 	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_rdma_rsp_hdr)) {
 		ERROR_LOG(
-		"header length's read failed. arrived:%d expected:%zud\n",
+		"header length's read failed. arrived:%d expected:%zu\n",
 		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_rdma_rsp_hdr));
 		return -1;
 	}

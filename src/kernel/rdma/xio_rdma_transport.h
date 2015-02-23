@@ -189,10 +189,11 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint16_t		write_num_sge;
 	uint16_t		pad1;
 	uint32_t		status;		/* status		*/
-	uint32_t		ltid;		/* local task id	*/
 
+	uint32_t		ltid;		/* local task id	*/
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
+
 	uint32_t		remain_data_len;/* remaining data length */
 
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
