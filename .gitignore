@@ -41,6 +41,7 @@ xio_read_lat
 xio_read_bw
 xioclntd
 xiosrvd
+event_loop_tests
 src/tools/usr/Makefile.in
 src/tools/usr/xio_mem_usage
 src/tools/usr/xio_if_numa_cpus
