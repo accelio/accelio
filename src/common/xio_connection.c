@@ -932,7 +932,9 @@ int xio_send_request(struct xio_connection *connection,
 	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
+#ifndef XIO_CFLAG_PERFORMANCE
 	int			valid;
+#endif
 
 	if (!connection || !msg) {
 		xio_set_error(EINVAL);
@@ -963,7 +965,7 @@ int xio_send_request(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
-
+#ifndef XIO_CFLAG_PERFORMANCE
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
@@ -978,6 +980,7 @@ int xio_send_request(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
+#endif
 
 		sgtbl		= xio_sg_table_get(&pmsg->out);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -1041,8 +1044,10 @@ int xio_send_response(struct xio_msg *msg)
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	size_t			bytes;
-	int			valid;
 	int			retval = 0;
+#ifndef XIO_CFLAG_PERFORMANCE
+	int			valid;
+#endif
 
 	while (pmsg) {
 		task	   = container_of(pmsg->request, struct xio_task, imsg);
@@ -1090,6 +1095,7 @@ int xio_send_response(struct xio_msg *msg)
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
 			     get_cycles() - task->imsg.timestamp);
 
+#ifndef XIO_CFLAG_PERFORMANCE
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -1097,7 +1103,7 @@ int xio_send_response(struct xio_msg *msg)
 			retval = -1;
 			goto send;
 		}
-
+#endif
 		sgtbl		= xio_sg_table_get(vmsg);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
 					xio_sg_table_ops_get(vmsg->sgl_type);
@@ -1194,9 +1200,11 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	size_t			tx_bytes;
-	int			valid;
 	int			nr = -1;
 	int			retval = 0;
+#ifndef XIO_CFLAG_PERFORMANCE
+	int			valid;
+#endif
 
 	if (unlikely(connection->disconnecting ||
 		     (connection->state != XIO_CONNECTION_STATE_ONLINE &&
@@ -1221,6 +1229,7 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			goto send;
 		}
 
+#ifndef XIO_CFLAG_PERFORMANCE
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
@@ -1228,6 +1237,7 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
+#endif
 		sgtbl		= xio_sg_table_get(&pmsg->out);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
 				       xio_sg_table_ops_get(pmsg->out.sgl_type);

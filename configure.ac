@@ -83,7 +83,7 @@ AS_IF([test "x$havempages" != "xyes"],
 ##########################################################################
 # usage: ./configure --enable-perf=yes
 #
-AC_MSG_CHECKING([whether to build with debug information])
+AC_MSG_CHECKING([whether to enable profiler perf tool flags])
 AC_ARG_ENABLE([perf],
 	      [AS_HELP_STRING([--enable-perf],
 			      [enable perf profiling])],
@@ -129,6 +129,22 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
+##########################################################################
+# performance compilation support
+##########################################################################
+# usage: ./configure --enable-performance=yes
+#
+AC_MSG_CHECKING([suppress extra checks to achieve performance - dangerous])
+AC_ARG_ENABLE([performance],
+	      [AS_HELP_STRING([--enable-performance],
+			      [enable extra optimized code for performance])],
+			       [enable_performance="$enableval"],
+			       [enable_performance=no])
+AC_MSG_RESULT([$enable_performance])
+
+if test "$enable_performance" = "yes"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_PERFORMANCE"
+fi
 
 ##########################################################################
 # raio compilation support
