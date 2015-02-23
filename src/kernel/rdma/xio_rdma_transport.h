@@ -74,6 +74,11 @@ extern struct xio_rdma_options	rdma_options;
 					   */
 #define CONN_SETUP_BUF_SIZE		4096
 
+#define NUM_START_PRIMARY_POOL_TASKS    312  /* must be enough to send few +
+						fully post_recv buffers
+						*/
+#define NUM_ALLOC_PRIMARY_POOL_TASKS    512
+
 #define NUM_START_PHANTOM_POOL_TASKS	0
 #define NUM_ALLOC_PHANTOM_POOL_TASKS	256
 #define NUM_MAX_PHANTOM_POOL_TASKS	32768

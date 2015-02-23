@@ -74,11 +74,12 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 		return -1;
 	}
 
-	if (q->curr_alloced < q->params.start_nr)
+	if (q->params.start_nr && q->curr_alloced < q->params.start_nr)
 		alloc_nr = min(q->params.start_nr, q->params.max_nr);
 	else
 		alloc_nr = min(q->params.alloc_nr,
-			       q->params.max_nr - (int)q->curr_alloced);
+				q->params.max_nr - q->curr_alloced);
+
 
 	if (alloc_nr == 0)
 		return 0;
