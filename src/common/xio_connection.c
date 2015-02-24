@@ -2127,6 +2127,9 @@ int xio_connection_destroy(struct xio_connection *connection)
 	/* if there is any delayed timeout -  stop it.
 	 * users may call this function at any stage
 	 **/
+	xio_ctx_del_work(connection->ctx, &connection->hello_work);
+	xio_ctx_del_work(connection->ctx, &connection->fin_work);
+
 	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->fin_delayed_work);
 	xio_ctx_del_delayed_work(connection->ctx,
