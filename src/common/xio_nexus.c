@@ -1641,6 +1641,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 					int event, void *event_data)
 {
 	struct xio_nexus		*nexus = (struct xio_nexus *)observer;
+	int				 tx = 1;
 	union xio_transport_event_data *ev_data =
 			(union xio_transport_event_data *)event_data;
 
@@ -1695,11 +1696,13 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 		DEBUG_LOG("nexus: [notification] - transport disconnected. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_disconnected(nexus, ev_data);
+		tx = 0;
 		break;
 	case XIO_TRANSPORT_CLOSED:
 		DEBUG_LOG("nexus: [notification] - transport closed. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_closed(nexus, ev_data);
+		tx = 0;
 		return 0;
 	case XIO_TRANSPORT_REFUSED:
 		DEBUG_LOG("nexus: [notification] - transport refused. " \
@@ -1715,6 +1718,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 					XIO_NEXUS_EVENT_REFUSED,
 					&event_data);
 		}
+		tx = 0;
 		break;
 	case XIO_TRANSPORT_ERROR:
 		DEBUG_LOG("nexus: [notification] - transport error. " \
@@ -1723,10 +1727,11 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 			xio_nexus_client_reconnect_failed(nexus);
 		else
 			xio_nexus_on_transport_error(nexus, ev_data);
+		tx = 0;
 		break;
 	};
 
-	if (!list_empty(&nexus->tx_queue))
+	if (tx && !list_empty(&nexus->tx_queue))
 		xio_nexus_xmit(nexus);
 
 	return 0;
