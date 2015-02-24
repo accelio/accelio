@@ -2091,8 +2091,12 @@ int xio_connection_destroy(struct xio_connection *connection)
 		xio_set_error(EINVAL);
 		return -1;
 	}
+
 	found = xio_idr_lookup_uobj(usr_idr, connection);
 	if (found) {
+		if (!list_empty(&connection->io_tasks_list))
+			ERROR_LOG("tasks still pending.connection:%p\n",
+				  connection);
 		xio_idr_remove_uobj(usr_idr, connection);
 	} else {
 		ERROR_LOG("connection not found:%p\n", connection);
