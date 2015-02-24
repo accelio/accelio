@@ -579,7 +579,10 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 	TRACE_LOG("tcp transport context_shutdown handle:%p\n", tcp_hndl);
 
 	switch (tcp_hndl->state) {
+	case XIO_STATE_INIT:
+		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n", tcp_hndl);
 	case XIO_STATE_LISTEN:
+	case XIO_STATE_CONNECTING:
 	case XIO_STATE_CONNECTED:
 		tcp_hndl->state = XIO_STATE_DISCONNECTED;
 		/*fallthrough*/
@@ -1206,6 +1209,8 @@ single_sock:
 		ERROR_LOG("tcp getsockname failed. (errno=%d)\n", -retval);
 	}
 
+	child_hndl->state = XIO_STATE_CONNECTING;
+
 	ev_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
 	xio_transport_notify_observer((struct xio_transport_base *)parent_hndl,
@@ -1495,6 +1500,7 @@ void xio_tcp_conn_established_helper(struct xio_tcp_transport *tcp_hndl)
 		ERROR_LOG("tcp getpeername failed. (errno=%d)\n", -retval);
 		goto cleanup;
 	}
+	tcp_hndl->state = XIO_STATE_CONNECTING;
 
 	retval = tcp_hndl->socket.ops->add_ev_handlers(tcp_hndl);
 	if (retval) {
