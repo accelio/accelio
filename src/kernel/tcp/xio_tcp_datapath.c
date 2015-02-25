@@ -372,7 +372,7 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	/* now we can calculate  primary pool size */
 	xio_tcp_calc_pool_size(tcp_hndl);
 
-	tcp_hndl->state = XIO_STATE_CONNECTED;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_CONNECTED;
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
@@ -845,7 +845,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	if (tcp_hndl->tx_ready_tasks_num == 0)
 		return 0;
 
-	if (tcp_hndl->state != XIO_STATE_CONNECTED) {
+	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		xio_set_error(EAGAIN);
 		return -1;
 	}
@@ -3121,8 +3121,8 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 		switch (tcp_task->rxd.stage) {
 		case XIO_TCP_RX_START:
 			/* ORK todo find a better place to rearm rx_list?*/
-			if (tcp_hndl->state == XIO_STATE_CONNECTED ||
-			    tcp_hndl->state == XIO_STATE_DISCONNECTED) {
+			if (tcp_hndl->state == XIO_TRANSPORT_STATE_CONNECTED ||
+			    tcp_hndl->state == XIO_TRANSPORT_STATE_DISCONNECTED) {
 				task_next =
 					xio_tcp_primary_task_alloc(tcp_hndl);
 				if (!task_next) {
@@ -3274,7 +3274,7 @@ int xio_tcp_poll(struct xio_transport_base *transport,
 
 	tcp_hndl = (struct xio_tcp_transport *)transport;
 
-	if (tcp_hndl->state != XIO_STATE_CONNECTED) {
+	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		ERROR_LOG("tcp transport is not connected, state=%d\n",
 			  tcp_hndl->state);
 		return -1;

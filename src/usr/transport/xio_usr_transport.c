@@ -163,23 +163,23 @@ struct xio_mempool *xio_transport_mempool_get(
 char *xio_transport_state_str(enum xio_transport_state state)
 {
 	switch (state) {
-	case XIO_STATE_INIT:
+	case XIO_TRANSPORT_STATE_INIT:
 		return "INIT";
-	case XIO_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_LISTEN:
 		return "LISTEN";
-	case XIO_STATE_CONNECTING:
+	case XIO_TRANSPORT_STATE_CONNECTING:
 		return "CONNECTING";
-	case XIO_STATE_CONNECTED:
+	case XIO_TRANSPORT_STATE_CONNECTED:
 		return "CONNECTED";
-	case XIO_STATE_DISCONNECTED:
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
 		return "DISCONNECTED";
-	case XIO_STATE_RECONNECT:
+	case XIO_TRANSPORT_STATE_RECONNECT:
 		return "RECONNECT";
-	case XIO_STATE_CLOSED:
+	case XIO_TRANSPORT_STATE_CLOSED:
 		return "CLOSED";
-	case XIO_STATE_DESTROYED:
+	case XIO_TRANSPORT_STATE_DESTROYED:
 		return "DESTROYED";
-	case XIO_STATE_ERROR:
+	case XIO_TRANSPORT_STATE_ERROR:
 		return "ERROR";
 	default:
 		return "UNKNOWN";

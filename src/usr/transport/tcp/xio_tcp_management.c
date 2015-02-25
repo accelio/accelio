@@ -161,7 +161,7 @@ static void on_sock_close(struct xio_tcp_transport *tcp_hndl)
 				      XIO_TRANSPORT_EVENT_CLOSED,
 				      NULL);
 
-	tcp_hndl->state = XIO_STATE_DESTROYED;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_DESTROYED;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -224,10 +224,10 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 
 	TRACE_LOG("on_sock_disconnected. tcp_hndl:%p, state:%d\n",
 		  tcp_hndl, tcp_hndl->state);
-	if (tcp_hndl->state == XIO_STATE_DISCONNECTED) {
+	if (tcp_hndl->state == XIO_TRANSPORT_STATE_DISCONNECTED) {
 		TRACE_LOG("call to close. tcp_hndl:%p\n",
 			  tcp_hndl);
-		tcp_hndl->state = XIO_STATE_CLOSED;
+		tcp_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
 
 		xio_context_disable_event(&tcp_hndl->flush_tx_event);
 		xio_context_disable_event(&tcp_hndl->ctl_rx_event);
@@ -302,14 +302,14 @@ static void xio_tcp_close_cb(struct kref *kref)
 		  tcp_hndl, tcp_hndl->sock.cfd);
 
 	switch (tcp_hndl->state) {
-	case XIO_STATE_LISTEN:
-	case XIO_STATE_CONNECTED:
-		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+	case XIO_TRANSPORT_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_CONNECTED:
+		tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 		/*fallthrough*/
-	case XIO_STATE_DISCONNECTED:
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
 		on_sock_disconnected(tcp_hndl, 0);
 		/*fallthrough*/
-	case XIO_STATE_CLOSED:
+	case XIO_TRANSPORT_STATE_CLOSED:
 		on_sock_close(tcp_hndl);
 		break;
 	default:
@@ -317,11 +317,11 @@ static void xio_tcp_close_cb(struct kref *kref)
 				&tcp_hndl->base,
 				XIO_TRANSPORT_EVENT_CLOSED,
 				NULL);
-		tcp_hndl->state = XIO_STATE_DESTROYED;
+		tcp_hndl->state = XIO_TRANSPORT_STATE_DESTROYED;
 		break;
 	}
 
-	if (tcp_hndl->state  == XIO_STATE_DESTROYED)
+	if (tcp_hndl->state  == XIO_TRANSPORT_STATE_DESTROYED)
 		xio_tcp_post_close(tcp_hndl);
 }
 
@@ -461,21 +461,21 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 	TRACE_LOG("tcp transport context_shutdown handle:%p\n", tcp_hndl);
 
 	switch (tcp_hndl->state) {
-	case XIO_STATE_INIT:
+	case XIO_TRANSPORT_STATE_INIT:
 		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n", tcp_hndl);
-	case XIO_STATE_LISTEN:
-	case XIO_STATE_CONNECTING:
-	case XIO_STATE_CONNECTED:
-		tcp_hndl->state = XIO_STATE_DISCONNECTED;
+	case XIO_TRANSPORT_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_CONNECTING:
+	case XIO_TRANSPORT_STATE_CONNECTED:
+		tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 		/*fallthrough*/
-	case XIO_STATE_DISCONNECTED:
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
 		on_sock_disconnected(tcp_hndl, 0);
 		break;
 	default:
 		break;
 	}
 
-	tcp_hndl->state = XIO_STATE_DESTROYED;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_DESTROYED;
 	xio_tcp_flush_all_tasks(tcp_hndl);
 
 	xio_transport_notify_observer(&tcp_hndl->base,
@@ -540,7 +540,7 @@ void xio_tcp_consume_ctl_rx(void *xio_tcp_hndl)
 	} while (retval > 0 && count <  RX_POLL_NR_MAX);
 
 	if (/*retval > 0 && */ tcp_hndl->tmp_rx_buf_len &&
-	    tcp_hndl->state == XIO_STATE_CONNECTED) {
+	    tcp_hndl->state == XIO_TRANSPORT_STATE_CONNECTED) {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->ctl_rx_event);
 	}
@@ -1075,7 +1075,7 @@ single_sock:
 			  xio_get_last_socket_error());
 	}
 
-	child_hndl->state = XIO_STATE_CONNECTING;
+	child_hndl->state = XIO_TRANSPORT_STATE_CONNECTING;
 
 	ev_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
@@ -1269,7 +1269,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	if (src_port)
 		*src_port = sport;
 
-	tcp_hndl->state = XIO_STATE_LISTEN;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_LISTEN;
 	DEBUG_LOG("listen on [%s] src_port:%d\n", portal_uri, sport);
 
 	return 0;
@@ -1336,7 +1336,7 @@ void xio_tcp_conn_established_helper(int fd,
 		so_error = xio_get_last_socket_error();
 		goto cleanup;
 	}
-	tcp_hndl->state = XIO_STATE_CONNECTING;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_CONNECTING;
 
 	retval = xio_tcp_send_connect_msg(tcp_hndl->sock.cfd, msg);
 	if (retval)

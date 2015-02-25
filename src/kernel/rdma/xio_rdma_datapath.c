@@ -732,7 +732,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 {
-	if (rdma_hndl->state != XIO_STATE_CONNECTED ||
+	if (rdma_hndl->state != XIO_TRANSPORT_STATE_CONNECTED ||
 	    !rdma_hndl->primary_pool_cls.task_lookup)
 		return 0;
 
@@ -821,7 +821,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* rearm the receive queue  */
 	/*
-	if ((rdma_hndl->state == XIO_STATE_CONNECTED) &&
+	if ((rdma_hndl->state == XIO_TRANSPORT_STATE_CONNECTED) &&
 	    (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1))
 		xio_rdma_rearm_rq(rdma_hndl);
 	*/
@@ -868,7 +868,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 		break;
 	}
 	/*
-	if (rdma_hndl->state != XIO_STATE_CONNECTED)
+	if (rdma_hndl->state != XIO_TRANSPORT_STATE_CONNECTED)
 		return retval;
 	*/
 	/* transmit ready packets */

@@ -1720,7 +1720,7 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 		(struct xio_rdma_transport *)trans_base;
 
 	if (rdma_hndl->handler_nesting) {
-		rdma_hndl->state = XIO_STATE_DESTROYED;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_DESTROYED;
 		return;
 	}
 
@@ -1855,7 +1855,7 @@ static void on_cm_route_resolved(struct rdma_cm_id *cm_id,
 	}
 	rdma_hndl->client_responder_resources = cm_params.responder_resources;
 	rdma_hndl->client_initiator_depth = cm_params.initiator_depth;
-	rdma_hndl->state = XIO_STATE_CONNECTING;
+	rdma_hndl->state = XIO_TRANSPORT_STATE_CONNECTING;
 
 	return;
 
@@ -1907,7 +1907,7 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 		}
 		goto notify_err1;
 	}
-	child_hndl->state = XIO_STATE_CONNECTING;
+	child_hndl->state = XIO_TRANSPORT_STATE_CONNECTING;
 
 	dev = xio_devs[cm_id->port_num];
 	/* increment device reference count */
@@ -1915,7 +1915,7 @@ static void  on_cm_connect_request(struct rdma_cm_id *cm_id,
 
 	child_hndl->dev		= dev;
 	child_hndl->cm_id	= cm_id;
-	child_hndl->state	= XIO_STATE_CONNECTING;
+	child_hndl->state	= XIO_TRANSPORT_STATE_CONNECTING;
 
 	/* Parent handle i.e. listener doesn't have a CQ */
 	child_hndl->tcq		= NULL;
@@ -1970,12 +1970,12 @@ static void on_cm_refused(struct rdma_cm_event *ev,
 	/* we get CM_ESTABLISHED and afterward we get cm_refused. It looks like
 	 * cm state machine error.
 	 */
-	if (rdma_hndl->state == XIO_STATE_CONNECTED) {
+	if (rdma_hndl->state == XIO_TRANSPORT_STATE_CONNECTED) {
 		/* one for beacon */
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 		/* one for timedwait_exit */
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
-		rdma_hndl->state = XIO_STATE_ERROR;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_ERROR;
 	}
 	xio_transport_notify_observer(&rdma_hndl->base,
 				      XIO_TRANSPORT_EVENT_REFUSED, NULL);
@@ -1995,7 +1995,7 @@ static void on_cm_established(struct rdma_cm_event *ev,
 	       &rdma_hndl->cm_id->route.addr.src_addr,
 	       sizeof(rdma_hndl->base.local_addr));
 
-	rdma_hndl->state = XIO_STATE_CONNECTED;
+	rdma_hndl->state = XIO_TRANSPORT_STATE_CONNECTED;
 
 	/* one for beacon */
 	kref_get(&rdma_hndl->base.kref);
@@ -2054,19 +2054,19 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 	TRACE_LOG("on_cm_disconnected. rdma_hndl:%p, state:%d\n",
 		  rdma_hndl, rdma_hndl->state);
 	switch (rdma_hndl->state) {
-	case XIO_STATE_CONNECTED:
+	case XIO_TRANSPORT_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
-		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 		retval = xio_rdma_disconnect(rdma_hndl, 1);
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 				  rdma_hndl);
 		break;
-	case XIO_STATE_CONNECTING:
+	case XIO_TRANSPORT_STATE_CONNECTING:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
-		rdma_hndl->state = XIO_STATE_DISCONNECTED;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 		retval = xio_rdma_disconnect(rdma_hndl, 0);
 		if (retval)
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
@@ -2074,7 +2074,7 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 		/*  for beacon */
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 	break;
-	case XIO_STATE_CLOSED:
+	case XIO_TRANSPORT_STATE_CLOSED:
 		/* coming here from
 		 * context_shutdown/rdma_close,
 		 * don't go to disconnect state
@@ -2084,12 +2084,12 @@ static void on_cm_disconnected(struct rdma_cm_event *ev,
 			ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, " \
 				  "err=%d\n", rdma_hndl, retval);
 	break;
-	case XIO_STATE_INIT:
-	case XIO_STATE_LISTEN:
-	case XIO_STATE_DISCONNECTED:
-	case XIO_STATE_RECONNECT:
-	case XIO_STATE_DESTROYED:
-	case XIO_STATE_ERROR:
+	case XIO_TRANSPORT_STATE_INIT:
+	case XIO_TRANSPORT_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
+	case XIO_TRANSPORT_STATE_RECONNECT:
+	case XIO_TRANSPORT_STATE_DESTROYED:
+	case XIO_TRANSPORT_STATE_ERROR:
 	break;
 	}
 }
@@ -2110,7 +2110,7 @@ static void on_cm_timewait_exit(void *hndl)
 
 	xio_rdma_flush_all_tasks(rdma_hndl);
 
-	if (rdma_hndl->state == XIO_STATE_DISCONNECTED) {
+	if (rdma_hndl->state == XIO_TRANSPORT_STATE_DISCONNECTED) {
 		xio_transport_notify_observer(&rdma_hndl->base,
 					      XIO_TRANSPORT_EVENT_DISCONNECTED,
 					      NULL);
@@ -2268,7 +2268,7 @@ static int xio_handle_cm_event(struct rdma_cm_id *cm_id,
 	rdma_hndl->handler_nesting--;
 
 	/* state can be modified to destroyed (side effect) */
-	if (rdma_hndl->state == XIO_STATE_DESTROYED) {
+	if (rdma_hndl->state == XIO_TRANSPORT_STATE_DESTROYED) {
 		/* user space code calls here, xio_rdma_post_close which may
 		 * call rdma_destroy_id which is not allowed in an handler
 		 */
@@ -2399,27 +2399,27 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 		  rdma_hndl, rdma_hndl->qp);
 
 	switch (rdma_hndl->state) {
-	case XIO_STATE_LISTEN:
-		rdma_hndl->state = XIO_STATE_CLOSED;
+	case XIO_TRANSPORT_STATE_LISTEN:
+		rdma_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
 		break;
-	case XIO_STATE_CONNECTED:
+	case XIO_TRANSPORT_STATE_CONNECTED:
 		TRACE_LOG("call to rdma_disconnect. rdma_hndl:%p\n",
 			  rdma_hndl);
 
-		rdma_hndl->state = XIO_STATE_CLOSED;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
 		retval = xio_rdma_disconnect(rdma_hndl, 0);
 		if (retval)
 			DEBUG_LOG("handle:%p rdma_disconnect failed, " \
 				  "%d\n", rdma_hndl, retval);
 		break;
-	case XIO_STATE_DISCONNECTED:
-		rdma_hndl->state = XIO_STATE_CLOSED;
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
+		rdma_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
 		break;
-	case XIO_STATE_CLOSED:
+	case XIO_TRANSPORT_STATE_CLOSED:
 		/* do not kref_put - already done */
 		return;
 	default:
-		rdma_hndl->state = XIO_STATE_CLOSED;
+		rdma_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
 		break;
 	}
 	kref_put(&transport->kref, xio_rdma_close_cb);
@@ -2765,7 +2765,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 	if (src_port)
 		*src_port = sport;
 
-	rdma_hndl->state = XIO_STATE_LISTEN;
+	rdma_hndl->state = XIO_TRANSPORT_STATE_LISTEN;
 	DEBUG_LOG("listen on [%s] src_port:%d\n", portal_uri, sport);
 
 	return 0;
