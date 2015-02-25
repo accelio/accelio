@@ -463,6 +463,7 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 	switch (tcp_hndl->state) {
 	case XIO_TRANSPORT_STATE_INIT:
 		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n", tcp_hndl);
+		/*fallthrough*/
 	case XIO_TRANSPORT_STATE_LISTEN:
 	case XIO_TRANSPORT_STATE_CONNECTING:
 	case XIO_TRANSPORT_STATE_CONNECTED:
