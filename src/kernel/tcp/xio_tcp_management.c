@@ -91,6 +91,7 @@ static struct dentry *xio_tcp_root;
 struct xio_transport			xio_tcp_transport;
 struct xio_tcp_socket_ops		single_sock_ops;
 struct xio_tcp_socket_ops		dual_sock_ops;
+struct xio_options                     *g_poptions;
 
 /* tcp options */
 struct xio_tcp_options			tcp_options = {
@@ -1910,21 +1911,6 @@ static void xio_tcp_task_init(struct xio_task *task,
 
 /* task pools management */
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_calc_pool_size						     */
-/*---------------------------------------------------------------------------*/
-void xio_tcp_calc_pool_size(struct xio_tcp_transport *tcp_hndl)
-{
-	tcp_hndl->num_tasks = NUM_TASKS;
-
-	tcp_hndl->alloc_sz  = tcp_hndl->num_tasks * tcp_hndl->membuf_sz;
-
-	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
-		  tcp_hndl->alloc_sz,
-		  tcp_hndl->num_tasks,
-		  tcp_hndl->membuf_sz);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_tcp_initial_pool_slab_pre_create					     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_initial_pool_slab_pre_create(
@@ -2361,9 +2347,10 @@ static void xio_tcp_primary_pool_get_params(
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 			     tcp_options.max_in_iovsz) + 1;
 
-	*start_nr = tcp_hndl->num_tasks;
-	*alloc_nr = 0;
-	*max_nr = tcp_hndl->num_tasks;
+	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
+	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
+	*max_nr = max((g_poptions->snd_queue_depth_msgs +
+				g_poptions->rcv_queue_depth_msgs)*40, 1024);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
@@ -2704,6 +2691,7 @@ static int __init xio_init_module(void)
 	}
 
 	xio_tcp_transport_constructor();
+	g_poptions = xio_get_options();
 	return 0;
 }
 

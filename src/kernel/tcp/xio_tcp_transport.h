@@ -373,8 +373,6 @@ struct xio_tcp_transport {
 	uint16_t			sn;	   /* serial number */
 
 	/* control path params */
-	int				num_tasks;
-
 	uint32_t			peer_max_in_iovsz;
 	uint32_t			peer_max_out_iovsz;
 
@@ -453,8 +451,6 @@ int xio_tcp_rx_handler(struct xio_tcp_transport *tcp_hndl);
 int xio_tcp_poll(struct xio_transport_base *transport,
 		 long min_nr, long max_nr,
 		 struct timespec *ts_timeout);
-
-void xio_tcp_calc_pool_size(struct xio_tcp_transport *tcp_hndl);
 
 struct xio_task *xio_tcp_primary_task_lookup(
 					struct xio_tcp_transport *tcp_hndl,
