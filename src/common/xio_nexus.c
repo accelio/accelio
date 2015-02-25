@@ -1646,65 +1646,65 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 			(union xio_transport_event_data *)event_data;
 
 	switch (event) {
-	case XIO_TRANSPORT_NEW_MESSAGE:
+	case XIO_TRANSPORT_EVENT_NEW_MESSAGE:
 /*
 		TRACE_LOG("nexus: [notification] - new message. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 */
 		xio_nexus_on_new_message(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_SEND_COMPLETION:
+	case XIO_TRANSPORT_EVENT_SEND_COMPLETION:
 /*
 		TRACE_LOG("nexus: [notification] - send completion. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 */
 		xio_nexus_on_send_completion(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_ASSIGN_IN_BUF:
+	case XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF:
 /*
 		DEBUG_LOG("nexus: [notification] - assign in buffer. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 */
 		xio_nexus_on_assign_in_buf(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_MESSAGE_ERROR:
+	case XIO_TRANSPORT_EVENT_MESSAGE_ERROR:
 		DEBUG_LOG("nexus: [notification] - message error. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_message_error(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_CANCEL_REQUEST:
+	case XIO_TRANSPORT_EVENT_CANCEL_REQUEST:
 		DEBUG_LOG("nexus: [notification] - cancel request. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_cancel_request(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_CANCEL_RESPONSE:
+	case XIO_TRANSPORT_EVENT_CANCEL_RESPONSE:
 		DEBUG_LOG("nexus: [notification] - cancel respnose. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_cancel_response(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_NEW_CONNECTION:
+	case XIO_TRANSPORT_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("nexus: [notification] - new transport. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_new_transport(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_ESTABLISHED:
+	case XIO_TRANSPORT_EVENT_ESTABLISHED:
 		DEBUG_LOG("nexus: [notification] - transport established. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_established(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_DISCONNECTED:
+	case XIO_TRANSPORT_EVENT_DISCONNECTED:
 		DEBUG_LOG("nexus: [notification] - transport disconnected. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_disconnected(nexus, ev_data);
 		tx = 0;
 		break;
-	case XIO_TRANSPORT_CLOSED:
+	case XIO_TRANSPORT_EVENT_CLOSED:
 		DEBUG_LOG("nexus: [notification] - transport closed. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_closed(nexus, ev_data);
 		tx = 0;
 		return 0;
-	case XIO_TRANSPORT_REFUSED:
+	case XIO_TRANSPORT_EVENT_REFUSED:
 		DEBUG_LOG("nexus: [notification] - transport refused. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
@@ -1720,7 +1720,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 		}
 		tx = 0;
 		break;
-	case XIO_TRANSPORT_ERROR:
+	case XIO_TRANSPORT_EVENT_ERROR:
 		DEBUG_LOG("nexus: [notification] - transport error. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		if (nexus->state == XIO_NEXUS_STATE_RECONNECT)

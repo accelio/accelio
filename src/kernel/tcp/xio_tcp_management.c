@@ -212,8 +212,8 @@ static int xio_tcp_get_max_header_size(void)
 	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_tcp_rsp_hdr);
 	int iovsz = tcp_options.max_out_iovsz + tcp_options.max_in_iovsz;
 
-	req_hdr += iovsz*sizeof(struct xio_sge);
-	rsp_hdr += tcp_options.max_out_iovsz*sizeof(struct xio_sge);
+	req_hdr += iovsz * sizeof(struct xio_sge);
+	rsp_hdr += tcp_options.max_out_iovsz * sizeof(struct xio_sge);
 
 	return max(req_hdr, rsp_hdr);
 }
@@ -267,7 +267,7 @@ static void on_sock_close(struct xio_tcp_transport *tcp_hndl)
 	xio_tcp_flush_all_tasks(tcp_hndl);
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_CLOSED,
+				      XIO_TRANSPORT_EVENT_CLOSED,
 				      NULL);
 
 	tcp_hndl->state = XIO_STATE_DESTROYED;
@@ -338,7 +338,7 @@ void on_sock_disconnected(struct xio_tcp_transport *tcp_hndl,
 		if (passive_close) {
 			xio_transport_notify_observer(
 					&tcp_hndl->base,
-					XIO_TRANSPORT_DISCONNECTED,
+					XIO_TRANSPORT_EVENT_DISCONNECTED,
 					NULL);
 		}
 	}
@@ -445,7 +445,7 @@ static void xio_tcp_close_cb(struct kref *kref)
 	default:
 		xio_transport_notify_observer(
 				&tcp_hndl->base,
-				XIO_TRANSPORT_CLOSED,
+				XIO_TRANSPORT_EVENT_CLOSED,
 				NULL);
 		tcp_hndl->state = XIO_STATE_DESTROYED;
 		break;
@@ -597,7 +597,7 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 	xio_tcp_flush_all_tasks(tcp_hndl);
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_CLOSED,
+				      XIO_TRANSPORT_EVENT_CLOSED,
 				      NULL);
 
 	if (xio_tcp_post_close(tcp_hndl, 0))
@@ -814,7 +814,7 @@ static int xio_tcp_accept(struct xio_transport_base *transport)
 
 	xio_transport_notify_observer(
 			&tcp_hndl->base,
-			XIO_TRANSPORT_ESTABLISHED,
+			XIO_TRANSPORT_EVENT_ESTABLISHED,
 			NULL);
 
 	return 0;
@@ -1214,7 +1214,7 @@ single_sock:
 	ev_data.new_connection.child_trans_hndl =
 		(struct xio_transport_base *)child_hndl;
 	xio_transport_notify_observer((struct xio_transport_base *)parent_hndl,
-				      XIO_TRANSPORT_NEW_CONNECTION,
+				      XIO_TRANSPORT_EVENT_NEW_CONNECTION,
 				      &ev_data);
 
 	return;
@@ -1510,7 +1510,7 @@ void xio_tcp_conn_established_helper(struct xio_tcp_transport *tcp_hndl)
 	}
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_ESTABLISHED,
+				      XIO_TRANSPORT_EVENT_ESTABLISHED,
 				      NULL);
 
 	return;
@@ -1518,7 +1518,8 @@ void xio_tcp_conn_established_helper(struct xio_tcp_transport *tcp_hndl)
 cleanup:
 	if  (retval == -ECONNREFUSED)
 		xio_transport_notify_observer(&tcp_hndl->base,
-					      XIO_TRANSPORT_REFUSED, NULL);
+					      XIO_TRANSPORT_EVENT_REFUSED,
+					      NULL);
 	else
 		xio_transport_notify_observer_error(&tcp_hndl->base,
 						    XIO_E_CONNECT_ERROR);
@@ -1553,7 +1554,8 @@ void xio_tcp_single_conn_established_ev_handler(void *user_context)
 cleanup:
 	if  (retval == -ECONNREFUSED)
 		xio_transport_notify_observer(&tcp_hndl->base,
-					      XIO_TRANSPORT_REFUSED, NULL);
+					      XIO_TRANSPORT_EVENT_REFUSED,
+					      NULL);
 	else
 		xio_transport_notify_observer_error(&tcp_hndl->base,
 						    XIO_E_CONNECT_ERROR);
@@ -1914,7 +1916,7 @@ void xio_tcp_calc_pool_size(struct xio_tcp_transport *tcp_hndl)
 {
 	tcp_hndl->num_tasks = NUM_TASKS;
 
-	tcp_hndl->alloc_sz  = tcp_hndl->num_tasks*tcp_hndl->membuf_sz;
+	tcp_hndl->alloc_sz  = tcp_hndl->num_tasks * tcp_hndl->membuf_sz;
 
 	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
 		  tcp_hndl->alloc_sz,
@@ -2127,14 +2129,13 @@ static void xio_tcp_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	*start_nr = 10*NUM_CONN_SETUP_TASKS;
-	*alloc_nr = 10*NUM_CONN_SETUP_TASKS;
-	*max_nr = 100*NUM_CONN_SETUP_TASKS;
+	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
+	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
-	*task_dd_sz = sizeof(struct xio_tcp_task) +
-			      3*sizeof(struct iovec);
+	*task_dd_sz = sizeof(struct xio_tcp_task) + 3 * sizeof(struct iovec);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2309,23 +2310,23 @@ static int xio_tcp_primary_pool_slab_init_task(
 
 	/* fill xio_tcp_work_req */
 	tcp_task->txd.msg_iov = (void *)ptr;
-	ptr += (max_iovsz + 1)*sizeof(struct iovec);
+	ptr += (max_iovsz + 1) * sizeof(struct iovec);
 	tcp_task->rxd.msg_iov = (void *)ptr;
-	ptr += (max_iovsz + 1)*sizeof(struct iovec);
+	ptr += (max_iovsz + 1) * sizeof(struct iovec);
 
 	tcp_task->read_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mp_mem);
+	ptr += max_iovsz * sizeof(struct xio_mp_mem);
 	tcp_task->write_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_mp_mem);
+	ptr += max_iovsz * sizeof(struct xio_mp_mem);
 
 	tcp_task->req_read_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_sge);
+	ptr += max_iovsz * sizeof(struct xio_sge);
 	tcp_task->req_write_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_sge);
+	ptr += max_iovsz * sizeof(struct xio_sge);
 	tcp_task->req_recv_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_sge);
+	ptr += max_iovsz * sizeof(struct xio_sge);
 	tcp_task->rsp_write_sge = (void *)ptr;
-	ptr += max_iovsz*sizeof(struct xio_sge);
+	ptr += max_iovsz * sizeof(struct xio_sge);
 	/*****************************************/
 
 	buf = kmem_cache_zalloc(tcp_slab->data_pool, GFP_KERNEL);
@@ -2367,7 +2368,7 @@ static void xio_tcp_primary_pool_get_params(
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
-			(2 * (max_iovsz + 1))*sizeof(struct iovec) +
+			(2 * (max_iovsz + 1)) * sizeof(struct iovec) +
 			 2 * max_iovsz * sizeof(struct xio_mp_mem) +
 			 4 * max_iovsz * sizeof(struct xio_sge);
 }

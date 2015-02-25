@@ -50,18 +50,18 @@ struct xio_tasks_pool_ops;
 /* enums								     */
 /*---------------------------------------------------------------------------*/
 enum xio_transport_event {
-	XIO_TRANSPORT_NEW_CONNECTION,
-	XIO_TRANSPORT_ESTABLISHED,
-	XIO_TRANSPORT_DISCONNECTED,
-	XIO_TRANSPORT_CLOSED,
-	XIO_TRANSPORT_REFUSED,
-	XIO_TRANSPORT_NEW_MESSAGE,
-	XIO_TRANSPORT_SEND_COMPLETION,
-	XIO_TRANSPORT_ASSIGN_IN_BUF,
-	XIO_TRANSPORT_CANCEL_REQUEST,
-	XIO_TRANSPORT_CANCEL_RESPONSE,
-	XIO_TRANSPORT_MESSAGE_ERROR,
-	XIO_TRANSPORT_ERROR,
+	XIO_TRANSPORT_EVENT_NEW_CONNECTION,
+	XIO_TRANSPORT_EVENT_ESTABLISHED,
+	XIO_TRANSPORT_EVENT_DISCONNECTED,
+	XIO_TRANSPORT_EVENT_CLOSED,
+	XIO_TRANSPORT_EVENT_REFUSED,
+	XIO_TRANSPORT_EVENT_NEW_MESSAGE,
+	XIO_TRANSPORT_EVENT_SEND_COMPLETION,
+	XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF,
+	XIO_TRANSPORT_EVENT_CANCEL_REQUEST,
+	XIO_TRANSPORT_EVENT_CANCEL_RESPONSE,
+	XIO_TRANSPORT_EVENT_MESSAGE_ERROR,
+	XIO_TRANSPORT_EVENT_ERROR,
 };
 
 enum xio_transport_opt {
@@ -315,7 +315,7 @@ static inline void xio_transport_notify_observer_error(
 	ev_data.error.reason = (enum xio_status)reason;
 
 	xio_observable_notify_all_observers(&trans_hndl->observable,
-					    XIO_TRANSPORT_ERROR,
+					    XIO_TRANSPORT_EVENT_ERROR,
 					    &ev_data);
 }
 
@@ -333,7 +333,7 @@ static inline void xio_transport_notify_message_error(
 	ev_data.msg_error.reason	= reason;
 
 	xio_observable_notify_all_observers(&trans_hndl->observable,
-					    XIO_TRANSPORT_MESSAGE_ERROR,
+					    XIO_TRANSPORT_EVENT_MESSAGE_ERROR,
 					    &ev_data);
 }
 

@@ -137,7 +137,7 @@ int xio_transport_assign_in_buf(struct xio_transport_base *trans_hndl,
 	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(trans_hndl,
-				      XIO_TRANSPORT_ASSIGN_IN_BUF,
+				      XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF,
 				      &event_data);
 
 	*is_assigned = event_data.assign_in_buf.is_assigned;
