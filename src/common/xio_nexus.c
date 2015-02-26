@@ -87,6 +87,7 @@ static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
 static void xio_nexus_destroy_handler(void *nexus_);
+static void xio_nexus_disconnect_handler(void *nexus_);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_server_reconnect		                                     */
@@ -1334,6 +1335,10 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	nexus->destroy_event.handler		= xio_nexus_destroy_handler;
 	nexus->destroy_event.data		= nexus;
 
+	nexus->disconnect_event.handler		= xio_nexus_disconnect_handler;
+	nexus->disconnect_event.data		= nexus;
+
+
 	TRACE_LOG("nexus: [new] ptr:%p, transport_hndl:%p\n", nexus,
 		  nexus->transport_hndl);
 
@@ -1451,17 +1456,12 @@ static void xio_nexus_destroy_handler(void *nexus_)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_on_transport_disconnected				             */
+/* xio_nexus_disconnect_handler						     */
 /*---------------------------------------------------------------------------*/
-static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
-						union xio_transport_event_data
-						*event_data)
+static void xio_nexus_disconnect_handler(void *nexus_)
 {
+	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
 	int ret;
-
-	/* cancel old timers */
-	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-				 &nexus->close_time_hndl);
 
 	/* Try to reconnect */
 	if (g_options.reconnect) {
@@ -1487,11 +1487,26 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 		xio_observable_notify_all_observers(
 				&nexus->observable,
 				XIO_NEXUS_EVENT_DISCONNECTED,
-				&event_data);
+				NULL);
 	} else {
 		xio_context_add_event(nexus->transport_hndl->ctx,
 				      &nexus->destroy_event);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_on_transport_disconnected				             */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
+						union xio_transport_event_data
+						*event_data)
+{
+	/* cancel old timers */
+	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+				 &nexus->close_time_hndl);
+
+	xio_context_add_event(nexus->transport_hndl->ctx,
+			      &nexus->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1745,6 +1760,7 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
 	xio_context_disable_event(&nexus->destroy_event);
+	xio_context_disable_event(&nexus->disconnect_event);
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,
 					  &nexus->srv_observer);
@@ -1930,6 +1946,9 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	}
 	nexus->destroy_event.handler	= xio_nexus_destroy_handler;
 	nexus->destroy_event.data	= nexus;
+
+	nexus->disconnect_event.handler	= xio_nexus_disconnect_handler;
+	nexus->disconnect_event.data	= nexus;
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 
