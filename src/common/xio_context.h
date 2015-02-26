@@ -94,8 +94,13 @@ struct xio_context {
 	int				polling_timeout;
 	unsigned int			flags;
 	uint64_t			worker;
-	int				run_private;
-	int				pad;
+
+	int32_t				run_private;
+
+	uint32_t			is_running:1;
+	uint32_t			defered_destroy:1;
+	uint32_t			resereved:30;
+
 	struct xio_statistics		stats;
 	void				*user_context;
 	struct xio_workqueue		*workqueue;

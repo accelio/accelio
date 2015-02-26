@@ -198,8 +198,14 @@ void xio_context_destroy(struct xio_context *ctx)
 	int i;
 	int found;
 
-	if (!ctx)
+	if (unlikely(!ctx))
 		return;
+
+	if (unlikely(ctx->is_running && !ctx->defered_destroy)) {
+		ctx->defered_destroy = 1;
+		xio_ev_loop_stop(ctx->ev_loop);
+		return;
+	}
 
 	found = xio_idr_lookup_uobj(usr_idr, ctx);
 	if (found) {
@@ -438,10 +444,17 @@ int xio_context_del_ev_handler(struct xio_context *ctx,
 /*---------------------------------------------------------------------------*/
 int xio_context_run_loop(struct xio_context *ctx, int timeout_ms)
 {
-	if (timeout_ms == -1)
-		return	xio_ev_loop_run(ctx->ev_loop);
-	else
-		return	xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
+	int retval = 0;
+
+	ctx->is_running = 1;
+	retval = (timeout_ms == -1) ? xio_ev_loop_run(ctx->ev_loop) :
+		  xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
+	ctx->is_running = 0;
+
+	if (unlikely(ctx->defered_destroy))
+		xio_context_destroy(ctx);
+
+	return retval;
 }
 EXPORT_SYMBOL(xio_context_run_loop);
 
