@@ -175,6 +175,7 @@ static void xio_task_reset(struct xio_task *task)
 	xio_mbuf_reset(&task->mbuf);
 	*/
 
+	task->sender_task		= NULL;
 	task->tlv_type			= 0xdead;
 }
 
@@ -199,11 +200,12 @@ static inline void xio_task_release(struct kref *kref)
 
 	pool = (struct xio_tasks_pool *)task->pool;
 
-	xio_task_reset(task);
-
 	if (pool->params.pool_hooks.task_pre_put)
 		pool->params.pool_hooks.task_pre_put(
 				pool->params.pool_hooks.context, task);
+
+	xio_task_reset(task);
+
 	pool->curr_used--;
 
 	list_move(&task->tasks_list_entry, &pool->stack);
