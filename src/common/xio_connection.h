@@ -119,6 +119,8 @@ struct xio_connection {
 	uint32_t			nexus_attr_mask;
 	struct xio_nexus_init_attr	nexus_attr;
 
+	xio_work_handle_t		teardown_work;
+
 #ifdef XIO_SESSION_DEBUG
 	uint64_t			peer_connection;
 	uint64_t			peer_session;

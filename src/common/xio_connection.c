@@ -121,6 +121,7 @@ static struct xio_transition xio_transition_table[][2] = {
 };
 
 static void xio_connection_post_destroy(struct kref *kref);
+static void xio_connection_teardown_handler(void *connection_);
 
 struct xio_managed_rkey {
 	struct list_head	list_entry;
@@ -208,9 +209,9 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		connection->req_ack_sn	= ~0;
 		connection->rsp_ack_sn	= ~0;
 		connection->rx_queue_watermark_msgs =
-					session->rcv_queue_depth_msgs/2;
+					session->rcv_queue_depth_msgs / 2;
 		connection->rx_queue_watermark_bytes =
-					session->rcv_queue_depth_bytes/2;
+					session->rcv_queue_depth_bytes / 2;
 		connection->enable_flow_control = g_options.enable_flow_control;
 
 		connection->conn_idx	= conn_idx;
@@ -1540,9 +1541,12 @@ static void xio_fin_req_timeout(void *data)
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
-		xio_session_notify_connection_teardown(connection->session,
-						       connection);
-	else
+		xio_ctx_add_work(
+				connection->ctx,
+				connection,
+				xio_connection_teardown_handler,
+				&connection->teardown_work);
+	 else
 		xio_connection_destroy(connection);
 exit:
 	kref_put(&connection->kref, xio_connection_post_destroy);
@@ -2133,6 +2137,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 	 **/
 	xio_ctx_del_work(connection->ctx, &connection->hello_work);
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
+	xio_ctx_del_work(connection->ctx, &connection->teardown_work);
 
 	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->fin_delayed_work);
@@ -2144,6 +2149,18 @@ int xio_connection_destroy(struct xio_connection *connection)
 	return retval;
 }
 EXPORT_SYMBOL(xio_connection_destroy);
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_teardown_handler					     */
+/*---------------------------------------------------------------------------*/
+static void xio_connection_teardown_handler(void *connection_)
+{
+	struct xio_connection *connection =
+					(struct xio_connection *)connection_;
+
+	xio_session_notify_connection_teardown(connection->session,
+					       connection);
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_connection_disconnected						     */
@@ -2200,8 +2217,11 @@ int xio_connection_disconnected(struct xio_connection *connection)
 	}
 
 	if (!connection->disable_notify)
-		xio_session_notify_connection_teardown(connection->session,
-						       connection);
+		xio_ctx_add_work(
+				connection->ctx,
+				connection,
+				xio_connection_teardown_handler,
+				&connection->teardown_work);
 
 	return 0;
 }
@@ -2225,8 +2245,11 @@ int xio_connection_refused(struct xio_connection *connection)
 
 	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
 
-	xio_session_notify_connection_teardown(connection->session,
-					       connection);
+	xio_ctx_add_work(
+			connection->ctx,
+			connection,
+			xio_connection_teardown_handler,
+			&connection->teardown_work);
 
 	return 0;
 }
@@ -2249,8 +2272,12 @@ int xio_connection_error_event(struct xio_connection *connection,
 	xio_connection_notify_msgs_flush(connection);
 
 	connection->state	 = XIO_CONNECTION_STATE_ERROR;
-	xio_session_notify_connection_teardown(connection->session,
-					       connection);
+
+	xio_ctx_add_work(
+			connection->ctx,
+			connection,
+			xio_connection_teardown_handler,
+			&connection->teardown_work);
 
 	return 0;
 }
@@ -2295,8 +2322,11 @@ static void xio_close_time_wait(void *data)
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
-		xio_session_notify_connection_teardown(connection->session,
-						       connection);
+		xio_ctx_add_work(
+				connection->ctx,
+				connection,
+				xio_connection_teardown_handler,
+				&connection->teardown_work);
 	else
 		xio_connection_destroy(connection);
 
@@ -2326,9 +2356,11 @@ static void xio_handle_last_ack(void *data)
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
-		xio_session_notify_connection_teardown(
-				connection->session,
-				connection);
+		xio_ctx_add_work(
+				connection->ctx,
+				connection,
+				xio_connection_teardown_handler,
+				&connection->teardown_work);
 	else
 		xio_connection_destroy(connection);
 
