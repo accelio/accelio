@@ -133,10 +133,6 @@ struct xio_vmsg {
  * peer.
  */
 struct xio_msg {
-	struct xio_vmsg		in;		/**< incoming side of message */
-	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
-	struct xio_vmsg			out;	/**< outgoing side of message */
-
 	union {
 		uint64_t		sn;	/**< unique message serial    */
 						/**< number returned by the   */
@@ -145,9 +141,12 @@ struct xio_msg {
 		struct xio_msg		*request;  /**< responder - attached  */
 						   /**< the request           */
 	};
+	struct xio_vmsg		in;		/**< incoming side of message */
+	struct xio_vmsg		out;		/**< outgoing side of message */
+	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
+
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
-
 	enum xio_msg_type	type;		/**< message type	      */
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 	uint64_t		flags;		/**< message flags mask       */

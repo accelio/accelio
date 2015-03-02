@@ -118,9 +118,6 @@ struct xio_vmsg {
  * peer.
  */
 struct xio_msg {
-	struct xio_vmsg		in;		/**< incoming side of message */
-	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
-	struct xio_vmsg		out;
 	union {
 		uint64_t		sn;	/* unique message serial number
 						 * returned by the library
@@ -129,6 +126,9 @@ struct xio_msg {
 						    * request
 						    */
 	};
+	struct xio_vmsg		in;		/**< incoming side of message */
+	struct xio_vmsg		out;
+	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
 	void			*user_context;	/* for user usage - not sent */
 
 	enum xio_msg_type	type;
