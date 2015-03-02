@@ -171,6 +171,7 @@ struct xio_nexus {
 	struct xio_transport_init_attr	trans_attr;
 	struct xio_ev_data		destroy_event;
 	struct xio_ev_data		disconnect_event;
+	struct xio_ev_data		trans_error_event;
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };

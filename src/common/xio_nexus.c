@@ -68,6 +68,11 @@ struct xio_observers_htbl_node {
 
 };
 
+struct xio_event_params {
+	struct xio_nexus			*nexus;
+	union xio_transport_event_data		event_data;
+};
+
 static int xio_msecs[] = {60000, 30000, 15000, 0};
 
 #define XIO_SERVER_GRACE_PERIOD 1000
@@ -88,6 +93,7 @@ static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
 static void xio_nexus_destroy_handler(void *nexus_);
 static void xio_nexus_disconnect_handler(void *nexus_);
+static void xio_nexus_trans_error_handler(void *ev_params_);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_server_reconnect		                                     */
@@ -1338,6 +1344,8 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	nexus->disconnect_event.handler		= xio_nexus_disconnect_handler;
 	nexus->disconnect_event.data		= nexus;
 
+	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
+	nexus->trans_error_event.data		= NULL;
 
 	TRACE_LOG("nexus: [new] ptr:%p, transport_hndl:%p\n", nexus,
 		  nexus->transport_hndl);
@@ -1492,6 +1500,27 @@ static void xio_nexus_disconnect_handler(void *nexus_)
 		xio_context_add_event(nexus->transport_hndl->ctx,
 				      &nexus->destroy_event);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_trans_error_handler					     */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_trans_error_handler(void *ev_params_)
+{
+	struct xio_event_params *ev_params =
+				(struct xio_event_params *)ev_params_;
+
+	ev_params->nexus->trans_error_event.data = NULL;
+
+	xio_context_disable_event(&ev_params->nexus->trans_error_event);
+
+	if (ev_params->nexus->state == XIO_NEXUS_STATE_RECONNECT)
+		xio_nexus_client_reconnect_failed(ev_params->nexus);
+	else
+		xio_nexus_on_transport_error(ev_params->nexus,
+					     &ev_params->event_data);
+
+	kfree(ev_params);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1656,6 +1685,7 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 					int event, void *event_data)
 {
 	struct xio_nexus		*nexus = (struct xio_nexus *)observer;
+	struct xio_event_params		*ev_params;
 	int				 tx = 1;
 	union xio_transport_event_data *ev_data =
 			(union xio_transport_event_data *)event_data;
@@ -1738,10 +1768,22 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 	case XIO_TRANSPORT_EVENT_ERROR:
 		DEBUG_LOG("nexus: [notification] - transport error. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
-		if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
-			xio_nexus_client_reconnect_failed(nexus);
-		else
-			xio_nexus_on_transport_error(nexus, ev_data);
+		/* event still pending */
+		if (nexus->trans_error_event.data)
+			return 0;
+		ev_params = (struct xio_event_params *)
+				kmalloc(sizeof(*ev_params), GFP_KERNEL);
+		if (!ev_params) {
+			ERROR_LOG("failed to allocate memory\n");
+			return -1;
+		}
+		ev_params->nexus = nexus;
+		memcpy(&ev_params->event_data, ev_data, sizeof(*ev_data));
+		nexus->trans_error_event.data = ev_params;
+
+		xio_context_add_event(nexus->transport_hndl->ctx,
+				      &nexus->trans_error_event);
+
 		tx = 0;
 		break;
 	};
@@ -1761,6 +1803,12 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 
 	xio_context_disable_event(&nexus->destroy_event);
 	xio_context_disable_event(&nexus->disconnect_event);
+	xio_context_disable_event(&nexus->trans_error_event);
+
+	if (nexus->trans_error_event.data) {
+		kfree(nexus->trans_error_event.data);
+		nexus->trans_error_event.data = NULL;
+	}
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,
 					  &nexus->srv_observer);
@@ -1949,6 +1997,9 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 
 	nexus->disconnect_event.handler	= xio_nexus_disconnect_handler;
 	nexus->disconnect_event.data	= nexus;
+
+	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
+	nexus->trans_error_event.data		= NULL;
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 

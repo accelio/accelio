@@ -997,8 +997,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 		       union xio_nexus_event_data *event_data)
 {
-	struct xio_connection *connection =
-				xio_session_find_connection(session, nexus);
+	struct xio_connection *connection, *next_connection;
 
 	/* disable the teardown */
 	session->disable_teardown = 0;
@@ -1009,16 +1008,17 @@ int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 	case XIO_SESSION_STATE_CONNECT:
 	case XIO_SESSION_STATE_REDIRECTED:
 		session->state = XIO_SESSION_STATE_REFUSED;
-		while (!list_empty(&session->connections_list)) {
-			connection = list_first_entry(
-					&session->connections_list,
-					struct xio_connection,
-					connections_list_entry);
+		list_for_each_entry_safe(
+				connection, next_connection,
+				&session->connections_list,
+				connections_list_entry) {
 			xio_connection_error_event(connection,
 						   event_data->error.reason);
 		}
+
 		break;
 	default:
+		connection = xio_session_find_connection(session, nexus);
 		xio_connection_error_event(connection,
 					   event_data->error.reason);
 		break;
