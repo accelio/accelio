@@ -1227,8 +1227,8 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	    data_len + hdr_len + xio_hdr_len < tcp_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		tcp_task->read_num_sge = 0;
-		if (data_len)
-			tcp_task->recv_num_sge = tbl_nents(sgtbl_ops, sgtbl);
+		tcp_task->recv_num_sge = (data_len) ?
+			tbl_nents(sgtbl_ops, sgtbl) : 0;
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
 		/* user provided mr */

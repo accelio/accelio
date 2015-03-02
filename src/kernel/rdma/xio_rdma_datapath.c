@@ -3026,8 +3026,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->read_num_sge = 0;
-		if (data_len)
-			rdma_task->recv_num_sge = nents;
+		rdma_task->recv_num_sge = (data_len) ? nents : 0;
 	} else  {
 		/* user must provided buffers with length for RDMA WRITE */
 		if (xio_vmsg_to_sgt(vmsg, &rdma_task->read_sge.sgt,
