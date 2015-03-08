@@ -17,7 +17,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
-xiomodule := rdma.ko
+xiomodule := xio_rdma.ko
 
 all: all-@ENABLE_XIO_MODULE@
 install: install-@ENABLE_XIO_MODULE@
@@ -54,8 +54,8 @@ distdir: $(DISTFILES)
 
 ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
 
-obj-m := rdma.o
-rdma-objs := \
+obj-m := xio_rdma.o
+xio_rdma-objs := \
 	xio_rdma_datapath.o \
 	xio_rdma_management.o \
 	xio_rdma_memory.o \

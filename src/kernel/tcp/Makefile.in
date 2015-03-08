@@ -16,7 +16,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
-xiomodule := tcp.ko
+xiomodule := xio_tcp.ko
 
 all: all-@ENABLE_XIO_MODULE@
 install: install-@ENABLE_XIO_MODULE@
@@ -53,8 +53,8 @@ distdir: $(DISTFILES)
 
 ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
 
-obj-m := tcp.o
-tcp-objs := \
+obj-m := xio_tcp.o
+xio_tcp-objs := \
 	xio_tcp_datapath.o \
 	xio_tcp_management.o
 
