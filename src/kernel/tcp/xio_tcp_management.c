@@ -2342,8 +2342,6 @@ static void xio_tcp_primary_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport_hndl;
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 			     tcp_options.max_in_iovsz) + 1;
 
