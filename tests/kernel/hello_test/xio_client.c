@@ -74,7 +74,7 @@
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
 #define ONE_MB			(1 << 20)
 
-#define SG_TBL_LEN		64
+#define SG_TBL_LEN		256
 
 MODULE_AUTHOR("Eyal Solomon, Or Kehati, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO hello client " \

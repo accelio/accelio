@@ -70,7 +70,7 @@
 #define PEER_MAX_IN_IOVLEN	4
 #define PEER_MAX_OUT_IOVLEN	4
 
-#define SG_TBL_LEN		64
+#define SG_TBL_LEN		256
 
 
 MODULE_AUTHOR("Eyal Solomon, Or Kehati, Shlomo Pongratz");
