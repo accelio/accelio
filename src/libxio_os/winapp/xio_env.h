@@ -741,6 +741,15 @@ static inline int  xio_netlink(struct xio_context *ctx)
 	return 0;
 }
 
+/*
+ *  Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two.
+ */
+
+static inline const bool is_power_of_2(unsigned long n)
+{
+	return (n != 0 && ((n & (n - 1)) == 0));
+}
 
 #ifdef __cplusplus
 }

@@ -280,7 +280,7 @@ try_create:
 	if (ret < 0)
 		goto exit;
 
-	fd = open(XIO_HZ_FILE, O_CREAT|O_TRUNC|O_WRONLY|O_SYNC, 0644);
+	fd = open(XIO_HZ_FILE, O_CREAT | O_TRUNC | O_WRONLY | O_SYNC, 0644);
 	if (fd < 0)
 		goto exit;
 
@@ -491,6 +491,17 @@ static inline int xio_timerfd_settime(int fd, int flags,
 				      struct itimerspec *old_value)
 {
 	return timerfd_settime(fd, flags, new_value, old_value);
+}
+
+/*
+ *  Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two.
+ */
+
+static inline __attribute__((const))
+bool is_power_of_2(unsigned long n)
+{
+	return (n != 0 && ((n & (n - 1)) == 0));
 }
 
 #ifdef __cplusplus

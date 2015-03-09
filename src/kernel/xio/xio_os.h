@@ -56,6 +56,7 @@
 #include <linux/atomic.h>
 #endif
 #include <linux/debugfs.h>
+#include <linux/log2.h>
 
 #include <xio_env.h>
 
