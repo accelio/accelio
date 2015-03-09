@@ -167,7 +167,7 @@ struct xio_msg {
 		 (vmsg)->pdata_iov.sglist : NULL))
 
 #define vmsg_sglist_nents(vmsg)					\
-		 ((vmsg)->data_tbl.nents)
+		 (vmsg)->data_tbl.nents
 
 #define vmsg_sglist_set_nents(vmsg, n)				\
 		 (vmsg)->data_tbl.nents = (n)
