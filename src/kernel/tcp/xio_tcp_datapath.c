@@ -607,9 +607,10 @@ static int xio_tcp_prep_req_out_data(
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_vmsg		*vmsg = &task->omsg->out;
 	uint64_t		xio_hdr_len;
-	uint64_t		ulp_out_hdr_len;
+	uint64_t		xio_max_hdr_len;
+	uint64_t		ulp_hdr_len;
 	uint64_t		ulp_pad_len = 0;
-	uint64_t		ulp_out_imm_len;
+	uint64_t		ulp_imm_len;
 	size_t			retval;
 	unsigned int		i;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -623,25 +624,25 @@ static int xio_tcp_prep_req_out_data(
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
 	/* calculate headers */
-	ulp_out_hdr_len	= vmsg->header.iov_len;
-	ulp_out_imm_len	= tbl_length(sgtbl_ops, sgtbl);
+	ulp_hdr_len	= vmsg->header.iov_len;
+	ulp_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_tcp_req_hdr);
 	xio_hdr_len += sizeof(struct xio_sge) * (tcp_task->recv_num_sge +
-						 tcp_task->read_num_sge +
-						 nents);
+						 tcp_task->read_num_sge);
+	xio_max_hdr_len = xio_hdr_len + sizeof(struct xio_sge) * nents;
 
 	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
 		tx_by_sr = 0;
 	else
 		/* test for using send/receive or rdma_read */
-		tx_by_sr = (((ulp_out_hdr_len + ulp_out_imm_len +
-			      xio_hdr_len) <=
+		tx_by_sr = (((ulp_hdr_len + ulp_imm_len +
+			      ulp_pad_len + xio_max_hdr_len) <=
 			     tcp_hndl->max_inline_buf_sz) &&
-			     (((int)(ulp_out_imm_len) <=
+			     (((int)(ulp_imm_len) <=
 			       xio_get_options()->max_inline_data) ||
-			      ulp_out_imm_len == 0));
+			      ulp_imm_len == 0));
 
 	/* the data is outgoing via SEND */
 	if (tx_by_sr) {
@@ -652,13 +653,13 @@ static int xio_tcp_prep_req_out_data(
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_req_header(
 				tcp_hndl, task,
-				ulp_out_hdr_len, ulp_pad_len, ulp_out_imm_len,
+				ulp_hdr_len, ulp_pad_len, ulp_imm_len,
 				XIO_E_SUCCESS);
 		if (retval)
 			return -1;
 
 		/* if there is data, set it to buffer or directly to the sge */
-		if (ulp_out_imm_len) {
+		if (ulp_imm_len) {
 			retval = xio_tcp_write_send_data(tcp_hndl, task);
 			if (retval)
 				return -1;
@@ -678,7 +679,7 @@ static int xio_tcp_prep_req_out_data(
 
 		tcp_task->write_num_sge = tbl_nents(sgtbl_ops, sgtbl);
 
-		if (ulp_out_imm_len) {
+		if (ulp_imm_len) {
 			tcp_task->txd.tot_iov_byte_len = 0;
 			for (i = 0; i < tcp_task->write_num_sge; i++)  {
 				tcp_task->txd.msg_iov[i + 1].iov_base =
@@ -697,7 +698,7 @@ static int xio_tcp_prep_req_out_data(
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_req_header(
 				tcp_hndl, task,
-				ulp_out_hdr_len, 0, 0, XIO_E_SUCCESS);
+				xio_max_hdr_len, 0, 0, XIO_E_SUCCESS);
 
 		if (retval) {
 			ERROR_LOG("Failed to write header\n");
@@ -1506,6 +1507,14 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			tcp_task->req_read_num_sge) * sizeof(struct xio_sge);
 	enforce_write_rsp = task->imsg_flags & XIO_HEADER_FLAG_PEER_WRITE_RSP;
 
+	if (g_options.inline_data_align && ulp_imm_len) {
+		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
+
+		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+			      hdr_len;
+	}
+
+	/*
 	if (tcp_hndl->max_inline_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %llu exceeds max header %llu\n",
 			  ulp_hdr_len,
@@ -1513,12 +1522,14 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
+	*/
 
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
 	 */
 	if ((ulp_imm_len == 0) || (!enforce_write_rsp &&
-				   ((xio_hdr_len + ulp_hdr_len + ulp_imm_len)
+				   ((xio_hdr_len + ulp_hdr_len +
+				     ulp_pad_len + ulp_imm_len)
 				    < tcp_hndl->max_inline_buf_sz))) {
 		tcp_task->tcp_op = XIO_TCP_SEND;
 		/* write xio header to the buffer */

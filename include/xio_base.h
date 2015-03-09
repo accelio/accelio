@@ -1076,6 +1076,11 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_INLINE_DATA,      /**< set/get maximum inline data    */
 					  /**< size			      */
 
+	XIO_OPTNAME_XFER_BUF_ALIGN,     /**< set/get alignment of data buffer */
+					/**< address			      */
+	XIO_OPTNAME_INLINE_DATA_ALIGN,  /**< set/get alignment of inline data */
+					/**< buffer address		      */
+
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
 					  /**< transport memory pool	      */

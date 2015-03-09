@@ -82,6 +82,8 @@ extern double				g_mhz;
 		struct xio_tcp_transport *(th) =		\
 			(struct xio_tcp_transport *)(xt)->context
 
+#define PAGE_SIZE                       page_size
+
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/

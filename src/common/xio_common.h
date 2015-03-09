@@ -89,12 +89,12 @@ enum xio_msg_flags_ex {
 };
 
 #define xio_clear_ex_flags(flag) \
-	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
-			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
+	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST | \
+			XIO_MSG_FLAG_EX_RECEIPT_LAST  | \
 			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))
 
 #define xio_app_receipt_request(rq) \
-	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
+	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST | \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST))
 
 #define xio_app_receipt_first_request(rq) \
@@ -192,6 +192,8 @@ struct xio_options {
 	int			rcv_queue_depth_msgs;
 	uint64_t		snd_queue_depth_bytes;
 	uint64_t		rcv_queue_depth_bytes;
+	int			xfer_buf_align;
+	int			inline_data_align;
 };
 
 /*---------------------------------------------------------------------------*/

@@ -50,10 +50,12 @@
 #define XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL		0
 #define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS		1024
 #define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS		1024
-#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64*1024*1024)
-#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64*1024*1024)
+#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
+#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
 #define XIO_OPTVAL_DEF_MAX_INLINE_HEADER		256
-#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8*1024)
+#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8 * 1024)
+#define XIO_OPTVAL_DEF_XFER_BUF_ALIGN			(64)
+#define XIO_OPTVAL_DEF_INLINE_DATA_ALIGN		(0)
 
 /* xio options */
 struct xio_options			g_options = {
@@ -67,6 +69,8 @@ struct xio_options			g_options = {
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,	/*rcv_queue_depth_msgs*/
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,	/*snd_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,	/*rcv_queue_depth_bytes*/
+	XIO_OPTVAL_DEF_XFER_BUF_ALIGN,		/* xfer_buf_align */
+	XIO_OPTVAL_DEF_INLINE_DATA_ALIGN	/* inline_data_align */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -84,6 +88,8 @@ EXPORT_SYMBOL(xio_get_options);
 static int xio_general_set_opt(void *xio_obj, int optname,
 			       const void *optval, int optlen)
 {
+	int tmp;
+
 	switch (optname) {
 	case XIO_OPTNAME_LOG_FN:
 		if (optlen == 0 && !optval)
@@ -222,6 +228,30 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			break;
 		g_options.max_inline_data = *((int *)optval);
 		return 0;
+	case XIO_OPTNAME_XFER_BUF_ALIGN:
+		if (optlen != sizeof(int))
+			break;
+		tmp = *(int *)optval;
+		if (!is_power_of_2(tmp) || !(tmp % sizeof(void *) == 0)) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		g_options.xfer_buf_align = tmp;
+		return 0;
+	case XIO_OPTNAME_INLINE_DATA_ALIGN:
+		if (optlen != sizeof(int))
+			break;
+		tmp = *(int *)optval;
+		if (!tmp) {
+			g_options.inline_data_align = tmp;
+			return 0;
+		}
+		if (!is_power_of_2(tmp) || !(tmp % sizeof(void *) == 0)) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		g_options.inline_data_align = tmp;
+		return 0;
 	default:
 		break;
 	}
@@ -280,6 +310,14 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 	case XIO_OPTNAME_MAX_INLINE_DATA:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.max_inline_data;
+		 return 0;
+	case XIO_OPTNAME_INLINE_DATA_ALIGN:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.inline_data_align;
+		 return 0;
+	case XIO_OPTNAME_XFER_BUF_ALIGN:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.xfer_buf_align;
 		 return 0;
 	default:
 		break;

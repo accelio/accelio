@@ -462,7 +462,8 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	switch (tcp_hndl->state) {
 	case XIO_TRANSPORT_STATE_INIT:
-		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n", tcp_hndl);
+		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
+			  tcp_hndl);
 		/*fallthrough*/
 	case XIO_TRANSPORT_STATE_LISTEN:
 	case XIO_TRANSPORT_STATE_CONNECTING:
@@ -2006,7 +2007,8 @@ static int xio_tcp_initial_pool_slab_init_task(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
-	void *buf = sum_to_ptr(tcp_slab->data_pool, tid * tcp_slab->buf_size);
+	void *buf = sum_to_ptr(tcp_slab->data_pool,
+			       tid * ALIGN(tcp_slab->buf_size, PAGE_SIZE));
 	char *ptr;
 
 	XIO_TO_TCP_TASK(task, tcp_task);
@@ -2127,7 +2129,7 @@ static int xio_tcp_primary_pool_slab_pre_create(
 		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
-	size_t	alloc_sz = alloc_nr * tcp_hndl->membuf_sz;
+	size_t	alloc_sz = alloc_nr * ALIGN(tcp_hndl->membuf_sz, PAGE_SIZE);
 	int	retval;
 
 	tcp_slab->buf_size = tcp_hndl->membuf_sz;

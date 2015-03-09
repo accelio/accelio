@@ -54,7 +54,6 @@
 extern "C" {
 #endif
 
-
 /**
  * @struct xio_reg_mem
  * @brief registered memory buffer descriptor
@@ -151,6 +150,8 @@ struct xio_msg {
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 	uint64_t		flags;		/**< message flags mask       */
 	uint64_t		timestamp;	/**< submission timestamp     */
+	uint64_t		hints;		/**< hints flags from library */
+						/**< to application	      */
 
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /**< send list of messages    */
@@ -166,7 +167,7 @@ struct xio_msg {
 		 (vmsg)->pdata_iov.sglist : NULL))
 
 #define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
+		 ((vmsg)->data_tbl.nents)
 
 #define vmsg_sglist_set_nents(vmsg, n)				\
 		 (vmsg)->data_tbl.nents = (n)
@@ -175,6 +176,7 @@ static inline void vmsg_sglist_set_by_reg_mem(struct xio_vmsg *vmsg,
 					      const struct xio_reg_mem *reg_mem)
 {
 	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
 	vmsg_sglist_set_nents(vmsg, 1);
 	sgl[0].iov_base = reg_mem->addr;
 	sgl[0].iov_len = reg_mem->length;
@@ -190,6 +192,7 @@ static inline void *vmsg_sglist_one_base(const struct xio_vmsg *vmsg)
 static inline size_t vmsg_sglist_one_len(const struct xio_vmsg *vmsg)
 {
 	const struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
 	return sgl[0].iov_len;
 }
 
@@ -197,12 +200,14 @@ static inline void vmsg_sglist_set_user_context(struct xio_vmsg *vmsg,
 						void *user_context)
 {
 	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
 	sgl[0].user_context = user_context;
 }
 
 static inline void *vmsg_sglist_get_user_context(struct xio_vmsg *vmsg)
 {
 	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
 	return sgl[0].user_context;
 }
 
@@ -258,13 +263,13 @@ int xio_context_get_poll_fd(struct xio_context *ctx);
  * @brief accelio's event dispatcher event types
  */
 enum xio_ev_loop_events {
-	XIO_POLLIN			= (1<<0),
-	XIO_POLLOUT			= (1<<1),
-	XIO_POLLET			= (1<<2),  /**< edge-triggered poll */
-	XIO_ONESHOT			= (1<<3),
-	XIO_POLLRDHUP			= (1<<4),
-	XIO_POLLHUP                     = (1<<5),
-	XIO_POLLERR                     = (1<<6),
+	XIO_POLLIN			= (1 << 0),
+	XIO_POLLOUT			= (1 << 1),
+	XIO_POLLET			= (1 << 2),  /**< edge-triggered poll */
+	XIO_ONESHOT			= (1 << 3),
+	XIO_POLLRDHUP			= (1 << 4),
+	XIO_POLLHUP                     = (1 << 5),
+	XIO_POLLERR                     = (1 << 6),
 };
 
 /**
@@ -473,7 +478,6 @@ enum xio_mempool_flag {
 	XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB	= 0x0016
 };
 
-
 /**
  * create mempool with NO (!) slabs
  *
@@ -493,13 +497,17 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  * @param[in] min	  initial buffers to allocate
  * @param[in] max	  maximum buffers to allocate
  * @param[in] alloc_quantum_nr	growing quantum
+ * @param[in] alignment	  if not 0, the address of the allocated
+ *			  memory will be a multiple of alignment, which
+ *			  must be a power of two and a multiple
+ *			  of sizeof(void *)
  *
  * @return 0 on success, or -1 on error.  If an error occurs, call
  *	    xio_errno function to get the failure reason.
  */
 int xio_mempool_add_slab(struct xio_mempool *mpool,
 			 size_t size, size_t min, size_t max,
-			 size_t alloc_quantum_nr);
+			 size_t alloc_quantum_nr, int alignement);
 
 /**
  * destroy memory pool
@@ -530,10 +538,8 @@ int xio_mempool_alloc(struct xio_mempool *mpool,
  */
 void xio_mempool_free(struct xio_reg_mem *reg_mem);
 
-
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif /*XIO_API_H */

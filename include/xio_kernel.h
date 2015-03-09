@@ -49,7 +49,6 @@
 #define DRV_VERSION "0.1"
 #define DRV_RELDATE "2013-Oct-01"
 
-
 /**
  * @struct xio_reg_mem
  * @brief registered memory buffer descriptor
@@ -135,13 +134,15 @@ struct xio_msg {
 	enum xio_receipt_result	receipt_res;
 	uint64_t		flags;
 	uint64_t		timestamp;	/**< submission timestamp     */
+	uint64_t		hints;		/**< hints flags from library */
+						/**< to application	      */
 
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /* internal use */
 };
 
 #define vmsg_sglist_nents(vmsg)					\
-		 (vmsg)->data_tbl.nents
+		 ((vmsg)->data_tbl.nents)
 
 #define vmsg_sglist_set_nents(vmsg, n)				\
 		 (vmsg)->data_tbl.nents = (n)
@@ -157,12 +158,14 @@ static inline void vmsg_sglist_set_by_reg_mem(struct xio_vmsg *vmsg,
 static inline void *vmsg_sglist_one_base(const struct xio_vmsg *vmsg)
 {
 	struct scatterlist *sg = vmsg->data_tbl.sgl;
+
 	return sg_virt(sg);
 }
 
 static inline size_t vmsg_sglist_one_len(const struct xio_vmsg *vmsg)
 {
 	const struct scatterlist *sg = vmsg->data_tbl.sgl;
+
 	return sg->length;
 }
 
@@ -180,9 +183,11 @@ static inline void *vmsg_sglist_get_user_context(struct xio_vmsg *vmsg)
 static inline int xio_init_vmsg(struct xio_vmsg *vmsg, unsigned int nents)
 {
 	int ret;
+
 	vmsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
 	ret = sg_alloc_table(&vmsg->data_tbl, nents, GFP_KERNEL);
 	vmsg_sglist_set_nents(vmsg, 0);
+
 	return ret;
 }
 
@@ -203,6 +208,7 @@ static inline void xio_reinit_msg(struct xio_msg *msg)
 {
 	const struct sg_table in_tbl = msg->in.data_tbl;
 	const struct sg_table out_tbl = msg->out.data_tbl;
+
 	memset(msg, 0, sizeof(*msg));
 	xio_init_vmsg_from_sg_table(&msg->in, &in_tbl);
 	xio_init_vmsg_from_sg_table(&msg->out, &out_tbl);
@@ -231,7 +237,7 @@ struct xio_ev_data {
 		struct llist_node  ev_llist;
 		struct work_struct work;
 	};
-	volatile long unsigned int states; /* xio private data */
+	volatile unsigned long int states; /* xio private data */
 };
 
 /**
@@ -277,7 +283,6 @@ int xio_context_run_loop(struct xio_context *ctx);
 void xio_context_stop_loop(struct xio_context *ctx);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data);
-
 
 /*---------------------------------------------------------------------------*/
 /* XIO debugfs facility							     */

@@ -45,24 +45,24 @@
 /* Accelio's default mempool profile (don't expose it) */
 #define XIO_MEM_SLABS_NR	4
 
-#define _16K_BLOCK_SZ		(16*1024)
+#define _16K_BLOCK_SZ		(16 * 1024)
 #define _16K_MIN_NR		0
-#define _16K_MAX_NR		(1024*24)
+#define _16K_MAX_NR		(1024 * 24)
 #define _16K_ALLOC_NR		128
 
-#define _64K_BLOCK_SZ		(64*1024)
+#define _64K_BLOCK_SZ		(64 * 1024)
 #define _64K_MIN_NR		0
-#define _64K_MAX_NR		(1024*24)
+#define _64K_MAX_NR		(1024 * 24)
 #define _64K_ALLOC_NR		128
 
-#define _256K_BLOCK_SZ		(256*1024)
+#define _256K_BLOCK_SZ		(256 * 1024)
 #define _256K_MIN_NR		0
-#define _256K_MAX_NR		(1024*24)
+#define _256K_MAX_NR		(1024 * 24)
 #define _256K_ALLOC_NR		128
 
-#define _1M_BLOCK_SZ		(1024*1024)
+#define _1M_BLOCK_SZ		(1024 * 1024)
 #define _1M_MIN_NR		0
-#define _1M_MAX_NR		(1024*24)
+#define _1M_MAX_NR		(1024 * 24)
 #define _1M_ALLOC_NR		128
 
 struct xio_mempool_config g_mempool_config = {
@@ -117,6 +117,8 @@ struct xio_mem_slab {
 	int				alloc_quantum_nr; /* number of items
 							   per allocation */
 	int				used_mb_nr;
+	int				align;
+	int				pad;
 };
 
 struct xio_mempool {
@@ -283,21 +285,22 @@ static int xio_mem_slab_free(struct xio_mem_slab *slab)
 		list_for_each_entry_safe(r, tmp_r, &slab->mem_regions_list,
 					 mem_region_entry) {
 			list_del(&r->mem_region_entry);
-			if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
+			if (test_bits(XIO_MEMPOOL_FLAG_REG_MR,
+				      &slab->pool->flags)) {
 				struct xio_reg_mem   reg_mem;
 
 				reg_mem.mr = r->omr;
 				xio_mem_dereg(&reg_mem);
 			}
 
-			if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+			if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+				      &slab->pool->flags))
 				ufree_huge_pages(r->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+					   &slab->pool->flags))
 				unuma_free(r->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+					   &slab->pool->flags))
 				ufree(r->buf);
 			ufree(r);
 		}
@@ -322,6 +325,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	size_t				region_alloc_sz;
 	size_t				data_alloc_sz;
 	int				i;
+	int				aligned_sz;
 
 	if (slab->curr_mb_nr == 0) {
 		if (slab->init_mb_nr > slab->max_mb_nr)
@@ -339,7 +343,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 		return NULL;
 
 	region_alloc_sz = sizeof(*region) +
-		nr_blocks*sizeof(struct xio_mem_block);
+		nr_blocks * sizeof(struct xio_mem_block);
 	buf = (char *)ucalloc(region_alloc_sz, sizeof(uint8_t));
 	if (!buf)
 		return NULL;
@@ -350,37 +354,39 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	block = (struct xio_mem_block *)buf;
 
 	/* region data */
-	data_alloc_sz = nr_blocks*slab->mb_size;
+	aligned_sz = ALIGN(slab->mb_size, slab->align);
+	data_alloc_sz = nr_blocks * aligned_sz;
 
 	/* allocate the buffers and register them */
-	if (slab->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
+	if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+		      &slab->pool->flags))
 		region->buf = umalloc_huge_pages(data_alloc_sz);
-	} else if (slab->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+	else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+			   &slab->pool->flags))
 		region->buf = unuma_alloc(data_alloc_sz, slab->pool->nodeid);
-	} else if (slab->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC) {
-		/*region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t)); */
-		region->buf = umemalign(64, data_alloc_sz);
-	}
+	else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+			   &slab->pool->flags))
+		region->buf = umemalign(slab->align, data_alloc_sz);
 
 	if (!region->buf) {
 		ufree(region);
 		return NULL;
 	}
 
-	if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
+	if (test_bits(XIO_MEMPOOL_FLAG_REG_MR, &slab->pool->flags)) {
 		struct xio_reg_mem reg_mem;
 
 		xio_mem_register(region->buf, data_alloc_sz, &reg_mem);
 		region->omr = reg_mem.mr;
 		if (!region->omr) {
-			if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+			if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+				      &slab->pool->flags))
 				ufree_huge_pages(region->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+					   &slab->pool->flags))
 				unuma_free(region->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+					   &slab->pool->flags))
 				ufree(region->buf);
 
 			ufree(region);
@@ -395,7 +401,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 
 		pblock->parent_slab = slab;
 		pblock->omr	= region->omr;
-		pblock->buf	= (char *)(region->buf) + i*slab->mb_size;
+		pblock->buf	= (char *)(region->buf) + i * aligned_sz;
 		pblock->refcnt_claim = 1; /* free - claimed be MP */
 		qblock->next = pblock;
 		qblock = pblock;
@@ -479,22 +485,19 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 {
 	struct xio_mempool *p;
 
-	if (flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
-		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+	if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC, &flags)) {
+		clr_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
+		clr_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags);
 		DEBUG_LOG("mempool: using huge pages allocator\n");
-	} else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
-		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+	} else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags)) {
+		clr_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
 		DEBUG_LOG("mempool: using numa allocator\n");
 	} else {
-		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
-		flags |= XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		set_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
 		DEBUG_LOG("mempool: using regular allocator\n");
 	}
 
-	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+	if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags)) {
 		int ret;
 
 		if (nodeid == -1) {
@@ -546,7 +549,8 @@ struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 			g_mempool_config.slab_cfg[i].block_sz,
 			g_mempool_config.slab_cfg[i].init_blocks_nr,
 			g_mempool_config.slab_cfg[i].max_blocks_nr,
-			g_mempool_config.slab_cfg[i].grow_blocks_nr);
+			g_mempool_config.slab_cfg[i].grow_blocks_nr,
+			0); /*default alignment */
 		if (ret != 0)
 			goto cleanup;
 	}
@@ -614,8 +618,9 @@ retry:
 			block = xio_mem_slab_resize(slab, 1);
 			if (!block) {
 				if (++index == (int)p->slabs_nr ||
-				    (p->flags &
-				     XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB))
+				    test_bits(
+					XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB,
+					&p->flags))
 					index  = -1;
 
 				if (p->safe_mt)
@@ -685,11 +690,12 @@ void xio_mempool_free(struct xio_reg_mem *reg_mem)
 /*---------------------------------------------------------------------------*/
 int xio_mempool_add_slab(struct xio_mempool *p,
 			 size_t size, size_t min, size_t max,
-			 size_t alloc_quantum_nr)
+			 size_t alloc_quantum_nr, int alignment)
 {
 	struct xio_mem_slab	*new_slab;
 	struct xio_mem_block	*block;
 	unsigned int ix, slab_ix, slab_shift = 0;
+	int align = alignment;
 
 	slab_ix = p->slabs_nr;
 	if (p->slabs_nr) {
@@ -703,6 +709,14 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 				break;
 			}
 		}
+	}
+	if (!alignment) {
+		align = g_options.xfer_buf_align;
+	} else if (!is_power_of_2(alignment) ||
+		   !(alignment % sizeof(void *) == 0)) {
+		ERROR_LOG("invalid alignment %d\n", alignment);
+		xio_set_error(EINVAL);
+		return -1;
 	}
 
 	/* expand */
@@ -722,6 +736,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			new_slab[ix].init_mb_nr = min;
 			new_slab[ix].max_mb_nr = max;
 			new_slab[ix].alloc_quantum_nr = alloc_quantum_nr;
+			new_slab[ix].align = align;
 
 			spin_lock_init(&new_slab[ix].lock);
 			INIT_LIST_HEAD(&new_slab[ix].mem_regions_list);
@@ -736,12 +751,12 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			continue;
 		}
 		/* shift it */
-		new_slab[ix] = p->slab[ix-slab_shift];
+		new_slab[ix] = p->slab[ix - slab_shift];
 		INIT_LIST_HEAD(&new_slab[ix].mem_regions_list);
-		list_splice_init(&p->slab[ix-slab_shift].mem_regions_list,
+		list_splice_init(&p->slab[ix - slab_shift].mem_regions_list,
 				 &new_slab[ix].mem_regions_list);
 		INIT_LIST_HEAD(&new_slab[ix].blocks_list);
-		list_splice_init(&p->slab[ix-slab_shift].blocks_list,
+		list_splice_init(&p->slab[ix - slab_shift].blocks_list,
 				 &new_slab[ix].blocks_list);
 		list_for_each_entry(block, &new_slab[ix].blocks_list,
 				    blocks_list_entry) {
@@ -750,7 +765,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 	}
 
 	/* sentinel */
-	new_slab[p->slabs_nr+1].mb_size	= SIZE_MAX;
+	new_slab[p->slabs_nr + 1].mb_size = SIZE_MAX;
 
 	/* swap slabs */
 	ufree(p->slab);

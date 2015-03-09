@@ -581,7 +581,8 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	switch (tcp_hndl->state) {
 	case XIO_TRANSPORT_STATE_INIT:
-		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n", tcp_hndl);
+		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
+			  tcp_hndl);
 	case XIO_TRANSPORT_STATE_LISTEN:
 	case XIO_TRANSPORT_STATE_CONNECTING:
 	case XIO_TRANSPORT_STATE_CONNECTED:
@@ -2348,7 +2349,7 @@ static void xio_tcp_primary_pool_get_params(
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = max((g_poptions->snd_queue_depth_msgs +
-				g_poptions->rcv_queue_depth_msgs)*40, 1024);
+		       g_poptions->rcv_queue_depth_msgs) * 40, 1024);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
