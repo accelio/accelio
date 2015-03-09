@@ -2219,6 +2219,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 
 		tcp_task->req_write_num_sge = vec_size;
 		tbl_set_nents(sgtbl_ops, sgtbl, vec_size);
+		set_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &task->imsg.hints);
 	} else {
 		if (!tcp_hndl->tcp_mempool) {
 				ERROR_LOG("message /read/write failed - " \
@@ -2317,6 +2318,8 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len	= req_hdr.ulp_hdr_len;
+
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
 
 	if (req_hdr.ulp_hdr_len)
 		imsg->in.header.iov_base	= ulp_hdr;
@@ -2472,6 +2475,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	isgtbl		= xio_sg_table_get(&imsg->in);
 	isgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(imsg->in.sgl_type);
+
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
 
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 	/* msg from received message */
@@ -3306,8 +3311,10 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		switch (tcp_task->rxd.stage) {
 		case XIO_TCP_RX_START:
 			/* ORK todo find a better place to rearm rx_list?*/
-			if (tcp_hndl->state == XIO_TRANSPORT_STATE_CONNECTED ||
-			    tcp_hndl->state == XIO_TRANSPORT_STATE_DISCONNECTED) {
+			if (tcp_hndl->state ==
+					XIO_TRANSPORT_STATE_CONNECTED ||
+			    tcp_hndl->state ==
+					XIO_TRANSPORT_STATE_DISCONNECTED) {
 				task_next =
 					xio_tcp_primary_task_alloc(tcp_hndl);
 				if (!task_next) {

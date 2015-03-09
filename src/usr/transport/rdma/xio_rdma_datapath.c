@@ -2850,6 +2850,12 @@ static int xio_rdma_post_recv_rsp(struct xio_task *task)
 	 * pointers */
 	tbl_clone(osgtbl_ops, osgtbl, isgtbl_ops, isgtbl);
 
+	/* also set bits */
+	if (test_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints))
+		set_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &omsg->hints);
+	else
+		clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &omsg->hints);
+
 	return 0;
 }
 
@@ -2909,6 +2915,8 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	osgtbl		= xio_sg_table_get(&omsg->in);
 	osgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(omsg->in.sgl_type);
+
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
 
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 	/* msg from received message */
@@ -3609,6 +3617,7 @@ static int xio_sched_rdma_rd(struct xio_rdma_transport *rdma_hndl,
 			task->status = XIO_E_USER_BUF_OVERFLOW;
 			return -1;
 		}
+		set_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &task->imsg.hints);
 	} else {
 		if (!rdma_hndl->rdma_mempool) {
 				ERROR_LOG(
@@ -3912,6 +3921,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 
 	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len	= req_hdr.ulp_hdr_len;
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
 
 	if (req_hdr.ulp_hdr_len)
 		imsg->in.header.iov_base	= ulp_hdr;

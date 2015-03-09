@@ -38,7 +38,6 @@
 #ifndef XIO_BASE_H
 #define XIO_BASE_H
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -72,7 +71,6 @@ struct xio_server;			     /* server handle                */
 struct xio_session;			     /* session handle		     */
 struct xio_connection;			     /* connection handle	     */
 struct xio_mr;				     /* registered memory handle     */
-
 
 /*---------------------------------------------------------------------------*/
 /* accelio extended errors                                                    */
@@ -133,7 +131,6 @@ enum xio_status {
 	XIO_E_LAST_STATUS		= (XIO_BASE_STATUS + 40)
 };
 
-
 /*---------------------------------------------------------------------------*/
 /* message data type							     */
 /*---------------------------------------------------------------------------*/
@@ -149,7 +146,6 @@ enum xio_status {
 #define XIO_MESSAGE			(1 << 4)
 /** one sided message family type */
 #define XIO_ONE_WAY			(1 << 5)
-
 
 /**
  * @enum xio_msg_type
@@ -171,20 +167,36 @@ enum xio_msg_direction {
 	XIO_MSG_DIRECTION_IN
 };
 
-
 /**
  * @enum xio_msg_flags
  * @brief message level specific flags
  */
 enum xio_msg_flags {
-	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = (1<<0), /**< request read receipt    */
-	XIO_MSG_FLAG_PEER_WRITE_RSP	  = (1<<1), /**< force peer to rdma write*/
-	XIO_MSG_FLAG_PEER_READ_REQ	  = (1<<2), /**< force peer to rdma read */
-	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1<<3), /**< request an immediate    */
-						    /**< send completion         */
-	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1<<4), /**< last in batch	         */
+	/**< request read receipt*/
+	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = (1 << 0),
+
+	/**< force peer to rdma write*/
+	XIO_MSG_FLAG_PEER_WRITE_RSP	  = (1 << 1),
+
+	/**< force peer to rdma read */
+	XIO_MSG_FLAG_PEER_READ_REQ	  = (1 << 2),
+
+	/**< request an immediate send completion   */
+	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1 << 3),
+
+	/**< last in batch	   */
+	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1 << 4),
 
 	/* [1<<10 and above - reserved for library usage] */
+};
+
+/**
+ * @enum xio_msg_hints
+ * @brief message level specific hints
+ */
+enum xio_msg_hints {
+	/**< message "in" assigned via assign_data_in_buf   */
+	XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF = (1 << 0)
 };
 
 /**
@@ -224,7 +236,6 @@ struct xio_msg_pdata {
 	struct xio_msg		*next;          /**< internal library usage   */
 	struct xio_msg		**prev;		/**< internal library usage   */
 };
-
 
 /**
  * @struct xio_sg_table
@@ -383,7 +394,6 @@ struct xio_session_params {
 	size_t			private_data_len; /**< private data length    */
 	const char		*uri;		  /**< the uri		      */
 };
-
 
 /**
  * @struct xio_session_attr
@@ -661,7 +671,6 @@ int xio_modify_session(struct xio_session *session,
 		       struct xio_session_attr *attr,
 		       int attr_mask);
 
-
 /**
  * maps session event code to event string
  *
@@ -710,7 +719,7 @@ struct xio_connection_params {
 	struct xio_session	*session;	/**< xio session handle       */
 	struct xio_context	*ctx;		/**< xio context handle       */
 	uint32_t		conn_idx;	/**< Connection index greater */
-					        /**< then 0 if 0 - auto count */
+						/**< then 0 if 0 - auto count */
 	uint8_t			enable_tos;	/**< explicitly enable tos    */
 	uint8_t			tos;		/**< type of service RFC 2474 */
 	uint16_t		pad;
@@ -718,7 +727,7 @@ struct xio_connection_params {
 	/**< bounded outgoing interface address and/or port - NULL if not     */
 	/**< specified in form:                                               */
 	/**< host:port, host:, host, :port.                                   */
- 	/**< [host]:port, [host]:, [host]. [ipv6addr]:port, [ipv6addr]:,      */
+	/**< [host]:port, [host]:, [host]. [ipv6addr]:port, [ipv6addr]:,      */
 	/**< [ipv6addr].                                                      */
 	const char		*out_addr;
 
@@ -1028,7 +1037,6 @@ enum xio_log_level {
 	XIO_LOG_LEVEL_LAST
 };
 
-
 /**
  * @enum xio_optlevel
  * @brief configuration tuning option level
@@ -1065,9 +1073,8 @@ enum xio_optname {
 	XIO_OPTNAME_MAX_INLINE_HEADER,    /**< set/get maximum inline header  */
 					  /**< size			      */
 
-	XIO_OPTNAME_MAX_INLINE_DATA,    /**< set/get maximum inline data      */
+	XIO_OPTNAME_MAX_INLINE_DATA,      /**< set/get maximum inline data    */
 					  /**< size			      */
-
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
@@ -1104,7 +1111,6 @@ enum xio_optname {
 typedef void (*xio_log_fn)(const char *file, unsigned line,
 			   const char *function, unsigned level,
 			   const char *fmt, ...);
-
 
 /**
  *  @struct xio_mem_allocator
@@ -1201,7 +1207,7 @@ struct xio_mem_allocator {
  *		     sizeof(mempool_config));
  *
  */
- struct xio_mempool_config {
+struct xio_mempool_config {
 	/**< number of slabs */
 	size_t			    slabs_nr;
 
@@ -1291,6 +1297,5 @@ const char *xio_version(void);
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif
