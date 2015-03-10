@@ -42,6 +42,7 @@
 /* externals								     */
 /*---------------------------------------------------------------------------*/
 extern struct xio_rdma_options	rdma_options;
+extern struct xio_options	*g_poptions;
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */

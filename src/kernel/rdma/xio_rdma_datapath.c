@@ -2731,10 +2731,10 @@ static int xio_rdma_prep_rsp_out_data(
 	xio_hdr_len += (rdma_task->req_recv_num_sge +
 			rdma_task->req_read_num_sge) * sizeof(struct xio_sge);
 
-	if (g_options.inline_data_align && ulp_imm_len) {
+	if (g_poptions->inline_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
-		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+		ulp_pad_len = ALIGN(hdr_len, g_poptions->inline_data_align) -
 			      hdr_len;
 	}
 
@@ -2910,10 +2910,10 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 	}
 	*/
 
-	if (g_options.inline_data_align && ulp_imm_len) {
+	if (g_poptions->inline_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
-		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+		ulp_pad_len = ALIGN(hdr_len, g_poptions->inline_data_align) -
 			      hdr_len;
 	}
 

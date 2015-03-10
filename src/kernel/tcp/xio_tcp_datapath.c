@@ -1507,10 +1507,10 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			tcp_task->req_read_num_sge) * sizeof(struct xio_sge);
 	enforce_write_rsp = task->imsg_flags & XIO_HEADER_FLAG_PEER_WRITE_RSP;
 
-	if (g_options.inline_data_align && ulp_imm_len) {
+	if (g_poptions->inline_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
-		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+		ulp_pad_len = ALIGN(hdr_len, g_poptions->inline_data_align) -
 			      hdr_len;
 	}
 

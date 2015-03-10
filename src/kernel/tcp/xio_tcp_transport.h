@@ -42,6 +42,7 @@
 /* externals								     */
 /*---------------------------------------------------------------------------*/
 extern struct xio_tcp_options		tcp_options;
+extern struct xio_options		*g_poptions;
 
 /* definitions */
 #define MAX_SGE				(XIO_IOVLEN + 1)
