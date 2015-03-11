@@ -756,7 +756,7 @@ static int xio_tcp_prep_req_out_data(
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_req_header(
 				tcp_hndl, task,
-				(uint16_t)xio_max_hdr_len, 0, 0, XIO_E_SUCCESS);
+				(uint16_t)ulp_hdr_len, 0, 0, XIO_E_SUCCESS);
 
 		if (retval) {
 			ERROR_LOG("Failed to write header\n");
