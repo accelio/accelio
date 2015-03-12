@@ -110,7 +110,6 @@ static int xio_rdma_on_recv_rdma_read_ack(struct xio_rdma_transport *rdma_hndl,
 static int xio_sched_rdma_rd(struct xio_rdma_transport *rdma_hndl,
 			     struct xio_task *task);
 static int xio_rdma_post_recv_rsp(struct xio_task *task);
-
 /*---------------------------------------------------------------------------*/
 /* xio_post_recv							     */
 /*---------------------------------------------------------------------------*/
@@ -834,6 +833,13 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 
 	/* unmap dma */
 	xio_unmap_rx_work_req(rdma_hndl->dev, rxd);
+	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+			       DMA_FROM_DEVICE);
+
+	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+			       DMA_TO_DEVICE);
 
 	/* rearm the receive queue  */
 	/*
@@ -844,6 +850,7 @@ static int xio_rdma_rx_handler(struct xio_rdma_transport *rdma_hndl,
 	retval = xio_mbuf_read_first_tlv(&task->mbuf);
 
 	task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
+
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->io_list);
 
 	/* call recv completion  */
@@ -934,6 +941,7 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		rdma_task = ptask->dd_data;
 
 		txd = &rdma_task->txd;
+
 		/* unmap dma */
 		xio_unmap_tx_work_req(rdma_hndl->dev, txd);
 
@@ -964,11 +972,22 @@ static int xio_rdma_tx_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		} else if (IS_RESPONSE(ptask->tlv_type)) {
 			rdmad = &rdma_task->rdmad;
 			/* unmap dma */
-			/* Need to handel FMR/FRWR */
+			/* Need to handle FMR/FRWR */
 			if (rdma_task->ib_op == XIO_IB_RDMA_WRITE)
 				xio_unmap_txmad_work_req(rdma_hndl->dev, rdmad);
 			else
 				xio_unmap_rxmad_work_req(rdma_hndl->dev, rdmad);
+
+			if (rdma_task->read_sge.nents &&
+			    rdma_task->read_sge.mapped)
+				xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+					       DMA_FROM_DEVICE);
+
+			if (rdma_task->write_sge.nents &&
+			    rdma_task->write_sge.mapped)
+				xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+					       DMA_TO_DEVICE);
+
 			rdma_hndl->max_sn++;
 			rdma_hndl->rsps_in_flight_nr--;
 			xio_rdma_on_rsp_send_comp(rdma_hndl, ptask);
@@ -1055,6 +1074,16 @@ static void xio_rdma_rd_req_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		if (rdma_task->rdmad.mapped)
 			xio_unmap_rxmad_work_req(rdma_hndl->dev,
 						 &rdma_task->rdmad);
+
+		if (rdma_task->read_sge.nents &&
+		    rdma_task->read_sge.mapped)
+			xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+				       DMA_FROM_DEVICE);
+
+		if (rdma_task->write_sge.nents &&
+		    rdma_task->write_sge.mapped)
+			xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+				       DMA_TO_DEVICE);
 
 		/* fill notification event */
 		event_data.msg.op	= XIO_WC_OP_RECV;
@@ -1146,6 +1175,13 @@ static void xio_rdma_rd_rsp_comp_handler(struct xio_rdma_transport *rdma_hndl,
 		if (rdma_task->rdmad.mapped)
 			xio_unmap_rxmad_work_req(rdma_hndl->dev,
 						 &rdma_task->rdmad);
+		if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
+			xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+				       DMA_FROM_DEVICE);
+
+		if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
+			xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+				       DMA_TO_DEVICE);
 
 		/* copy from task->in to sender_task->in */
 		xio_rdma_post_recv_rsp(task);
@@ -3054,6 +3090,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 			ERROR_LOG("xio_vmsg_to_sgt failed\n");
 			goto cleanup;
 		}
+
 		sg = sge_first(sgtbl_ops, sgtbl);
 		if (!sge_addr(sgtbl_ops, sg)) {
 			if (!rdma_hndl->rdma_mempool) {
@@ -3557,6 +3594,12 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 					tbl_set_nents(osgtbl_ops, osgtbl,
 						      tbl_nents(isgtbl_ops,
 								isgtbl));
+					/* also read_sge.sgt must follow the
+					 * same nents => but we are about
+					 * to reset the desc
+					rdma_sender_task->read_sge.sgt.nents =
+						tbl_nents(isgtbl_ops, isgtbl);
+					*/
 				} else {
 					/* Bounce buffer */
 					tbl_copy(osgtbl_ops, osgtbl,
