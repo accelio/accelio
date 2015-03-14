@@ -12,4 +12,4 @@ fi
 server_ip=$1
 port=$2
 
-modprobe xio_rdma_client.ko url=rdma://${server_ip}:${port}
+modprobe xio_rdma_client url=rdma://${server_ip}:${port}
