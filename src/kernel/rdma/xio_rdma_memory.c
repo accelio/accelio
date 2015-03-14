@@ -89,7 +89,7 @@ void xio_unmap_rx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 {
 	struct ib_device *ib_dev = dev->ib_dev;
 
-	if (!xd->nents)
+	if (!xd->nents || !xd->mapped)
 		return;
 
 	/* Assume scatterlist is terminated properly */
@@ -107,10 +107,7 @@ void xio_unmap_tx_work_req(struct xio_device *dev, struct xio_work_req *xd)
 {
 	struct ib_device *ib_dev = dev->ib_dev;
 
-	if (!xd->nents)
-		return;
-
-	if (!xd->mapped)
+	if (!xd->nents || !xd->mapped)
 		return;
 
 	/* Assume scatterlist is terminated properly */
@@ -223,7 +220,7 @@ void xio_unmap_rxmad_work_req(struct xio_device *dev, struct xio_work_req *xd)
 {
 	struct ib_device *ib_dev = dev->ib_dev;
 
-	if (!xd->nents)
+	if (!xd->nents || !xd->mapped)
 		return;
 
 	/* Assume scatterlist is terminated properly */
@@ -248,7 +245,7 @@ void xio_unmap_txmad_work_req(struct xio_device *dev, struct xio_work_req *xd)
 {
 	struct ib_device *ib_dev = dev->ib_dev;
 
-	if (!xd->nents)
+	if (!xd->nents || !xd->mapped)
 		return;
 
 	/* Assume scatterlist is terminated properly */
@@ -360,7 +357,7 @@ int xio_remap_work_req(struct xio_device *odev, struct xio_device *ndev,
 	int nents;
 	int i;
 
-	if (!xd->nents)
+	if (!xd->nents || !xd->mapped)
 		return -1;
 
 	/* Assume scatterlist is terminated properly */
@@ -423,10 +420,7 @@ void xio_unmap_desc(struct xio_rdma_transport *rdma_hndl,
 	struct xio_device *dev = rdma_hndl->dev;
 	struct ib_device *ib_dev = dev->ib_dev;
 
-	if (!desc->nents)
-		return;
-
-	if (!desc->mapped)
+	if (!desc->nents || !desc->mapped)
 		return;
 
 	/* fast unregistration routine may do nothing but it is always exists */
@@ -490,7 +484,7 @@ int xio_remap_desc(struct xio_rdma_transport *rdma_ohndl,
 	struct ib_device *ib_dev;
 	int nents;
 
-	if (!desc->nents)
+	if (!desc->nents || !desc->mapped)
 		return -1;
 
 	dev = rdma_ohndl->dev;
