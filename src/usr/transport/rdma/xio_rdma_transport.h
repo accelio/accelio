@@ -47,8 +47,9 @@ extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
 extern spinlock_t		dev_list_lock;
 
-#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
-#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	0    /*  0 milliseconds */
+#define XIO_DISCONNECT_TIMEOUT		100     /* 100 mili */
+#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000  /* 1 minute */
+#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	0     /*  0 milliseconds */
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
@@ -412,7 +413,7 @@ struct xio_rdma_transport {
 	uint16_t			max_exp_sn; /* upper edge of
 						       receiver's window + 1 */
 
-	uint16_t			timewait; /* flag */
+	uint16_t			pad1;
 
 	/* control path params */
 	int				sq_depth;     /* max snd allowed  */
@@ -441,9 +442,12 @@ struct xio_rdma_transport {
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad1;
 
-	uint16_t			ignore_timewait;
+	uint32_t			ignore_timewait:1;
+	uint32_t			timewait_nr:1; /* flag */
+	uint32_t			ignore_disconnect:1;
+	uint32_t			disconnect_nr:1; /* flag */
+	uint32_t			reserved:28;
 
 	/* too big to be on stack - use as temporaries */
 	union {
@@ -453,6 +457,7 @@ struct xio_rdma_transport {
 	struct xio_ev_data		close_event;
 	struct xio_ev_data		timewait_exit_event;
 	xio_delayed_work_handle_t	timewait_timeout_work;
+	xio_delayed_work_handle_t	disconnect_timeout_work;
 	struct ibv_send_wr		beacon;
 	struct xio_task			beacon_task;
 	uint32_t			trans_attr_mask;
