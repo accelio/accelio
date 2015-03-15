@@ -200,6 +200,7 @@ if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_lat])
+	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_ow])
 	AC_CONFIG_SUBDIRS([tests/kernel/direct_rdma_test])
 else
 	subdirs2="src/usr";

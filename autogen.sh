@@ -12,6 +12,7 @@ subdirlist=("src/kernel/xio"				\
 	    "examples/kernel/hello_world_mt"		\
 	    "tests/kernel/hello_test"                   \
 	    "tests/kernel/hello_test_lat"               \
+	    "tests/kernel/hello_test_ow"               \
 	    "tests/kernel/direct_rdma_test")
 
 for subdir in ${!subdirlist[*]} ; do
