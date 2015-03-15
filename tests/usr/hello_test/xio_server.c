@@ -523,7 +523,6 @@ int main(int argc, char *argv[])
 	} else {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
-		xio_assert(0);
 	}
 
 	xio_context_destroy(test_params.ctx);

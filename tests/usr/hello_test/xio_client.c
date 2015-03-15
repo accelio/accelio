@@ -799,6 +799,12 @@ int main(int argc, char *argv[])
 #endif
 	/* connect the session  */
 	test_params.connection = xio_connect(&cparams);
+	if (!test_params.connection) {
+		error = xio_errno();
+		fprintf(stderr, "failed to create connection. %d - %s\n",
+			error, xio_strerror(error));
+		goto destroy_session;
+	}
 
 	printf("**** starting ...\n");
 
@@ -821,7 +827,7 @@ int main(int argc, char *argv[])
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
-
+destroy_session:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
