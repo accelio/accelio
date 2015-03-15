@@ -2849,6 +2849,7 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	void			*sgtbl;
 	void			*sge;
 	unsigned int		nents, max_nents;
+	uint64_t		length = 0;
 
 	/* kernel works only with kernel's scatterlist */
 	if (unlikely(vmsg->sgl_type != XIO_SGL_TYPE_SCATTERLIST)) {
@@ -2883,10 +2884,13 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
+		length += sge_length(sgtbl_ops, sge);
 		if (sge_addr(sgtbl_ops, sge) &&
 		    (sge_length(sgtbl_ops, sge)  == 0))
 			return 0;
 	}
+	if (length >= (XIO_MAX_IOV + 1) * PAGE_SIZE)
+		return 0;
 
 	return 1;
 }

@@ -156,7 +156,8 @@ struct test_params {
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
-	uint16_t		padding[3];
+	uint16_t		padding;
+	uint32_t		iov_sz;
 	uint64_t		disconnect_nr;
 };
 
@@ -351,7 +352,7 @@ static int on_response(struct xio_session *session,
 	xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 	for (j = 0; j < test_config.in_iov_len; j++) {
-		sg_set_buf(sgl, NULL, ONE_MB);
+		sg_set_buf(sgl, NULL, test_params->iov_sz);
 		sgl = sg_next(sgl);
 	}
 
@@ -609,7 +610,7 @@ int send_one_by_one(struct test_params *test_params)
 		xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 		for (j = 0; j < test_config.in_iov_len; j++) {
-			sg_set_buf(sgl, NULL, ONE_MB);
+			sg_set_buf(sgl, NULL, g_test_params.iov_sz);
 			sgl = sg_next(sgl);
 		}
 
@@ -660,7 +661,7 @@ int send_chained(struct test_params *test_params)
 		xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 		for (j = 0; j < test_config.in_iov_len; j++) {
-			sg_set_buf(sgl, NULL, ONE_MB);
+			sg_set_buf(sgl, NULL, g_test_params.iov_sz);
 			sgl = sg_next(sgl);
 		}
 
@@ -763,6 +764,10 @@ static int xio_client_main(void *data)
 	g_test_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
 					  test_config.in_iov_len,
 					  test_config.out_iov_len);
+	/* accelio kernel can support up to 256 pages so only ONE_MB is
+	 * allowed */
+	g_test_params.iov_sz = (test_config.in_iov_len) ?
+		ONE_MB / test_config.in_iov_len : 0;
 	if (g_test_params.pool == NULL) {
 		pr_err("msg_pool_alloc failed\n");
 		goto cleanup;
