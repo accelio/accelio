@@ -1793,6 +1793,9 @@ static void xio_rdma_post_close(struct xio_transport_base *trans_base)
 	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
 				 &rdma_hndl->timewait_timeout_work);
 
+	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+				 &rdma_hndl->disconnect_timeout_work);
+
 	xio_context_disable_event(&rdma_hndl->timewait_exit_event);
 
 	xio_context_disable_event(&rdma_hndl->close_event);
@@ -2177,6 +2180,9 @@ static void  on_cm_disconnected(struct rdma_cm_event *ev,
 	if (rdma_hndl->disconnect_nr)
 		return;
 	rdma_hndl->disconnect_nr = 1;
+
+	xio_ctx_del_delayed_work(rdma_hndl->base.ctx,
+				 &rdma_hndl->disconnect_timeout_work);
 
 	DEBUG_LOG("on_cm_disconnected. rdma_hndl:%p, state:%s\n",
 		  rdma_hndl, xio_transport_state_str(rdma_hndl->state));
