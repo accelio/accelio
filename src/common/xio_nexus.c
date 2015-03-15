@@ -1914,7 +1914,9 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	/* get the transport's proto */
 	transport = xio_get_transport(proto);
 	if (!transport) {
-		ERROR_LOG("invalid protocol. proto: %s\n", proto);
+		ERROR_LOG("failed to load %s transport layer.\n", proto);
+		ERROR_LOG("validate that your system support %s" \
+			  "and that the module is loaded\n", proto);
 		xio_set_error(XIO_E_ADDR_ERROR);
 		return NULL;
 	}
