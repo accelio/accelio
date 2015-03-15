@@ -2653,7 +2653,7 @@ static void xio_rdma_close(struct xio_transport_base *transport)
 			  rdma_hndl);
 
 		rdma_hndl->state = XIO_TRANSPORT_STATE_CLOSED;
-	//	retval = xio_rdma_disconnect(rdma_hndl, 0);
+		retval = xio_rdma_disconnect(rdma_hndl, 0);
 		if (retval)
 			DEBUG_LOG("handle:%p rdma_disconnect failed, " \
 					"%m\n", rdma_hndl);
