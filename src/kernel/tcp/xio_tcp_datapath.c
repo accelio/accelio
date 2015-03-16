@@ -2972,7 +2972,16 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 				 next_tcp_task->rxd.stage == XIO_TCP_RX_IO_DATA)
 				 ? xio_tcp_get_data_rxd(next_task) : NULL;
 
+		/* An Accelio application runs on Side A would crush,
+		 * when it connects Side B by a port binded by an
+		 * application (not accelio) run on Side B.
+		 */
 		rxd_work = xio_tcp_get_data_rxd(task);
+		if (!rxd_work) {
+			ERROR_LOG("rxd_work is NULL! Disconnect!\n");
+			xio_tcp_disconnect_helper(tcp_hndl);
+			return -1;
+		}
 
 		for (i = 0; i < rxd_work->msg.msg_iovlen; i++) {
 			tcp_hndl->tmp_work.msg_iov
