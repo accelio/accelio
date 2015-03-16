@@ -3438,6 +3438,13 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 	rdma_sender_task = task->sender_task->dd_data;
 	xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
 
+	if (rdma_sender_task->read_sge.nents && rdma_sender_task->read_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_sender_task->read_sge,
+				DMA_FROM_DEVICE);
+	if (rdma_sender_task->write_sge.nents && rdma_sender_task->write_sge.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_sender_task->write_sge,
+				DMA_TO_DEVICE);
+
 	omsg		= task->sender_task->omsg;
 	imsg		= &task->imsg;
 	isgtbl		= xio_sg_table_get(&imsg->in);
