@@ -65,7 +65,7 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct xio_connection_attr	conn_attr;
+	/*struct xio_connection_attr	conn_attr;*/
 
 	pr_info("session event: %s. session:%p, connection:%p, reason: %s\n",
 	       xio_session_event_str(event_data->event),

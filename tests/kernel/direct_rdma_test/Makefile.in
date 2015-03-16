@@ -62,7 +62,7 @@ distdir: $(DISTFILES)
 
 EXTRA_CFLAGS := -I$(src)/../../portable -I$(src)/../../portable/direct_rdma_test
 ccflags-y += -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../common
-obj-m := xio_tests_common.o xio_rdma_client.o
+obj-m := xio_tests_common.o xio_rdma_client.o xio_rdma_server.o
 # xio_rdma_server.o - server side is currently not supported.
 xio_rdma_server-objs := xio_server.o xio_rdma_common_kernel.o xio_tests_common.o
 xio_rdma_client-objs := xio_client.o xio_rdma_common_kernel.o xio_tests_common.o
