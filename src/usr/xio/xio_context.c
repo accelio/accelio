@@ -256,7 +256,8 @@ void xio_context_destroy(struct xio_context *ctx)
 		xio_mempool_destroy((struct xio_mempool *)ctx->mempool);
 		ctx->mempool = NULL;
 	}
-	xio_ev_loop_destroy(&ctx->ev_loop);
+	xio_ev_loop_destroy(ctx->ev_loop);
+	ctx->ev_loop = NULL;
 
 	xio_ctx_task_pools_destroy(ctx);
 

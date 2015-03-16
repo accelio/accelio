@@ -188,7 +188,7 @@ static void *device_thread_cb(void *data)
 	TRACE_LOG("devices thread exit signaled\n");
 
 	/* destroy the default loop */
-	xio_ev_loop_destroy(&dev_tdata.async_loop);
+	xio_ev_loop_destroy(dev_tdata.async_loop);
 	dev_tdata.async_loop = NULL;
 
 	return NULL;
@@ -212,7 +212,7 @@ static int xio_device_thread_init(void)
 	if (ret < 0) {
 		ERROR_LOG("pthread_create failed. %m\n");
 		/* destroy the default loop */
-		xio_ev_loop_destroy(&dev_tdata.async_loop);
+		xio_ev_loop_destroy(dev_tdata.async_loop);
 		dev_tdata.async_loop = NULL;
 		return -1;
 	}

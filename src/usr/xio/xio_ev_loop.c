@@ -540,9 +540,9 @@ inline void xio_ev_loop_stop(void *loop_hndl)
 /*---------------------------------------------------------------------------*/
 /* xio_ev_loop_destroy                                                       */
 /*---------------------------------------------------------------------------*/
-void xio_ev_loop_destroy(void **loop_hndl)
+void xio_ev_loop_destroy(void *loop_hndl)
 {
-	struct xio_ev_loop *loop = *(struct xio_ev_loop **)loop_hndl;
+	struct xio_ev_loop	*loop = (struct xio_ev_loop *)loop_hndl;
 	struct xio_ev_data	*tev, *tmp_tev;
 
 	if (!loop)
@@ -573,7 +573,6 @@ void xio_ev_loop_destroy(void **loop_hndl)
 	loop->wakeup_event = -1;
 
 	ufree(loop);
-	loop = NULL;
 }
 
 /*---------------------------------------------------------------------------*/

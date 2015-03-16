@@ -99,7 +99,7 @@ int xio_ev_loop_is_stopping(void *loop_hndl);
  *
  * @param[in] loop		Pointer to event loop
  */
-void xio_ev_loop_destroy(void **loop);
+void xio_ev_loop_destroy(void *loop);
 
 /**
  * add event handlers on dispatcher
