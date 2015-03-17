@@ -70,11 +70,13 @@ static void *alloc_mem_buf(size_t pool_size, int *shmid)
 	/* allocate memory */
 	shmemid = shmget(IPC_PRIVATE, pool_size,
 			 SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-
 	if (shmemid < 0) {
 		fprintf(stderr,
-			"shmget rdma pool sz:%zu failed (errno=%d %m)\n",
-			pool_size, errno);
+			"warning - failed to allocate %zu bytes with " \
+			"hugepages. (errno=%d %m)\n", pool_size, errno);
+		fprintf(stderr,
+			"check that hugepages are configured. " \
+			"falling back to 4K pages allocations...\n");
 		goto failed_huge_page;
 	}
 
