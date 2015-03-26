@@ -1475,8 +1475,9 @@ int xio_session_destroy(struct xio_session *session)
 	if (!session)
 		return 0;
 
-	xio_ctx_del_work(session->teardown_work_ctx,
-			 &session->teardown_work);
+	if (session->teardown_work_ctx)
+		xio_ctx_del_work(session->teardown_work_ctx,
+				 &session->teardown_work);
 
 	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
@@ -1682,6 +1683,7 @@ static void xio_session_pre_teardown(void *_session)
 
 	xio_ctx_del_work(session->teardown_work_ctx,
 			 &session->teardown_work);
+	session->teardown_work_ctx = NULL;
 
 	spin_unlock(&session->connections_list_lock);
 
