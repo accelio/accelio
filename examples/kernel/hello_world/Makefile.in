@@ -16,8 +16,8 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
-xiomodule1 := client.ko
-xiomodule2 := server.ko
+xiomodule1 := xio_client_example.ko
+xiomodule2 := xio_server_example.ko
 
 all: all-@ENABLE_XIO_MODULE@
 install: install-@ENABLE_XIO_MODULE@
@@ -56,9 +56,9 @@ distdir: $(DISTFILES)
 
 
 ccflags-y += -I$(SUBDIRS)/../../../include
-obj-m := server.o client.o
-server-objs := xio_server.o
-client-objs := xio_client.o
+obj-m := xio_server_example.o xio_client_example.o
+xio_server_example-objs := xio_server.o
+xio_client_example-objs := xio_client.o
 
 all-spec:
 	export NOSTDINC_FLAGS

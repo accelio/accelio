@@ -54,7 +54,7 @@ MODULE_DESCRIPTION("XIO hello client " \
 		   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static char *xio_argv[] = {"xio_hello_client", 0, 0};
+static char *xio_argv[] = {"xio_client_example", 0, 0};
 
 module_param_named(ip, xio_argv[1], charp, 0);
 MODULE_PARM_DESC(ip, "IP of NIC to send request to");
