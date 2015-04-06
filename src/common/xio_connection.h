@@ -243,4 +243,7 @@ int xio_on_credits_ack_recv(struct xio_connection *connection,
 const struct xio_transport_base *xio_req_to_transport_base(
 	const struct xio_msg *req);
 
+int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
+			 void *optval, int *optlen);
+
 #endif /*XIO_CONNECTION_H */

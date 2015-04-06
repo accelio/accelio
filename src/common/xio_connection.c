@@ -2754,3 +2754,34 @@ const struct xio_transport_base *xio_req_to_transport_base(
 
 	return task->connection->nexus->transport_hndl;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_ioctl						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
+			 void *optval, int *optlen)
+{
+	if (!connection) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
+	switch (con_optname) {
+	case XIO_CONNECTION_FIONWRITE_BYTES:
+		*optlen = sizeof(uint64_t);
+		*((uint64_t *)optval) =
+				connection->session->snd_queue_depth_bytes -
+				connection->tx_bytes;
+		return 0;
+	case XIO_CONNECTION_FIONWRITE_MSGS:
+		*optlen = sizeof(int);
+		*((int *)optval) = 
+				connection->session->snd_queue_depth_msgs -
+				connection->tx_queued_msgs;
+		return 0;
+	default:
+		break;
+	}
+	xio_set_error(XIO_E_NOT_SUPPORTED);
+	return -1;
+}
+EXPORT_SYMBOL(xio_connection_ioctl);

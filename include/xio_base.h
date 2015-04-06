@@ -790,6 +790,34 @@ int xio_modify_connection(struct xio_connection *conn,
 int xio_query_connection(struct xio_connection *conn,
 			 struct xio_connection_attr *attr,
 			 int attr_mask);
+
+/**
+ * @enum xio_connection_optname
+ * @brief connection option name
+ */
+enum xio_connection_optname {
+	XIO_CONNECTION_FIONWRITE_BYTES,  /**< uint64_t: the number of bytes */
+		/**< in send queue */
+	XIO_CONNECTION_FIONWRITE_MSGS  /**< int: the number of msgs in */
+		/**< send queue */
+};
+
+/**
+ * get xio_connections's info
+ *
+ * @param[in] connection  Pointer to xio_connection
+ * @param[in] con_optname Get value of this option.
+ *			  (@ref xio_connection_optname)
+ * @param[in,out] optval  A pointer to the buffer in which the value
+ *			  for the requested option is specified
+ * @param[in,out] optlen  The size, in bytes, of the buffer pointed to by
+ *			  the optval parameter
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
+			 void *optval, int *optlen);
 /**
  * send request to responder
  *
