@@ -127,7 +127,7 @@ static struct io_u *fio_libraio_event(struct thread_data *td, int event)
 }
 
 static int fio_libraio_getevents(struct thread_data *td, unsigned int min,
-				 unsigned int max, struct timespec *t)
+				 unsigned int max, const struct timespec *t)
 {
 	struct libraio_data *ld = td->io_ops->data;
 	unsigned actual_min = td->o.iodepth_batch_complete == 0 ? 0 : min;
@@ -135,7 +135,8 @@ static int fio_libraio_getevents(struct thread_data *td, unsigned int min,
 
 	do {
 		r = raio_getevents(ld->raio_ctx, actual_min,
-				   max, ld->raio_events + events, t);
+				   max, ld->raio_events + events,
+				   (struct timespec *)t);
 		if (r >= 0) {
 			raio_release(ld->raio_ctx, r,
 				     ld->raio_events + events);
