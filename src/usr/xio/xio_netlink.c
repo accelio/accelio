@@ -155,7 +155,7 @@ int xio_netlink(struct xio_context *ctx)
 		return 0;
 	}
 
-	fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
+	fd = socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_GENERIC);
 	if (fd < 0) {
 		xio_set_error(errno);
 		ERROR_LOG("socket failed. %m\n");
@@ -177,8 +177,18 @@ int xio_netlink(struct xio_context *ctx)
 	nladdr.nl_groups = 1;
 
 	if (bind(fd, (struct sockaddr *)&nladdr, sizeof(nladdr))) {
+		/*
+		 * I suspect that accelio is broken on kernel 3.19 due
+		 * to the following patch:
+		 * https://patchwork.ozlabs.org/patch/429350/
+		 */
+		if (errno == ENOENT) {
+			WARN_LOG("netlink bind failed. %m\n");
+			close(fd);
+			return 0;
+		}
 		xio_set_error(errno);
-		ERROR_LOG("bind failed. %m\n");
+		ERROR_LOG("netlink bind failed. %m\n");
 		goto cleanup;
 	}
 
