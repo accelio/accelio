@@ -62,7 +62,7 @@ static int intf_master_name(const char *iface, char *master)
 	if (fd == -1)
 		return -1;
 
-	len = read(fd, buf, sizeof(buf)-1);
+	len = read(fd, buf, sizeof(buf) - 1);
 	if (len < 0) {
 		len = readlink(path, buf, sizeof(buf) - 1);
 		if (len < 0)
@@ -189,10 +189,10 @@ int main(int argc, char *argv[])
 		perror("getifaddrs");
 		goto cleanup;
 	}
-	printf("%-10s %-16s %-30s %-5s %-4s\n",
-	       "interface", "host", "flags", "numa", "cpus");
+	printf("%-10s %-16s %-30s %-5s %-10s %-40s\n",
+	       "interface", "host", "flags", "numa", "cpus mask", "cpus");
 	printf("---------------------------------------------------");
-	printf("-------------------------------------------------\n");
+	printf("-------------------------------------------------------\n");
 
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		switch (ifa->ifa_addr->sa_family) {
@@ -238,15 +238,15 @@ int main(int argc, char *argv[])
 					     &cpusmask, &cpusnum);
 		if (retval != 0) {
 			/*perror("intf_name_best_cpus"); */
-			printf("%-10s %-16s %-30s %-5c %-4s [0]\n",
-			       ifa->ifa_name, host, flags, 0x20, "cpus");
+			printf("%-10s %-16s %-30s %-5c 0x%-8lx %-4s[0]\n",
+			       ifa->ifa_name, host, flags, 0x20, 0UL, "cpus");
 			continue;
 		}
 		intf_cpusmask_str(cpusmask, cpusnum, cpus_str);
 
-		printf("%-10s %-16s %-30s %-5d %-4s [%d] - %s\n",
-		       ifa->ifa_name, host, flags, numa_node, "cpus",
-		       cpusnum, cpus_str);
+		printf("%-10s %-16s %-30s %-5d 0x%-8lx %-4s[%d] - %s\n",
+		       ifa->ifa_name, host, flags, numa_node, cpusmask,
+		       "cpus",  cpusnum, cpus_str);
 	}
 	ec = EXIT_SUCCESS;
 
