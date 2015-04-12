@@ -3032,8 +3032,8 @@ static int xio_rdma_enable_fork_support(void)
 {
 	int   retval;
 
-	setenv("RDMAV_FORK_SAFE", "YES", 1);
-	setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
+	if (!disable_huge_pages)
+		setenv("RDMAV_HUGEPAGES_SAFE", "YES", 1);
 	retval = ibv_fork_init();
 	if (retval) {
 		ERROR_LOG("ibv_fork_init failed (errno=%d %s)\n",
