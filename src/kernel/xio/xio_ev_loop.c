@@ -323,7 +323,7 @@ static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event)
 		return 0;
 	}
 
-	event->work.func = priv_ev_loop_run_work;
+	INIT_WORK(&event->work, priv_ev_loop_run_work);
 	queue_work_on(loop->ctx->cpuid, loop->workqueue, &event->work);
 
 	return 0;
@@ -514,7 +514,7 @@ int priv_ev_loop_run(void *loop_hndl)
 						  ev_llist);
 				node = llist_next(node);
 				loop->first = node;
-				tev->work.func = priv_ev_loop_run_work;
+				INIT_WORK(&tev->work, priv_ev_loop_run_work);
 				queue_work_on(loop->ctx->cpuid, loop->workqueue,
 					      &tev->work);
 			}
