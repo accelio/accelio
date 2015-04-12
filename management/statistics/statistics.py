@@ -85,6 +85,8 @@ XIO_STAT_RX_BYTES = 3
 XIO_STAT_DELAY = 4
 XIO_STAT_APPDELAY = 5
 
+XIO_NETLINK_MCAST_GRP_ID = 4
+
 def align(l, alignto=4):
     return (l + alignto - 1) & ~(alignto - 1)
 
@@ -583,7 +585,7 @@ class Loop(object):
         #Send first message requesting counters' name
         msg = Message.new(Message.FORMAT)
         #Send MC message
-        self.conn.send(msg, 0, 1)
+        self.conn.send(msg, 0, XIO_NETLINK_MCAST_GRP_ID)
 
     def cli_done(self):
         self.cli.prompt()
@@ -595,7 +597,7 @@ class Loop(object):
         #Send periodic message requesting for counters
         msg = Message.new(Message.STATS)
         #Send MC message
-        self.conn.send(msg, 0, 1)
+        self.conn.send(msg, 0, XIO_NETLINK_MCAST_GRP_ID)
 
     def callback_done(self, fileno):
         if fileno in self.done_cb:

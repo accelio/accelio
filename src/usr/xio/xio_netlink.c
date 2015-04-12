@@ -52,6 +52,8 @@
 #include "xio_task.h"
 #include "xio_context.h"
 
+#define XIO_NETLINK_MCAST_GRP_ID 4
+
 /*---------------------------------------------------------------------------*/
 /* xio_stats_handler							     */
 /*---------------------------------------------------------------------------*/
@@ -174,7 +176,7 @@ int xio_netlink(struct xio_context *ctx)
 	*
 	*/
 	nladdr.nl_pid = 0;
-	nladdr.nl_groups = 1;
+	nladdr.nl_groups = XIO_NETLINK_MCAST_GRP_ID;
 
 	if (bind(fd, (struct sockaddr *)&nladdr, sizeof(nladdr))) {
 		/*
