@@ -63,6 +63,7 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define NSECS_IN_SEC		1000000000
+#define POLLING_TIME_USEC	70
 
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
@@ -446,7 +447,7 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 
 
 	/* create thread context for the client */
-	session_data->ctx = xio_context_create(NULL, 0, -1);
+	session_data->ctx = xio_context_create(NULL, POLLING_TIME_USEC, -1);
 
 	/* create url to connect to */
 	sprintf(url, "%s://%s:%d",
