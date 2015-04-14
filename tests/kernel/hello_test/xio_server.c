@@ -99,7 +99,7 @@ module_param_named(iov_len, xio_argv[6], charp, 0);
 MODULE_PARM_DESC(iov_len, "Data length of the message vector");
 
 module_param_named(cpu, xio_argv[7], charp, 0);
-MODULE_PARM_DESC(cpu, "Bind to specific cpu");
+MODULE_PARM_DESC(cpu, "Cpu mask");
 
 static struct task_struct *xio_main_th;
 static struct completion cleanup_complete;
@@ -109,7 +109,7 @@ struct xio_test_config {
 	char		server_addr[32];
 	uint16_t	server_port;
 	char		transport[16];
-	int16_t		cpu;
+	uint64_t	cpu_mask;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
 	uint32_t	iov_len;
@@ -124,6 +124,7 @@ struct test_params {
 	uint64_t		nsent;
 	uint64_t		ncomp;
 	struct msg_params	msg_params;
+	int cpu;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -395,7 +396,7 @@ static void usage(const char *argv0)
 			"(default %d)\n", XIO_DEF_IOV_LEN);
 
 	pr_info("\tcpu=<cpu num> ");
-	pr_info("\t\tBind the process to specific cpu\n");
+	pr_info("\t\tSet cpu mask to bind the process to specific cpu\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -441,9 +442,8 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	}
 
 	if (argv[7]) {
-		if(kstrtouint(argv[7], 0, &tmp))
+		if(kstrtoull(argv[7], 16, &test_config->cpu_mask))
 			pr_err("parse error\n");
-		test_config->cpu = (int16_t)tmp;
 	}
 
 	return 0;
@@ -464,7 +464,7 @@ static void print_test_config(
 	pr_info(" Header Length		: %u\n", test_config_p->hdr_len);
 	pr_info(" Data Length		: %u\n", test_config_p->data_len);
 	pr_info(" Vector Length		: %u\n", test_config_p->iov_len);
-	pr_info(" CPU Affinity		: %x\n", test_config_p->cpu);
+	pr_info(" CPU Mask		: 0x%llx\n", test_config_p->cpu_mask);
 	pr_info(" =============================================\n");
 }
 
@@ -522,7 +522,7 @@ static int xio_server_main(void *data)
 		goto cleanup;
 
 	g_test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, test_config.cpu);
+					     current, 0, g_test_params.cpu);
 	if (g_test_params.ctx == NULL) {
 		int error = xio_errno();
 		pr_err("context creation failed. reason %d - (%s)\n",
@@ -593,12 +593,20 @@ static int __init xio_hello_init_module(void)
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
 		    &iov_len, sizeof(int));
 
-	xio_main_th = kthread_run(xio_server_main, xio_argv,
+	xio_main_th = kthread_create(xio_server_main, xio_argv,
 				  "xio-hello-server");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
 	}
+
+	if (test_config.cpu_mask) {
+		g_test_params.cpu = __ffs64(test_config.cpu_mask);
+		pr_info("cpu is %d\n", g_test_params.cpu);
+		kthread_bind(xio_main_th, g_test_params.cpu);
+	 }
+
+	wake_up_process(xio_main_th);
 
 	return 0;
 }

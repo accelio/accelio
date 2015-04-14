@@ -101,11 +101,14 @@ MODULE_PARM_DESC(data_len, "Data length of the message");
 module_param_named(out_iov_len, xio_argv[6], charp, 0);
 MODULE_PARM_DESC(out_iov_len, "Data length of the out message vector");
 
-module_param_named(finite_run, xio_argv[7], charp, 0);
+module_param_named(in_iov_len, xio_argv[7], charp, 0);
+MODULE_PARM_DESC(in_iov_len, "Data length of the in message vecto");
+
+module_param_named(finite_run, xio_argv[8], charp, 0);
 MODULE_PARM_DESC(finite_run, "0 for infinite run, 1 for infinite run");
 
-module_param_named(cpu, xio_argv[8], charp, 0);
-MODULE_PARM_DESC(cpu, "Bind to specific cpu");
+module_param_named(cpu, xio_argv[9], charp, 0);
+MODULE_PARM_DESC(cpu, "Cpu mask");
 
 static struct task_struct *xio_main_th;
 static struct completion cleanup_complete;
@@ -115,7 +118,7 @@ struct xio_test_config {
 	char			server_addr[32];
 	uint16_t		server_port;
 	char			transport[16];
-	int16_t			cpu;
+	uint64_t		cpu_mask;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		in_iov_len;
@@ -149,6 +152,7 @@ struct test_params {
 	uint16_t		finite_run;
 	uint16_t		closed;
 	uint64_t		disconnect_nr;
+	int 			cpu;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -483,12 +487,16 @@ static void usage(const char *argv0)
 	pr_info("\t\tSet the data length of the out message vector" \
 			"(default %d)\n", XIO_DEF_OUT_IOV_LEN);
 
+	pr_info("\tin_iov_len=<length> ");
+	pr_info("\t\tSet the data length of the message vector" \
+			"(default %d)\n", XIO_DEF_IN_IOV_LEN);
+
 	pr_info("\tfinite_run=<finite-run> ");
 	pr_info("\t\t0 for infinite run, 1 for infinite run" \
 			"(default 0)\n");
 
 	pr_info("\tcpu=<cpu num> ");
-	pr_info("\t\tBind the process to specific cpu\n");
+	pr_info("\t\tSet cpu mask to bind the process to specific cpu\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -551,9 +559,8 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	}
 
 	if (argv[9]) {
-		if (kstrtouint(argv[9], 0, &tmp))
+		if (kstrtoull(argv[9], 16, &test_config->cpu_mask))
 			pr_err("parse error\n");
-		test_config->cpu = (int16_t)tmp;
 	}
 
 	return 0;
@@ -576,7 +583,7 @@ static void print_test_config(
 	pr_info(" Out Vector Length	: %u\n", test_config_p->out_iov_len);
 	pr_info(" In Vector Length	: %u\n", test_config_p->in_iov_len);
 	pr_info(" Connection Index	: %u\n", test_config_p->conn_idx);
-	pr_info(" CPU Affinity		: %x\n", test_config_p->cpu);
+	pr_info(" CPU Mask		: 0x%llx\n", test_config_p->cpu_mask);
 	pr_info(" Finite run		: %x\n", test_config_p->finite_run);
 	pr_info(" =============================================\n");
 }
@@ -651,7 +658,7 @@ static int xio_client_main(void *data)
 
 	/* create thread context for the client */
 	g_test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, test_config.cpu);
+					     current, 0, g_test_params.cpu);
 	if (!g_test_params.ctx) {
 		pr_err("context open failed\n");
 		goto cleanup;
@@ -751,7 +758,6 @@ static int __init xio_hello_init_module(void)
 {
 	int iov_len = SG_TBL_LEN;
 
-	pr_err("fffffffffffffffffffffff\n");
 	if (parse_cmdline(&test_config, xio_argv))
 		return -EINVAL;
 
@@ -766,12 +772,20 @@ static int __init xio_hello_init_module(void)
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
 		    &iov_len, sizeof(int));
 
-	xio_main_th = kthread_run(xio_client_main, xio_argv,
+	xio_main_th = kthread_create(xio_client_main, xio_argv,
 				  "xio-hello-client");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
 	}
+
+	if (test_config.cpu_mask) {
+		g_test_params.cpu = __ffs64(test_config.cpu_mask);
+		pr_info("cpu is %d\n", g_test_params.cpu);
+		kthread_bind(xio_main_th, g_test_params.cpu);
+	}
+
+	wake_up_process(xio_main_th);
 
 	return 0;
 }

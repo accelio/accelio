@@ -58,8 +58,8 @@
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
 #define XIO_DEF_TRANSPORT	"rdma"
-#define XIO_DEF_HEADER_SIZE	32
-#define XIO_DEF_DATA_SIZE	32
+#define XIO_DEF_HEADER_SIZE	0
+#define XIO_DEF_DATA_SIZE	0
 #define XIO_DEF_CPU		-1
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
@@ -94,7 +94,7 @@ module_param_named(finite_run, xio_argv[6], charp, 0);
 MODULE_PARM_DESC(finite_run, "finite run");
 
 module_param_named(cpu, xio_argv[7], charp, 0);
-MODULE_PARM_DESC(cpu, "Bind to specific cpu");
+MODULE_PARM_DESC(cpu, "Cpu mask");
 
 /*
  * Important: If running client & server on same machine, use "cpu"
@@ -109,7 +109,7 @@ struct xio_test_config {
 	char		server_addr[32];
 	uint16_t	server_port;
 	char		transport[16];
-	int16_t		cpu;
+	uint64_t	cpu_mask;
 	uint32_t	hdr_len;
 	uint32_t	data_len;
 	uint32_t	finite_run;
@@ -124,6 +124,7 @@ static void			*xbuf;
 static struct msg_params	msg_params;
 struct xio_session		*g_session;
 struct xio_connection		*g_connection;
+int				cpu;
 
 static struct xio_test_config  test_config = {
 	XIO_DEF_ADDRESS,
@@ -346,7 +347,7 @@ static void usage(const char *argv0)
 	pr_info("\t0 for infinite run, 1 for infinite run (default 0)\n");
 
 	pr_info("\tcpu=<cpu num> ");
-	pr_info("\t\tBind the process to specific cpu\n");
+	pr_info("\t\tSet cpu mask to bind the process to specific cpu\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -365,7 +366,7 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	sprintf(test_config->server_addr, "%s", argv[1]);
 
 	if (argv[2]) {
-		if(kstrtouint(argv[2], 0, &tmp))
+		if (kstrtouint(argv[2], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->server_port = (uint16_t)tmp;
 	}
@@ -374,22 +375,21 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 		sprintf(test_config->transport, "%s", argv[3]);
 
 	if (argv[4])
-		if(kstrtouint(argv[4], 0, &test_config->hdr_len))
+		if (kstrtouint(argv[4], 0, &test_config->hdr_len))
 			pr_err("parse error\n");
 
 	if (argv[5])
-		if(kstrtouint(argv[5], 0, &test_config->data_len))
+		if (kstrtouint(argv[5], 0, &test_config->data_len))
 			pr_err("parse error\n");
 
 	if (argv[6]) {
-		if(kstrtouint(argv[6], 0, &test_config->finite_run))
+		if (kstrtouint(argv[6], 0, &test_config->finite_run))
 			pr_err("parse error\n");
 	}
 
 	if (argv[7]) {
-		if(kstrtouint(argv[7], 0, &tmp))
+		if (kstrtoull(argv[7], 16, &test_config->cpu_mask))
 			pr_err("parse error\n");
-		test_config->cpu = (int16_t)tmp;
 	}
 
 	return 0;
@@ -409,7 +409,7 @@ static void print_test_config(
 	pr_info(" Transport		: %s\n", test_config_p->transport);
 	pr_info(" Header Length		: %u\n", test_config_p->hdr_len);
 	pr_info(" Data Length		: %u\n", test_config_p->data_len);
-	pr_info(" CPU Affinity		: %x\n", test_config_p->cpu);
+	pr_info(" CPU Mask		: 0x%llx\n", test_config_p->cpu_mask);
 	pr_info(" Finite run		: %u\n", test_config_p->finite_run);
 	pr_info(" =============================================\n");
 }
@@ -467,7 +467,7 @@ static int xio_server_main(void *data)
 		goto cleanup;
 
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-				 current, POLLING_TIMEOUT, test_config.cpu);
+				 current, POLLING_TIMEOUT, cpu);
 	if (ctx == NULL) {
 		int error = xio_errno();
 		pr_err("context creation failed. reason %d - (%s)\n",
@@ -534,12 +534,20 @@ static int __init xio_lat_init_module(void)
 		    XIO_OPTLEVEL_TCP, XIO_OPTNAME_TCP_NO_DELAY,
 		    &opt, sizeof(int));
 
-	xio_main_th = kthread_run(xio_server_main, xio_argv,
-				  "xio-hello-server");
+	xio_main_th = kthread_create(xio_server_main, xio_argv,
+			  "xio-hello-server");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
 	}
+
+	if (test_config.cpu_mask) {
+		cpu = __ffs64(test_config.cpu_mask);
+		pr_info("cpu is %d\n", cpu);
+		kthread_bind(xio_main_th, cpu);
+	}
+
+	wake_up_process(xio_main_th);
 
 	return 0;
 }
