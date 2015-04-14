@@ -68,9 +68,9 @@ static int on_session_event(struct xio_session *session,
 	/*struct xio_connection_attr	conn_attr;*/
 
 	pr_info("session event: %s. session:%p, connection:%p, reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       session, event_data->conn,
-	       xio_strerror(event_data->reason));
+		xio_session_event_str(event_data->event),
+		session, event_data->conn,
+		xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
@@ -78,16 +78,14 @@ static int on_session_event(struct xio_session *session,
 			test_params.connection = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+		if (event_data->reason != XIO_E_SESSION_REJECTED)
 			test_params.connection = NULL;
-		}
 		xio_connection_destroy(event_data->conn);
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
 		xio_session_destroy(session);
-		if (event_data->reason != XIO_E_SESSION_REJECTED) {
+		if (event_data->reason != XIO_E_SESSION_REJECTED)
 			xio_context_stop_loop(test_params.ctx);
-		}
 		break;
 	default:
 		break;
@@ -107,12 +105,12 @@ static int xio_server_main(void *data)
 
 	test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
 					     current, 0, 0);
-	xio_assert(test_params.ctx != NULL);
+	xio_assert(test_params.ctx);
 
 	session_ops.on_session_event = on_session_event;
 	server = xio_bind(test_params.ctx, &session_ops,
 			  url, NULL, 0, NULL);
-	xio_assert(server != NULL);
+	xio_assert(server);
 	pr_info("listen to %s\n", url);
 
 	xio_context_run_loop(test_params.ctx);

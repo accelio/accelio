@@ -152,7 +152,7 @@ struct test_params {
 	uint16_t		finite_run;
 	uint16_t		closed;
 	uint64_t		disconnect_nr;
-	int 			cpu;
+	int			cpu;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -773,7 +773,7 @@ static int __init xio_hello_init_module(void)
 		    &iov_len, sizeof(int));
 
 	xio_main_th = kthread_create(xio_client_main, xio_argv,
-				  "xio-hello-client");
+				     "xio-hello-client");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);

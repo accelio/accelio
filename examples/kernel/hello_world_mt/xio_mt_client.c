@@ -289,6 +289,7 @@ static int xio_client_thread(void *data)
 		char msg[128];
 		struct xio_msg *req = &tdata->req[i];
 		struct xio_vmsg *out = &req->out;
+
 		sprintf(msg,
 			"hello world header request [cpu(%d) port(%d)-req(%d)]",
 			cpu, tdata->port, i);
@@ -382,7 +383,6 @@ static void free_tdata(struct session_data *sdata)
 	}
 }
 
-
 static int init_threads(struct session_data *sdata)
 {
 	char name[32];
@@ -392,6 +392,7 @@ static int init_threads(struct session_data *sdata)
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		struct thread_data *tdata;
+
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
 		tdata = vzalloc_node(sizeof(*tdata) * QUEUE_DEPTH,
@@ -460,7 +461,7 @@ static int xio_client_main(void *data)
 
 	sdata = kzalloc(sizeof(*sdata), GFP_KERNEL);
 	if (!sdata) {
-		pr_err("session_data allocation failed\n");
+		/*pr_err("session_data allocation failed\n");*/
 		ret = -ENOMEM;
 		goto cleanup0;
 	}
@@ -631,7 +632,6 @@ static struct attribute_group default_attr_group = {
 };
 
 static struct kobject *sysfs_kobj;
-
 
 static void destroy_sysfs_files(void)
 {

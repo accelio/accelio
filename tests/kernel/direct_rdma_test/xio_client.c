@@ -83,8 +83,6 @@ static int on_session_event(struct xio_session *session,
 	return 0;
 }
 
-
-
 /*---------------------------------------------------------------------------*/
 /* main									     */
 /*---------------------------------------------------------------------------*/
@@ -105,7 +103,7 @@ static int xio_client_main(void *data)
 	/* create thread context for the client */
 	test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
 					       current, 0, 0);
-	xio_assert(test_params.ctx != NULL);
+	xio_assert(test_params.ctx);
 
 	session_ops.on_session_event = on_session_event;
 	params.type		= XIO_SESSION_CLIENT;
@@ -113,7 +111,7 @@ static int xio_client_main(void *data)
 	params.uri		= url;
 
 	session = xio_session_create(&params);
-	xio_assert(session != NULL);
+	xio_assert(session);
 
 	cparams.session			= session;
 	cparams.ctx			= test_params.ctx;
@@ -124,7 +122,7 @@ static int xio_client_main(void *data)
 	pr_info("**** starting ...\n");
 
 	msg = msg_pool_get(test_params.pool);
-	xio_assert(msg != NULL);
+	xio_assert(msg);
 	vmsg_sglist_set_nents(&msg->in, 0);
 	vmsg_sglist_set_nents(&msg->out, 0);
 	msg->out.header.iov_base = "hello";

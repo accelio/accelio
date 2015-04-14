@@ -101,7 +101,7 @@ static void process_request(struct xio_msg *req)
 		str = (char *)req->in.header.iov_base;
 		len = req->in.header.iov_len;
 		if (str) {
-			if (((unsigned) len) > 64)
+			if (((unsigned)len) > 64)
 				len = 64;
 			tmp = str[len];
 			str[len] = '\0';
@@ -114,7 +114,7 @@ static void process_request(struct xio_msg *req)
 			str = (char *)sg_virt(sg);
 			len = sg->length;
 			if (str) {
-				if (((unsigned) len) > 64)
+				if (((unsigned)len) > 64)
 					len = 64;
 				tmp = str[len];
 				str[len] = '\0';
@@ -126,14 +126,6 @@ static void process_request(struct xio_msg *req)
 		}
 		g_server_data->cnt = 0;
 	}
-
-#if 0
-	/* Server didn't allocate this memory */
-	req->in.header.iov_base = NULL;
-	req->in.header.iov_len  = 0;
-	/* Server didn't allocate in data table to reset it */
-	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
-#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -182,7 +174,7 @@ static int on_new_session(struct xio_session *session,
 	server_data->session = session;
 
 	/* Automatically accept the request */
-	if (server_data->connection == NULL)
+	if (!server_data->connection)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
 		xio_reject(session, EISCONN, NULL, 0);
@@ -265,7 +257,7 @@ static int xio_server_main(void *data)
 
 	server_data = vzalloc(sizeof(*server_data));
 	if (!server_data) {
-		pr_err("server_data alloc failed\n");
+		/*pr_err("server_data alloc failed\n");*/
 		return 0;
 	}
 

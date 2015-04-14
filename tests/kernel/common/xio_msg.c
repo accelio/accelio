@@ -44,25 +44,20 @@
 # define roundup(x, y)  ((((x) + ((y) - 1)) / (y)) * (y))
 #endif /* !defined(roundup) */
 
-
-#define HUGE_PAGE_SZ (2*1024*1024)
+#define HUGE_PAGE_SZ (2 * 1024 * 1024)
 #define ALIGNHUGEPAGE(x) \
 	(size_t)((~(HUGE_PAGE_SZ - 1)) & ((x) + HUGE_PAGE_SZ - 1))
-
 
 /*---------------------------------------------------------------------------*/
 /* msg_api_free								     */
 /*---------------------------------------------------------------------------*/
 void msg_api_free(struct msg_params *msg_params)
 {
-	if (msg_params->g_hdr) {
-		kfree(msg_params->g_hdr);
-		msg_params->g_hdr = NULL;
-	}
-	if (msg_params->g_data) {
-		kfree(msg_params->g_data);
-		msg_params->g_data = NULL;
-	}
+	kfree(msg_params->g_hdr);
+	msg_params->g_hdr = NULL;
+
+	kfree(msg_params->g_data);
+	msg_params->g_data = NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -148,14 +143,13 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 	int			i;
 	uint8_t			*buf;
 
-
 	/* allocate the structures */
 	len = sizeof(struct msg_pool) +
-		max*(2*sizeof(struct xio_msg *)+sizeof(struct xio_msg));
+		max * (2 * sizeof(struct xio_msg *) + sizeof(struct xio_msg));
 
 	buf = vzalloc(len);
 	if (!buf) {
-		pr_err("Couldn't allocate message pool\n");
+		/*pr_err("Couldn't allocate message pool\n");*/
 		BUG();
 	}
 
@@ -237,7 +231,7 @@ inline void msg_pool_free(struct msg_pool *pool)
 	int i;
 	struct xio_msg		*msg;
 
-	if (pool == NULL)
+	if (!pool)
 		return;
 
 	for (i = 0; i < pool->max; i++) {

@@ -47,10 +47,10 @@
 
 #ifndef NIPQUAD
 #define NIPQUAD(addr) \
-        ((unsigned char *)&(addr))[0], \
-        ((unsigned char *)&(addr))[1], \
-        ((unsigned char *)&(addr))[2], \
-        ((unsigned char *)&(addr))[3]
+		((unsigned char *)&(addr))[0], \
+		((unsigned char *)&(addr))[1], \
+		((unsigned char *)&(addr))[2], \
+		((unsigned char *)&(addr))[3]
 #endif
 
 #ifndef NIPQUAD_FMT
@@ -59,14 +59,14 @@
 
 #ifndef NIP6
 #define NIP6(addr) \
-    ntohs((addr).s6_addr16[0]), \
-    ntohs((addr).s6_addr16[1]), \
-    ntohs((addr).s6_addr16[2]), \
-    ntohs((addr).s6_addr16[3]), \
-    ntohs((addr).s6_addr16[4]), \
-    ntohs((addr).s6_addr16[5]), \
-    ntohs((addr).s6_addr16[6]), \
-    ntohs((addr).s6_addr16[7])
+	     ntohs((addr).s6_addr16[0]), \
+	     ntohs((addr).s6_addr16[1]), \
+	     ntohs((addr).s6_addr16[2]), \
+	     ntohs((addr).s6_addr16[3]), \
+	     ntohs((addr).s6_addr16[4]), \
+	     ntohs((addr).s6_addr16[5]), \
+	     ntohs((addr).s6_addr16[6]), \
+	     ntohs((addr).s6_addr16[7])
 #endif
 
 /*---------------------------------------------------------------------------*/
@@ -96,11 +96,13 @@ inline char *get_ip(const struct sockaddr *ip, char *buf)
 {
 	if (ip->sa_family == AF_INET) {
 		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
+
 		sprintf(buf, "%d.%d.%d.%d", NIPQUAD(v4->sin_addr));
 		buf[INET_ADDRSTRLEN] = '\0';
 	}
 	if (ip->sa_family == AF_INET6) {
 		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
+
 		sprintf(buf, "%d.%d.%d.%d.%d.%d.%d.%d", NIP6(v6->sin6_addr));
 		buf[INET6_ADDRSTRLEN] = '\0';
 	}
@@ -114,10 +116,12 @@ inline uint16_t get_port(const struct sockaddr *ip)
 {
 	if (ip->sa_family == AF_INET) {
 		struct sockaddr_in *v4 = (struct sockaddr_in *)ip;
+
 		return ntohs(v4->sin_port);
 	}
 	if (ip->sa_family == AF_INET6) {
 		struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)ip;
+
 		return ntohs(v6->sin6_port);
 	}
 	return 0;

@@ -40,6 +40,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/bitops.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
 #include <asm/atomic.h>
@@ -64,7 +65,7 @@
 #define XIO_DEF_CPU		-1
 #define XIO_TEST_VERSION	"1.0.0"
 #define MAX_POOL_SIZE		2048
-#define ONE_MB			(1 << 20)
+#define ONE_MB			BIT(20)
 #define POLLING_TIMEOUT		500
 #define DISCONNECT_FACTOR	3
 
@@ -182,14 +183,15 @@ static void process_response(struct xio_msg *rsp)
 		char		timeb[40];
 
 		uint64_t delta = get_cpu_usecs() - start_time;
-		uint64_t pps = (cnt*USECS_IN_SEC)/delta;
+		uint64_t pps = (cnt * USECS_IN_SEC) / delta;
 
-		double txbw = (1.0*pps*txlen/ONE_MB);
-		double rxbw = (1.0*pps*rxlen/ONE_MB);
-		double lat = (1000000.0/pps);
+		double txbw = (1.0 * pps * txlen / ONE_MB);
+		double rxbw = (1.0 * pps * rxlen / ONE_MB);
+		double lat = (1000000.0 / pps);
 
-		pr_info("transactions per second: %llu, lat: %d us, bandwidth: " \
-		       "TX %d MB/s, RX: %d MB/s, length: TX: %zd B, RX: %zd B\n",
+		pr_info("transactions per second: %llu, lat: %d us, " \
+			"bandwidth: TX %d MB/s, RX: %d MB/s, length: " \
+			"TX: %zd B, RX: %zd B\n",
 		       pps, (int)lat, (int)txbw, (int)rxbw,
 		       txlen, rxlen);
 		get_time(timeb, 40);
@@ -218,7 +220,7 @@ static int on_connection_established(struct xio_connection *conn)
 
 	/* create transaction */
 	msg = msg_pool_get(pool);
-	if (msg == NULL)
+	if (!msg)
 		return 0;
 
 	/* get pointers to internal buffers */
@@ -261,8 +263,8 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_user_context)
 {
 	pr_info("session event: %s. reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       xio_strerror(event_data->reason));
+		xio_session_event_str(event_data->event),
+		xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_ESTABLISHED_EVENT:
@@ -287,6 +289,7 @@ static int on_session_event(struct xio_session *session,
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
@@ -384,6 +387,7 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -410,11 +414,11 @@ static void usage(const char *argv0)
 
 	pr_info("\tport=<port> ");
 	pr_info("\t\tConnect to port <port> (default %d)\n",
-	        XIO_DEF_PORT);
+		XIO_DEF_PORT);
 
 	pr_info("\ttransport=<type> ");
 	pr_info("\t\tUse rdma/tcp as transport <type> (default %s)\n",
-	       XIO_DEF_TRANSPORT);
+		XIO_DEF_TRANSPORT);
 
 	pr_info("\theader_len=<number> ");
 	pr_info("\t\tSet the header length of the message to <number> bytes " \
@@ -448,7 +452,7 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	sprintf(test_config->server_addr, "%s", argv[1]);
 
 	if (argv[2]) {
-		if(kstrtouint(argv[2], 0, &tmp))
+		if (kstrtouint(argv[2], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->server_port = (uint16_t)tmp;
 	}
@@ -457,22 +461,22 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 		sprintf(test_config->transport, "%s", argv[3]);
 
 	if (argv[4])
-		if(kstrtouint(argv[4], 0, &test_config->hdr_len))
+		if (kstrtouint(argv[4], 0, &test_config->hdr_len))
 			pr_err("parse error\n");
 
 	if (argv[5])
-		if(kstrtouint(argv[5], 0, &test_config->data_len))
+		if (kstrtouint(argv[5], 0, &test_config->data_len))
 			pr_err("parse error\n");
 
 	if (argv[6]) {
 		tmp = 0;
-		if(kstrtouint(argv[6], 0, &tmp))
+		if (kstrtouint(argv[6], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->finite_run = (uint16_t)tmp;
 	}
 
 	if (argv[7]) {
-		if(kstrtoull(argv[7], 16, &test_config->cpu_mask))
+		if (kstrtoull(argv[7], 16, &test_config->cpu_mask))
 			pr_err("parse error\n");
 	}
 
@@ -555,7 +559,7 @@ static int xio_client_main(void *data)
 	}
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 1, 1);
-	if (pool == NULL) {
+	if (!pool) {
 		pr_err("msg_pool_alloc failed\n");
 		goto cleanup;
 	}
@@ -578,9 +582,8 @@ static int xio_client_main(void *data)
 	params.uri		= url;
 
 	g_session = xio_session_create(&params);
-	if (g_session == NULL) {
+	if (!g_session)
 		pr_err("session creation failed\n");
-	}
 
 	cparams.session			= g_session;
 	cparams.ctx			= ctx;
@@ -597,7 +600,7 @@ static int xio_client_main(void *data)
 	if (retval != 0) {
 		error = xio_errno();
 		pr_err("running event loop failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
+		       error, xio_strerror(error));
 		xio_assert(retval == 0);
 	}
 
@@ -622,9 +625,8 @@ static int __init xio_lat_init_module(void)
 {
 	int opt = 1;
 
-	if (parse_cmdline(&test_config, xio_argv)) {
+	if (parse_cmdline(&test_config, xio_argv))
 		return -EINVAL;
-	}
 
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
@@ -635,7 +637,7 @@ static int __init xio_lat_init_module(void)
 		    &opt, sizeof(int));
 
 	xio_main_th = kthread_create(xio_client_main, xio_argv,
-			  "xio-hello-client");
+				     "xio-hello-client");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
@@ -671,7 +673,6 @@ static void __exit xio_lat_cleanup_module(void)
 	if (state & 2)
 		wait_for_completion(&cleanup_complete);
 }
-
 
 module_init(xio_lat_init_module);
 module_exit(xio_lat_cleanup_module);

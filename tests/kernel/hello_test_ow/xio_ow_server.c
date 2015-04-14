@@ -538,7 +538,7 @@ static int __init xio_hello_init_module(void)
 		    &iov_len, sizeof(int));
 
 	xio_main_th = kthread_create(xio_server_main, xio_argv,
-				  "xio-hello-server");
+				     "xio-hello-server");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);

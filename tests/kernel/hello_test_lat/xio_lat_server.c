@@ -62,11 +62,10 @@
 #define XIO_DEF_DATA_SIZE	0
 #define XIO_DEF_CPU		-1
 #define XIO_TEST_VERSION	"1.0.0"
-#define XIO_READ_BUF_LEN	(1024*1024)
+#define XIO_READ_BUF_LEN	(1024 * 1024)
 #define POLLING_TIMEOUT		500
 
 #define SG_TBL_LEN		64
-
 
 MODULE_AUTHOR("Eyal Solomon, Or Kehati, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO lat server " \
@@ -142,7 +141,7 @@ static void process_request(struct xio_msg *msg)
 {
 	static int cnt;
 
-	if (msg == NULL) {
+	if (!msg) {
 		cnt = 0;
 		return;
 	}
@@ -150,9 +149,9 @@ static void process_request(struct xio_msg *msg)
 		struct scatterlist *sgl = msg->in.data_tbl.sgl;
 
 		pr_info("**** message [%llu] %s - %s\n",
-		       (msg->sn+1),
-		       (char *)msg->in.header.iov_base,
-		       (char *)sg_virt(sgl));
+			(msg->sn + 1),
+			(char *)msg->in.header.iov_base,
+			(char *)sg_virt(sgl));
 		cnt = 0;
 	}
 }
@@ -165,9 +164,9 @@ static int on_session_event(struct xio_session *session,
 			    void *cb_prv_data)
 {
 	pr_info("session event: %s. session:%p, connection:%p, reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       session, event_data->conn,
-	       xio_strerror(event_data->reason));
+		xio_session_event_str(event_data->event),
+		session, event_data->conn,
+		xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
@@ -202,8 +201,8 @@ static int on_new_session(struct xio_session *session,
 	char ip[48];
 
 	pr_info("**** [%p] on_new_session :%s:%d\n", session,
-	       get_ip((struct sockaddr *)&req->src_addr, ip),
-	       get_port((struct sockaddr *)&req->src_addr));
+		get_ip((struct sockaddr *)&req->src_addr, ip),
+		get_port((struct sockaddr *)&req->src_addr));
 
 	g_session = session;
 
@@ -237,7 +236,7 @@ static int on_request(struct xio_session *session,
 
 	if (xio_send_response(rsp) == -1) {
 		pr_info("**** [%p] Error - xio_send_msg failed. %s\n",
-		       session, xio_strerror(xio_errno()));
+			session, xio_strerror(xio_errno()));
 		msg_pool_put(pool, req);
 		xio_assert(0);
 	}
@@ -268,7 +267,7 @@ static int on_msg_error(struct xio_session *session,
 			void *cb_user_context)
 {
 	pr_info("**** [%p] message [%llu] failed. reason: %s\n",
-	       session, msg->sn, xio_strerror(error));
+		session, msg->sn, xio_strerror(error));
 
 	msg_pool_put(pool, msg);
 
@@ -293,7 +292,7 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct scatterlist	*sgl = msg->in.data_tbl.sgl;
 
 	msg->in.data_tbl.nents = 1;
-	if (xbuf == NULL)
+	if (!xbuf)
 		xbuf = kzalloc(XIO_READ_BUF_LEN, GFP_KERNEL);
 
 	sg_set_buf(sgl, xbuf, XIO_READ_BUF_LEN);
@@ -329,11 +328,11 @@ static void usage(const char *argv0)
 
 	pr_info("\tport=<port> ");
 	pr_info("\t\tConnect to port <port> (default %d)\n",
-	        XIO_DEF_PORT);
+		XIO_DEF_PORT);
 
 	pr_info("\ttransport=<type> ");
 	pr_info("\t\tUse rdma/tcp as transport <type> (default %s)\n",
-	       XIO_DEF_TRANSPORT);
+		XIO_DEF_TRANSPORT);
 
 	pr_info("\theader_len=<number> ");
 	pr_info("\t\tSet the header length of the message to <number> bytes " \
@@ -463,16 +462,17 @@ static int xio_server_main(void *data)
 		return -1;
 
 	pool = msg_pool_alloc(MAX_POOL_SIZE, 0, 1);
-	if (pool == NULL)
+	if (!pool)
 		goto cleanup;
 
 	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
 				 current, POLLING_TIMEOUT, cpu);
-	if (ctx == NULL) {
+	if (!ctx) {
 		int error = xio_errno();
+
 		pr_err("context creation failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
-		xio_assert(ctx != NULL);
+		       error, xio_strerror(error));
+		xio_assert(ctx);
 	}
 
 	sprintf(url, "%s://%s:%d",
@@ -506,10 +506,8 @@ static int xio_server_main(void *data)
 	if (pool)
 		msg_pool_free(pool);
 
-	if (xbuf) {
-		kfree(xbuf);
-		xbuf = NULL;
-	}
+	kfree(xbuf);
+	xbuf = NULL;
 
 cleanup:
 	msg_api_free(&msg_params);
@@ -523,9 +521,8 @@ static int __init xio_lat_init_module(void)
 {
 	int opt = 1;
 
-	if (parse_cmdline(&test_config, xio_argv)) {
+	if (parse_cmdline(&test_config, xio_argv))
 		return -EINVAL;
-	}
 
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
@@ -535,7 +532,7 @@ static int __init xio_lat_init_module(void)
 		    &opt, sizeof(int));
 
 	xio_main_th = kthread_create(xio_server_main, xio_argv,
-			  "xio-hello-server");
+				     "xio-hello-server");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);

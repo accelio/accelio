@@ -215,7 +215,7 @@ static int xio_client_main(void *data)
 
 	session_data = vzalloc(sizeof(*session_data));
 	if (!session_data) {
-		pr_err("session_data alloc failed\n");
+		/*pr_err("session_data alloc failed\n");*/
 		return 0;
 	}
 
