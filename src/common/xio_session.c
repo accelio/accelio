@@ -343,6 +343,10 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 {
 	struct xio_session_event_data  event = {};
 
+	if (connection->cd_bit)
+		return;
+
+	connection->cd_bit = 1;
 	event.event = XIO_SESSION_CONNECTION_CLOSED_EVENT;
 	event.reason = (enum xio_status)connection->close_reason;
 	event.conn = connection;
@@ -363,6 +367,11 @@ void xio_session_notify_connection_disconnected(
 		enum xio_status reason)
 {
 	struct xio_session_event_data  event = {};
+
+	if (connection->cd_bit)
+		return;
+
+	connection->cd_bit = 1;
 
 	event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 	event.reason = reason;
