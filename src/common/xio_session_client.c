@@ -190,6 +190,7 @@ int xio_session_accept_connections(struct xio_session *session)
 				retval = -1;
 				break;
 			}
+			connection->cd_bit = 0;
 			DEBUG_LOG("reconnecting to %s. connection:%p, " \
 				  "nexus:%p\n",
 				  portal, connection, nexus);
@@ -231,6 +232,7 @@ int xio_session_redirect_connection(struct xio_session *session)
 	/* initialize the redirected connection */
 	tmp_nexus = session->lead_connection->nexus;
 	session->redir_connection = session->lead_connection;
+	session->redir_connection->cd_bit = 0;
 	xio_connection_set_nexus(session->redir_connection, nexus);
 
 	ERROR_LOG("connection redirected to %s\n", service);

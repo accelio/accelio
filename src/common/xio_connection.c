@@ -2182,10 +2182,17 @@ int xio_connection_disconnected(struct xio_connection *connection)
 
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
-	if (!connection->disable_notify && !connection->disconnecting)
+	if (!connection->disable_notify && !connection->disconnecting) {
 		xio_session_notify_connection_disconnected(
 				connection->session, connection,
 				(enum xio_status)connection->close_reason);
+	} else if (connection->state == XIO_CONNECTION_STATE_INIT &&
+		   connection->disconnecting) {
+		connection->disable_notify = 0;
+		xio_session_notify_connection_disconnected(
+				connection->session, connection,
+				(enum xio_status)connection->close_reason);
+	}
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
@@ -2774,7 +2781,7 @@ int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
 		return 0;
 	case XIO_CONNECTION_FIONWRITE_MSGS:
 		*optlen = sizeof(int);
-		*((int *)optval) = 
+		*((int *)optval) =
 				connection->session->snd_queue_depth_msgs -
 				connection->tx_queued_msgs;
 		return 0;
