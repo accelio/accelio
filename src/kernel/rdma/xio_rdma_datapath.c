@@ -3016,7 +3016,7 @@ static int xio_rdma_prep_req_out_data(struct xio_rdma_transport *rdma_hndl,
 
 		/* write XIO header to the buffer */
 		retval = xio_rdma_prep_req_header(rdma_hndl, task,
-						  xio_max_hdr_len, 0, 0,
+						  ulp_hdr_len, 0, 0,
 						  XIO_E_SUCCESS);
 
 		if (retval) {
