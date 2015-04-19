@@ -2198,7 +2198,7 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			if (!sge_mr(sgtbl_ops, sg)) {
+			if (!sge_mr(sgtbl_ops, sg) && tcp_options.enable_mr_check) {
 				ERROR_LOG("application has not provided mr\n");
 				ERROR_LOG("tcp read is ignored\n");
 				task->status = XIO_E_NO_USER_MR;
