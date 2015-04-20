@@ -702,12 +702,6 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 			return -1;
 		}
 
-		/* new_transport_hndl was "duplicated" on transport_hndl
-		 * thus we need to consume one reference count
-		 */
-		nexus->transport->close(nexus->new_transport_hndl);
-		nexus->new_transport_hndl = NULL;
-
 		/* TODO: what about messages held by the application */
 		/* be ready to receive messages */
 		retval = xio_nexus_primary_pool_recreate(nexus);

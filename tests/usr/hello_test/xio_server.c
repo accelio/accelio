@@ -60,7 +60,7 @@
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define TEST_DISCONNECT		0
-#define DISCONNECT_NR		12000000
+#define DISCONNECT_NR		(30*PRINT_COUNTER)
 #define PEER_MAX_IN_IOVLEN	4
 #define PEER_MAX_OUT_IOVLEN	4
 
@@ -292,7 +292,7 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 
 	for (i = 0; i < nents; i++) {
 		sglist[i].iov_base = test_params->reg_mem.addr;
-	        sglist[i].mr = test_params->reg_mem.mr;
+		sglist[i].mr = test_params->reg_mem.mr;
 	}
 
 	return 0;
@@ -463,6 +463,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			in_iov_len = PEER_MAX_OUT_IOVLEN;
 	int			out_iov_len = PEER_MAX_IN_IOVLEN;
+	int			reconnect;
 
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -473,6 +474,11 @@ int main(int argc, char *argv[])
 	set_cpu_affinity(test_config.cpu);
 
 	xio_init();
+
+	/* enable reconnect */
+	reconnect = 1;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_RECONNECT,
+			&reconnect, sizeof(reconnect));
 
 	/* set accelio max message vector used */
 	xio_set_opt(NULL,

@@ -579,6 +579,10 @@ int xio_on_server_nexus_established(struct xio_session *session,
 				    struct xio_nexus *nexus,
 				    union xio_nexus_event_data *event_data)
 {
+
+	struct xio_connection *connection = xio_session_find_connection (session, nexus);
+	connection->restarted = 1;
+
 	return 0;
 }
 

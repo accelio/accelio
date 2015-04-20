@@ -908,6 +908,9 @@ int xio_connection_restart(struct xio_connection *connection)
 	if (retval)
 		return retval;
 
+	/* raise restart flag */
+	connection->restarted = 1;
+
 	/* Notify user on responses */
 	xio_connection_notify_rsp_msgs_flush(connection, XIO_E_MSG_FLUSHED);
 

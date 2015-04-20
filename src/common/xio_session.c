@@ -470,9 +470,15 @@ static int xio_on_req_recv(struct xio_connection *connection,
 			connection->peer_credits_msgs += hdr.credits_msgs;
 			connection->peer_credits_bytes += hdr.credits_bytes;
 		}
+		connection->restarted = 0;
 	} else {
-		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
-			  connection->req_exp_sn, hdr.sn);
+		if (unlikely(connection->restarted)) {
+			connection->req_exp_sn = hdr.sn + 1;
+			connection->restarted = 0;
+		} else {
+			ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
+				  connection->req_exp_sn, hdr.sn);
+		}
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
@@ -577,13 +583,19 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	if (connection->rsp_exp_sn == hdr.sn) {
 		connection->rsp_exp_sn++;
 		connection->rsp_ack_sn = hdr.sn;
+		connection->restarted  = 0;
 		if (connection->enable_flow_control) {
 			connection->peer_credits_msgs += hdr.credits_msgs;
 			connection->peer_credits_bytes += hdr.credits_bytes;
 		}
 	} else {
-		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
-			  connection->rsp_exp_sn, hdr.sn);
+		if (unlikely(connection->restarted)) {
+			connection->rsp_exp_sn = hdr.sn + 1;
+			connection->restarted = 0;
+		} else {
+			ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
+				  connection->rsp_exp_sn, hdr.sn);
+		}
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
