@@ -222,7 +222,6 @@ static void xio_thread_down(void *data)
 	struct thread_data *tdata;
 	struct session_data *sdata;
 	struct xio_connection *connection;
-	struct xio_context *ctx;
 
 	tdata = (struct thread_data *)data;
 	sdata = tdata->sdata;
@@ -233,7 +232,8 @@ static void xio_thread_down(void *data)
 					       lockdep_is_held(&sdata->lock));
 	if (!connection) {
 		spin_unlock(&sdata->lock);
-		goto stop_loop_now;
+		/*goto stop_loop_now; */
+		return;
 	}
 	rcu_assign_pointer(tdata->connection, NULL);
 	spin_unlock(&sdata->lock);
@@ -242,7 +242,7 @@ static void xio_thread_down(void *data)
 	xio_disconnect(connection);
 
 	return;
-
+#if 0
 stop_loop_now:
 	/* No connection */
 	spin_lock(&sdata->lock);
@@ -257,6 +257,7 @@ stop_loop_now:
 	} else {
 		spin_unlock(&sdata->lock);
 	}
+#endif
 }
 
 /*---------------------------------------------------------------------------*/

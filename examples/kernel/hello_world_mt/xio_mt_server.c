@@ -580,20 +580,18 @@ void xio_thread_down(void *data)
 	rcu_read_lock();
 	ctx = rcu_dereference(tdata->ctx);
 	session = rcu_dereference(tdata->sdata->session);
-	if (!session)
-		goto stop_loop_now;
-
-	if (!tdata->connection)
-		goto stop_loop_now;
-
+	if (!session || !tdata->connection) {
+		rcu_read_unlock();
+		/*goto stop_loop_now; */
+		return;
+	}
 	xio_disconnect(tdata->connection);
 
 	rcu_read_unlock();
 
 	return;
-
+#if 0
 stop_loop_now:
-	rcu_read_unlock();
 	/* there is no session and no connection */
 	spin_lock(&sdata->lock);
 	ctx = rcu_dereference_protected(tdata->ctx,
@@ -607,6 +605,7 @@ stop_loop_now:
 	} else {
 		spin_unlock(&sdata->lock);
 	}
+#endif
 }
 
 void xio_server_down(void *data)
