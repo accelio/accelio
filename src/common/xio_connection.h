@@ -74,24 +74,31 @@ struct xio_connection {
 	uint16_t			req_sn;
 	uint16_t			req_exp_sn;
 	uint16_t			req_ack_sn;
+
 	uint16_t			rsp_sn;
 	uint16_t			rsp_exp_sn;
 	uint16_t			rsp_ack_sn;
 	uint16_t			credits_msgs;
+
 	uint16_t			peer_credits_msgs;
 	uint16_t			rx_queue_watermark_msgs;
 	uint16_t			conn_idx;
 	uint16_t			state;
+
 	uint16_t			fin_req_timeout;
 	uint16_t			disable_notify;
 	uint16_t			disconnecting;
 	uint16_t			restarted;
+
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
 	uint16_t			cd_bit;  /*close disconnect bit */
+	uint16_t			pad;
+
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
 	struct kref			kref;
+	uint32_t			pad2;
 
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
