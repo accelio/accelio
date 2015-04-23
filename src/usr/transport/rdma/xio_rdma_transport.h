@@ -67,7 +67,6 @@ extern spinlock_t		dev_list_lock;
 #define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
-#define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
 #define MAX_NUM_DELAYED_ARM		16
 
@@ -148,6 +147,7 @@ struct xio_rdma_options {
 	int			enable_dma_latency;
 	int			max_in_iovsz;
 	int			max_out_iovsz;
+	int			qp_cap_max_inline_data;
 };
 
 #define XIO_REQ_HEADER_VERSION	1

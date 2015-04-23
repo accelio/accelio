@@ -1117,7 +1117,11 @@ enum xio_optname {
 	/* XIO_OPTLEVEL_RDMA */
 	XIO_OPTNAME_RDMA_NUM_DEVICES = 300,    /**< number of RDMA capable    */
 					       /**< devices on the machine    */
-	XIO_OPTNAME_ENABLE_FORK_INIT = 301,    /**< Call ibv_fork_init()     */
+	XIO_OPTNAME_ENABLE_FORK_INIT,	       /**< Call ibv_fork_init()      */
+	XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA,    /**< Max number of data        */
+					       /**< (bytes) that can be       */
+					       /**< posted inline to the SQ   */
+					       /**< passed to ib(v)_create_qp */
 
 	/* XIO_OPTLEVEL_TCP */
 	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400, /**< check tcp mr validity     */

@@ -92,6 +92,7 @@ MODULE_PARM_DESC(cq_timeout, "moderate CQ to max T micro-sec if T > 0 (default:d
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
+#define XIO_OPTVAL_DEF_QP_CAP_MAX_INLINE_DATA		(200)
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -104,6 +105,7 @@ struct xio_rdma_options			rdma_options = {
 	.enable_dma_latency		= XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY,
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
+	.qp_cap_max_inline_data		= XIO_OPTVAL_DEF_QP_CAP_MAX_INLINE_DATA,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -588,11 +590,10 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.recv_cq		 = tcq->cq;
 	qp_init_attr.cap.max_send_wr	 = 5 * MAX_SEND_WR;
 	qp_init_attr.cap.max_recv_wr	 = MAX_RECV_WR + EXTRA_RQE;
-	qp_init_attr.cap.max_inline_data = MAX_INLINE_DATA;
+	qp_init_attr.cap.max_inline_data = rdma_options.qp_cap_max_inline_data;
 	qp_init_attr.cap.max_send_sge	 = min(rdma_options.max_out_iovsz + 1,
 						dev->device_attr.max_sge);
 	qp_init_attr.cap.max_recv_sge	 = 1;
-	qp_init_attr.cap.max_inline_data = MAX_INLINE_DATA;
 
 	/* only generate completion queue entries if requested
 	 * User space version sets sq_sig_all to 0, according to
@@ -2801,6 +2802,10 @@ static int xio_rdma_set_opt(void *xio_obj,
 		VALIDATE_SZ(sizeof(int));
 		rdma_options.max_out_iovsz = *((int *)optval);
 		return 0;
+	case XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.qp_cap_max_inline_data = *((int *)optval);
+		return 0;
 	default:
 		break;
 	}
@@ -2831,6 +2836,10 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*((int *)optval) = rdma_options.max_out_iovsz;
 		*optlen = sizeof(int);
 		return 0;
+	case XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA:
+		 *((int *)optval) = rdma_options.qp_cap_max_inline_data;
+		*optlen = sizeof(int);
+		 return 0;
 	default:
 		break;
 	}

@@ -67,6 +67,7 @@
 #define XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY		0
 #define XIO_OPTVAL_DEF_MAX_IN_IOVSZ			XIO_IOVLEN
 #define XIO_OPTVAL_DEF_MAX_OUT_IOVSZ			XIO_IOVLEN
+#define XIO_OPTVAL_DEF_QP_CAP_MAX_INLINE_DATA		(200)
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -94,6 +95,7 @@ struct xio_rdma_options			rdma_options = {
 	.enable_dma_latency		= XIO_OPTVAL_DEF_ENABLE_DMA_LATENCY,
 	.max_in_iovsz			= XIO_OPTVAL_DEF_MAX_IN_IOVSZ,
 	.max_out_iovsz			= XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,
+	.qp_cap_max_inline_data		= XIO_OPTVAL_DEF_QP_CAP_MAX_INLINE_DATA,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -909,7 +911,7 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	qp_init_attr.cap.max_send_sge	  = min(rdma_options.max_out_iovsz + 1,
 						dev->device_attr.max_sge);
 	qp_init_attr.cap.max_recv_sge	  = 1;
-	qp_init_attr.cap.max_inline_data  = MAX_INLINE_DATA;
+	qp_init_attr.cap.max_inline_data  = rdma_options.qp_cap_max_inline_data;
 
 	/* only generate completion queue entries if requested */
 	qp_init_attr.sq_sig_all		= 0;
@@ -3067,6 +3069,10 @@ static int xio_rdma_set_opt(void *xio_obj,
 		VALIDATE_SZ(sizeof(int));
 		rdma_options.max_out_iovsz = *((int *)optval);
 		return 0;
+	case XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA:
+		VALIDATE_SZ(sizeof(int));
+		rdma_options.qp_cap_max_inline_data = *((int *)optval);
+		return 0;
 	case XIO_OPTNAME_ENABLE_FORK_INIT:
 		return xio_rdma_enable_fork_support();
 	default:
@@ -3099,6 +3105,10 @@ static int xio_rdma_get_opt(void  *xio_obj,
 		*((int *)optval) = rdma_options.max_out_iovsz;
 		*optlen = sizeof(int);
 		return 0;
+	case XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA:
+		 *((int *)optval) = rdma_options.qp_cap_max_inline_data;
+		*optlen = sizeof(int);
+		 return 0;
 	case XIO_OPTNAME_RDMA_NUM_DEVICES:
 		*((int *)optval) = rdma_num_devices;
 		*optlen = sizeof(int);
