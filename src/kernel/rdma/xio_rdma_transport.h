@@ -63,8 +63,6 @@ extern struct xio_options	*g_poptions;
 #define MAX_CQE_PER_QP			(5*MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
 
-#define DEF_DATA_ALIGNMENT		0
-#define SEND_BUF_SZ			9216
 #define MAX_HDR_SZ			512
 #define BUDGET_SIZE			1024
 #define MAX_NUM_DELAYED_ARM		16
