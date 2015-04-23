@@ -44,10 +44,10 @@ maintainer-clean: distclean
 distdir: $(DISTFILES)
 	cp -p $(DISTFILES) $(distdir)
 
+compat/.git:
+	cd ../../../ && git submodule update --init
 
-all-spec:
+all-spec: compat/.git
 	@export KLIB_BUILD=@kernelsrc@ @KERNELMAKE_PARAMS@
-	@cd ../../../ && git submodule update --init && cd ./src/kernel/compat
-	cd ./compat && $(MAKE) && cd ../
+	cd ./compat && $(MAKE)
 	@cp -f ./compat/compat/$(compatmodule) ./ && cp -f ./compat/Module.symvers ./
-
