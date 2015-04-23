@@ -974,8 +974,8 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* from now on don't allow changes */
 	tcp_hndl->max_inline_buf_sz	= max_xio_hdr +
-					  xio_get_options()->max_inline_hdr +
-					  xio_get_options()->max_inline_data;
+					  xio_get_options()->max_inline_xio_hdr +
+					  xio_get_options()->max_inline_xio_data;
 	tcp_hndl->max_inline_buf_sz	=
 				ALIGN(tcp_hndl->max_inline_buf_sz, 64);
 
@@ -2566,7 +2566,7 @@ static int xio_tcp_is_valid_out_msg(struct xio_msg *msg)
 	     (vmsg->header.iov_len != 0)))
 			return 0;
 
-	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_hdr)
+	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_xio_hdr)
 		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {

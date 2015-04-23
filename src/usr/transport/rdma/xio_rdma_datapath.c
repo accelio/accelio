@@ -2017,10 +2017,10 @@ static int xio_rdma_prep_rsp_out_data(
 	/* initialize the txd */
 	rdma_task->txd.send_wr.num_sge = 1;
 
-	if (g_options.inline_data_align && ulp_imm_len) {
+	if (g_options.inline_xio_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
-		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+		ulp_pad_len = ALIGN(hdr_len, g_options.inline_xio_data_align) -
 			      hdr_len;
 	}
 
@@ -2208,10 +2208,10 @@ static int xio_rdma_prep_req_out_data(
 						 rdma_task->read_num_sge);
 	xio_max_hdr_len = xio_hdr_len + sizeof(struct xio_sge) * nents;
 
-	if (g_options.inline_data_align && ulp_imm_len) {
+	if (g_options.inline_xio_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
-		ulp_pad_len = ALIGN(hdr_len, g_options.inline_data_align) -
+		ulp_pad_len = ALIGN(hdr_len, g_options.inline_xio_data_align) -
 			      hdr_len;
 	}
 
@@ -2227,7 +2227,7 @@ static int xio_rdma_prep_req_out_data(
 			      ulp_imm_len + xio_max_hdr_len) <=
 			     rdma_hndl->max_inline_buf_sz) &&
 			    (((int)(ulp_imm_len) <=
-			      g_options.max_inline_data) ||
+			      g_options.max_inline_xio_data) ||
 			     ulp_imm_len == 0));
 
 	/* The data is outgoing via SEND

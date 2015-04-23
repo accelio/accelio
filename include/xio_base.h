@@ -1098,15 +1098,16 @@ enum xio_optname {
 	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES, /**< maximum rx queued bytes	      */
 	XIO_OPTNAME_CONFIG_MEMPOOL,	   /**< configure internal memory pool*/
 
-	XIO_OPTNAME_MAX_INLINE_HEADER,    /**< set/get maximum inline header  */
-					  /**< size			      */
+	XIO_OPTNAME_MAX_INLINE_XIO_HEADER, /**< set/get max inline XIO header */
+					   /**< size			      */
 
-	XIO_OPTNAME_MAX_INLINE_DATA,      /**< set/get maximum inline data    */
-					  /**< size			      */
+	XIO_OPTNAME_MAX_INLINE_XIO_DATA,   /**< set/get max inline XIO data   */
+					   /**< size			      */
 
 	XIO_OPTNAME_XFER_BUF_ALIGN,     /**< set/get alignment of data buffer */
 					/**< address			      */
-	XIO_OPTNAME_INLINE_DATA_ALIGN,  /**< set/get alignment of inline data */
+	XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,  /**< set/get alignment of inline  */
+					    /**< xio data		      */
 					/**< buffer address		      */
 
 	/* XIO_OPTLEVEL_RDMA/TCP */

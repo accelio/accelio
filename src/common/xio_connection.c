@@ -266,7 +266,7 @@ static void xio_connection_set_ow_send_comp_params(struct xio_msg *msg)
 		set_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &msg->flags);
 		return;
 	}
-	if (data_len > (ssize_t)g_options.max_inline_data && data_len > 0) {
+	if (data_len > (ssize_t)g_options.max_inline_xio_data && data_len > 0) {
 		clr_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &msg->flags);
 		set_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &msg->flags);
 		return;

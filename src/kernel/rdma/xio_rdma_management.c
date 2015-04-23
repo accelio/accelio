@@ -2326,8 +2326,8 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->rq_depth		= MAX_RECV_WR;
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
-	rdma_hndl->max_inline_buf_sz	= xio_get_options()->max_inline_hdr +
-					  xio_get_options()->max_inline_data +
+	rdma_hndl->max_inline_buf_sz	= xio_get_options()->max_inline_xio_hdr +
+					  xio_get_options()->max_inline_xio_data +
 					  max_xio_hdr;
 	rdma_hndl->max_inline_buf_sz	=
 				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
@@ -2961,9 +2961,9 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 		return 0;
 	}
 
-	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_hdr) {
+	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_xio_hdr) {
 		ERROR_LOG("Header is too large %zu>%zu\n", vmsg->header.iov_len,
-			  (size_t)xio_get_options()->max_inline_hdr);
+			  (size_t)xio_get_options()->max_inline_xio_hdr);
 		return 0;
 	}
 

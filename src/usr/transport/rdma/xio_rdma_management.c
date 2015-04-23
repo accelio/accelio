@@ -2571,8 +2571,8 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
 	rdma_hndl->max_inline_buf_sz	= max_xio_hdr +
-					  g_options.max_inline_hdr +
-					  g_options.max_inline_data;
+					  g_options.max_inline_xio_hdr +
+					  g_options.max_inline_xio_data;
 	rdma_hndl->max_inline_buf_sz	=
 				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
 
@@ -3363,7 +3363,7 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	if (!vmsg->header.iov_base  && (vmsg->header.iov_len != 0))
 		return 0;
 
-	if (vmsg->header.iov_len > (size_t)g_options.max_inline_hdr)
+	if (vmsg->header.iov_len > (size_t)g_options.max_inline_xio_hdr)
 		return 0;
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {

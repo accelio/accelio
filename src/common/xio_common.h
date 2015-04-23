@@ -185,15 +185,15 @@ struct xio_options {
 	int			max_out_iovsz;
 	int			reconnect;
 	/* transport options needed globally */
-	int			max_inline_hdr;
-	int			max_inline_data;
+	int			max_inline_xio_hdr;
+	int			max_inline_xio_data;
 	int			enable_flow_control;
 	int			snd_queue_depth_msgs;
 	int			rcv_queue_depth_msgs;
 	uint64_t		snd_queue_depth_bytes;
 	uint64_t		rcv_queue_depth_bytes;
 	int			xfer_buf_align;
-	int			inline_data_align;
+	int			inline_xio_data_align;
 };
 
 /*---------------------------------------------------------------------------*/

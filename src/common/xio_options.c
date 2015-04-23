@@ -52,25 +52,25 @@
 #define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS		1024
 #define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
 #define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
-#define XIO_OPTVAL_DEF_MAX_INLINE_HEADER		256
-#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8 * 1024)
+#define XIO_OPTVAL_DEF_MAX_INLINE_XIO_HEADER		256
+#define XIO_OPTVAL_DEF_MAX_INLINE_XIO_DATA		(8 * 1024)
 #define XIO_OPTVAL_DEF_XFER_BUF_ALIGN			(64)
-#define XIO_OPTVAL_DEF_INLINE_DATA_ALIGN		(0)
+#define XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN		(0)
 
 /* xio options */
 struct xio_options			g_options = {
 	XIO_OPTVAL_DEF_MAX_IN_IOVSZ,		/*max_in_iovsz*/
 	XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,		/*max_out_iovsz*/
 	XIO_OPTVAL_DEF_ENABLE_RECONNECT,	/*reconnect*/
-	XIO_OPTVAL_DEF_MAX_INLINE_HEADER,	/*max_inline_hdr*/
-	XIO_OPTVAL_DEF_MAX_INLINE_DATA,		/*max_inline_data*/
+	XIO_OPTVAL_DEF_MAX_INLINE_XIO_HEADER,	/*max_inline_xio_hdr*/
+	XIO_OPTVAL_DEF_MAX_INLINE_XIO_DATA,	/*max_inline_xio_data*/
 	XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL,	/*enable_flow_control*/
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS,	/*snd_queue_depth_msgs*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,	/*rcv_queue_depth_msgs*/
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,	/*snd_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,	/*rcv_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_XFER_BUF_ALIGN,		/* xfer_buf_align */
-	XIO_OPTVAL_DEF_INLINE_DATA_ALIGN	/* inline_data_align */
+	XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN	/* inline_xio_data_align */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -214,19 +214,19 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			break;
 		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
-	case XIO_OPTNAME_MAX_INLINE_HEADER:
+	case XIO_OPTNAME_MAX_INLINE_XIO_HEADER:
 		if (optlen != sizeof(int))
 			break;
 		if (*((int *)optval) < 0)
 			break;
-		g_options.max_inline_hdr = *((int *)optval);
+		g_options.max_inline_xio_hdr = *((int *)optval);
 		return 0;
-	case XIO_OPTNAME_MAX_INLINE_DATA:
+	case XIO_OPTNAME_MAX_INLINE_XIO_DATA:
 		if (optlen != sizeof(int))
 			break;
 		if (*((int *)optval) < 0)
 			break;
-		g_options.max_inline_data = *((int *)optval);
+		g_options.max_inline_xio_data = *((int *)optval);
 		return 0;
 	case XIO_OPTNAME_XFER_BUF_ALIGN:
 		if (optlen != sizeof(int))
@@ -238,19 +238,19 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		}
 		g_options.xfer_buf_align = tmp;
 		return 0;
-	case XIO_OPTNAME_INLINE_DATA_ALIGN:
+	case XIO_OPTNAME_INLINE_XIO_DATA_ALIGN:
 		if (optlen != sizeof(int))
 			break;
 		tmp = *(int *)optval;
 		if (!tmp) {
-			g_options.inline_data_align = tmp;
+			g_options.inline_xio_data_align = tmp;
 			return 0;
 		}
 		if (!is_power_of_2(tmp) || !(tmp % sizeof(void *) == 0)) {
 			xio_set_error(EINVAL);
 			return -1;
 		}
-		g_options.inline_data_align = tmp;
+		g_options.inline_xio_data_align = tmp;
 		return 0;
 	default:
 		break;
@@ -303,17 +303,17 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(uint64_t);
 		 *((uint64_t *)optval) = g_options.rcv_queue_depth_bytes;
 		 return 0;
-	case XIO_OPTNAME_MAX_INLINE_HEADER:
+	case XIO_OPTNAME_MAX_INLINE_XIO_HEADER:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.max_inline_hdr;
+		 *((int *)optval) = g_options.max_inline_xio_hdr;
 		 return 0;
-	case XIO_OPTNAME_MAX_INLINE_DATA:
+	case XIO_OPTNAME_MAX_INLINE_XIO_DATA:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.max_inline_data;
+		 *((int *)optval) = g_options.max_inline_xio_data;
 		 return 0;
-	case XIO_OPTNAME_INLINE_DATA_ALIGN:
+	case XIO_OPTNAME_INLINE_XIO_DATA_ALIGN:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.inline_data_align;
+		 *((int *)optval) = g_options.inline_xio_data_align;
 		 return 0;
 	case XIO_OPTNAME_XFER_BUF_ALIGN:
 		*optlen = sizeof(int);
@@ -418,4 +418,3 @@ int xio_get_opt(void *xio_obj, int level,  int optname,
 	return -1;
 }
 EXPORT_SYMBOL(xio_get_opt);
-
