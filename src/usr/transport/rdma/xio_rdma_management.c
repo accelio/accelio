@@ -2726,7 +2726,8 @@ static int xio_rdma_dup2(struct xio_transport_base *old_trans_hndl,
 	xio_rdma_close(*new_trans_hndl);
 
 	/* nexus layer will call close which will only decrement */
-	kref_get(&old_trans_hndl->kref);
+	/*kref_get(&old_trans_hndl->kref);*/
+
 	*new_trans_hndl = old_trans_hndl;
 
 	return 0;

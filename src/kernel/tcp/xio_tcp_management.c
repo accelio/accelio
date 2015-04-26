@@ -2589,7 +2589,8 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	xio_tcp_close(*new_trans_hndl);
 
 	/* conn layer will call close which will only decrement */
-	kref_get(&old_trans_hndl->kref);
+	/*kref_get(&old_trans_hndl->kref);*/
+
 	*new_trans_hndl = old_trans_hndl;
 
 	return 0;
