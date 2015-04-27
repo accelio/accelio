@@ -560,3 +560,18 @@ int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
 }
 EXPORT_SYMBOL(xio_context_poll_completions);
 
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		if (!--ctx->run_private) {
+			xio_context_stop_loop(ctx);
+		}
+	}
+}
+EXPORT_SYMBOL(xio_context_destroy_resume);

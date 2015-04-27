@@ -110,6 +110,7 @@ struct xio_context {
 	struct xio_observable		observable;
 	void				*netlink_sock;
 	struct dentry			*ctx_dentry;
+	xio_work_handle_t               destroy_ctx_work;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -238,13 +239,7 @@ static inline void xio_context_destroy_wait(struct xio_context *ctx)
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy_resume	                                             */
 /*---------------------------------------------------------------------------*/
-static inline void xio_context_destroy_resume(struct xio_context *ctx)
-{
-	if (ctx->run_private) {
-		if (!--ctx->run_private)
-			xio_context_stop_loop(ctx);
-	}
-}
+void xio_context_destroy_resume(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_set_poll_completions_fn	                                     */

@@ -175,7 +175,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 	xio_root = xio_debugfs_root();
 	if (xio_root) {
 		/* More then one contexts can share the core */
-		sprintf(name, "ctx-%d-%p", cpu_hint, worker);
+		sprintf(name, "ctx-%d-%p", cpu_hint, ctx);
 		ctx->ctx_dentry = debugfs_create_dir(name, xio_root);
 		if (!ctx->ctx_dentry) {
 			ERROR_LOG("debugfs entry %s create failed\n", name);
@@ -283,27 +283,14 @@ static void xio_ctx_task_pools_destroy(struct xio_context *ctx)
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy	                                                     */
 /*---------------------------------------------------------------------------*/
-void xio_context_destroy(struct xio_context *ctx)
+void xio_destroy_context_continue(struct work_struct *work)
 {
+	xio_work_handle_t *xio_work;
+	struct xio_context *ctx;
 	int i;
-	int found;
 
-	found = xio_idr_lookup_uobj(usr_idr, ctx);
-	if (found) {
-		xio_idr_remove_uobj(usr_idr, ctx);
-	} else {
-		ERROR_LOG("context not found:%p\n", ctx);
-		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
-		return;
-	}
-
-	ctx->run_private = 0;
-	xio_observable_notify_all_observers(&ctx->observable,
-					    XIO_CONTEXT_EVENT_CLOSE, NULL);
-	/* allow internally to run the loop for final cleanup */
-	if (ctx->run_private)
-		xio_context_run_loop(ctx);
-
+	xio_work = container_of(work, xio_work_handle_t, work);
+	ctx = container_of(xio_work, struct xio_context, destroy_ctx_work);
 	if (ctx->run_private)
 		ERROR_LOG("not all observers finished! run_private=%d\n",
 			  ctx->run_private);
@@ -341,6 +328,30 @@ void xio_context_destroy(struct xio_context *ctx)
 	}
 
 	kfree(ctx);
+}
+EXPORT_SYMBOL(xio_destroy_context_continue);
+
+void xio_context_destroy(struct xio_context *ctx)
+{
+	int found;
+
+	found = xio_idr_lookup_uobj(usr_idr, ctx);
+	if (found) {
+		xio_idr_remove_uobj(usr_idr, ctx);
+	} else {
+		ERROR_LOG("context not found:%p\n", ctx);
+		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+		return;
+	}
+
+	ctx->run_private = 0;
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_CLOSE, NULL);
+	/* allow internally to run the loop for final cleanup */
+	if (ctx->run_private)
+		xio_context_run_loop(ctx);
+	if (ctx->run_private == 0)
+		xio_destroy_context_continue(&ctx->destroy_ctx_work.work);
 }
 EXPORT_SYMBOL(xio_context_destroy);
 
@@ -515,3 +526,30 @@ struct xio_mempool *xio_mempool_get(struct xio_context *ctx)
 	return ctx->mempool;
 }
 EXPORT_SYMBOL(xio_mempool_get);
+
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		if (!--ctx->run_private) {
+			switch (ctx->flags) {
+				case XIO_LOOP_GIVEN_THREAD:
+					xio_context_stop_loop(ctx);
+					break;
+				case XIO_LOOP_WORKQUEUE:
+					INIT_WORK(&ctx->destroy_ctx_work.work, xio_destroy_context_continue);
+					schedule_work(&ctx->destroy_ctx_work.work);
+					break;
+				default:
+					ERROR_LOG("Not supported type. %d\n", ctx->flags);
+					break;
+			}
+		}
+	}
+}
+EXPORT_SYMBOL(xio_context_destroy_resume);

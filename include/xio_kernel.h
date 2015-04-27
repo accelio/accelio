@@ -284,6 +284,7 @@ void xio_context_stop_loop(struct xio_context *ctx);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data);
 
+void xio_destroy_context_continue(struct work_struct *work);
 /*---------------------------------------------------------------------------*/
 /* XIO debugfs facility							     */
 /*---------------------------------------------------------------------------*/
