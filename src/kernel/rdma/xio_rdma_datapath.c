@@ -1264,7 +1264,6 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IB_WC_SEND:
-	case IB_WC_RDMA_WRITE:
 		xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_RDMA_READ:
@@ -1277,6 +1276,8 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 			xio_direct_rdma_rd_comp_handler(rdma_hndl, task);
 		else
 			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
+		break;
+	case IB_WC_RDMA_WRITE:
 		break;
 	case IB_WC_LOCAL_INV:
 	case IB_WC_FAST_REG_MR:
