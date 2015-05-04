@@ -3439,6 +3439,9 @@ static int xio_rdma_on_recv_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	task->rtid	 = rsp_hdr.ltid;
 	rdma_sender_task = task->sender_task->dd_data;
+	/* mark the sender task as arrived */
+	task->sender_task->state = XIO_TASK_STATE_RESPONSE_RECV;
+
 	xio_unmap_tx_work_req(rdma_hndl->dev, &rdma_sender_task->txd);
 
 	if (rdma_sender_task->read_sge.nents && rdma_sender_task->read_sge.mapped)
@@ -3972,6 +3975,7 @@ static int xio_rdma_on_recv_req(struct xio_rdma_transport *rdma_hndl,
 	}
 
 	/* save originator identifier */
+	task->imsg_flags	= req_hdr.flags;
 	task->rtid		= req_hdr.ltid;
 
 	imsg		= &task->imsg;
