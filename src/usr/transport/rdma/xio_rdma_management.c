@@ -1894,6 +1894,14 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 	int				retval = 0;
 	struct rdma_conn_param		cm_params;
 
+	if (!rdma_hndl->cm_id || !rdma_hndl->cm_id->verbs) {
+		xio_set_error(ENODEV);
+		ERROR_LOG("NULL ibv_context. rdma_hndl:%p, cm_id:%p\n",
+			  rdma_hndl, rdma_hndl->cm_id);
+		/* do not notify error in this case since it may
+		 * already was notified */
+		return;
+	}
 	retval = xio_qp_create(rdma_hndl);
 	if (retval != 0) {
 		ERROR_LOG("internal logic error in create_endpoint\n");
