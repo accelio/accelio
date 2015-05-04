@@ -58,9 +58,11 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	void			*buf;
 	void			*data, *ptr;
 	struct xio_tasks_slab	*s;
+	struct xio_task		*task;
 	int			retval = 0, i;
 	int			tot_sz;
 	int			huge_alloc = 0;
+	LIST_HEAD(tmp_list);
 
 	if ((int)q->params.start_nr < 0  || (int)q->params.max_nr < 0 ||
 	    (int)q->params.alloc_nr < 0) {
@@ -79,15 +81,15 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	/* slab + private data */
 	slab_alloc_sz = sizeof(struct xio_tasks_slab) +
 			q->params.slab_dd_data_sz +
-			alloc_nr*sizeof(struct xio_task *);
+			alloc_nr * sizeof(struct xio_task *);
 
 	/* slab data */
-	tasks_alloc_sz = alloc_nr*(sizeof(struct xio_task) +
-			  g_options.max_in_iovsz*sizeof(struct xio_iovec_ex) +
-			  g_options.max_out_iovsz*sizeof(struct xio_iovec_ex) +
-			  q->params.task_dd_data_sz);
+	tasks_alloc_sz = alloc_nr * (sizeof(struct xio_task) +
+			g_options.max_in_iovsz * sizeof(struct xio_iovec_ex) +
+			g_options.max_out_iovsz * sizeof(struct xio_iovec_ex) +
+			q->params.task_dd_data_sz);
 
-	tot_sz = slab_alloc_sz+tasks_alloc_sz;
+	tot_sz = slab_alloc_sz + tasks_alloc_sz;
 
 	if (tot_sz > 1 << 20) {
 		buf = umalloc_huge_pages(tot_sz);
@@ -130,35 +132,31 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 
 	for (i = 0; i < alloc_nr; i++) {
 		s->array[i]		= (struct xio_task *)data;
-		s->array[i]->tlv_type	= 0xdead;
-		s->array[i]->ltid	= s->start_idx + i;
-		s->array[i]->magic	= XIO_TASK_MAGIC;
-		s->array[i]->pool	= (void *)q;
-		s->array[i]->dd_data	= ((char *)data) +
+		task			= s->array[i];
+		task->tlv_type	= 0xdead;
+		task->ltid	= s->start_idx + i;
+		task->magic	= XIO_TASK_MAGIC;
+		task->pool	= (void *)q;
+		task->dd_data	= ((char *)data) +
 						sizeof(struct xio_task);
 
 		data = ((char *)data) + sizeof(struct xio_task) +
 					q->params.task_dd_data_sz;
 
-		s->array[i]->imsg.in.sgl_type		 =
-						XIO_SGL_TYPE_IOV_PTR;
-		s->array[i]->imsg.in.pdata_iov.sglist	 =
-						(struct xio_iovec_ex *)data;
-		s->array[i]->imsg.in.pdata_iov.max_nents =
-						g_options.max_in_iovsz;
+		task->imsg.in.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
+		task->imsg.in.pdata_iov.sglist	= (struct xio_iovec_ex *)data;
+		task->imsg.in.pdata_iov.max_nents = g_options.max_in_iovsz;
 
 		data = ((char *)data) +
-			g_options.max_in_iovsz*sizeof(struct xio_iovec_ex);
+			g_options.max_in_iovsz * sizeof(struct xio_iovec_ex);
 
-		s->array[i]->imsg.out.sgl_type		  =
-						XIO_SGL_TYPE_IOV_PTR;
-		s->array[i]->imsg.out.pdata_iov.sglist	  =
-						(struct xio_iovec_ex *)data;
-		s->array[i]->imsg.out.pdata_iov.max_nents =
+		task->imsg.out.sgl_type		= XIO_SGL_TYPE_IOV_PTR;
+		task->imsg.out.pdata_iov.sglist	= (struct xio_iovec_ex *)data;
+		task->imsg.out.pdata_iov.max_nents =
 						g_options.max_out_iovsz;
 
 		data = ((char *)data) +
-			g_options.max_out_iovsz*sizeof(struct xio_iovec_ex);
+			g_options.max_out_iovsz * sizeof(struct xio_iovec_ex);
 
 		if (q->params.pool_hooks.slab_init_task) {
 			retval = q->params.pool_hooks.slab_init_task(
@@ -166,15 +164,16 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 				q->dd_data,
 				s->dd_data,
 				i,
-				s->array[i]);
+				task);
 			if (retval)
 				goto cleanup;
 		}
-		list_add_tail(&s->array[i]->tasks_list_entry, &q->stack);
+		list_add_tail(&task->tasks_list_entry, &tmp_list);
 	}
 	q->curr_alloced += alloc_nr;
 
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
+	list_splice_tail(&tmp_list, &q->stack);
 
 	if (q->params.pool_hooks.slab_post_create) {
 		retval = q->params.pool_hooks.slab_post_create(
@@ -206,7 +205,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 	char			*buf;
 
 	/* pool */
-	buf = (char *)ucalloc(sizeof(*q)+params->pool_dd_data_sz, 1);
+	buf = (char *)ucalloc(sizeof(*q) + params->pool_dd_data_sz, 1);
 	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("ucalloc failed\n");
@@ -227,7 +226,7 @@ struct xio_tasks_pool *xio_tasks_pool_create(
 		q->params.pool_hooks.pool_pre_create(
 				q->params.pool_hooks.context, q, q->dd_data);
 
-	if (q->params.start_nr != 0) {
+	if (q->params.start_nr) {
 		xio_tasks_pool_alloc_slab(q, q->params.pool_hooks.context);
 		if (list_empty(&q->stack)) {
 			ufree(q);
@@ -295,6 +294,9 @@ void xio_tasks_pool_remap(struct xio_tasks_pool *q, void *new_context)
 {
 	struct xio_tasks_slab	*pslab, *next_pslab;
 	unsigned int		i;
+
+	if (!q)
+		return;
 
 	list_for_each_entry_safe(pslab, next_pslab, &q->slabs_list,
 				 slabs_list_entry) {

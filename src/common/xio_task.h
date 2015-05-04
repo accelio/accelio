@@ -245,15 +245,21 @@ static inline struct xio_task *xio_tasks_pool_get(
 {
 	struct xio_task *t;
 
-	if (unlikely(list_empty(&q->stack))) {
+	t = list_first_entry_or_null(&q->stack, struct xio_task,
+				     tasks_list_entry);
+
+	if (unlikely(!t || list_is_last(&t->tasks_list_entry, &q->stack))) {
 		if (q->curr_used == q->params.max_nr)
 			return NULL;
 		xio_tasks_pool_alloc_slab(q, context);
 		if (unlikely(list_empty(&q->stack)))
 			return NULL;
+		t = list_last_entry(&q->stack, struct xio_task,
+				    tasks_list_entry);
+	} else {
+		t = list_first_entry(&q->stack, struct xio_task,
+				     tasks_list_entry);
 	}
-
-	t = list_first_entry(&q->stack, struct xio_task,  tasks_list_entry);
 	list_del_init(&t->tasks_list_entry);
 	q->curr_used++;
 	if (q->curr_used > q->max_used)
