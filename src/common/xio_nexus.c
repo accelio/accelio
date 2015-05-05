@@ -547,9 +547,10 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 		cid = req.cid;
 		flags = XIO_RECONNECT;
 		dis_nexus = xio_nexus_cache_lookup(cid);
-		if (dis_nexus) {
+		if (dis_nexus && dis_nexus != new_nexus) {
 			/* stop timer */
 			xio_nexus_cancel_dwork(dis_nexus);
+
 			retval = xio_nexus_swap(dis_nexus, new_nexus);
 			if (retval != 0) {
 				ERROR_LOG("swap nexus failed\n");
@@ -561,17 +562,18 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 			nexus = dis_nexus;
 		} else {
 			flags = XIO_CID;
-			status = -1;
+			status = XIO_E_UNSUCCESSFUL;
 		}
-	} else {
-		cid = nexus->cid;
-		/* time to prepare the primary pool */
-		retval = xio_nexus_primary_pool_create(nexus);
-		if (retval != 0) {
-			ERROR_LOG("create primary pool failed\n");
-			status = ENOMEM;
-			goto send_response;
-		}
+		goto send_response;
+	}
+
+	cid = nexus->cid;
+	/* time to prepare the primary pool */
+	retval = xio_nexus_primary_pool_create(nexus);
+	if (retval != 0) {
+		ERROR_LOG("create primary pool failed\n");
+		status = ENOMEM;
+		goto send_response;
 	}
 
 send_response:
@@ -611,6 +613,43 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_prep_new_transport						     */
+/*---------------------------------------------------------------------------*/
+static int xio_nexus_prep_new_transport(struct xio_nexus *nexus)
+{
+	int retval;
+
+	/* ignore close event on transport_hndl (part of dup2) */
+	xio_observable_unreg_observer(
+			&nexus->transport_hndl->observable,
+			&nexus->trans_observer);
+
+	/* nexus is an observer of the new transport (see open API)
+	 * no need to register
+	 */
+	xio_tasks_pool_remap(nexus->primary_tasks_pool,
+			     nexus->new_transport_hndl);
+	/* make nexus->transport_hndl copy of nexus->new_transport_hndl
+	 * old nexus->trasport_hndl will be closed
+	 */
+	if (nexus->transport->dup2(nexus->new_transport_hndl,
+				   &nexus->transport_hndl)) {
+		ERROR_LOG("dup2 transport failed\n");
+		return -1;
+	}
+
+	/* TODO: what about messages held by the application */
+	/* be ready to receive messages */
+	retval = xio_nexus_primary_pool_recreate(nexus);
+	if (retval != 0) {
+		ERROR_LOG("recreate primary pool failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_on_recv_setup_rsp						     */
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
@@ -619,7 +658,7 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 	struct xio_nexus_setup_rsp	rsp;
 	int				retval;
 
-	TRACE_LOG("receiving setup response\n");
+	TRACE_LOG("receiving setup response. nexus:%p\n", nexus);
 	retval = xio_nexus_read_setup_rsp(task, &rsp);
 	if (retval != 0)
 		goto cleanup;
@@ -634,6 +673,15 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 			 */
 			/* Stop timer */
 			xio_nexus_cancel_dwork(nexus);
+			if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
+				retval = xio_nexus_prep_new_transport(nexus);
+				if (retval != 0) {
+					ERROR_LOG(
+					      "prep new transport failed\n");
+					return -1;
+				}
+			}
+
 			/* Kill nexus */
 			nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 			TRACE_LOG("nexus state changed to disconnected\n");
@@ -650,7 +698,11 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 					XIO_NEXUS_EVENT_ERROR,
 					&nexus_event_data);
 		}
-		return -1;
+		xio_tasks_pool_put(task->sender_task);
+		task->sender_task = NULL;
+		xio_tasks_pool_put(task);
+
+		return 0;
 	}
 	if (rsp.version != XIO_VERSION) {
 		xio_set_error(XIO_E_INVALID_VERSION);
@@ -683,30 +735,9 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 		/* Stop reconnect timer */
 		xio_nexus_cancel_dwork(nexus);
 
-		/* ignore close event on transport_hndl (part of dup2) */
-		xio_observable_unreg_observer(
-				&nexus->transport_hndl->observable,
-				&nexus->trans_observer);
-
-		/* nexus is an observer of the new transport (see open API)
-		 * no need to register
-		 */
-		xio_tasks_pool_remap(nexus->primary_tasks_pool,
-				     nexus->new_transport_hndl);
-		/* make nexus->transport_hndl copy of nexus->new_transport_hndl
-		 * old nexus->trasport_hndl will be closed
-		 */
-		if (nexus->transport->dup2(nexus->new_transport_hndl,
-					   &nexus->transport_hndl)) {
-			ERROR_LOG("dup2 transport failed\n");
-			return -1;
-		}
-
-		/* TODO: what about messages held by the application */
-		/* be ready to receive messages */
-		retval = xio_nexus_primary_pool_recreate(nexus);
+		retval = xio_nexus_prep_new_transport(nexus);
 		if (retval != 0) {
-			ERROR_LOG("recreate primary pool failed\n");
+			ERROR_LOG("prep new transport failed\n");
 			return -1;
 		}
 		nexus->state = XIO_NEXUS_STATE_CONNECTED;
@@ -1566,7 +1597,7 @@ static int xio_nexus_on_new_message(struct xio_nexus *nexus,
 
 	if (retval != 0) {
 		ERROR_LOG("failed to handle message. " \
-			  "nexus:%p tlv_type:%d op:%d\n",
+			  "nexus:%p tlv_type:0x%x op:%d\n",
 			  nexus, task->tlv_type, event_data->msg.op);
 	}
 
@@ -1822,10 +1853,8 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	xio_context_disable_event(&nexus->disconnect_event);
 	xio_context_disable_event(&nexus->trans_error_event);
 
-	if (nexus->trans_error_event.data) {
-		kfree(nexus->trans_error_event.data);
-		nexus->trans_error_event.data = NULL;
-	}
+	kfree(nexus->trans_error_event.data);
+	nexus->trans_error_event.data = NULL;
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,
 					  &nexus->srv_observer);
@@ -2601,6 +2630,10 @@ static void xio_nexus_client_reconnect_failed(void *data)
 {
 	struct xio_nexus *nexus = (struct xio_nexus *)data;
 	int retval;
+
+	retval = xio_nexus_prep_new_transport(nexus);
+	if (retval != 0)
+		ERROR_LOG("prep new transport failed\n");
 
 	/* Failed to reconnect (connect was called) */
 	if (nexus->reconnect_retries) {
