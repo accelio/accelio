@@ -38,6 +38,11 @@
 #ifndef XIO_TASK_H
 #define XIO_TASK_H
 
+#ifndef list_last_entry
+#define list_last_entry(ptr, type, member) \
+	list_entry((ptr)->prev, type, member)
+#endif
+
 enum xio_task_state {
 	XIO_TASK_STATE_INIT,
 	XIO_TASK_STATE_DELIVERED,
