@@ -38,6 +38,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <time.h>
+#include <sys/time.h>
 #include <event2/event.h>		/* libevent header (libevent-devel) */
 #include <event2/event_struct.h>	/* libevent header (libevent-devel) */
 
@@ -63,7 +65,11 @@ struct session_data {
 
 static inline void timeout_cb(evutil_socket_t fd, short event, void *arg)
 {
-	printf("timeout_cb called\n");
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	ts.tv_nsec /= 1000000;
+	printf("[%lu.%lu] - timeout_cb called\n", ts.tv_sec, ts.tv_nsec);
 }
 
 static inline void xio_event_handler(int fd, short event, void *arg)
@@ -257,6 +263,7 @@ int main(int argc, char *argv[])
 
 	evutil_timerclear(&tv);
 	tv.tv_sec = 2;
+	tv.tv_usec = 0;
 	event_add(&timeout, &tv);
 
 	event_assign(&xio_event, session_data.evbase, xio_fd,
