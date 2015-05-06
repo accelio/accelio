@@ -1247,9 +1247,10 @@ static void xio_rearm_completions(struct xio_cq *tcq)
 /*---------------------------------------------------------------------------*/
 static void xio_poll_cq_armable(struct xio_cq *tcq)
 {
-	int err;
+	int err = -1;
 
-	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
+	if (++tcq->num_poll_cq < NUM_POLL_CQ)
+		err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (unlikely(err < 0)) {
 		struct xio_rdma_transport *rdma_hndl;
 
@@ -1292,6 +1293,9 @@ static void xio_sched_consume_cq(void *data)
 {
 	struct xio_cq *tcq = (struct xio_cq *)data;
 	int err;
+
+	if (++tcq->num_poll_cq >= NUM_POLL_CQ)
+		return;
 
 	err = xio_poll_cq(tcq, MAX_POLL_WC, tcq->ctx->polling_timeout);
 	if (err > 0) {
@@ -1340,7 +1344,7 @@ void xio_cq_event_handler(int fd  __attribute__ ((unused)),
 		return;
 	}
 	tcq->cq_events_that_need_ack++;
-
+	tcq->num_poll_cq = 0;
 	/* if a poll was previously scheduled, remove it,
 	   as it will be scheduled when necessary */
 	xio_context_disable_event(&tcq->poll_cq_event);

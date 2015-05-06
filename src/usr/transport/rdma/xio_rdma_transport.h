@@ -54,6 +54,7 @@ extern spinlock_t		dev_list_lock;
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
+#define NUM_POLL_CQ			16
 
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
@@ -297,6 +298,8 @@ struct xio_cq  {
 	int32_t				cqe_avail;    /* free elements  */
 	struct kref			kref;       /* utilization counter */
 	int32_t				num_delayed_arm;
+	int32_t				num_poll_cq;
+	int32_t				pad;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */
