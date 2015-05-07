@@ -66,6 +66,25 @@ static spinlock_t mr_list_lock;
 static uint32_t mr_num; /* checkpatch doesn't like initializing static vars */
 
 /*---------------------------------------------------------------------------*/
+/* xio_register_transport						     */
+/*---------------------------------------------------------------------------*/
+static int xio_register_transport(void)
+{
+	static int init_transport;
+
+	/* this may the first call in application so initialize the rdma */
+	if (!init_transport) {
+		struct xio_transport *transport = xio_get_transport("rdma");
+		if (!transport)
+			return 0;
+
+		init_transport = 1;
+	}
+
+	return init_transport;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_mem_register_no_dev						     */
 /*---------------------------------------------------------------------------*/
 static inline int xio_mem_register_no_dev(void *addr, size_t length,
@@ -259,9 +278,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
-		struct xio_transport *transport = xio_get_transport("rdma");
-
-		if (!transport) {
+		if (xio_register_transport() == 0) {
 			ERROR_LOG("invalid protocol. proto: rdma\n");
 			xio_set_error(XIO_E_ADDR_ERROR);
 			return NULL;
@@ -437,8 +454,10 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 		xio_set_error(EINVAL);
 		return -1;
 	}
-	if (list_empty(&dev_list))
-		return xio_mem_register_no_dev(addr, length, reg_mem);
+	if (list_empty(&dev_list)) {
+		if (xio_register_transport() && list_empty(&dev_list))
+			return xio_mem_register_no_dev(addr, length, reg_mem);
+	}
 
 	reg_mem->mr = xio_reg_mr_ex(&addr, length,
 			     IBV_ACCESS_LOCAL_WRITE  |
@@ -488,8 +507,10 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 		ERROR_LOG("xio_mem_alloc failed. length:%zu\n", length);
 		return -1;
 	}
-	if (list_empty(&dev_list))
-		return xio_mem_alloc_no_dev(length, reg_mem);
+	if (list_empty(&dev_list)) {
+		if (xio_register_transport() && list_empty(&dev_list))
+			return xio_mem_alloc_no_dev(length, reg_mem);
+	}
 
 	access = IBV_ACCESS_LOCAL_WRITE  |
 		 IBV_ACCESS_REMOTE_WRITE |
