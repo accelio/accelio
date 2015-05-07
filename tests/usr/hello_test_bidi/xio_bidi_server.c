@@ -210,7 +210,7 @@ static int on_new_connection_event(struct xio_connection *connection,
 		sglist[0].mr = NULL;
 
 		/* recycle the message and fill new request */
-		msg_write(&msg_params, req,
+		msg_build_out_sgl(&msg_params, req,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 
@@ -303,7 +303,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&msg_params, rsp,
+	msg_build_out_sgl(&msg_params, rsp,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -343,7 +343,7 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 
 	do {
 		/* recycle the message and fill new request */
-		msg_write(&msg_params, rsp,
+		msg_build_out_sgl(&msg_params, rsp,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 

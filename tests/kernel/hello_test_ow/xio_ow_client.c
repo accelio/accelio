@@ -327,7 +327,7 @@ static int on_msg_delivered(struct xio_session *session,
 		msg->flags = 0;
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  test_config.out_iov_len, test_config.data_len);
 
@@ -391,7 +391,7 @@ static int on_msg_send_complete(struct xio_session *session,
 	xio_tbl_set_nents(&msg->in.data_tbl, 0);
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -701,7 +701,7 @@ static int xio_client_main(void *data)
 		vmsg_sglist_set_nents(&msg->in, 0);
 
 		/* assign buffers to the message */
-		msg_write(&g_test_params.msg_params, msg,
+		msg_build_out_sgl(&g_test_params.msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 

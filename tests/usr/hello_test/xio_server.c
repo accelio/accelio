@@ -207,7 +207,7 @@ static int on_request(struct xio_session *session,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&test_params->msg_params, rsp,
+	msg_build_out_sgl(&test_params->msg_params, rsp,
 		  test_config.hdr_len,
 		  test_config.iov_len, test_config.data_len);
 

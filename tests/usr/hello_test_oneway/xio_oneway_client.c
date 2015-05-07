@@ -290,7 +290,7 @@ static int on_message_delivered(struct xio_session *session,
 	}
 
 	/* assign buffers to the message */
-	msg_write(&ow_params->msg_params, new_msg,
+	msg_build_out_sgl(&ow_params->msg_params, new_msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -629,7 +629,7 @@ int main(int argc, char *argv[])
 			break;
 
 		/* assign buffers to the message */
-		msg_write(&ow_params.msg_params, msg,
+		msg_build_out_sgl(&ow_params.msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 

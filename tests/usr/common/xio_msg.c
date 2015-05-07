@@ -210,12 +210,12 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_write								     */
+/* msg_build_out_sgl							     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct msg_params *msg_params,
-	       struct xio_msg *msg,
-	       size_t hdrlen,
-	       size_t data_iovlen, size_t datalen)
+void msg_build_out_sgl(struct msg_params *msg_params,
+		       struct xio_msg *msg,
+		       size_t hdrlen,
+		       size_t data_iovlen, size_t datalen)
 {
 	struct xio_vmsg		*pmsg = &msg->out;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(pmsg);

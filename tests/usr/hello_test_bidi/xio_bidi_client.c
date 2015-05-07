@@ -255,6 +255,7 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 	sglist = vmsg_sglist(&rsp->in);
 	vmsg_sglist_set_nents(&rsp->in, 1);
 
+	/* tell accelio to use 1MB buffer from its internal pool */
 	sglist[0].iov_base = NULL;
 	sglist[0].iov_len  = ONE_MB;
 	sglist[0].mr = NULL;
@@ -262,7 +263,7 @@ static int on_response(struct xio_session *session, struct xio_msg *rsp,
 	rsp->sn = 0;
 	do {
 		/* recycle the message and fill new request */
-		msg_write(&msg_params, rsp,
+		msg_build_out_sgl(&msg_params, rsp,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 
@@ -298,7 +299,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&msg_params, rsp,
+	msg_build_out_sgl(&msg_params, rsp,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -655,7 +656,7 @@ int main(int argc, char *argv[])
 		sglist[0].mr = NULL;
 
 		/* recycle the message and fill new request */
-		msg_write(&msg_params, msg,
+		msg_build_out_sgl(&msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 

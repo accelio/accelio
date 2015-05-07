@@ -237,7 +237,7 @@ static int on_connection_established(struct xio_connection *conn)
 	   */
 
 	/* recycle the message and fill new request */
-	msg_write(&msg_params, msg, test_config.hdr_len, 1,
+	msg_build_out_sgl(&msg_params, msg, test_config.hdr_len, 1,
 		  test_config.data_len);
 
 	/* try to send it */
@@ -345,7 +345,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* recycle the message and fill new request */
-	msg_write(&msg_params, msg,
+	msg_build_out_sgl(&msg_params, msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 

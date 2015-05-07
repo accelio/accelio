@@ -255,12 +255,13 @@ static void *worker_thread(void *data)
 		sglist = vmsg_sglist(&msg->in);
 		vmsg_sglist_set_nents(&msg->in, 1);
 
+		/* tell accelio to use  1MB buffer from its internal pool */
 		sglist[0].iov_base = NULL;
 		sglist[0].iov_len  = ONE_MB;
 		sglist[0].mr = NULL;
 
 		/* create "hello world" message */
-		msg_write(&msg_params, msg,
+		msg_build_out_sgl(&msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 
@@ -375,7 +376,7 @@ static int on_response(struct xio_session *session,
 	sglist = vmsg_sglist(&msg->in);
 	vmsg_sglist_set_nents(&msg->in, 1);
 
-
+	/* tell accelio to use  1MB buffer from its internal pool */
 	sglist[0].iov_base = NULL;
 	sglist[0].iov_len  = ONE_MB;
 	sglist[0].mr = NULL;
@@ -383,7 +384,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* recycle the message and fill new request */
-	msg_write(&msg_params, msg,
+	msg_build_out_sgl(&msg_params, msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 

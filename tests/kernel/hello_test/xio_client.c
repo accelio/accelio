@@ -362,7 +362,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  test_config.out_iov_len, test_config.data_len);
 
@@ -617,7 +617,7 @@ int send_one_by_one(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
@@ -668,7 +668,7 @@ int send_chained(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 

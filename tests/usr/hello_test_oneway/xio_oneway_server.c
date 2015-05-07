@@ -140,7 +140,7 @@ static int on_new_connection_event(struct xio_connection *connection,
 			break;
 
 		/* assign buffers to the message */
-		msg_write(&ow_params->msg_params, msg,
+		msg_build_out_sgl(&ow_params->msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 
@@ -270,7 +270,7 @@ static int on_message_delivered(struct xio_session *session,
 	new_msg	= msg_pool_get(ow_params->pool);
 
 	/* fill response */
-	msg_write(&ow_params->msg_params, new_msg,
+	msg_build_out_sgl(&ow_params->msg_params, new_msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 

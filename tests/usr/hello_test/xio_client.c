@@ -299,6 +299,7 @@ static int on_response(struct xio_session *session,
 	sglist = vmsg_sglist(&msg->in);
 	vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
 
+	/* tell accelio to use 1MB buffer from its internal pool */
 	for (j = 0; j < test_config.in_iov_len; j++) {
 		sglist[j].iov_base = NULL;
 		sglist[j].iov_len  = ONE_MB;
@@ -308,7 +309,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  test_config.out_iov_len, test_config.data_len);
 
@@ -620,6 +621,7 @@ int send_one_by_one(struct test_params *test_params)
 		sglist = vmsg_sglist(&msg->in);
 		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
 
+		/* tell accelio to use  1MB buffer from its internal pool */
 		for (j = 0; j < test_config.in_iov_len; j++) {
 			sglist[j].iov_base = NULL;
 			sglist[j].iov_len  = ONE_MB;
@@ -627,7 +629,7 @@ int send_one_by_one(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
@@ -679,7 +681,7 @@ int send_chained(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
