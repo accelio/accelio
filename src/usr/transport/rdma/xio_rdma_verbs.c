@@ -265,6 +265,7 @@ cleanup:
 	return NULL;
 }
 
+#define MAX_DEVS 32
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr_ex							     */
 /*---------------------------------------------------------------------------*/
@@ -275,6 +276,9 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	struct xio_device		*dev;
 	int				retval;
 	static int			init_transport = 1;
+	struct xio_device		*devs_arr[MAX_DEVS];
+	int				devs_nr = 0, i;
+
 
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
@@ -292,6 +296,13 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 		spin_unlock(&dev_list_lock);
 		goto cleanup2;
 	}
+	list_for_each_entry(dev, &dev_list, dev_list_entry) {
+		if (devs_nr == MAX_DEVS)
+			break;
+		xio_device_get(dev);
+		devs_arr[devs_nr] = dev;
+		devs_nr++;
+	}
 	spin_unlock(&dev_list_lock);
 
 	tmr = (struct xio_mr *)ucalloc(1, sizeof(*tmr));
@@ -306,12 +317,12 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	 */
 	INIT_LIST_HEAD(&tmr->mr_list_entry);
 
-	spin_lock(&dev_list_lock);
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
+	for (i = 0; i < devs_nr; i++) {
+		dev = devs_arr[i];
 		tmr_elem = xio_reg_mr_ex_dev(dev, addr, length, access);
 		if (!tmr_elem) {
+			xio_device_put(dev);
 			xio_set_error(errno);
-			spin_unlock(&dev_list_lock);
 			goto cleanup1;
 		}
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
@@ -321,8 +332,8 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 			access  &= ~IBV_XIO_ACCESS_ALLOCATE_MR;
 			*addr = tmr_elem->mr->addr;
 		}
+		xio_device_put(dev);
 	}
-	spin_unlock(&dev_list_lock);
 
 	/* For dynamically discovered devices */
 	tmr->addr   = *addr;
