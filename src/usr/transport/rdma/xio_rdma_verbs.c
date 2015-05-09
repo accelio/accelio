@@ -280,6 +280,11 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	int				retval;
 	static int			init_transport = 1;
 
+	/* Show a warning in case the memory is non aligned */
+	if ((access & IBV_XIO_ACCESS_ALLOCATE_MR) == 0 &&
+	    ((uintptr_t)(*addr) & (page_size - 1)) != 0) {
+		WARN_LOG("Unaligned memory for address %p: length is %d while page size is %d.\n.", *addr, length, page_size);
+	}
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
 		struct xio_transport *transport = xio_get_transport("rdma");
