@@ -44,12 +44,20 @@
 #include "xio_observer.h"
 #include "xio_usr_transport.h"
 
-static int xio_get_addr(char *dst, struct sockaddr *addr)
+static int xio_get_addr(char *dst, char *port, struct sockaddr *addr)
 {
 	struct addrinfo *res;
 	int ret;
 
-	ret = getaddrinfo(dst, NULL, NULL, &res);
+	if (!dst) {
+		struct addrinfo hints;
+		memset(&hints, 0, sizeof(struct addrinfo));
+		hints.ai_family	= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
+		hints.ai_flags	= AI_PASSIVE;
+		ret = getaddrinfo(dst, port, &hints, &res);
+	} else {
+		ret = getaddrinfo(dst, NULL, NULL, &res);
+	}
 	if (ret) {
 		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(ret));
 		return ret;
@@ -137,9 +145,9 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	ss->ss_family = PF_INET;
 
 	if (host[0] == '*' || host[0] == 0)
-		s = xio_get_addr(NULL, (struct sockaddr *)ss);
+		s = xio_get_addr(NULL, port, (struct sockaddr *)ss);
 	else
-		s = xio_get_addr(host, (struct sockaddr *)ss);
+		s = xio_get_addr(host, NULL, (struct sockaddr *)ss);
 
 	if (s != 0) {
 		ERROR_LOG("unresolved address\n");
@@ -237,9 +245,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	ss->ss_family = PF_INET;
 
 	if (host[0] == '*' || host[0] == 0)
-		s = xio_get_addr(NULL, (struct sockaddr *)ss);
+		s = xio_get_addr(NULL, port, (struct sockaddr *)ss);
 	else
-		s = xio_get_addr(host, (struct sockaddr *)ss);
+		s = xio_get_addr(host, NULL, (struct sockaddr *)ss);
 
 	if (s != 0) {
 		ERROR_LOG("unresolved address\n");
