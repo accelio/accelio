@@ -229,6 +229,7 @@ struct __attribute__((__packed__)) xio_tcp_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
+	uint32_t                max_header_size;
 };
 
 struct __attribute__((__packed__)) xio_tcp_cancel_hdr {
@@ -391,7 +392,7 @@ struct xio_tcp_transport {
 	void				*tmp_rx_buf;
 	void				*tmp_rx_buf_cur;
 	uint32_t			tmp_rx_buf_len;
-	uint32_t			pad2;
+	uint32_t			peer_max_header;
 
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[UIO_MAXIOV];

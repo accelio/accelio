@@ -211,6 +211,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
+	uint32_t                max_header_len;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -382,7 +383,8 @@ struct xio_rdma_transport {
 							     peer sends */
 	uint16_t			peer_credits;
 
-	uint16_t			pad[3];
+	uint16_t			pad;
+	uint32_t                        peer_max_header;
 
 	/* fast path params */
 	int				rdma_rd_req_in_flight;

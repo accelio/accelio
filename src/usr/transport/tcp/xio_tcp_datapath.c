@@ -173,6 +173,7 @@ static void xio_tcp_write_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	PACK_LLVAL(msg, tmp_msg, buffer_sz);
 	PACK_LVAL(msg, tmp_msg, max_in_iovsz);
 	PACK_LVAL(msg, tmp_msg, max_out_iovsz);
+	PACK_LVAL(msg, tmp_msg, max_header_len);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -209,6 +210,7 @@ static void xio_tcp_read_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	UNPACK_LLVAL(tmp_msg, msg, buffer_sz);
 	UNPACK_LVAL(tmp_msg, msg, max_in_iovsz);
 	UNPACK_LVAL(tmp_msg, msg, max_out_iovsz);
+	UNPACK_LVAL(tmp_msg, msg, max_header_len);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -230,9 +232,12 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 
 	DEBUG_LOG("xio_tcp_send_setup_req\n");
 
-	req.buffer_sz		= tcp_hndl->max_inline_buf_sz;
+	req.buffer_sz		= ALIGN(xio_tcp_get_max_header_size() +
+					g_options.max_inline_xio_hdr +
+					g_options.max_inline_xio_data, 1024);
 	req.max_in_iovsz	= tcp_options.max_in_iovsz;
 	req.max_out_iovsz	= tcp_options.max_out_iovsz;
+	req.max_header_len      = g_options.max_inline_xio_hdr;
 
 	xio_tcp_write_setup_msg(tcp_hndl, task, &req);
 
@@ -276,6 +281,8 @@ static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 
 	rsp->max_in_iovsz	= tcp_options.max_in_iovsz;
 	rsp->max_out_iovsz	= tcp_options.max_out_iovsz;
+	rsp->buffer_sz          = tcp_hndl->membuf_sz;
+	rsp->max_header_len     = g_options.max_inline_xio_hdr;
 
 	xio_tcp_write_setup_msg(tcp_hndl, task, rsp);
 
@@ -311,6 +318,7 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 {
 	union xio_transport_event_data event_data;
 	struct xio_tcp_setup_msg *rsp  = &tcp_hndl->setup_rsp;
+	uint64_t local_buf_size;
 
 	DEBUG_LOG("xio_tcp_on_setup_msg\n");
 
@@ -336,16 +344,20 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 		xio_tcp_read_setup_msg(tcp_hndl, task, &req);
 
 		/* current implementation is symmetric */
-		rsp->buffer_sz	= min(req.buffer_sz,
-				tcp_hndl->max_inline_buf_sz);
+		local_buf_size = ALIGN(xio_tcp_get_max_header_size() +
+					g_options.max_inline_xio_hdr +
+					g_options.max_inline_xio_data, 1024);
+		rsp->buffer_sz	= min(req.buffer_sz, local_buf_size);
 		rsp->max_in_iovsz	= req.max_in_iovsz;
 		rsp->max_out_iovsz	= req.max_out_iovsz;
+		rsp->max_header_len     = req.max_header_len;
 	}
 
 	tcp_hndl->max_inline_buf_sz	= (size_t)rsp->buffer_sz;
 	tcp_hndl->membuf_sz		= (size_t)rsp->buffer_sz;
 	tcp_hndl->peer_max_in_iovsz	= rsp->max_in_iovsz;
 	tcp_hndl->peer_max_out_iovsz	= rsp->max_out_iovsz;
+	tcp_hndl->peer_max_header      = rsp->max_header_len;
 
 	tcp_hndl->sn = 0;
 
@@ -1238,6 +1250,11 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
+	if (hdr_len >= rdma_hndl->peer_max_header) {
+		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%p\n",
+				hdr_len, rdma_hndl->peer_max_header);
+		return -1;
+	}
 
 	/* before working on the out - current place after the session header */
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);

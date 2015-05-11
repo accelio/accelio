@@ -205,6 +205,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	u64		buffer_sz;
 	u32		max_in_iovsz;
 	u32		max_out_iovsz;
+	u32		max_header_len;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -501,7 +502,7 @@ struct xio_rdma_transport {
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad2[2];
+	uint32_t                        peer_max_header;
 
 	/* too big to be on stack - use as temporaries */
 	union {
