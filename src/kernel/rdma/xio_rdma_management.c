@@ -1043,7 +1043,7 @@ static int xio_rdma_initial_pool_post_create(
 		rdma_hndl->peer_credits	= 1;
 		rdma_hndl->sim_peer_credits = 1;
 
-		rdma_task->ib_op	= XIO_IB_RECV;
+		rdma_task->out_ib_op	= XIO_IB_RECV;
 		list_add_tail(&task->tasks_list_entry, &rdma_hndl->rx_list);
 	}
 
@@ -1072,36 +1072,36 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 		xio_unmap_tx_work_req(dev, &rdma_task->txd);
 
 	if (rdma_task->rdmad.mapped) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_WRITE)
+		if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE)
 			xio_unmap_txmad_work_req(dev, &rdma_task->rdmad);
 		else
 			xio_unmap_rxmad_work_req(dev, &rdma_task->rdmad);
 	}
 
-	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+	if (rdma_task->read_mem_desc.nents && rdma_task->read_mem_desc.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->read_mem_desc,
 			       DMA_FROM_DEVICE);
 
-	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+	if (rdma_task->write_mem_desc.nents && rdma_task->write_mem_desc.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->write_mem_desc,
 			       DMA_TO_DEVICE);
 
 	/* recycle RDMA  buffers back to pool */
 
 	/* put buffers back to pool */
-	xio_mempool_free(&rdma_task->read_sge);
-	rdma_task->read_num_sge = 0;
+	xio_mempool_free(&rdma_task->read_mem_desc);
+	rdma_task->read_num_mem_desc = 0;
 
-	xio_mempool_free(&rdma_task->write_sge);
-	rdma_task->write_num_sge	= 0;
+	xio_mempool_free(&rdma_task->write_mem_desc);
+	rdma_task->write_num_mem_desc = 0;
 	/*
-	rdma_task->req_write_num_sge	= 0;
-	rdma_task->rsp_write_num_sge	= 0;
-	rdma_task->req_read_num_sge	= 0;
-	rdma_task->req_recv_num_sge	= 0;
+	rdma_task->req_write_num_mem_desc	= 0;
+	rdma_task->rsp_write_num_mem_desc	= 0;
+	rdma_task->req_read_num_mem_desc	= 0;
+	rdma_task->req_recv_num_sge		= 0;
 
 	rdma_task->txd.send_wr.num_sge = 1;
-	rdma_task->ib_op = XIO_IB_NULL;
+	rdma_task->out_ib_op = XIO_IB_NULL;
 	rdma_task->phantom_idx = 0;
 	rdma_task->sn = 0;
 	*/
@@ -1162,28 +1162,28 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		xio_unmap_tx_work_req(dev, &rdma_task->txd);
 
 	if (rdma_task->rdmad.mapped) {
-		if (rdma_task->ib_op == XIO_IB_RDMA_WRITE)
+		if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE)
 			xio_unmap_txmad_work_req(dev, &rdma_task->rdmad);
 		else
 			xio_unmap_rxmad_work_req(dev, &rdma_task->rdmad);
 	}
 
-	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->read_sge,
+	if (rdma_task->read_mem_desc.nents && rdma_task->read_mem_desc.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->read_mem_desc,
 			       DMA_FROM_DEVICE);
 
-	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->write_sge,
+	if (rdma_task->write_mem_desc.nents && rdma_task->write_mem_desc.mapped)
+		xio_unmap_desc(rdma_hndl, &rdma_task->write_mem_desc,
 			       DMA_TO_DEVICE);
 
 	if (rdma_task->rdmad.sgt.sgl)
 		sg_free_table(&rdma_task->rdmad.sgt);
 #if 0
-	if (rdma_task->write_sge.sgt.sgl)
-		sg_free_table(&rdma_task->write_sge.sgt);
+	if (rdma_task->write_mem_desc.sgt.sgl)
+		sg_free_table(&rdma_task->write_mem_desc.sgt);
 
-	if (rdma_task->read_sge.sgt.sgl)
-		sg_free_table(&rdma_task->read_sge.sgt);
+	if (rdma_task->read_mem_desc.sgt.sgl)
+		sg_free_table(&rdma_task->read_mem_desc.sgt);
 #endif
 	/* Phantom tasks have no buffer */
 	if (rdma_task->buf) {
@@ -1297,7 +1297,7 @@ static int xio_rdma_phantom_pool_slab_init_task(
 	ptr += rdma_hndl->max_sge * sizeof(struct ib_sge);
 	/*****************************************/
 
-	rdma_task->ib_op = 0x200;
+	rdma_task->out_ib_op = 0x200;
 	xio_rdma_task_init(
 			task,
 			rdma_hndl,
@@ -1522,7 +1522,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 
 	if (rdma_task->rdmad.mapped) {
 		enum dma_data_direction direction =
-				(rdma_task->ib_op == XIO_IB_RDMA_WRITE) ?
+				(rdma_task->out_ib_op == XIO_IB_RDMA_WRITE) ?
 					DMA_TO_DEVICE : DMA_FROM_DEVICE;
 		if (xio_remap_work_req(old_dev, new_dev, &rdma_task->rdmad,
 				       direction)) {
@@ -1531,50 +1531,51 @@ static int xio_rdma_primary_pool_slab_remap_task(
 		}
 	}
 
-	if (rdma_task->read_sge.nents && rdma_task->read_sge.mapped) {
+	if (rdma_task->read_mem_desc.nents && rdma_task->read_mem_desc.mapped) {
 		int used_fast;
 		unsigned int sqe_used = 0;
 		/* was FRWR/FMR in use */
-		if (rdma_task->read_sge.mem_reg.mem_h) {
+		if (rdma_task->read_mem_desc.mem_reg.mem_h) {
 			te = &new_hndl->rkey_tbl[new_hndl->rkey_tbl_size];
-			te->old_rkey = rdma_task->read_sge.mem_reg.rkey;
+			te->old_rkey = rdma_task->read_mem_desc.mem_reg.rkey;
 			used_fast = 1;
 		} else {
 			used_fast = 0;
 		}
-		xio_remap_desc(old_hndl, new_hndl, &rdma_task->read_sge,
+		xio_remap_desc(old_hndl, new_hndl, &rdma_task->read_mem_desc,
 			       DMA_FROM_DEVICE, &sqe_used);
 		rdma_task->sqe_used += sqe_used;
 		if (used_fast) {
-			if (!rdma_task->read_sge.mem_reg.mem_h) {
+			if (!rdma_task->read_mem_desc.mem_reg.mem_h) {
 				ERROR_LOG("Fast re-reg from device failed\n");
 				return -1;
 			}
-			te->new_rkey = rdma_task->read_sge.mem_reg.rkey;
+			te->new_rkey = rdma_task->read_mem_desc.mem_reg.rkey;
 			new_hndl->rkey_tbl_size++;
 		}
 	}
 
-	if (rdma_task->write_sge.nents && rdma_task->write_sge.mapped) {
+	if (rdma_task->write_mem_desc.nents &&
+	    rdma_task->write_mem_desc.mapped) {
 		int used_fast;
 		unsigned int sqe_used = 0;
 		/* was FRWR/FMR in use */
-		if (rdma_task->write_sge.mem_reg.mem_h) {
+		if (rdma_task->write_mem_desc.mem_reg.mem_h) {
 			te = &new_hndl->rkey_tbl[new_hndl->rkey_tbl_size];
-			te->old_rkey = rdma_task->write_sge.mem_reg.rkey;
+			te->old_rkey = rdma_task->write_mem_desc.mem_reg.rkey;
 			used_fast = 1;
 		} else {
 			used_fast = 0;
 		}
-		xio_remap_desc(old_hndl, new_hndl, &rdma_task->write_sge,
+		xio_remap_desc(old_hndl, new_hndl, &rdma_task->write_mem_desc,
 			       DMA_TO_DEVICE, &sqe_used);
 		rdma_task->sqe_used += sqe_used;
 		if (used_fast) {
-			if (!rdma_task->write_sge.mem_reg.mem_h) {
+			if (!rdma_task->write_mem_desc.mem_reg.mem_h) {
 				ERROR_LOG("Fast re-reg tom device failed\n");
 				return -1;
 			}
-			te->new_rkey = rdma_task->write_sge.mem_reg.rkey;
+			te->new_rkey = rdma_task->write_mem_desc.mem_reg.rkey;
 			new_hndl->rkey_tbl_size++;
 		}
 	}
@@ -1614,35 +1615,35 @@ static int xio_rdma_primary_pool_slab_init_task(
 	rdma_task->rdmad.sge = (void *)ptr;
 	ptr += max_sge * sizeof(struct ib_sge);
 
-	rdma_task->read_sge.mp_sge = (void *)ptr;
+	rdma_task->read_mem_desc.mp_sge = (void *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_mp_mem);
 
-	rdma_task->write_sge.mp_sge = (void *)ptr;
+	rdma_task->write_mem_desc.mp_sge = (void *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_mp_mem);
 
-	rdma_task->req_read_sge = (void *)ptr;
+	rdma_task->req_in_sge = (void *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
-	rdma_task->req_write_sge = (void *)ptr;
+	rdma_task->req_out_sge = (void *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
-	rdma_task->req_recv_sge = (void *)ptr;
-	ptr += max_iovsz * sizeof(struct xio_sge);
-	rdma_task->rsp_write_sge = (void *)ptr;
+	rdma_task->rsp_out_sge = (void *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
 	/*****************************************/
 
 #if 0
-	if (sg_alloc_table(&rdma_task->read_sge.sgt, max_iovsz, GFP_KERNEL)) {
-		ERROR_LOG("sg_alloc_table(read_sge)\n");
+	if (sg_alloc_table(&rdma_task->read_mem_desc.sgt,
+			   max_iovsz, GFP_KERNEL)) {
+		ERROR_LOG("sg_alloc_table(read_mem_desc)\n");
 		goto cleanup0;
 	}
 
-	if (sg_alloc_table(&rdma_task->write_sge.sgt, max_iovsz, GFP_KERNEL)) {
-		ERROR_LOG("sg_alloc_table(write_sge)\n");
+	if (sg_alloc_table(&rdma_task->write_mem_desc.sgt,
+			   max_iovsz, GFP_KERNEL)) {
+		ERROR_LOG("sg_alloc_table(write_mem_desc)\n");
 		goto cleanup1;
 	}
 #endif
 
-	rdma_task->ib_op = 0x200;
+	rdma_task->out_ib_op = 0x200;
 
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
@@ -1665,9 +1666,9 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 cleanup2:
 #if 0
-	sg_free_table(&rdma_task->write_sge.sgt);
+	sg_free_table(&rdma_task->write_mem_desc.sgt);
 cleanup1:
-	sg_free_table(&rdma_task->read_sge.sgt);
+	sg_free_table(&rdma_task->read_mem_desc.sgt);
 cleanup0:
 #endif
 	xio_set_error(ENOMEM);
@@ -1698,7 +1699,7 @@ static void xio_rdma_primary_pool_get_params(
 	*task_dd_sz = sizeof(struct xio_rdma_task) +
 		(max_sge + 1 + max_sge) * sizeof(struct ib_sge) +
 		 2 * max_iovsz * sizeof(struct xio_mp_mem) +
-		 4 * max_iovsz * sizeof(struct xio_sge);
+		 3 * max_iovsz * sizeof(struct xio_sge);
 }
 
 static struct xio_tasks_pool_ops primary_tasks_pool_ops = {
@@ -2327,9 +2328,9 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->rq_depth		= MAX_RECV_WR;
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
-	rdma_hndl->max_inline_buf_sz	= xio_get_options()->max_inline_xio_hdr +
-					  xio_get_options()->max_inline_xio_data +
-					  max_xio_hdr;
+	rdma_hndl->max_inline_buf_sz	=
+		xio_get_options()->max_inline_xio_hdr +
+		xio_get_options()->max_inline_xio_data + max_xio_hdr;
 	rdma_hndl->max_inline_buf_sz	=
 				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
 
@@ -2490,18 +2491,13 @@ static int xio_rdma_update_task(struct xio_transport_base *trans_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	int i;
 
-	for (i = 0; i < rdma_task->req_recv_num_sge; i++) {
-		if (xio_new_rkey(rdma_hndl, &rdma_task->req_recv_sge[i].stag))
+	for (i = 0; i < rdma_task->req_in_num_sge; i++) {
+		if (xio_new_rkey(rdma_hndl, &rdma_task->req_in_sge[i].stag))
 			return -1;
 	}
 
-	for (i = 0; i < rdma_task->req_read_num_sge; i++) {
-		if (xio_new_rkey(rdma_hndl, &rdma_task->req_read_sge[i].stag))
-			return -1;
-	}
-
-	for (i = 0; i < rdma_task->write_num_sge; i++) {
-		if (xio_new_rkey(rdma_hndl, &rdma_task->req_write_sge[i].stag))
+	for (i = 0; i < rdma_task->req_out_num_sge; i++) {
+		if (xio_new_rkey(rdma_hndl, &rdma_task->req_out_sge[i].stag))
 			return -1;
 	}
 
@@ -2970,7 +2966,8 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 		return 0;
 	}
 
-	if (vmsg->header.iov_len > (size_t)xio_get_options()->max_inline_xio_hdr) {
+	if (vmsg->header.iov_len >
+	    (size_t)xio_get_options()->max_inline_xio_hdr) {
 		ERROR_LOG("Header is too large %zu>%zu\n", vmsg->header.iov_len,
 			  (size_t)xio_get_options()->max_inline_xio_hdr);
 		return 0;

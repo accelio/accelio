@@ -1974,7 +1974,7 @@ static int xio_tcp_initial_pool_post_create(
 	} else {
 		list_add_tail(&task->tasks_list_entry, &tcp_hndl->rx_list);
 		tcp_task = (struct xio_tcp_task *)task->dd_data;
-		tcp_task->tcp_op = XIO_TCP_RECV;
+		tcp_task->out_tcp_op = XIO_TCP_RECV;
 	}
 
 	return 0;
@@ -2065,28 +2065,27 @@ static int xio_tcp_task_pre_put(
 
 	/* put buffers back to pool */
 
-	for (i = 0; i < tcp_task->read_num_sge; i++) {
-		if (tcp_task->read_sge[i].priv) {
-			xio_mempool_free(&tcp_task->read_sge[i]);
-			tcp_task->read_sge[i].priv = NULL;
+	for (i = 0; i < tcp_task->read_num_reg_mem; i++) {
+		if (tcp_task->read_reg_mem[i].priv) {
+			xio_mempool_free(&tcp_task->read_reg_mem[i]);
+			tcp_task->read_reg_mem[i].priv = NULL;
 		}
 	}
-	tcp_task->read_num_sge = 0;
+	tcp_task->read_num_reg_mem = 0;
 
-	for (i = 0; i < tcp_task->write_num_sge; i++) {
-		if (tcp_task->write_sge[i].priv) {
-			xio_mempool_free(&tcp_task->write_sge[i]);
-			tcp_task->write_sge[i].priv = NULL;
+	for (i = 0; i < tcp_task->write_num_reg_mem; i++) {
+		if (tcp_task->write_reg_mem[i].priv) {
+			xio_mempool_free(&tcp_task->write_reg_mem[i]);
+			tcp_task->write_reg_mem[i].priv = NULL;
 		}
 	}
-	tcp_task->write_num_sge		= 0;
-	tcp_task->req_write_num_sge	= 0;
-	tcp_task->rsp_write_num_sge	= 0;
-	tcp_task->req_read_num_sge	= 0;
-	tcp_task->req_recv_num_sge	= 0;
+	tcp_task->write_num_reg_mem	= 0;
+	tcp_task->req_in_num_sge	= 0;
+	tcp_task->req_out_num_sge	= 0;
+	tcp_task->rsp_out_num_sge	= 0;
 	tcp_task->sn			= 0;
 
-	tcp_task->tcp_op		= XIO_TCP_NULL;
+	tcp_task->out_tcp_op		= XIO_TCP_NULL;
 
 	xio_tcp_rxd_init(&tcp_task->rxd,
 			 task->mbuf.buf.head,
@@ -2184,7 +2183,7 @@ static int xio_tcp_primary_pool_post_create(
 			return -1;
 		}
 		tcp_task = (struct xio_tcp_task *)task->dd_data;
-		tcp_task->tcp_op = XIO_TCP_RECV;
+		tcp_task->out_tcp_op = XIO_TCP_RECV;
 		list_add_tail(&task->tasks_list_entry, &tcp_hndl->rx_list);
 	}
 
@@ -2238,22 +2237,20 @@ static int xio_tcp_primary_pool_slab_init_task(
 	tcp_task->rxd.msg_iov = (struct iovec *)ptr;
 	ptr += (max_iovsz + 1) * sizeof(struct iovec);
 
-	tcp_task->read_sge = (struct xio_reg_mem *)ptr;
+	tcp_task->read_reg_mem = (struct xio_reg_mem *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_reg_mem);
-	tcp_task->write_sge = (struct xio_reg_mem *)ptr;
+	tcp_task->write_reg_mem = (struct xio_reg_mem *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_reg_mem);
 
-	tcp_task->req_read_sge = (struct xio_sge *)ptr;
+	tcp_task->req_in_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
-	tcp_task->req_write_sge = (struct xio_sge *)ptr;
+	tcp_task->req_out_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
-	tcp_task->req_recv_sge = (struct xio_sge *)ptr;
-	ptr += max_iovsz * sizeof(struct xio_sge);
-	tcp_task->rsp_write_sge = (struct xio_sge *)ptr;
+	tcp_task->rsp_out_sge = (struct xio_sge *)ptr;
 	ptr += max_iovsz * sizeof(struct xio_sge);
 	/*****************************************/
 
-	tcp_task->tcp_op = (enum xio_tcp_op_code)0x200;
+	tcp_task->out_tcp_op = (enum xio_tcp_op_code)0x200;
 	xio_tcp_task_init(
 			task,
 			tcp_hndl,
@@ -2284,7 +2281,7 @@ static void xio_tcp_primary_pool_get_params(
 	*task_dd_sz = sizeof(struct xio_tcp_task) +
 			(2 * (max_iovsz + 1)) * sizeof(struct iovec) +
 			 2 * max_iovsz * sizeof(struct xio_reg_mem) +
-			 4 * max_iovsz * sizeof(struct xio_sge);
+			 3 * max_iovsz * sizeof(struct xio_sge);
 }
 
 static struct xio_tasks_pool_ops   primary_tasks_pool_ops;

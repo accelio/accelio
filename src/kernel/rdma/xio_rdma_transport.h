@@ -60,17 +60,17 @@ extern struct xio_options	*g_poptions;
 
 /*  - one for send, (one for frwr, one for local invalidate) x (r1 + w1)
  */
-#define MAX_CQE_PER_QP			(5*MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
-#define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
+#define MAX_CQE_PER_QP		(5 * MAX_SEND_WR + MAX_RECV_WR + EXTRA_RQE)
+#define CQE_ALLOC_SIZE		(10 * MAX_CQE_PER_QP)
 
-#define MAX_HDR_SZ			512
-#define BUDGET_SIZE			1024
-#define MAX_NUM_DELAYED_ARM		16
+#define MAX_HDR_SZ		512
+#define BUDGET_SIZE		1024
+#define MAX_NUM_DELAYED_ARM	16
 
-#define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
-					   * one for reply tx
-					   */
-#define CONN_SETUP_BUF_SIZE		4096
+#define NUM_CONN_SETUP_TASKS	2 /* one posted for req rx,
+				   * one for reply tx
+				   */
+#define CONN_SETUP_BUF_SIZE	4096
 
 #define NUM_START_PRIMARY_POOL_TASKS    312  /* must be enough to send few +
 						fully post_recv buffers
@@ -92,7 +92,7 @@ extern struct xio_options	*g_poptions;
 #define PAGE_SIZE			BIT(PAGE_SHIFT)
 #endif
 #ifndef PAGE_MASK
-#define PAGE_MASK			(~(PAGE_SIZE-1))
+#define PAGE_MASK			(~(PAGE_SIZE - 1))
 #endif
 
 #define USECS_IN_SEC			1000000
@@ -157,13 +157,12 @@ struct __attribute__((__packed__)) xio_rdma_req_hdr {
 
 	uint16_t		credits;	/* peer send credits	*/
 	uint32_t		ltid;		/* local task id	*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint8_t			in_ib_op;	/* opcode  for peers	*/
+	uint8_t			out_ib_op;
 
-	uint16_t		recv_num_sge;
-	uint16_t		read_num_sge;
-	uint16_t		write_num_sge;
-	uint16_t		pad1;
+	uint16_t		in_num_sge;
+	uint16_t		out_num_sge;
+	uint32_t		pad1;
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
@@ -182,11 +181,11 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 
 	uint16_t		credits;	/* peer send credits	*/
 	uint32_t		rtid;		/* remote task id	*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint8_t			out_ib_op;	/* opcode  for peers	*/
+	uint8_t			pad;
 
-	uint16_t		write_num_sge;
 	uint16_t		pad1;
+	uint16_t		out_num_sge;
 	uint32_t		status;		/* status		*/
 
 	uint32_t		ltid;		/* local task id	*/
@@ -242,6 +241,9 @@ struct xio_work_req {
 };
 
 struct xio_rdma_task {
+	enum xio_ib_op_code		out_ib_op;
+	enum xio_ib_op_code		in_ib_op;
+
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */
@@ -258,32 +260,31 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	u32				read_num_sge;
-	u32				write_num_sge;
-	u32				recv_num_sge;
 	u32				sqe_used;
-	struct xio_mem_desc		read_sge;
-	struct xio_mem_desc		write_sge;
+	u16				read_num_mem_desc;
+	u16				write_num_mem_desc;
+	struct xio_mem_desc		read_mem_desc;
+	struct xio_mem_desc		write_mem_desc;
 
 	/* What this side got from the peer for RDMA R/W */
-	u32				req_read_num_sge;
-	u32				req_write_num_sge;
-	u32				req_recv_num_sge;
-	u32				rsp_write_num_sge;
-	struct xio_sge			*req_read_sge;
-	struct xio_sge			*req_write_sge;
-	/* What this side got from the peer for SEND
-	*/
-	struct xio_sge			*req_recv_sge;
 
-	/* What this side writes to the peer on RDMA W
-	 */
-	struct xio_sge			*rsp_write_sge;
+	u16				req_out_num_sge;
+	u16				req_in_num_sge;
+	u16				rsp_out_num_sge;
+	u16				pad1;
+
+	/* can serve send/rdma write  */
+	struct xio_sge			*req_in_sge;
+
+	/* can serve send/rdma read  */
+	struct xio_sge			*req_out_sge;
+
+	/* can serve send/rdma read response/rdma write  */
+	struct xio_sge			*rsp_out_sge;
 
 	unsigned int			phantom_idx;
-	enum xio_ib_op_code		ib_op;
 	u16				sn;
-	u16				pad[5];
+	u16				pad[3];
 
 };
 

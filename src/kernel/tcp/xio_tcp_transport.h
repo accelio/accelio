@@ -177,19 +177,21 @@ struct __attribute__((__packed__)) xio_tcp_req_hdr {
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
-	uint16_t		pad;
+	uint16_t		pad0;
 
 	uint32_t		ltid;		/* local task id	*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad1[1];
-	uint16_t		recv_num_sge;
+	uint16_t		pad;
+	uint8_t			in_tcp_op;	/* opcode  for peers	*/
+	uint8_t			out_tcp_op;	/* opcode  for peers	*/
 
-	uint16_t		read_num_sge;
-	uint16_t		write_num_sge;
+	uint16_t		in_num_sge;
+	uint16_t		out_num_sge;
+	uint32_t		pad1;
+
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 
@@ -205,9 +207,9 @@ struct __attribute__((__packed__)) xio_tcp_rsp_hdr {
 	uint32_t		ltid;		/* local task id 	*/
 	uint32_t		rtid;		/* remote task id	*/
 
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad1[1];
-	uint16_t		write_num_sge;
+	uint8_t			out_tcp_op;	/* opcode  for peers	*/
+	uint8_t			pad1;
+	uint16_t		out_num_sge;
 	uint32_t		status;		/* status		*/
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
@@ -247,41 +249,35 @@ struct xio_tcp_work_req {
 };
 
 struct xio_tcp_task {
-	enum xio_tcp_op_code		tcp_op;
-
-	uint32_t			recv_num_sge;
-	uint32_t			read_num_sge;
-	uint32_t			write_num_sge;
-
-	uint32_t			req_write_num_sge;
-	uint32_t			rsp_write_num_sge;
-	uint32_t			req_read_num_sge;
-	uint32_t			req_recv_num_sge;
-
-	uint16_t			sn;
-	uint16_t			pad[3];
+	enum xio_tcp_op_code		in_tcp_op;
+	enum xio_tcp_op_code		out_tcp_op;
 
 	void				*buf;
 	struct xio_tcp_work_req		txd;
 	struct xio_tcp_work_req		rxd;
 
+	uint16_t			read_num_mp_mem;
+	uint16_t			write_num_mp_mem;
+	uint32_t			pad0;
+
 	/* User (from vmsg) or pool buffer used for */
-	struct xio_mp_mem		*read_sge;
-	struct xio_mp_mem		*write_sge;
+	struct xio_mp_mem		*read_mp_mem;
+	struct xio_mp_mem		*write_mp_mem;
+
+	uint16_t			req_in_num_sge;
+	uint16_t			req_out_num_sge;
+	uint16_t			rsp_out_num_sge;
+	uint16_t			sn;
 
 	/* What this side got from the peer for SEND */
 	/* What this side got from the peer for RDMA equivalent R/W
 	 */
-	struct xio_sge			*req_read_sge;
-	struct xio_sge			*req_write_sge;
-
-	/* What this side got from the peer for SEND
-	 */
-	struct xio_sge			*req_recv_sge;
+	struct xio_sge			*req_in_sge;
+	struct xio_sge			*req_out_sge;
 
 	/* What this side writes to the peer on RDMA equivalent W
 	 */
-	struct xio_sge			*rsp_write_sge;
+	struct xio_sge			*rsp_out_sge;
 
 	struct xio_ev_data		comp_event;
 };
