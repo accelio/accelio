@@ -2586,23 +2586,21 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 
 	if (rdma_task->in_ib_op != XIO_IB_SEND &&
 	    rdma_task->req_in_num_sge > 0) {
-			unsigned int sqe_used = 0;
+		unsigned int sqe_used = 0;
 
-			if (xio_map_desc(rdma_hndl, &rdma_task->read_mem_desc,
-					 DMA_FROM_DEVICE, &sqe_used))
-				goto cleanup0;
-			rdma_task->sqe_used += sqe_used;
-		}
+		if (xio_map_desc(rdma_hndl, &rdma_task->read_mem_desc,
+				 DMA_FROM_DEVICE, &sqe_used))
+			goto cleanup0;
+		rdma_task->sqe_used += sqe_used;
 	}
 	if (rdma_task->out_ib_op != XIO_IB_SEND &&
 	    rdma_task->req_out_num_sge > 0) {
-			unsigned int sqe_used = 0;
+		unsigned int sqe_used = 0;
 
-			if (xio_map_desc(rdma_hndl, &rdma_task->write_mem_desc,
-					 DMA_TO_DEVICE, &sqe_used))
-				goto cleanup1;
-			rdma_task->sqe_used += sqe_used;
-		}
+		if (xio_map_desc(rdma_hndl, &rdma_task->write_mem_desc,
+				 DMA_TO_DEVICE, &sqe_used))
+			goto cleanup1;
+		rdma_task->sqe_used += sqe_used;
 	}
 
 	if (xio_rdma_write_req_header(rdma_hndl, task, &req_hdr) != 0)
