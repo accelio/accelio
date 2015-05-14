@@ -1078,13 +1078,21 @@ int xio_rdma_task_pre_put(struct xio_transport_base *trans_hndl,
 			xio_unmap_rxmad_work_req(dev, &rdma_task->rdmad);
 	}
 
-	if (rdma_task->read_mem_desc.nents && rdma_task->read_mem_desc.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->read_mem_desc,
-			       DMA_FROM_DEVICE);
+	if (rdma_task->in_ib_op != XIO_IB_SEND) {
+		if (rdma_task->read_mem_desc.nents &&
+		    rdma_task->read_mem_desc.mapped)
+			xio_unmap_desc(rdma_hndl,
+				       &rdma_task->read_mem_desc,
+				       DMA_FROM_DEVICE);
+	}
 
-	if (rdma_task->write_mem_desc.nents && rdma_task->write_mem_desc.mapped)
-		xio_unmap_desc(rdma_hndl, &rdma_task->write_mem_desc,
-			       DMA_TO_DEVICE);
+	if (rdma_task->out_ib_op != XIO_IB_SEND) {
+		if (rdma_task->write_mem_desc.nents &&
+		    rdma_task->write_mem_desc.mapped)
+			xio_unmap_desc(rdma_hndl,
+				       &rdma_task->write_mem_desc,
+				       DMA_TO_DEVICE);
+	}
 
 	/* recycle RDMA  buffers back to pool */
 
