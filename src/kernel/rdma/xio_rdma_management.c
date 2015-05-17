@@ -2048,7 +2048,8 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl, int send_beacon)
 		ERROR_LOG("rdma_hndl %p failed to post beacon (%d)\n",
 			  rdma_hndl, retval);
 		return -1;
-	}
+	} else
+		rdma_hndl->beacon_sent = 1;
 
 	return 0;
 }
@@ -2116,7 +2117,8 @@ static void on_cm_timewait_exit(void *hndl)
 {
 	struct xio_rdma_transport *rdma_hndl = hndl;
 
-	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p\n", rdma_hndl);
+	TRACE_LOG("on_cm_timedwait_exit rdma_hndl:%p state:%s\n",
+		  rdma_hndl, xio_transport_state_str(rdma_hndl->state));
 
 	xio_rdma_flush_all_tasks(rdma_hndl);
 
@@ -2124,6 +2126,12 @@ static void on_cm_timewait_exit(void *hndl)
 		xio_transport_notify_observer(&rdma_hndl->base,
 					      XIO_TRANSPORT_EVENT_DISCONNECTED,
 					      NULL);
+	}
+	/* if beacon was sent but was never received as wc error then reduce
+	   ref count */
+	if (rdma_hndl->beacon_sent) {
+		rdma_hndl->beacon_sent = 0;
+		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 	}
 
 	kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);

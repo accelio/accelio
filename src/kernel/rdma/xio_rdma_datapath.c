@@ -676,6 +676,7 @@ static void xio_handle_wc_error(struct ib_wc *wc)
 		rdma_hndl = container_of(task,
 					 struct xio_rdma_transport,
 					 beacon_task);
+		rdma_hndl->beacon_sent = 0;
 		TRACE_LOG("beacon rdma_hndl:%p\n", rdma_hndl);
 		kref_put(&rdma_hndl->base.kref, xio_rdma_close_cb);
 		return;
