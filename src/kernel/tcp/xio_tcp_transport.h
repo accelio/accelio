@@ -229,7 +229,7 @@ struct __attribute__((__packed__)) xio_tcp_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
-	uint32_t                max_header_size;
+	uint32_t                max_header_len;
 	uint32_t		pad;
 };
 

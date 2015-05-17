@@ -3072,7 +3072,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len  = vmsg->header.iov_len;
 	if (hdr_len >= rdma_hndl->peer_max_header) {
-		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%p\n",
+		ERROR_LOG("hdr_len=%zd is bigger than peer_max_reader=%d\n",
 				hdr_len, rdma_hndl->peer_max_header);
 		return -1;
 	}
