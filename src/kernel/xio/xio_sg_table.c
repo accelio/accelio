@@ -174,3 +174,62 @@ int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 }
 EXPORT_SYMBOL(tbl_copy);
 
+/*---------------------------------------------------------------------------*/
+/* tbl_copy_sg								     */
+/*---------------------------------------------------------------------------*/
+int tbl_copy_sg(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
+		struct xio_sg_table_ops *stbl_ops, void *stbl)
+{
+	void		*dsge	= sge_first(dtbl_ops, dtbl);
+	void		*ssge	= sge_first(stbl_ops, stbl);
+	void		*daddr	= sge_addr(dtbl_ops, dsge);
+	void		*saddr	= sge_addr(stbl_ops, ssge);
+	size_t		dlen	= sge_length(dtbl_ops, dsge);
+	size_t		slen	= sge_length(stbl_ops, ssge);
+	size_t		dnents	= tbl_nents(dtbl_ops, dtbl);
+	size_t		snents	= tbl_nents(stbl_ops, stbl);
+
+	size_t		d	= 0,
+			s	= 0;
+
+	if (dnents < 1 || snents < 1) {
+		ERROR_LOG("nents < 1 dnents:%zd, snents:%zd\n",
+			  dnents, snents);
+		return 0;
+	}
+	if (dnents < snents) {
+		ERROR_LOG("dnents < snents dnents:%zd, snents:%zd\n",
+			  dnents, snents);
+		return 0;
+	}
+
+	dnents = snents;
+	while (1) {
+		if (slen <= dlen) {
+			dlen = slen;
+			memcpy(daddr, saddr, dlen);
+			sge_set_length(dtbl_ops, dsge, dlen);
+
+			d++;
+			s++;
+			dsge = sge_next(dtbl_ops, dtbl, dsge);
+			ssge = sge_next(stbl_ops, stbl, ssge);
+			if ((d == dnents) || (s == snents))
+				break;
+
+			daddr	= sge_addr(dtbl_ops, dsge);
+			dlen	= sge_length(dtbl_ops, dsge);
+			saddr	= sge_addr(stbl_ops, ssge);
+			slen	= sge_length(stbl_ops, ssge);
+		} else {
+			ERROR_LOG("not enough buffer to complete " \
+				  "slen:%d dlen:%d\n", slen, dlen);
+			break;
+		}
+	}
+	tbl_set_nents(dtbl_ops, dtbl, d);
+
+	return 0;
+}
+EXPORT_SYMBOL(tbl_copy_sg);
+

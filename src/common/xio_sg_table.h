@@ -89,6 +89,9 @@ struct  xio_sg_table_ops {
 int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	     struct xio_sg_table_ops *stbl_ops, void *stbl);
 
+int tbl_copy_sg(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
+		struct xio_sg_table_ops *stbl_ops, void *stbl);
+
 int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	      struct xio_sg_table_ops *stbl_ops, void *stbl);
 
