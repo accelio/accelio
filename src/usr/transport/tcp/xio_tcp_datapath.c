@@ -1250,9 +1250,9 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
-	if (hdr_len >= rdma_hndl->peer_max_header) {
+	if (hdr_len >= tcp_hndl->peer_max_header) {
 		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%p\n",
-				hdr_len, rdma_hndl->peer_max_header);
+				hdr_len, tcp_hndl->peer_max_header);
 		return -1;
 	}
 

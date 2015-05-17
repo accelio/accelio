@@ -202,7 +202,7 @@ static void xio_tcp_write_setup_msg(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_read_setup_msg						     */
+/* xio_tcp_read_setup_msg						     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_read_setup_msg(struct xio_tcp_transport *tcp_hndl,
 				   struct xio_task *task,
@@ -288,7 +288,7 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_send_setup_rsp						     */
+/* xio_tcp_send_setup_rsp						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 				  struct xio_task *task)
@@ -333,7 +333,7 @@ static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_on_setup_msg						     */
+/* xio_tcp_on_setup_msg						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 				struct xio_task *task)
@@ -595,7 +595,7 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 
 cleanup:
 	xio_set_error(XIO_E_MSG_SIZE);
-	ERROR_LOG("xio_rdma_write_req_header failed\n");
+	ERROR_LOG("xio_tcp_write_req_header failed\n");
 	return -1;
 }
 
@@ -1144,9 +1144,9 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
-	if (hdr_len >= rdma_hndl->peer_max_header) {
+	if (hdr_len >= tcp_hndl->peer_max_header) {
 		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%p\n",
-				hdr_len, rdma_hndl->peer_max_header);
+				hdr_len, tcp_hndl->peer_max_header);
 		return -1;
 	}
 

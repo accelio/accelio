@@ -207,7 +207,7 @@ out:
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_get_max_header_size						     */
 /*---------------------------------------------------------------------------*/
-static int xio_tcp_get_max_header_size(void)
+int xio_tcp_get_max_header_size(void)
 {
 	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_tcp_req_hdr);
 	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_tcp_rsp_hdr);

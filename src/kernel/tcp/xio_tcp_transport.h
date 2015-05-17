@@ -230,6 +230,7 @@ struct __attribute__((__packed__)) xio_tcp_setup_msg {
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
 	uint32_t                max_header_size;
+	uint32_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_tcp_cancel_hdr {
@@ -438,6 +439,8 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 
 	return retval;
 }
+
+int xio_tcp_get_max_header_size(void);
 
 int xio_tcp_send(struct xio_transport_base *transport,
 		 struct xio_task *task);

@@ -206,6 +206,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	u32		max_in_iovsz;
 	u32		max_out_iovsz;
 	u32		max_header_len;
+	u32		pad;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -573,6 +574,8 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		  struct timespec *ts_timeout);
 
 /* xio_rdma_management.c */
+int xio_rdma_get_max_header_size(void);
+
 void xio_rdma_close_cb(struct kref *kref);
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 

@@ -212,6 +212,7 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
 	uint32_t                max_header_len;
+	uint32_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -507,6 +508,8 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			void *ulp_msg, size_t ulp_msg_sz);
 
 /* xio_rdma_management.c */
+int xio_rdma_get_max_header_size(void);
+
 struct xio_task *xio_rdma_primary_task_alloc(
 				struct xio_rdma_transport *rdma_hndl);
 

@@ -118,7 +118,7 @@ static void xio_device_release(struct xio_device *dev);
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_get_max_header_size						     */
 /*---------------------------------------------------------------------------*/
-static int xio_rdma_get_max_header_size(void)
+int xio_rdma_get_max_header_size(void)
 {
 	int req_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rdma_req_hdr);
 	int rsp_hdr = XIO_TRANSPORT_OFFSET + sizeof(struct xio_rdma_rsp_hdr);
