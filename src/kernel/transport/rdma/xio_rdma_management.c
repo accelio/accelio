@@ -192,9 +192,6 @@ static void xio_cq_down(struct kref *kref)
 	if (retval)
 		ERROR_LOG("ib_destroy_cq failed. (err=%d)\n", retval);
 
-	debugfs_remove_recursive(tcq->tcq_dentry);
-	tcq->tcq_dentry = NULL;
-
 	XIO_OBSERVER_DESTROY(&tcq->observer);
 
 	kfree(tcq->wc_array);
@@ -283,25 +280,6 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	/* xio_rdma_poll doesn't support separate tx & rx poll
 	 * so we use only one cq for RX and TX
 	 */
-	if (ctx->ctx_dentry) {
-		struct dentry *d;
-
-		tcq->tcq_dentry = debugfs_create_dir("tcq", ctx->ctx_dentry);
-		if (!tcq->tcq_dentry)
-			goto cleanup2;
-		d = debugfs_create_u64("events", S_IRUGO,
-				       tcq->tcq_dentry, &tcq->events);
-		if (!d)
-			goto cleanup2;
-		d = debugfs_create_u64("wqes", S_IRUGO,
-				       tcq->tcq_dentry, &tcq->wqes);
-		if (!d)
-			goto cleanup2;
-		d = debugfs_create_u64("scheds", S_IRUGO,
-				       tcq->tcq_dentry, &tcq->scheds);
-		if (!d)
-			goto cleanup2;
-	}
 
 	tcq->cq = ib_create_cq(dev->ib_dev,
 			       xio_cq_data_callback,
@@ -310,7 +288,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 			       alloc_sz, cpu);
 	if (IS_ERR(tcq->cq)) {
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
-		goto cleanup3;
+		goto cleanup2;
 	}
 	tcq->cq_depth	= tcq->cq->cqe;
 	tcq->cqe_avail	= tcq->cq->cqe;
@@ -327,7 +305,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 					   xio_rdma_cq_timeout);
 			if (ret && ret != -ENOSYS) {
 				ERROR_LOG("failed modifying CQ (%d)\n", ret);
-				goto cleanup4;
+				goto cleanup3;
 			}
 		}
 	}
@@ -337,7 +315,7 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	if (ib_req_notify_cq(tcq->cq,
 			     IB_CQ_NEXT_COMP | IB_CQ_REPORT_MISSED_EVENTS)) {
 		ERROR_LOG("ib_req_notify_cq\n");
-		goto cleanup4;
+		goto cleanup3;
 	}
 
 	write_lock_bh(&dev->cq_lock);
@@ -354,11 +332,8 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 
 	return tcq;
 
-cleanup4:
-	ib_destroy_cq(tcq->cq);
 cleanup3:
-	debugfs_remove_recursive(tcq->tcq_dentry);
-	tcq->tcq_dentry = NULL;
+	ib_destroy_cq(tcq->cq);
 cleanup2:
 	kfree(tcq->wc_array);
 cleanup1:

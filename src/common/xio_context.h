@@ -109,7 +109,6 @@ struct xio_context {
 	/* list of sessions using this connection */
 	struct xio_observable		observable;
 	void				*netlink_sock;
-	struct dentry			*ctx_dentry;
 	xio_work_handle_t               destroy_ctx_work;
 };
 

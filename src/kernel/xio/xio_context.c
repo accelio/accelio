@@ -96,8 +96,6 @@ struct xio_context *xio_context_create(unsigned int flags,
 				       int cpu_hint)
 {
 	struct xio_context *ctx;
-	struct dentry *xio_root;
-	char name[32];
 	int cpu;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
@@ -172,20 +170,9 @@ struct xio_context *xio_context_create(unsigned int flags,
 		goto cleanup3;
 	}
 
-	xio_root = xio_debugfs_root();
-	if (xio_root) {
-		/* More then one contexts can share the core */
-		sprintf(name, "ctx-%d-%p", cpu_hint, ctx);
-		ctx->ctx_dentry = debugfs_create_dir(name, xio_root);
-		if (!ctx->ctx_dentry) {
-			ERROR_LOG("debugfs entry %s create failed\n", name);
-			goto cleanup3;
-		}
-	}
-
 	ctx->ev_loop = xio_ev_loop_init(flags, ctx, loop_ops);
 	if (!ctx->ev_loop)
-		goto cleanup4;
+		goto cleanup3;
 
 	ctx->stats.hertz = HZ;
 	/* Initialize default counters' name */
@@ -198,10 +185,6 @@ struct xio_context *xio_context_create(unsigned int flags,
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
-
-cleanup4:
-	debugfs_remove_recursive(ctx->ctx_dentry);
-	ctx->ctx_dentry = NULL;
 
 cleanup3:
 	xio_objpool_destroy(ctx->msg_pool);
@@ -314,9 +297,6 @@ void xio_destroy_context_continue(struct work_struct *work)
 		xio_ev_loop_destroy(ctx->ev_loop);
 
 	ctx->ev_loop = NULL;
-
-	debugfs_remove_recursive(ctx->ctx_dentry);
-	ctx->ctx_dentry = NULL;
 
 	XIO_OBSERVABLE_DESTROY(&ctx->observable);
 
