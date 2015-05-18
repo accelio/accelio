@@ -112,18 +112,6 @@ extern struct xio_options	*g_poptions;
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
-enum xio_transport_state {
-	XIO_TRANSPORT_STATE_INIT,
-	XIO_TRANSPORT_STATE_LISTEN,
-	XIO_TRANSPORT_STATE_CONNECTING,
-	XIO_TRANSPORT_STATE_CONNECTED,
-	XIO_TRANSPORT_STATE_DISCONNECTED,
-	XIO_TRANSPORT_STATE_RECONNECT,
-	XIO_TRANSPORT_STATE_CLOSED,
-	XIO_TRANSPORT_STATE_DESTROYED,
-	XIO_TRANSPORT_STATE_ERROR
-};
-
 enum xio_ib_op_code {
 	XIO_IB_NULL,
 	XIO_IB_RECV		= 1,

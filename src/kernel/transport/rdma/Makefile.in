@@ -13,7 +13,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h xio_rdma_utils.h \
 	xio_rdma_transport.h \
 	xio_rdma_datapath.c  xio_rdma_management.c  xio_rdma_memory.c \
-	xio_rdma_verbs.c xio_rdma_utils.c
+	xio_rdma_verbs.c xio_rdma_utils.c ../xio_ktransport.c
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
@@ -52,7 +52,7 @@ distdir: $(DISTFILES)
 	cp -p $(DISTFILES) $(distdir)
 
 
-ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
+ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../../ -I$(SUBDIRS)/../../xio -I$(SUBDIRS)/../../../common -I$(SUBDIRS)/../../../../include -I$(SUBDIRS)/../../../libxio_os/linuxkernel
 
 obj-m := xio_rdma.o
 xio_rdma-objs := \

@@ -6,8 +6,8 @@ libtoolize  --force --copy --quiet  \
 && autoconf
 
 subdirlist=("src/kernel/xio"				\
-	    "src/kernel/rdma"				\
-	    "src/kernel/tcp"				\
+	    "src/kernel/transport/rdma"			\
+	    "src/kernel/transport/tcp"			\
 	    "examples/kernel/hello_world"		\
 	    "examples/kernel/hello_world_mt"		\
 	    "tests/kernel/hello_test"                   \

@@ -53,6 +53,7 @@
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_ktransport.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mem.h"

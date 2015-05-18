@@ -22,7 +22,7 @@ AC_ARG_ENABLE(kernel-module,
 	[  --enable-kernel-module  Compile kernel module ])
 
 
-TCP_SYMVERS=`pwd`/../xio/Module.symvers
+TCP_SYMVERS=`pwd`/../../xio/Module.symvers
 
 if test "$ENABLE_OFED_BUILD" = "y"; then
 AC_MSG_CHECKING([if ofed installed])

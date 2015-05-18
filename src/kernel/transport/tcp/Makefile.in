@@ -12,7 +12,7 @@ NOSTDINC_FLAGS += @OFED_CFLAGS@
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h \
 	xio_tcp_transport.h \
-	xio_tcp_datapath.c  xio_tcp_management.c
+	xio_tcp_datapath.c  xio_tcp_management.c ../xio_ktransport.c
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
@@ -51,7 +51,7 @@ distdir: $(DISTFILES)
 	cp -p $(DISTFILES) $(distdir)
 
 
-ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../xio -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
+ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../.. -I$(SUBDIRS)/../../xio -I$(SUBDIRS)/../../../common -I$(SUBDIRS)/../../../../include -I$(SUBDIRS)/../../../libxio_os/linuxkernel
 
 obj-m := xio_tcp.o
 xio_tcp-objs := \

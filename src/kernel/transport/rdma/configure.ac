@@ -22,7 +22,7 @@ AC_ARG_ENABLE(kernel-module,
 	[  --enable-kernel-module  Compile kernel module ])
 
 #build against installed OFED
-RDMA_SYMVERS=`pwd`/../xio/Module.symvers
+RDMA_SYMVERS=`pwd`/../../xio/Module.symvers
 
 if test "$ENABLE_OFED_BUILD" = "y"; then
 AC_MSG_CHECKING([if ofed installed])

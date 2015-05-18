@@ -47,6 +47,7 @@
 #include "xio_common.h"
 #include "xio_log.h"
 #include "xio_observer.h"
+#include "xio_ktransport.h"
 #include "xio_transport.h"
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
