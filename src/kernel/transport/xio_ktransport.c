@@ -38,7 +38,7 @@
 
 #include <xio_os.h>
 #include "libxio.h"
-#include "xio_transport.h"
+#include "xio_ktransport.h"
 
 /*---------------------------------------------------------------------------*/
 /* xio_transport_state_str						     */
@@ -69,5 +69,6 @@ char *xio_transport_state_str(enum xio_transport_state state)
 	}
 
 	return NULL;
-};
+}
+EXPORT_SYMBOL(xio_transport_state_str);
 

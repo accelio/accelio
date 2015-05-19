@@ -56,6 +56,7 @@ ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../../ -I$
 
 obj-m := xio_rdma.o
 xio_rdma-objs := \
+	../xio_ktransport.o \
 	xio_rdma_datapath.o \
 	xio_rdma_management.o \
 	xio_rdma_memory.o \
