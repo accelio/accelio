@@ -185,6 +185,7 @@ static int xio_dereg_mr(struct xio_mr *tmr)
 	struct xio_mr		*ptmr, *tmp_ptmr;
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval, found = 0;
+	struct list_head	dm_list;
 
 	spin_lock(&mr_list_lock);
 	list_for_each_entry_safe(ptmr, tmp_ptmr, &mr_list, mr_list_entry) {
@@ -195,24 +196,32 @@ static int xio_dereg_mr(struct xio_mr *tmr)
 		}
 	}
 	spin_unlock(&mr_list_lock);
+	if (!found)
+		return 0;
 
-	if (found) {
-		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
+	spin_lock(&dev_list_lock);
+	INIT_LIST_HEAD(&dm_list);
+	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
-			retval = ibv_dereg_mr(tmr_elem->mr);
-			if (retval != 0) {
-				xio_set_error(errno);
-				ERROR_LOG("ibv_dereg_mr failed, %m\n");
-			}
-			/* Remove the item from the list. */
-			spin_lock(&dev_list_lock);
-			list_del(&tmr_elem->dm_list_entry);
-			list_del(&tmr_elem->xm_list_entry);
-			spin_unlock(&dev_list_lock);
-			ufree(tmr_elem);
-		}
-		ufree(tmr);
+		list_del(&tmr_elem->dm_list_entry);
+		list_del(&tmr_elem->xm_list_entry);
+		list_add(&tmr_elem->dm_list_entry, &dm_list);
 	}
+	spin_unlock(&dev_list_lock);
+
+	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dm_list,
+			dm_list_entry) {
+		retval = ibv_dereg_mr(tmr_elem->mr);
+		if (retval != 0) {
+			xio_set_error(errno);
+			ERROR_LOG("ibv_dereg_mr failed, %m\n");
+		}
+		/* Remove the item from the list. */
+		list_del(&tmr_elem->dm_list_entry);
+		ufree(tmr_elem);
+	}
+	ufree(tmr);
+
 
 	return 0;
 }
@@ -362,6 +371,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 {
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval;
+	LIST_HEAD(tmp_list);
 
 	spin_lock(&dev_list_lock);
 	if (list_empty(&dev->xm_list)) {
@@ -369,7 +379,14 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 		return 0;
 	}
 
-	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dev->xm_list,
+	list_splice_tail(&dev->xm_list, &tmp_list);
+	INIT_LIST_HEAD(&dev->xm_list);
+	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmp_list,
+				 xm_list_entry)
+		list_del(&tmr_elem->dm_list_entry);
+	spin_unlock(&dev_list_lock);
+
+	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmp_list,
 				 xm_list_entry) {
 		if (tmr_elem->mr) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
@@ -379,11 +396,9 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 			}
 		}
 		/* Remove the item from the lists. */
-		list_del(&tmr_elem->dm_list_entry);
 		list_del(&tmr_elem->xm_list_entry);
 		ufree(tmr_elem);
 	}
-	spin_unlock(&dev_list_lock);
 
 	return 0;
 }
