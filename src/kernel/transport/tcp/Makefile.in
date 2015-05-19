@@ -55,6 +55,7 @@ ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../.. -I$(
 
 obj-m := xio_tcp.o
 xio_tcp-objs := \
+	../xio_ktransport.o \
 	xio_tcp_datapath.o \
 	xio_tcp_management.o
 
