@@ -366,26 +366,6 @@ void xio_context_stop_loop(struct xio_context *ctx);
  */
 int xio_context_poll_wait(struct xio_context *ctx, int timeout_ms);
 
-/**
- * poll for events using direct access to the event signaling resources
- * (e.g. hw event queues) associated with the context;
- * polling is performed continuously (by busy-waiting) during the specified
- * timeout period
- *
- * all events which become pending during that time are handled and the user
- * callbacks are called as appropriate for those events
- *
- * as there is no way to interrupt the loop, infinite polling is unsupported;
- * the polling period may be limited internally by an unspecified value
- *
- * @param[in] ctx		Pointer to the xio context handle
- * @param[in] timeout_us	number of microseconds to poll for events
- *				0 : just poll instantly, don't busy-wait;
- *
- * @return 0 on success, or -1 on error. If an error occurs, call
- *	    xio_errno function to get the failure reason.
- */
-int xio_context_poll_completions(struct xio_context *ctx, int timeout_us);
 
 /*---------------------------------------------------------------------------*/
 /* library initialization routines					     */

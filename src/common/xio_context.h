@@ -216,6 +216,14 @@ int xio_context_is_pending_event(struct xio_ev_data *evt);
 int xio_context_is_loop_stopping(struct xio_context *ctx);
 
 /*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx);
+
+/*---------------------------------------------------------------------------*/
 /* xio_context_modify_ev_handler					     */
 /*---------------------------------------------------------------------------*/
 int xio_context_modify_ev_handler(struct xio_context *ctx,
@@ -239,18 +247,6 @@ static inline void xio_context_destroy_wait(struct xio_context *ctx)
 /* xio_context_destroy_resume	                                             */
 /*---------------------------------------------------------------------------*/
 void xio_context_destroy_resume(struct xio_context *ctx);
-
-/*---------------------------------------------------------------------------*/
-/* xio_context_set_poll_completions_fn	                                     */
-/*---------------------------------------------------------------------------*/
-static inline void xio_context_set_poll_completions_fn(
-		struct xio_context *ctx,
-		poll_completions_fn_t poll_completions_fn,
-		void *poll_completions_ctx)
-{
-	ctx->poll_completions_ctx = poll_completions_ctx;
-	ctx->poll_completions_fn =  poll_completions_fn;
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_msg_pool_get	                                             */

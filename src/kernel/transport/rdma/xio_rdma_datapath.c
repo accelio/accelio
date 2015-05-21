@@ -1298,42 +1298,23 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_poll							     */
 /*---------------------------------------------------------------------------*/
-int xio_rdma_poll(struct xio_transport_base *transport,
-		  long min_nr, long max_nr,
-		  struct timespec *ts_timeout)
+void xio_poll_completions(struct xio_cq *tcq, int timeout_us)
 {
 	int			retval;
 	int			i;
 	struct xio_task		*task;
-	struct xio_rdma_transport *rdma_hndl;
-	struct xio_cq		*tcq;
-	int			nr = 8;
-	int			nr_comp = 0, last_in_rxq = -1;
+	int			last_in_rxq = -1;
 	int			tlv_type;
 	unsigned long		timeout;
 	unsigned long		start_time;
 	struct ib_wc		*wc;
 
-	if (min_nr > max_nr)
-		return -1;
-
-	rdma_hndl  = (struct xio_rdma_transport *)transport;
-	tcq = rdma_hndl->tcq;
-
-	if (!ts_timeout) {
-		xio_set_error(EINVAL);
-		return -1;
-	}
-
-	timeout = timespec_to_jiffies(ts_timeout);
-	if (timeout == 0)
-		return 0;
+	timeout = usecs_to_jiffies(timeout_us);
 
 	start_time = jiffies;
 
 	while (1) {
-		nr = min(((u32)max_nr), tcq->wc_array_len);
-		retval = ib_poll_cq(tcq->cq, nr, tcq->wc_array);
+		retval = ib_poll_cq(tcq->cq, tcq->wc_array_len, tcq->wc_array);
 		if (likely(retval > 0)) {
 			wc = &tcq->wc_array[retval - 1];
 			for (i = retval - 1; i >= 0; i--) {
@@ -1360,11 +1341,9 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 					xio_handle_wc_error(wc);
 				wc++;
 			}
-			nr_comp += retval;
-			max_nr  -= retval;
-			if (nr_comp >= min_nr || max_nr == 0)
-				break;
 			if (time_is_before_eq_jiffies(start_time + timeout))
+				break;
+			if (xio_context_is_loop_stopping(tcq->ctx))
 				break;
 		} else if (retval == 0) {
 			if (time_is_before_eq_jiffies(start_time + timeout))
@@ -1372,7 +1351,7 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		} else {
 			ERROR_LOG("ib_poll_cq failed. (ret=%d %m)\n", retval);
 			xio_set_error(-retval);
-			return -1;
+			return;
 		}
 	}
 
@@ -1381,11 +1360,9 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 		/* didn't request IB_CQ_REPORT_MISSED_EVENTS so can't be > 0 */
 		xio_set_error(-retval);
 		ERROR_LOG("ib_req_notify_cq failed. (ret=%d)\n", retval);
-		return -1;
+		return;
 	}
 	tcq->num_delayed_arm = 0;
-
-	return nr_comp;
 }
 
 /*---------------------------------------------------------------------------*/

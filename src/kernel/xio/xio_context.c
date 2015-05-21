@@ -442,6 +442,7 @@ int xio_context_is_loop_stopping(struct xio_context *ctx)
 
 	return ev_loop->is_stopping(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_is_loop_stopping);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_work							     */
@@ -518,18 +519,46 @@ void xio_context_destroy_resume(struct xio_context *ctx)
 	if (ctx->run_private) {
 		if (!--ctx->run_private) {
 			switch (ctx->flags) {
-				case XIO_LOOP_GIVEN_THREAD:
-					xio_context_stop_loop(ctx);
-					break;
-				case XIO_LOOP_WORKQUEUE:
-					INIT_WORK(&ctx->destroy_ctx_work.work, xio_destroy_context_continue);
-					schedule_work(&ctx->destroy_ctx_work.work);
-					break;
-				default:
-					ERROR_LOG("Not supported type. %d\n", ctx->flags);
-					break;
+			case XIO_LOOP_GIVEN_THREAD:
+				xio_context_stop_loop(ctx);
+				break;
+			case XIO_LOOP_WORKQUEUE:
+				INIT_WORK(&ctx->destroy_ctx_work.work,
+					  xio_destroy_context_continue);
+				schedule_work(&ctx->destroy_ctx_work.work);
+				break;
+			default:
+				ERROR_LOG("Not supported type. %d\n", ctx->flags);
+				break;
 			}
 		}
 	}
 }
 EXPORT_SYMBOL(xio_context_destroy_resume);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx)
+{
+	ctx->poll_completions_ctx = poll_completions_ctx;
+	ctx->poll_completions_fn =  poll_completions_fn;
+}
+EXPORT_SYMBOL(xio_context_set_poll_completions_fn);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_poll_completions		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
+{
+	if (ctx->poll_completions_fn)
+		return ctx->poll_completions_fn(ctx->poll_completions_ctx,
+					       timeout_us);
+
+	return 0;
+}
+EXPORT_SYMBOL(xio_context_poll_completions);
+

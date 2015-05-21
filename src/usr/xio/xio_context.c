@@ -575,3 +575,17 @@ void xio_context_destroy_resume(struct xio_context *ctx)
 	}
 }
 EXPORT_SYMBOL(xio_context_destroy_resume);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx)
+{
+	ctx->poll_completions_ctx = poll_completions_ctx;
+	ctx->poll_completions_fn =  poll_completions_fn;
+}
+EXPORT_SYMBOL(xio_context_set_poll_completions_fn);
+

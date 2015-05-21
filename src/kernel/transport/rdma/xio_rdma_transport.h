@@ -627,4 +627,6 @@ static inline void xio_device_put(struct xio_device *dev)
 	kref_put(&dev->kref, xio_device_down);
 }
 
+void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us);
+
 #endif  /* XIO_RDMA_TRANSPORT_H */
