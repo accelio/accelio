@@ -8,17 +8,17 @@ bs=1K
 loops=1
 direct=0
 iodepth=1
-filename=/192.168.1.67/1234/dev/null
+filename=/192.168.1.66/1234/dev/null
 ;filename=/192.168.1.67/1234/dev/ram2
 
-;[file1]
-;cpus_allowed=1
+[file1]
+cpus_allowed=1
 
 ;[file2]
 ;cpus_allowed=2
 
-[file3]
-cpus_allowed=3
+;[file3]
+;cpus_allowed=3
 
 ;[file4]
 ;cpus_allowed=4

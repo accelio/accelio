@@ -5,9 +5,9 @@ thread
 ioengine=./.libs/libraio_fio.so
 rw=write
 bs=1K
-loops=1
+loops=10
 direct=1
-invalidate=1
+;invalidate=1
 iodepth=1
 size=512M
 ;verify_fatal=1
@@ -17,9 +17,9 @@ size=512M
 ;numa_cpu_nodes=0
 ;numa_mem_policy=bind:0
 ;gtod_reduce=1
-;filename=/192.168.1.67/1234/dev/ram0
-filename=/192.168.1.67/1234/dev/null
-;filename=/192.168.1.67/1234/tmp/tmp.test
+;filename=/192.168.1.66/1234/dev/ram0
+filename=/192.168.1.66/1234/dev/null
+;filename=/192.168.1.66/1234/tmp/tmp.test
 ;[file1]
 ;cpus_allowed=1
 
