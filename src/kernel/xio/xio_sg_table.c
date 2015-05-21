@@ -223,7 +223,7 @@ int tbl_copy_sg(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 			slen	= sge_length(stbl_ops, ssge);
 		} else {
 			ERROR_LOG("not enough buffer to complete " \
-				  "slen:%d dlen:%d\n", slen, dlen);
+				  "slen:%zd dlen:%zd\n", slen, dlen);
 			break;
 		}
 	}
