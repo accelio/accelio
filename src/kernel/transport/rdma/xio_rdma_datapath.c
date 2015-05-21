@@ -1296,9 +1296,9 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_poll							     */
+/* xio_rdma_poll_completions						     */
 /*---------------------------------------------------------------------------*/
-void xio_poll_completions(struct xio_cq *tcq, int timeout_us)
+void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 {
 	int			retval;
 	int			i;
