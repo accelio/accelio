@@ -33,6 +33,7 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_observer.c \
 	../../common/xio_idr.c \
 	../../common/xio_utils.c \
+	../transport/xio_ktransport.c
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
@@ -96,6 +97,7 @@ xio_core-objs := \
 	xio_sg_iovptr.o	\
 	xio_sg_scatter.o \
 	xio_sg_table.o	\
+	../transport/xio_ktransport.o	\
 	$(PRIVATE_COMMON)/version.o \
 	$(PRIVATE_COMMON)/xio_objpool.o \
 	$(PRIVATE_COMMON)/xio_nexus.o \
