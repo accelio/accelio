@@ -1398,8 +1398,11 @@ int xio_release_response(struct xio_msg *msg)
 
 	while (pmsg) {
 		task = container_of(pmsg->request, struct xio_task, imsg);
-		if (!task->sender_task) {
-			/* do not release response in responder */
+		if (!task->sender_task ||
+		    task->tlv_type != XIO_MSG_TYPE_RSP) {
+		/* do not release response in responder */
+			ERROR_LOG("xio_release_rsp failed. invalid type:0x%x\n",
+				  task->tlv_type);
 			xio_set_error(EINVAL);
 			return -1;
 		}
