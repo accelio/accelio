@@ -4206,9 +4206,7 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	uint16_t payload;
 	struct xio_rdma_setup_msg  req;
 
-	req.buffer_sz           = ALIGN(xio_rdma_get_max_header_size() +
-					g_poptions->max_inline_xio_hdr +
-					g_poptions->max_inline_xio_data, 1024);
+	req.buffer_sz           = xio_rdma_get_inline_buffer_size();
 	req.sq_depth		= rdma_hndl->sq_depth;
 	req.rq_depth		= rdma_hndl->rq_depth;
 	req.credits		= 0;
@@ -4354,9 +4352,7 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		xio_rdma_read_setup_msg(rdma_hndl, task, &req);
 
 		/* current implementation is symmetric */
-		local_buf_size = ALIGN(xio_rdma_get_max_header_size() +
-					g_poptions->max_inline_xio_hdr +
-					g_poptions->max_inline_xio_data, 1024);
+		local_buf_size          = xio_rdma_get_inline_buffer_size();
 		rsp->buffer_sz		= min(req.buffer_sz, local_buf_size);
 		rsp->sq_depth		= min(req.sq_depth, ((u16)rdma_hndl->rq_depth));
 		rsp->rq_depth		= min(req.rq_depth, ((u16)rdma_hndl->sq_depth));

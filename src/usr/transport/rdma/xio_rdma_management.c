@@ -131,6 +131,19 @@ int xio_rdma_get_max_header_size(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_get_inline_buffer_size					     */
+/*---------------------------------------------------------------------------*/
+int xio_rdma_get_inline_buffer_size(void)
+{
+	int inline_buf_sz = xio_rdma_get_max_header_size() +
+			    g_options.max_inline_xio_hdr +
+			    g_options.max_inline_xio_data;
+	inline_buf_sz = ALIGN(inline_buf_sz, 1024);
+
+	return inline_buf_sz;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_async_ev_handler							     */
 /*---------------------------------------------------------------------------*/
 static void xio_async_ev_handler(int fd, int events, void *user_context)
@@ -1502,7 +1515,8 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
-	size_t alloc_sz = alloc_nr * ALIGN(rdma_hndl->membuf_sz, PAGE_SIZE);
+	size_t inline_buf_sz = xio_rdma_get_inline_buffer_size();
+	size_t alloc_sz = alloc_nr * ALIGN(inline_buf_sz, PAGE_SIZE);
 	int	retval;
 
 	if (alloc_sz == 0) {
@@ -1513,7 +1527,7 @@ static int xio_rdma_primary_pool_slab_pre_create(
 			return -1;
 	}
 	rdma_slab->alloc_nr = alloc_nr;
-	rdma_slab->buf_size = rdma_hndl->membuf_sz;
+	rdma_slab->buf_size = inline_buf_sz;
 
 	if (disable_huge_pages) {
 		retval = xio_mem_alloc(alloc_sz, &rdma_slab->reg_mem);
@@ -1668,7 +1682,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	task->context = new_th;
 
 	/* if the same device is used then there is no need to remap */
-	if (old_hndl->tcq->dev == new_hndl->tcq->dev)
+	if (old_hndl && old_hndl->tcq->dev == new_hndl->tcq->dev)
 		return 0;
 
 	data_mr = xio_rdma_mr_lookup(rdma_slab->data_mr, new_hndl->tcq->dev);
@@ -1749,7 +1763,12 @@ static void xio_rdma_primary_pool_get_params(
 		(struct xio_rdma_transport *)transport_hndl;
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
 			     rdma_options.max_in_iovsz) + 1;
-	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
+	int  max_sge;
+
+	if (rdma_hndl)
+		max_sge = min(rdma_hndl->max_sge, max_iovsz);
+	else
+		max_sge = min(XIO_DEV_ATTR_MAX_SGE, max_iovsz);
 
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
@@ -2545,7 +2564,6 @@ static struct xio_transport_base *xio_rdma_open(
 		struct xio_transport_init_attr *attr)
 {
 	struct xio_rdma_transport	*rdma_hndl;
-	int				max_xio_hdr;
 
 	/*allocate rdma handle */
 	rdma_hndl = (struct xio_rdma_transport *)
@@ -2571,9 +2589,6 @@ static struct xio_transport_base *xio_rdma_open(
 			goto cleanup;
 		}
 	}
-	max_xio_hdr = xio_rdma_get_max_header_size();
-	max_xio_hdr = ALIGN(max_xio_hdr, 64);
-
 	rdma_hndl->base.portal_uri	= NULL;
 	rdma_hndl->base.proto		= XIO_PROTO_RDMA;
 	kref_init(&rdma_hndl->base.kref);
@@ -2586,11 +2601,8 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
-	rdma_hndl->max_inline_buf_sz	= max_xio_hdr +
-					  g_options.max_inline_xio_hdr +
-					  g_options.max_inline_xio_data;
-	rdma_hndl->max_inline_buf_sz	=
-				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
+	rdma_hndl->max_inline_buf_sz	= xio_rdma_get_inline_buffer_size();
+
 
 	/*
 	DEBUG_LOG("max_inline_buf:%d\n", rdma_hndl->max_inline_buf_sz);

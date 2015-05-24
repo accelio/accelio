@@ -50,6 +50,11 @@ enum xio_context_event {
 	XIO_CONTEXT_EVENT_POST_CLOSE
 };
 
+enum xio_context_pool_class {
+	XIO_CONTEXT_POOL_CLASS_INITIAL,
+	XIO_CONTEXT_POOL_CLASS_PRIMARY
+};
+
 enum xio_counters {
 	XIO_STAT_TX_MSG,
 	XIO_STAT_RX_MSG,
@@ -263,6 +268,11 @@ static inline void xio_context_msg_pool_put(void *obj)
 {
 	xio_objpool_free(obj);
 }
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_pool_create							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
+		        enum xio_context_pool_class pool_cls);
 
 #endif /*XIO_CONTEXT_H */
 

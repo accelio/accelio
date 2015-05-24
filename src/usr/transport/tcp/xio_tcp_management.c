@@ -110,6 +110,17 @@ int xio_tcp_get_max_header_size(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_tcp_get_inline_buffer_size					     */
+/*---------------------------------------------------------------------------*/
+int xio_tcp_get_inline_buffer_size(void)
+{
+	int inline_buf_sz = ALIGN(xio_tcp_get_max_header_size() +
+				  g_options.max_inline_xio_hdr +
+				  g_options.max_inline_xio_data, 1024);
+	return inline_buf_sz;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_tcp_flush_all_tasks						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_flush_all_tasks(struct xio_tcp_transport *tcp_hndl)
@@ -795,7 +806,6 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 		int			create_socket)
 {
 	struct xio_tcp_transport	*tcp_hndl;
-	int				max_xio_hdr;
 
 	/*allocate tcp handl */
 	tcp_hndl = (struct xio_tcp_transport *)
@@ -835,9 +845,6 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	memset(&tcp_hndl->tmp_work, 0, sizeof(struct xio_tcp_work_req));
 	tcp_hndl->tmp_work.msg_iov = tcp_hndl->tmp_iovec;
 
-	max_xio_hdr = xio_tcp_get_max_header_size();
-	max_xio_hdr =	ALIGN(max_xio_hdr, 64);
-
 	/* create tcp socket */
 	if (create_socket) {
 		tcp_hndl->sock.ops = tcp_options.tcp_dual_sock ?
@@ -847,12 +854,7 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 	}
 
 	/* from now on don't allow changes */
-	tcp_hndl->max_inline_buf_sz	= max_xio_hdr +
-					  g_options.max_inline_xio_hdr +
-					  g_options.max_inline_xio_data;
-	tcp_hndl->max_inline_buf_sz	=
-				ALIGN(tcp_hndl->max_inline_buf_sz, 64);
-
+	tcp_hndl->max_inline_buf_sz	= xio_tcp_get_inline_buffer_size();
 	tcp_hndl->membuf_sz		= tcp_hndl->max_inline_buf_sz;
 
 	if (observer)
@@ -2118,20 +2120,19 @@ static void init_initial_tasks_pool_ops(void)
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_primary_pool_slab_pre_create				     */
+/* xio_tcp_primary_pool_slab_pre_create					     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_primary_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
 		int alloc_nr, void *pool_dd_data, void *slab_dd_data)
 {
-	struct xio_tcp_transport *tcp_hndl =
-		(struct xio_tcp_transport *)transport_hndl;
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
-	size_t	alloc_sz = alloc_nr * ALIGN(tcp_hndl->membuf_sz, PAGE_SIZE);
+	size_t inline_buf_sz = xio_tcp_get_inline_buffer_size();
+	size_t	alloc_sz = alloc_nr * ALIGN(inline_buf_sz, PAGE_SIZE);
 	int	retval;
 
-	tcp_slab->buf_size = tcp_hndl->membuf_sz;
+	tcp_slab->buf_size = inline_buf_sz;
 
 	if (disable_huge_pages) {
 		retval = xio_mem_alloc(alloc_sz, &tcp_slab->reg_mem);

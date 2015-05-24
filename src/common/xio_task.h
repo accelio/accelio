@@ -59,7 +59,6 @@ struct xio_tasks_pool;
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
-
 struct xio_task {
 	struct list_head	tasks_list_entry;
 	void			*dd_data;
@@ -82,6 +81,7 @@ struct xio_task {
 	int32_t                 pad1;
 
 	void			*pool;
+	void			*slab;
 	void			*context;
 	struct xio_session	*session;
 	struct xio_connection	*connection;
@@ -194,6 +194,27 @@ static inline void xio_task_addref(
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_task_reinit							     */
+/*---------------------------------------------------------------------------*/
+static int xio_task_reinit(void *context, struct xio_task *task)
+{
+	struct xio_tasks_pool	*pool = (struct xio_tasks_pool *)task->pool;
+	struct xio_tasks_slab	*slab = (struct xio_tasks_slab *)task->slab;
+	int			retval = -1;
+	int			i = task->ltid - slab->start_idx;
+
+	if (pool->params.pool_hooks.slab_init_task && i >= 0)
+		retval = pool->params.pool_hooks.slab_init_task(context,
+							      pool->dd_data,
+							      slab->dd_data,
+							      i,
+							      task);
+	task->context = context;
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_task_release							     */
 /*---------------------------------------------------------------------------*/
 static inline void xio_task_release(struct kref *kref)
@@ -272,7 +293,9 @@ static inline struct xio_task *xio_tasks_pool_get(
 
 	kref_init(&t->kref);
 	t->tlv_type	= 0xbeef;  /* poison the type */
-	t->context	= context;
+
+	if (t->context != context)
+		xio_task_reinit(context, t);
 
 	if (q->params.pool_hooks.task_post_get)
 		q->params.pool_hooks.task_post_get(context, t);

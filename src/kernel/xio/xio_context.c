@@ -60,6 +60,7 @@
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
 #include "xio_task.h"
+#include "xio_transport.h"
 
 #define MSGPOOL_INIT_NR	8
 #define MSGPOOL_GROW_NR	64
@@ -561,4 +562,126 @@ int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
 	return 0;
 }
 EXPORT_SYMBOL(xio_context_poll_completions);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_pool_create							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
+		        enum xio_context_pool_class pool_cls)
+{
+	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_tasks_pool		**tasks_pool;
+	struct xio_transport		*transport;
+	struct xio_tasks_pool_params	params;
+	char				pool_name[64];
+	const char			*proto_str = xio_proto_str(proto);
+
+	/* get the transport's proto */
+	transport = xio_get_transport(proto_str);
+	if (!transport) {
+		ERROR_LOG("failed to load %s transport layer.\n", proto_str);
+		ERROR_LOG("validate that your system support %s " \
+			  "and the accelio's %s module is loaded\n",
+			  proto_str, proto_str);
+		xio_set_error(ENOPROTOOPT);
+		return -1;
+	}
+
+	if (transport->get_pools_setup_ops) {
+		if (!ctx->primary_pool_ops[proto] ||
+		    !ctx->initial_pool_ops[proto])
+			transport->get_pools_setup_ops(
+					NULL,
+					&ctx->initial_pool_ops[proto],
+					&ctx->primary_pool_ops[proto]);
+	} else {
+		ERROR_LOG("transport does not implement " \
+			  "\"get_pools_setup_ops\"\n");
+		return -1;
+	}
+
+	switch(pool_cls) {
+	case XIO_CONTEXT_POOL_CLASS_INITIAL:
+		tasks_pool = &ctx->initial_tasks_pool[proto];
+		pool_ops = ctx->initial_pool_ops[proto];
+		sprintf(pool_name, "ctx:%p - initial_pool_%s", ctx, proto_str);
+
+	break;
+	case XIO_CONTEXT_POOL_CLASS_PRIMARY:
+		tasks_pool = &ctx->primary_tasks_pool[proto];
+		pool_ops = ctx->primary_pool_ops[proto];
+		sprintf(pool_name, "ctx:%p - primary_pool_%s", ctx, proto_str);
+	break;
+	default:
+		xio_set_error(EINVAL);
+		ERROR_LOG("unknown pool class\n");
+		return -1;
+	};
+
+	/* if already exist */
+	if (*tasks_pool)
+		return 0;
+
+	if (!pool_ops)
+		return -1;
+
+	if (!pool_ops->pool_get_params ||
+	    !pool_ops->slab_pre_create ||
+	    !pool_ops->slab_init_task ||
+	    !pool_ops->pool_post_create ||
+	    !pool_ops->slab_destroy)
+		return -1;
+
+	/* get pool properties from the transport */
+	memset(&params, 0, sizeof(params));
+
+	pool_ops->pool_get_params(NULL,
+				  (int *)&params.start_nr,
+				  (int *)&params.max_nr,
+				  (int *)&params.alloc_nr,
+				  (int *)&params.pool_dd_data_sz,
+				  (int *)&params.slab_dd_data_sz,
+				  (int *)&params.task_dd_data_sz);
+
+	params.pool_hooks.slab_pre_create  =
+		(int (*)(void *, int, void *, void *))
+				pool_ops->slab_pre_create;
+	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
+				pool_ops->slab_post_create;
+	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
+				pool_ops->slab_destroy;
+	params.pool_hooks.slab_init_task   =
+		(int (*)(void *, void *, void *, int,  struct xio_task *))
+				pool_ops->slab_init_task;
+	params.pool_hooks.slab_uninit_task =
+		(int (*)(void *, void *, void *, struct xio_task *))
+				pool_ops->slab_uninit_task;
+	params.pool_hooks.slab_remap_task =
+		(int (*)(void *, void *, void *, void *, struct xio_task *))
+				pool_ops->slab_remap_task;
+	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
+				pool_ops->pool_pre_create;
+	/*
+	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
+				pool_ops->pool_post_create;
+	*/
+	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
+				pool_ops->pool_destroy;
+	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))
+		pool_ops->task_pre_put;
+	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
+		pool_ops->task_post_get;
+
+	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
+
+	/* initialize the tasks pool */
+	*tasks_pool = xio_tasks_pool_create(&params);
+	if (!*tasks_pool) {
+		ERROR_LOG("xio_tasks_pool_create failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 

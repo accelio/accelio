@@ -131,12 +131,13 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	}
 
 	for (i = 0; i < alloc_nr; i++) {
-		s->array[i]		= (struct xio_task *)data;
-		task			= s->array[i];
+		s->array[i]	= (struct xio_task *)data;
+		task		= s->array[i];
 		task->tlv_type	= 0xdead;
 		task->ltid	= s->start_idx + i;
 		task->magic	= XIO_TASK_MAGIC;
 		task->pool	= (void *)q;
+		task->slab	= (void *)s;
 		task->dd_data	= ((char *)data) +
 						sizeof(struct xio_task);
 
@@ -158,7 +159,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 		data = ((char *)data) +
 			g_options.max_out_iovsz * sizeof(struct xio_iovec_ex);
 
-		if (q->params.pool_hooks.slab_init_task) {
+		if (q->params.pool_hooks.slab_init_task && context) {
 			retval = q->params.pool_hooks.slab_init_task(
 				context,
 				q->dd_data,
@@ -175,7 +176,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
 	list_splice_tail(&tmp_list, &q->stack);
 
-	if (q->params.pool_hooks.slab_post_create) {
+	if (q->params.pool_hooks.slab_post_create && context) {
 		retval = q->params.pool_hooks.slab_post_create(
 				context,
 				q->dd_data,

@@ -354,6 +354,8 @@ struct xio_tcp_transport {
 
 int xio_tcp_get_max_header_size(void);
 
+int xio_tcp_get_inline_buffer_size(void);
+
 int xio_tcp_send(struct xio_transport_base *transport,
 		 struct xio_task *task);
 

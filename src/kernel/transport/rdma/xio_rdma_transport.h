@@ -563,6 +563,8 @@ int xio_rdma_poll(struct xio_transport_base *transport,
 /* xio_rdma_management.c */
 int xio_rdma_get_max_header_size(void);
 
+int xio_rdma_get_inline_buffer_size(void);
+
 void xio_rdma_close_cb(struct kref *kref);
 void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 

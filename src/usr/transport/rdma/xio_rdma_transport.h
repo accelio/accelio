@@ -64,6 +64,7 @@ extern spinlock_t		dev_list_lock;
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 #define MAX_ACKED_CQE			128
+#define XIO_DEV_ATTR_MAX_SGE		 30
 
 #define MAX_CQE_PER_QP			(MAX_SEND_WR + MAX_RECV_WR + EXTRA_RQE)
 #define CQE_ALLOC_SIZE			(10 * MAX_CQE_PER_QP)
@@ -510,6 +511,8 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 
 /* xio_rdma_management.c */
 int xio_rdma_get_max_header_size(void);
+
+int xio_rdma_get_inline_buffer_size(void);
 
 struct xio_task *xio_rdma_primary_task_alloc(
 				struct xio_rdma_transport *rdma_hndl);

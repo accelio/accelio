@@ -430,6 +430,8 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 
 int xio_tcp_get_max_header_size(void);
 
+int xio_tcp_get_inline_buffer_size(void);
+
 int xio_tcp_send(struct xio_transport_base *transport,
 		 struct xio_task *task);
 

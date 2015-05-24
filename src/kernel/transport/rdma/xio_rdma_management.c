@@ -125,6 +125,17 @@ int xio_rdma_get_max_header_size(void)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_rdma_get_inline_buffer_size					     */
+/*---------------------------------------------------------------------------*/
+int xio_rdma_get_inline_buffer_size(void)
+{
+	int inline_buf_sz = ALIGN(xio_rdma_get_max_header_size() +
+				  g_poptions->max_inline_xio_hdr +
+				  g_poptions->max_inline_xio_data, 1024);
+	return inline_buf_sz;
+}
+
+/*---------------------------------------------------------------------------*/
 /* forward declaration							     */
 /*---------------------------------------------------------------------------*/
 static struct xio_transport_base *xio_rdma_open(
@@ -1109,11 +1120,11 @@ static int xio_rdma_initial_pool_slab_destroy(
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
 	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
-
+	/*
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
 			  rdma_slab->name, rdma_slab->count);
-
+	*/
 	kmem_cache_destroy(rdma_slab->data_pool);
 
 	return 0;
@@ -1177,11 +1188,12 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 #endif
 	/* Phantom tasks have no buffer */
 	if (rdma_task->buf) {
+		/*
 		if (rdma_slab->count)
 			rdma_slab->count--;
 		else
 			ERROR_LOG("pool(%s) double free?\n", rdma_slab->name);
-
+		*/
 		kmem_cache_free(rdma_slab->data_pool, rdma_task->buf);
 	}
 
@@ -1216,14 +1228,18 @@ static int xio_rdma_initial_pool_slab_init_task(
 	ptr += sizeof(struct ib_sge);
 	/*****************************************/
 
+	if (!rdma_hndl)
+		return 0;
+
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmem_cache_zalloc(initial_pool)\n");
 		return -ENOMEM;
 	}
+	/*
 	rdma_slab->count++;
-
+	*/
 	return xio_rdma_task_init(task,
 				  rdma_hndl,
 				  buf,
@@ -1379,12 +1395,11 @@ static int xio_rdma_primary_pool_slab_pre_create(
 		struct xio_transport_base *transport_hndl,
 		int alloc_nr, void *pool_dd_data, void *slab_dd_data)
 {
-	struct xio_rdma_transport *rdma_hndl =
-		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_slab *rdma_slab =
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
+	size_t inline_buf_sz = xio_rdma_get_inline_buffer_size();
 
-	rdma_slab->buf_size = rdma_hndl->membuf_sz;
+	rdma_slab->buf_size = inline_buf_sz;
 	/* The name must be valid until the pool is destroyed
 	 * Use the address of the pool structure to create a unique
 	 * name for the pool
@@ -1449,10 +1464,11 @@ static int xio_rdma_primary_pool_slab_destroy(
 
 	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
 
+	/*
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
 			  rdma_slab->name, rdma_slab->count);
-
+	*/
 	kmem_cache_destroy(rdma_slab->data_pool);
 
 	return 0;
@@ -1480,7 +1496,7 @@ static int xio_rdma_primary_pool_slab_remap_task(
 	task->context = new_th;
 
 	/* if the same device is used then there is no need to remap */
-	if (old_dev == new_dev)
+	if (old_dev && old_dev == new_dev)
 		return 0;
 
 	xio_rdma_task_reinit(task, new_hndl, new_dev->mr);
@@ -1635,13 +1651,16 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	rdma_task->out_ib_op = 0x200;
 
+	if (!rdma_hndl)
+		return 0;
+
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
 		goto cleanup2;
 	}
 
-	rdma_slab->count++;
+/*	rdma_slab->count++; */
 
 	xio_rdma_task_init(task,
 			   rdma_hndl,
@@ -2293,7 +2312,6 @@ static struct xio_transport_base *xio_rdma_open(
 					struct xio_transport_init_attr *attr)
 {
 	struct xio_rdma_transport *rdma_hndl;
-	int			   max_xio_hdr;
 
 	/* allocate rdma handle */
 	rdma_hndl = kzalloc(sizeof(*rdma_hndl), GFP_KERNEL);
@@ -2313,9 +2331,6 @@ static struct xio_transport_base *xio_rdma_open(
 		ERROR_LOG("allocating rdma mempool failed.\n");
 		goto cleanup;
 	}
-	max_xio_hdr = xio_rdma_get_max_header_size();
-	max_xio_hdr =	ALIGN(max_xio_hdr, 64);
-
 	rdma_hndl->base.portal_uri	= NULL;
 	kref_init(&rdma_hndl->base.kref);
 	rdma_hndl->transport		= transport;
@@ -2326,11 +2341,7 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->rq_depth		= MAX_RECV_WR;
 	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
-	rdma_hndl->max_inline_buf_sz	=
-		xio_get_options()->max_inline_xio_hdr +
-		xio_get_options()->max_inline_xio_data + max_xio_hdr;
-	rdma_hndl->max_inline_buf_sz	=
-				ALIGN(rdma_hndl->max_inline_buf_sz, 1024);
+	rdma_hndl->max_inline_buf_sz	= xio_rdma_get_inline_buffer_size();
 
 	rdma_hndl->frwr_task.dd_data = ptr_from_int64(XIO_FRWR_LI_WRID);
 

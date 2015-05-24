@@ -888,19 +888,12 @@ static int xio_nexus_on_send_msg_comp(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 {
-	int				alloc_nr;
-	int				start_nr;
-	int				max_nr;
-	int				task_dd_sz;
-	int				slab_dd_sz;
-	int				pool_dd_sz;
-	struct xio_tasks_pool_cls	pool_cls;
-	struct xio_tasks_pool_params	params;
-	struct xio_transport_base	*transport_hndl;
 	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_transport_base	*transport_hndl;
+	struct xio_tasks_pool_cls	pool_cls;
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
-	char				pool_name[64];
+	int				retval;
 
 	if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
 		transport_hndl = nexus->new_transport_hndl;
@@ -909,17 +902,13 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 
 	proto		= transport_hndl->proto;
 	ctx		= transport_hndl->ctx;
-	pool_ops	= ctx->initial_pool_ops[proto];
 
-	if (!pool_ops)
+	retval = xio_ctx_pool_create(ctx, proto,
+				     XIO_CONTEXT_POOL_CLASS_INITIAL);
+	if (retval) {
+		ERROR_LOG("Failed to create initial pool. nexus:%p\n", nexus);
 		return -1;
-
-	if (!pool_ops->pool_get_params ||
-	    !pool_ops->slab_pre_create ||
-	    !pool_ops->slab_init_task ||
-	    !pool_ops->pool_post_create ||
-	    !pool_ops->slab_destroy)
-		return -1;
+	}
 
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
@@ -934,71 +923,8 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 		nexus->transport->set_pools_cls(transport_hndl,
 						&pool_cls, NULL);
 	}
+	pool_ops = ctx->initial_pool_ops[proto];
 
-	if (ctx->initial_tasks_pool[proto])
-		goto post_create;
-
-	/* get pool properties from the transport */
-	pool_ops->pool_get_params(transport_hndl,
-				  &start_nr,
-				  &max_nr,
-				  &alloc_nr,
-				  &pool_dd_sz,
-				  &slab_dd_sz,
-				  &task_dd_sz);
-
-	memset(&params, 0, sizeof(params));
-
-	params.start_nr			   = start_nr;
-	params.max_nr			   = max_nr;
-	params.alloc_nr			   = alloc_nr;
-	params.pool_dd_data_sz		   = pool_dd_sz;
-	params.slab_dd_data_sz		   = slab_dd_sz;
-	params.task_dd_data_sz		   = task_dd_sz;
-	params.pool_hooks.context	   = transport_hndl;
-	params.pool_hooks.slab_pre_create  =
-		(int (*)(void *, int, void *, void *))
-				pool_ops->slab_pre_create;
-	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
-				pool_ops->slab_post_create;
-	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
-				pool_ops->slab_destroy;
-	params.pool_hooks.slab_init_task   =
-		(int (*)(void *, void *, void *, int,  struct xio_task *))
-				pool_ops->slab_init_task;
-	params.pool_hooks.slab_uninit_task =
-		(int (*)(void *, void *, void *, struct xio_task *))
-				pool_ops->slab_uninit_task;
-	params.pool_hooks.slab_remap_task =
-		(int (*)(void *, void *, void *, void *, struct xio_task *))
-				pool_ops->slab_remap_task;
-	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
-				pool_ops->pool_pre_create;
-	/*
-	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
-				pool_ops->pool_post_create;
-	*/
-	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
-				pool_ops->pool_destroy;
-	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))
-		pool_ops->task_pre_put;
-	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
-		pool_ops->task_post_get;
-
-	sprintf(pool_name, "%s_%s_initial_pool_of_context:%p",
-		(nexus->transport_hndl->is_client) ? "client" : "server",
-		xio_proto_str(proto), ctx);
-
-	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
-
-	/* initialize the tasks pool */
-	ctx->initial_tasks_pool[proto] = xio_tasks_pool_create(&params);
-	if (!ctx->initial_tasks_pool[proto]) {
-		ERROR_LOG("xio_tasks_pool_create failed\n");
-		goto cleanup;
-	}
-
-post_create:
 	if (pool_ops->pool_post_create)
 		pool_ops->pool_post_create(
 				transport_hndl,
@@ -1008,9 +934,6 @@ post_create:
 	nexus->initial_tasks_pool = ctx->initial_tasks_pool[proto];
 
 	return 0;
-
-cleanup:
-	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1018,32 +941,23 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 {
-	int				alloc_nr;
-	int				start_nr;
-	int				max_nr;
-	int				task_dd_sz;
-	int				slab_dd_sz;
-	int				pool_dd_sz;
-	struct xio_tasks_pool_cls	pool_cls;
-	struct xio_tasks_pool_params	params;
 	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_transport_base	*transport_hndl;
+	struct xio_tasks_pool_cls	pool_cls;
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
-	char				pool_name[64];
+	int				retval;
 
-	proto		= nexus->transport_hndl->proto;
-	ctx		= nexus->transport_hndl->ctx;
-	pool_ops	= ctx->primary_pool_ops[proto];
+	transport_hndl  = nexus->transport_hndl;
+	proto		= transport_hndl->proto;
+	ctx		= transport_hndl->ctx;
 
-	if (!pool_ops)
+	retval = xio_ctx_pool_create(ctx, proto,
+				     XIO_CONTEXT_POOL_CLASS_PRIMARY);
+	if (retval) {
+		ERROR_LOG("Failed to create primary pool. nexus:%p\n", nexus);
 		return -1;
-
-	if (!pool_ops->pool_get_params ||
-	    !pool_ops->slab_pre_create ||
-	    !pool_ops->slab_init_task ||
-	    !pool_ops->pool_post_create ||
-	    !pool_ops->slab_destroy)
-		return -1;
+	}
 
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
@@ -1052,89 +966,22 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
-		pool_cls.task_put	= xio_tasks_pool_put;
-
-		nexus->transport->set_pools_cls(nexus->transport_hndl,
-					       NULL,
-					       &pool_cls);
+		pool_cls.task_put	= (void (*)(struct xio_task *))
+						xio_tasks_pool_put;
+		nexus->transport->set_pools_cls(transport_hndl,
+						NULL, &pool_cls);
 	}
+	pool_ops = ctx->primary_pool_ops[proto];
 
-	if (ctx->primary_tasks_pool[proto])
-		goto post_create;
-
-	/* get pool properties from the transport */
-	pool_ops->pool_get_params(nexus->transport_hndl,
-				  &start_nr,
-				  &max_nr,
-				  &alloc_nr,
-				  &pool_dd_sz,
-				  &slab_dd_sz,
-				  &task_dd_sz);
-
-	memset(&params, 0, sizeof(params));
-
-	params.start_nr			   = start_nr;
-	params.max_nr			   = max_nr;
-	params.alloc_nr			   = alloc_nr;
-	params.pool_dd_data_sz		   = pool_dd_sz;
-	params.slab_dd_data_sz		   = slab_dd_sz;
-	params.task_dd_data_sz		   = task_dd_sz;
-	params.pool_hooks.context	   = nexus->transport_hndl;
-	params.pool_hooks.slab_pre_create  =
-		(int (*)(void *, int, void *, void *))
-				pool_ops->slab_pre_create;
-	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
-				pool_ops->slab_post_create;
-	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
-				pool_ops->slab_destroy;
-	params.pool_hooks.slab_init_task   =
-		(int (*)(void *, void *, void *, int,  struct xio_task *))
-				pool_ops->slab_init_task;
-	params.pool_hooks.slab_uninit_task =
-		(int (*)(void *, void *, void *, struct xio_task *))
-				pool_ops->slab_uninit_task;
-	params.pool_hooks.slab_remap_task =
-		(int (*)(void *, void *, void *, void *, struct xio_task *))
-				pool_ops->slab_remap_task;
-	params.pool_hooks.pool_pre_create = (int (*)(void *, void *, void *))
-				pool_ops->pool_pre_create;
-	/*
-	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
-				pool_ops->pool_post_create;
-	*/
-	params.pool_hooks.pool_destroy = (int (*)(void *, void *, void *))
-				pool_ops->pool_destroy;
-	params.pool_hooks.task_pre_put = (int (*)(void *, struct xio_task *))
-				pool_ops->task_pre_put;
-	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
-				pool_ops->task_post_get;
-
-	sprintf(pool_name, "%s_%s_primary_pool_of_context:%p",
-		(nexus->transport_hndl->is_client) ? "client" : "server",
-		xio_proto_str(proto), ctx);
-
-	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
-
-	/* initialize the tasks pool */
-	ctx->primary_tasks_pool[proto] = xio_tasks_pool_create(&params);
-	if (!ctx->primary_tasks_pool[proto]) {
-		ERROR_LOG("xio_tasks_pool_create failed\n");
-		goto cleanup;
-	}
-
-post_create:
 	if (pool_ops->pool_post_create)
 		pool_ops->pool_post_create(
-				nexus->transport_hndl,
+				transport_hndl,
 				ctx->primary_tasks_pool[proto],
 				ctx->primary_tasks_pool[proto]->dd_data);
 
 	nexus->primary_tasks_pool = ctx->primary_tasks_pool[proto];
 
 	return 0;
-
-cleanup:
-	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
