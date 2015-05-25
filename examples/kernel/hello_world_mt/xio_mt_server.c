@@ -297,6 +297,7 @@ int xio_portal_thread(void *data)
 	struct server_data *sdata;
 	void *ctx;
 	struct xio_server *server;	/* server portal */
+	struct xio_context_params ctx_params;
 	char url[256];
 	int cpu, i;
 
@@ -330,7 +331,11 @@ int xio_portal_thread(void *data)
 	}
 
 	/* create thread context for the server */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		pr_err("context open failed\n");
 		goto cleanup1;
@@ -472,6 +477,7 @@ int xio_server_main(void *data)
 	char **argv;
 	struct xio_server	*server;	/* server portal */
 	struct server_data	*sdata;
+	struct xio_context_params ctx_params;
 	char			url[256];
 	void			*ctx;
 	u16			port;
@@ -500,7 +506,11 @@ int xio_server_main(void *data)
 	kref_init(&sdata->kref);
 
 	/* create thread context for the server */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		pr_err("context open filed\n");
 		ret = -1;

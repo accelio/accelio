@@ -448,8 +448,9 @@ stop_loop_now:
 /*---------------------------------------------------------------------------*/
 static int xio_server_main(void *data)
 {
-	struct xio_server	*server;
-	char			url[256];
+	struct xio_server		*server;
+	struct xio_context_params	ctx_params;
+	char				url[256];
 
 	atomic_add(2, &module_state);
 
@@ -465,8 +466,13 @@ static int xio_server_main(void *data)
 	if (!pool)
 		goto cleanup;
 
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-				 current, POLLING_TIMEOUT, cpu);
+	/* create thread context for the server */
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params,
+				 POLLING_TIMEOUT, cpu);
 	if (!ctx) {
 		int error = xio_errno();
 

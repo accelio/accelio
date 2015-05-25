@@ -745,6 +745,7 @@ static int xio_client_main(void *data)
 	struct xio_connection_params	cparams;
 	int				error;
 	int				retval;
+	struct xio_context_params	ctx_params;
 	static int			chain_messages = CHAIN_MESSAGES;
 
 	atomic_add(2, &module_state);
@@ -776,8 +777,13 @@ static int xio_client_main(void *data)
 	}
 
 	/* create thread context for the client */
-	g_test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, g_test_params.cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+
+	g_test_params.ctx = xio_context_create(&ctx_params,
+					       0, g_test_params.cpu);
 	if (!g_test_params.ctx) {
 		pr_err("context open failed\n");
 		goto cleanup;

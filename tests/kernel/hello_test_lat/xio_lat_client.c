@@ -538,6 +538,7 @@ static int xio_client_main(void *data)
 {
 	char				url[256];
 	struct xio_session_params	params;
+	struct xio_context_params	ctx_params;
 	struct xio_connection_params	cparams;
 	int				error;
 	int				retval = 0;
@@ -564,9 +565,13 @@ static int xio_client_main(void *data)
 		goto cleanup;
 	}
 
-	/* create thread context for the client */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-				 current, POLLING_TIMEOUT, cpu);
+	/* create thread context for the server */
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params,
+				 POLLING_TIMEOUT, cpu);
 	if (!ctx) {
 		pr_err("context open failed\n");
 		goto cleanup;

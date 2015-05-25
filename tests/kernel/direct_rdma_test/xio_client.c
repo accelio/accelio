@@ -90,6 +90,7 @@ static struct xio_session		*session;
 static struct xio_msg			*msg;
 static struct xio_session_params	params;
 static struct xio_connection_params	cparams;
+static struct xio_context_params	ctx_params;
 
 static int xio_client_main(void *data)
 {
@@ -101,8 +102,12 @@ static int xio_client_main(void *data)
 	init_xio_rdma_common_test();
 
 	/* create thread context for the client */
-	test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					       current, 0, 0);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+
+	test_params.ctx = xio_context_create(&ctx_params, 0, 0);
 	xio_assert(test_params.ctx);
 
 	session_ops.on_session_event = on_session_event;

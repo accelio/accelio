@@ -205,6 +205,7 @@ static int xio_client_main(void *data)
 
 	struct xio_session	*session;
 	struct xio_session_params params;
+	struct xio_context_params ctx_params;
 	struct xio_connection_params cparams;
 	char			url[256];
 	struct xio_context	*ctx;
@@ -220,7 +221,11 @@ static int xio_client_main(void *data)
 	}
 
 	/* create thread context for the client */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		vfree(session_data);
 		pr_err("context open filed\n");

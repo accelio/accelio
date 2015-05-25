@@ -236,15 +236,28 @@ static inline void xio_reinit_msg(struct xio_msg *msg)
 #define XIO_INFINITE			-1
 
 /**
+ * @struct xio_context_params
+ * @brief context creation parameters structure
+ */
+struct xio_context_params {
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< oriented callbacks      */
+	int			prealloc_pools; /**< pre allocate  rdma only */
+						/**< internal pools	     */
+	int			reserved;
+};
+
+/**
  * creates xio context - a context object represent concurrency unit
  *
- * @param[in] ctx_attr context attributes
- * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
+ * @param[in] ctx_params: context creation parameters (can be NULL)
+ * @param[in] polling_timeout_us: Polling timeout in microsecs - 0 ignore
  * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
  *
  * @return xio context handle, or NULL upon error
  */
-struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
+struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout_us,
 				       int cpu_hint);
 

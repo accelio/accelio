@@ -461,8 +461,9 @@ stop_loop_now:
 /*---------------------------------------------------------------------------*/
 static int xio_server_main(void *data)
 {
-	struct xio_server	*server;
-	char			url[256];
+	struct xio_server		*server;
+	struct xio_context_params	ctx_params;
+	char				url[256];
 
 	atomic_add(2, &module_state);
 
@@ -471,8 +472,12 @@ static int xio_server_main(void *data)
 	g_test_params.finite_run = test_config.finite_run;
 	g_test_params.disconnect_nr = PRINT_COUNTER * DISCONNECT_FACTOR;
 
-	g_test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, g_test_params.cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	g_test_params.ctx = xio_context_create(&ctx_params,
+					       0, g_test_params.cpu);
 	if (!g_test_params.ctx) {
 		int error = xio_errno();
 

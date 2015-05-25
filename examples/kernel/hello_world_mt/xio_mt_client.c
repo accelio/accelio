@@ -267,6 +267,7 @@ static int xio_client_thread(void *data)
 	struct thread_data		*tdata;
 	struct session_data		*sdata;
 	struct xio_connection		*connection;
+	struct xio_context_params	ctx_params;
 	struct xio_connection_params	cparams;
 	struct xio_context		*ctx;
 	int				cpu;
@@ -305,7 +306,11 @@ static int xio_client_thread(void *data)
 	}
 
 	/* create thread context for the client */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		pr_err("context open failed\n");
 		goto cleanup1;

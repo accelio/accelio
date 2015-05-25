@@ -90,13 +90,14 @@ EXPORT_SYMBOL(xio_context_unreg_observer);
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_create							     */
 /*---------------------------------------------------------------------------*/
-struct xio_context *xio_context_create(unsigned int flags,
-				       struct xio_loop_ops *loop_ops,
-				       struct task_struct *worker,
+struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout,
 				       int cpu_hint)
 {
 	struct xio_context *ctx;
+	struct xio_loop_ops *loop_ops = ctx_params->loop_ops;
+	struct task_struct *worker = ctx_params->worker;
+	int flags = ctx_params->flags;
 	int cpu;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
@@ -134,6 +135,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		cpu_hint = cpu;
 
 	ctx->run_private = 0;
+	ctx->user_context = ctx_params->user_context;
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);

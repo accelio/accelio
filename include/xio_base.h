@@ -270,7 +270,6 @@ struct xio_rdma_msg {
 /*---------------------------------------------------------------------------*/
 /* XIO context API							     */
 /*---------------------------------------------------------------------------*/
-
 /**
  * @enum xio_context_attr_mask
  * @brief supported context attributes to query/modify

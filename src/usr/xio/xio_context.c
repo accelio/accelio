@@ -85,7 +85,7 @@ EXPORT_SYMBOL(xio_context_unreg_observer);
 /*---------------------------------------------------------------------------*/
 /* xio_context_create                                                        */
 /*---------------------------------------------------------------------------*/
-struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
+struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout_us, int cpu_hint)
 {
 	struct xio_context		*ctx = NULL;
@@ -126,8 +126,8 @@ struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
 	ctx->polling_timeout	= polling_timeout_us;
 	ctx->worker		= xio_get_current_thread_id();
 
-	if (ctx_attr)
-		ctx->user_context = ctx_attr->user_context;
+	if (ctx_params)
+		ctx->user_context = ctx_params->user_context;
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);

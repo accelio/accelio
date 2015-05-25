@@ -252,23 +252,43 @@ struct xio_loop_ops {
 };
 
 /**
+ * @struct xio_context_params
+ * @brief context creation parameters structure
+ */
+struct xio_context_params {
+
+	unsigned int		flags;		/**< creation flags */
+
+	/* User's structure of callbacks operations for this context
+	 * (case flag XIO_LOOP_USER_LOOP)
+	 */
+	struct xio_loop_ops	*loop_ops;
+
+	/* kthread if flags XIO_LOOP_GIVEN_THREAD can be current
+	*/
+	struct task_struct	*worker;
+
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< oriented callbacks      */
+	int			prealloc_pools; /**< pre allocate  rdma only */
+						/**< internal pools	     */
+};
+
+/**
  * xio_context - creates xio context - a context is mapped internally to
  *		a cpu core.
  *
- * @flags: Creation flags
- * @loop_ops: User's structure of callbacks operations for this context
- *	      (case flag XIO_LOOP_USER_LOOP)
- * @worker: kthread if flags XIO_LOOP_GIVEN_THREAD can be current
+ * @ctx_params: context creation creation flags
  * @polling_timeout: polling timeout in microsecs - 0 ignore
  * @cpu_hint: -1 (current)
  *
  * RETURNS: xio context handle, or NULL upon error.
  */
-struct xio_context *xio_context_create(unsigned int flags,
-				       struct xio_loop_ops *loop_ops,
-				       struct task_struct *worker,
-				       int polling_timeout,
-				       int cpu_hint);
+struct xio_context *xio_context_create(
+		struct xio_context_params  *ctx_params,
+		int polling_timeout,
+		int cpu_hint);
 
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */

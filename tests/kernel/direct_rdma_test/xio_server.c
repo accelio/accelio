@@ -99,12 +99,16 @@ static int on_session_event(struct xio_session *session,
 /*---------------------------------------------------------------------------*/
 static int xio_server_main(void *data)
 {
-	struct xio_server	*server;
+	struct xio_server		*server;
+	struct xio_context_params	ctx_params;
 
 	init_xio_rdma_common_test();
 
-	test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, 0);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	test_params.ctx = xio_context_create(&ctx_params, 0, 0);
 	xio_assert(test_params.ctx);
 
 	session_ops.on_session_event = on_session_event;

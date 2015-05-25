@@ -250,6 +250,7 @@ static int xio_server_main(void *data)
 	struct xio_server	*server;	/* server portal */
 	struct server_data	*server_data;
 	char			url[256];
+	struct xio_context_params ctx_params;
 	struct xio_context	*ctx;
 	int			i;
 
@@ -262,8 +263,11 @@ static int xio_server_main(void *data)
 	}
 
 	/* create thread context for the server */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-				 current, 0, -1);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		vfree(server_data);
 		pr_err("context open filed\n");
