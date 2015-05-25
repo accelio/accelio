@@ -329,9 +329,11 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		for (i = 0; i < MAX_THREADS; i++)
-			if (session_data->tdata[i].exit_code == 0)
-				xio_context_stop_loop(session_data->tdata[i].ctx);
+		for (i = 0; i < MAX_THREADS; i++) {
+			struct thread_data *tdata = &session_data->tdata[i];
+			if (tdata->exit_code == 0 && tdata->ctx)
+				xio_context_stop_loop(tdata->ctx);
+		}
 		break;
 	default:
 		break;
