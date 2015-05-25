@@ -57,6 +57,7 @@ extern struct xio_options	*g_poptions;
 #define MAX_SEND_WR			(XIO_MAX_IOV + 1)
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
+#define XIO_DEV_ATTR_MAX_SGE		30
 
 /*  - one for send, (one for frwr, one for local invalidate) x (r1 + w1)
  */

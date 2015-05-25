@@ -227,8 +227,7 @@ static inline void xio_task_release(struct kref *kref)
 	pool = (struct xio_tasks_pool *)task->pool;
 
 	if (pool->params.pool_hooks.task_pre_put)
-		pool->params.pool_hooks.task_pre_put(
-				pool->params.pool_hooks.context, task);
+		pool->params.pool_hooks.task_pre_put(task->context, task);
 
 	xio_task_reset(task);
 
