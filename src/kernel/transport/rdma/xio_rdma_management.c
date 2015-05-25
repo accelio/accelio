@@ -811,7 +811,7 @@ static void xio_xd_reinit(struct xio_work_req *xd,
 {
 	int i;
 
-	if (!srmr)
+	if (!srmr || !xd || !xd->sge)
 		return;
 
 	for (i = 0; i < xd_nr; i++) {
