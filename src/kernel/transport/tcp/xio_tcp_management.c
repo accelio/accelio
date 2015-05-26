@@ -2004,6 +2004,9 @@ static int xio_tcp_initial_pool_post_create(
 	struct xio_tcp_transport *tcp_hndl =
 		(struct xio_tcp_transport *)transport_hndl;
 
+	if (!tcp_hndl)
+		return 0;
+
 	tcp_hndl->initial_pool_cls.pool = pool;
 
 	task = xio_tcp_initial_task_alloc(tcp_hndl);
@@ -2240,6 +2243,9 @@ static int xio_tcp_primary_pool_post_create(
 	int			i;
 	struct xio_tcp_transport *tcp_hndl =
 		(struct xio_tcp_transport *)transport_hndl;
+
+	if (!tcp_hndl)
+		return 0;
 
 	tcp_hndl->primary_pool_cls.pool = pool;
 

@@ -104,7 +104,8 @@ struct xio_context {
 
 	uint32_t			is_running:1;
 	uint32_t			defered_destroy:1;
-	uint32_t			resereved:30;
+	uint32_t			prealloc_pools:1;
+	uint32_t			resereved:29;
 
 	struct xio_statistics		stats;
 	void				*user_context;

@@ -94,11 +94,12 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout,
 				       int cpu_hint)
 {
-	struct xio_context *ctx;
-	struct xio_loop_ops *loop_ops = ctx_params->loop_ops;
-	struct task_struct *worker = ctx_params->worker;
-	int flags = ctx_params->flags;
-	int cpu;
+	struct xio_context		*ctx;
+	struct xio_loop_ops		*loop_ops = ctx_params->loop_ops;
+	struct task_struct		*worker = ctx_params->worker;
+	struct xio_transport		*transport;
+	int				flags = ctx_params->flags;
+	int				cpu;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
 		xio_set_error(EINVAL);
@@ -140,6 +141,8 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
 	ctx->polling_timeout = polling_timeout;
+	ctx->prealloc_pools = !!ctx_params->prealloc_pools;
+
 	ctx->workqueue = xio_workqueue_create(ctx);
 	if (!ctx->workqueue) {
 		xio_set_error(ENOMEM);
@@ -185,6 +188,23 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	ctx->stats.name[XIO_STAT_RX_BYTES] = kstrdup("RX_BYTES", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_DELAY]    = kstrdup("DELAY", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_APPDELAY] = kstrdup("APPDELAY", GFP_KERNEL);
+
+	/* initialize rdma pools only */
+	transport = xio_get_transport("rdma");
+	if (transport && ctx->prealloc_pools) {
+		int retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					         XIO_CONTEXT_POOL_CLASS_INITIAL);
+		if (retval) {
+			ERROR_LOG("Failed to create initial pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+		retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					     XIO_CONTEXT_POOL_CLASS_PRIMARY);
+		if (retval) {
+			ERROR_LOG("Failed to create primary pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+	}
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
@@ -644,6 +664,10 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				  (int *)&params.pool_dd_data_sz,
 				  (int *)&params.slab_dd_data_sz,
 				  (int *)&params.task_dd_data_sz);
+	if (ctx->prealloc_pools) {
+		params.start_nr = params.max_nr;
+		params.alloc_nr = 0;
+	}
 
 	params.pool_hooks.slab_pre_create  =
 		(int (*)(void *, int, void *, void *))
@@ -663,10 +687,8 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				pool_ops->slab_remap_task;
 	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
 				pool_ops->pool_pre_create;
-	/*
 	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
 				pool_ops->pool_post_create;
-	*/
 	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
 				pool_ops->pool_destroy;
 	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))

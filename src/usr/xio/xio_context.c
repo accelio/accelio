@@ -89,6 +89,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout_us, int cpu_hint)
 {
 	struct xio_context		*ctx = NULL;
+	struct xio_transport		*transport;
 	int				cpu;
 
 	xio_read_logging_level();
@@ -126,8 +127,10 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	ctx->polling_timeout	= polling_timeout_us;
 	ctx->worker		= xio_get_current_thread_id();
 
-	if (ctx_params)
+	if (ctx_params) {
 		ctx->user_context = ctx_params->user_context;
+		ctx->prealloc_pools = !!ctx_params->prealloc_pools;
+	}
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);
@@ -148,6 +151,24 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 
 	if (-1 == xio_netlink(ctx))
 		goto cleanup2;
+
+	/* initialize rdma pools only */
+	transport = xio_get_transport("rdma");
+	if (transport && ctx->prealloc_pools) {
+		int retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					         XIO_CONTEXT_POOL_CLASS_INITIAL);
+		if (retval) {
+			ERROR_LOG("Failed to create initial pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+		retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					     XIO_CONTEXT_POOL_CLASS_PRIMARY);
+		if (retval) {
+			ERROR_LOG("Failed to create primary pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+	}
+	DEBUG_LOG("context created. context:%p\n", ctx);
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
@@ -669,7 +690,10 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				  (int *)&params.pool_dd_data_sz,
 				  (int *)&params.slab_dd_data_sz,
 				  (int *)&params.task_dd_data_sz);
-
+	if (ctx->prealloc_pools) {
+		params.start_nr = params.max_nr;
+		params.alloc_nr = 0;
+	}
 	params.pool_hooks.slab_pre_create  =
 		(int (*)(void *, int, void *, void *))
 				pool_ops->slab_pre_create;
@@ -688,10 +712,8 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				pool_ops->slab_remap_task;
 	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
 				pool_ops->pool_pre_create;
-	/*
 	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
 				pool_ops->pool_post_create;
-	*/
 	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
 				pool_ops->pool_destroy;
 	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))
