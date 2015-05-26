@@ -74,7 +74,7 @@
 /* Not yet implemented, parameter or sysfs */
 static inline void xio_read_logging_level(void)
 {
-	pr_warn("xio_read_logging_level\n");
+	pr_devel("xio_read_logging_level\n");
 }
 
 static inline int xio_set_log_level(int /*enum xio_log_level*/ level)
