@@ -112,6 +112,7 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	struct xio_idr_entry	*idr1_entry = NULL, *idr_entry;
 	struct xio_key_int64	key;
 	int			retval = -1;
+	char			*pname = NULL;
 
 	if (!idr || !uobj)
 		return -1;
@@ -121,6 +122,8 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	if (!idr_entry)
 		return -1;
 
+	pname = kstrdup(obj_name, GFP_KERNEL);
+
 	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
 	HT_LOOKUP(&idr->cache, &key, idr1_entry, idr_ht_entry);
@@ -128,14 +131,15 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 		goto exit;
 
 	idr_entry->key = uobj;
-	idr_entry->name = kstrdup(obj_name, GFP_KERNEL);
+	idr_entry->name = pname;
 	HT_INSERT(&idr->cache, &key, idr_entry, idr_ht_entry);
 	retval = 0;
 exit:
 	spin_unlock(&idr->lock);
-	if (retval)
+	if (retval) {
+		kfree(pname);
 		kfree(idr_entry);
-
+	}
 	return retval;
 }
 
