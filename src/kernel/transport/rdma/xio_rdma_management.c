@@ -1012,6 +1012,9 @@ static int xio_rdma_initial_pool_post_create(
 	struct xio_rdma_task *rdma_task;
 	int	retval;
 
+	if (!rdma_hndl)
+		return 0;
+
 	rdma_hndl->initial_pool_cls.pool = pool;
 	rdma_pool->dev = rdma_hndl->dev;
 
@@ -1120,11 +1123,11 @@ static int xio_rdma_initial_pool_slab_destroy(
 		(struct xio_rdma_tasks_slab *)slab_dd_data;
 
 	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
-	/*
+
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
 			  rdma_slab->name, rdma_slab->count);
-	*/
+
 	kmem_cache_destroy(rdma_slab->data_pool);
 
 	return 0;
@@ -1188,13 +1191,13 @@ static int xio_rdma_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 #endif
 	/* Phantom tasks have no buffer */
 	if (rdma_task->buf) {
-		/*
 		if (rdma_slab->count)
 			rdma_slab->count--;
 		else
 			ERROR_LOG("pool(%s) double free?\n", rdma_slab->name);
-		*/
+
 		kmem_cache_free(rdma_slab->data_pool, rdma_task->buf);
+		rdma_task->buf = NULL;
 	}
 
 	return 0;
@@ -1216,6 +1219,9 @@ static int xio_rdma_initial_pool_slab_init_task(
 	void *buf;
 	char *ptr;
 
+	if (!rdma_hndl || rdma_task->buf)
+		return 0;
+
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
 	ptr += sizeof(struct xio_rdma_task);
@@ -1228,18 +1234,14 @@ static int xio_rdma_initial_pool_slab_init_task(
 	ptr += sizeof(struct ib_sge);
 	/*****************************************/
 
-	if (!rdma_hndl)
-		return 0;
-
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmem_cache_zalloc(initial_pool)\n");
 		return -ENOMEM;
 	}
-	/*
 	rdma_slab->count++;
-	*/
+
 	return xio_rdma_task_init(task,
 				  rdma_hndl,
 				  buf,
@@ -1328,6 +1330,9 @@ static int xio_rdma_phantom_pool_post_create(
 		(struct xio_rdma_transport *)transport_hndl;
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
+
+	if (!rdma_hndl)
+		return 0;
 
 	rdma_pool->dev = rdma_hndl->dev;
 
@@ -1434,6 +1439,9 @@ static int xio_rdma_primary_pool_post_create(
 	struct xio_rdma_tasks_pool *rdma_pool =
 		(struct xio_rdma_tasks_pool *)pool_dd_data;
 
+	if (!rdma_hndl)
+		return 0;
+
 	rdma_hndl->primary_pool_cls.pool = pool;
 	rdma_pool->dev = rdma_hndl->dev;
 
@@ -1464,11 +1472,11 @@ static int xio_rdma_primary_pool_slab_destroy(
 
 	DEBUG_LOG("kcache(%s) freed\n", rdma_slab->name);
 
-	/*
+
 	if (rdma_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
 			  rdma_slab->name, rdma_slab->count);
-	*/
+
 	kmem_cache_destroy(rdma_slab->data_pool);
 
 	return 0;
@@ -1609,6 +1617,9 @@ static int xio_rdma_primary_pool_slab_init_task(
 	void *buf;
 	char *ptr;
 
+	if (rdma_task->buf)
+		return 0;
+
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
 	ptr += sizeof(struct xio_rdma_task);
@@ -1651,16 +1662,12 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	rdma_task->out_ib_op = 0x200;
 
-	if (!rdma_hndl)
-		return 0;
-
 	buf = kmem_cache_zalloc(rdma_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
 		goto cleanup2;
 	}
-
-/*	rdma_slab->count++; */
+	rdma_slab->count++;
 
 	xio_rdma_task_init(task,
 			   rdma_hndl,

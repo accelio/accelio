@@ -1262,6 +1262,9 @@ static int xio_rdma_initial_pool_post_create(
 	struct xio_rdma_task *rdma_task;
 	int	retval;
 
+	if (!rdma_hndl)
+		return 0;
+
 	rdma_hndl->initial_pool_cls.pool = pool;
 
 	task = xio_rdma_initial_task_alloc(rdma_hndl);
@@ -1365,6 +1368,9 @@ static int xio_rdma_initial_pool_slab_init_task(
 	struct ibv_mr *data_mr;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	if (!rdma_hndl /*|| rdma_task->buf*/)
+		return 0;
 
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
@@ -1626,6 +1632,9 @@ static int xio_rdma_primary_pool_post_create(
 	struct xio_rdma_transport *rdma_hndl =
 		(struct xio_rdma_transport *)transport_hndl;
 
+	if (!rdma_hndl)
+		return 0;
+
 	rdma_hndl->primary_pool_cls.pool = pool;
 
 	xio_rdma_rearm_rq(rdma_hndl);
@@ -1707,11 +1716,16 @@ static int xio_rdma_primary_pool_slab_init_task(
 						       PAGE_SIZE);
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
 			     rdma_options.max_in_iovsz) + 1;
-	int  max_sge = min(rdma_hndl->max_sge, max_iovsz);
+	int  max_sge;
 	char		*ptr;
 	struct ibv_mr	*data_mr;
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
+
+	if (!rdma_hndl)
+		return 0;
+
+	max_sge = min(rdma_hndl->max_sge, max_iovsz);
 
 	/* fill xio_rdma_task */
 	ptr = (char *)rdma_task;
