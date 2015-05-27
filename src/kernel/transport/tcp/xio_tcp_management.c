@@ -2033,11 +2033,9 @@ static int xio_tcp_initial_pool_slab_destroy(
 
 	INFO_LOG("kcache(%s) freed\n", tcp_slab->name);
 
-	/*
 	if (tcp_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n", tcp_slab->name,
 			  tcp_slab->count);
-	*/
 	kmem_cache_destroy(tcp_slab->data_pool);
 
 	return 0;
@@ -2054,16 +2052,16 @@ static int xio_tcp_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 
 	XIO_TO_TCP_TASK(task, tcp_task);
-
+	
 	/* Phantom tasks have no buffer */
 	if (tcp_task->buf) {
-		/*
 		if (tcp_slab->count)
 			tcp_slab->count--;
 		else
 			ERROR_LOG("pool(%s) double free?\n", tcp_slab->name);
-		*/
+
 		kmem_cache_free(tcp_slab->data_pool, tcp_task->buf);
+		tcp_task->buf = NULL;
 	}
 
 	return 0;
@@ -2086,6 +2084,10 @@ static int xio_tcp_initial_pool_slab_init_task(
 
 	XIO_TO_TCP_TASK(task, tcp_task);
 
+	if (!tcp_hndl || tcp_task->buf)
+		return 0;
+
+
 	/* fill xio_tcp_task */
 	ptr = (char *)tcp_task;
 	ptr += sizeof(struct xio_tcp_task);
@@ -2098,18 +2100,14 @@ static int xio_tcp_initial_pool_slab_init_task(
 	ptr += 2 * sizeof(struct iovec);
 	/*****************************************/
 
-	if (!tcp_hndl)
-		return 0;
-
 	buf = kmem_cache_zalloc(tcp_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmem_cache_zalloc(initial_pool)\n");
 		return -ENOMEM;
 	}
-	/*
 	tcp_slab->count++;
-	*/
+
 	xio_tcp_task_init(
 			task,
 			tcp_hndl,
@@ -2274,12 +2272,12 @@ static int xio_tcp_primary_pool_slab_destroy(
 	struct xio_tcp_tasks_slab *tcp_slab =
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 
-	INFO_LOG("kcache(%s) freed\n", tcp_slab->name);
-	/*
+	INFO_LOG("kcache(%s) freed cnt:%d\n", tcp_slab->name, tcp_slab->count);
+
 	if (tcp_slab->count)
 		ERROR_LOG("pool(%s) not-free(%d)\n",
 			  tcp_slab->name, tcp_slab->count);
-	*/
+
 	kmem_cache_destroy(tcp_slab->data_pool);
 
 	return 0;
@@ -2304,6 +2302,9 @@ static int xio_tcp_primary_pool_slab_init_task(
 
 	XIO_TO_TCP_TASK(task, tcp_task);
 
+	if (!tcp_hndl || tcp_task->buf)
+		return 0;
+
 	/* fill xio_tco_task */
 	ptr = (char *)tcp_task;
 	ptr += sizeof(struct xio_tcp_task);
@@ -2327,17 +2328,13 @@ static int xio_tcp_primary_pool_slab_init_task(
 	ptr += max_iovsz * sizeof(struct xio_sge);
 	/*****************************************/
 
-	if (!tcp_hndl)
-		return 0;
-
 	buf = kmem_cache_zalloc(tcp_slab->data_pool, GFP_KERNEL);
 	if (!buf) {
 		ERROR_LOG("kmem_cache_zalloc(primary_pool)\n");
 		xio_set_error(ENOMEM);
 		return -ENOMEM;
 	}
-
-	/*tcp_slab->count++;*/
+	tcp_slab->count++;
 
 	tcp_task->out_tcp_op = 0x200;
 	xio_tcp_task_init(
