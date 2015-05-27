@@ -75,6 +75,7 @@ static int xio_register_transport(void)
 	/* this may the first call in application so initialize the rdma */
 	if (!init_transport) {
 		struct xio_transport *transport = xio_get_transport("rdma");
+
 		if (!transport)
 			return 0;
 
@@ -185,7 +186,6 @@ static int xio_dereg_mr(struct xio_mr *tmr)
 	struct xio_mr		*ptmr, *tmp_ptmr;
 	struct xio_mr_elem	*tmr_elem, *tmp_tmr_elem;
 	int			retval, found = 0;
-	struct list_head	dm_list;
 
 	spin_lock(&mr_list_lock);
 	list_for_each_entry_safe(ptmr, tmp_ptmr, &mr_list, mr_list_entry) {
@@ -196,32 +196,24 @@ static int xio_dereg_mr(struct xio_mr *tmr)
 		}
 	}
 	spin_unlock(&mr_list_lock);
-	if (!found)
-		return 0;
 
-	spin_lock(&dev_list_lock);
-	INIT_LIST_HEAD(&dm_list);
-	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
+	if (found) {
+		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
-		list_del(&tmr_elem->dm_list_entry);
-		list_del(&tmr_elem->xm_list_entry);
-		list_add(&tmr_elem->dm_list_entry, &dm_list);
-	}
-	spin_unlock(&dev_list_lock);
-
-	list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &dm_list,
-			dm_list_entry) {
-		retval = ibv_dereg_mr(tmr_elem->mr);
-		if (retval != 0) {
-			xio_set_error(errno);
-			ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			retval = ibv_dereg_mr(tmr_elem->mr);
+			if (retval != 0) {
+				xio_set_error(errno);
+				ERROR_LOG("ibv_dereg_mr failed, %m\n");
+			}
+			/* Remove the item from the list. */
+			spin_lock(&dev_list_lock);
+			list_del(&tmr_elem->dm_list_entry);
+			list_del(&tmr_elem->xm_list_entry);
+			spin_unlock(&dev_list_lock);
+			ufree(tmr_elem);
 		}
-		/* Remove the item from the list. */
-		list_del(&tmr_elem->dm_list_entry);
-		ufree(tmr_elem);
+		ufree(tmr);
 	}
-	ufree(tmr);
-
 
 	return 0;
 }
@@ -277,7 +269,6 @@ cleanup:
 	return NULL;
 }
 
-#define MAX_DEVS 32
 /*---------------------------------------------------------------------------*/
 /* xio_reg_mr_ex							     */
 /*---------------------------------------------------------------------------*/
@@ -288,13 +279,12 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	struct xio_device		*dev;
 	int				retval;
 	static int			init_transport = 1;
-	struct xio_device		*devs_arr[MAX_DEVS];
-	int				devs_nr = 0, i;
-
 
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
-		if (xio_register_transport() == 0) {
+		struct xio_transport *transport = xio_get_transport("rdma");
+
+		if (!transport) {
 			ERROR_LOG("invalid protocol. proto: rdma\n");
 			xio_set_error(XIO_E_ADDR_ERROR);
 			return NULL;
@@ -307,13 +297,6 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 		ERROR_LOG("dev_list is empty\n");
 		spin_unlock(&dev_list_lock);
 		goto cleanup2;
-	}
-	list_for_each_entry(dev, &dev_list, dev_list_entry) {
-		if (devs_nr == MAX_DEVS)
-			break;
-		xio_device_get(dev);
-		devs_arr[devs_nr] = dev;
-		devs_nr++;
 	}
 	spin_unlock(&dev_list_lock);
 
@@ -329,12 +312,12 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	 */
 	INIT_LIST_HEAD(&tmr->mr_list_entry);
 
-	for (i = 0; i < devs_nr; i++) {
-		dev = devs_arr[i];
+	spin_lock(&dev_list_lock);
+	list_for_each_entry(dev, &dev_list, dev_list_entry) {
 		tmr_elem = xio_reg_mr_ex_dev(dev, addr, length, access);
 		if (!tmr_elem) {
-			xio_device_put(dev);
 			xio_set_error(errno);
+			spin_unlock(&dev_list_lock);
 			goto cleanup1;
 		}
 		list_add(&tmr_elem->dm_list_entry, &tmr->dm_list);
@@ -344,8 +327,8 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 			access  &= ~IBV_XIO_ACCESS_ALLOCATE_MR;
 			*addr = tmr_elem->mr->addr;
 		}
-		xio_device_put(dev);
 	}
+	spin_unlock(&dev_list_lock);
 
 	/* For dynamically discovered devices */
 	tmr->addr   = *addr;
