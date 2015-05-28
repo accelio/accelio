@@ -1123,6 +1123,8 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
 		break;
 	case IBV_WC_RDMA_WRITE:
+		if (task->tlv_type == XIO_MSG_TYPE_RDMA)
+			xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	default:
 		ERROR_LOG("unknown opcode :%s [%x]\n",
