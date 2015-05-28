@@ -114,7 +114,7 @@ struct xio_sg_iovptr {
  */
 struct xio_vmsg {
 	struct xio_iovec		header;	    /**< header's io vector  */
-	enum xio_sgl_type		sgl_type;   /**< @ref xio_sgl_type   */
+	enum xio_sgl_type		sgl_type;   /**< sg list type enum   */
 	int				pad;	    /**< padding	     */
 	/**< union for different scatter gather representations		     */
 	union {
@@ -245,7 +245,7 @@ struct xio_context_params {
 						/**< oriented callbacks      */
 	int			prealloc_pools; /**< pre allocate  rdma only */
 						/**< internal pools	     */
-	int			reserved;
+	int			reserved;	/**< reserved for future use */
 };
 
 /**
@@ -425,8 +425,27 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
  */
 int xio_mem_dereg(struct xio_reg_mem *reg_mem);
 
+/**
+ * extract the rkey of the registered message assisting the
+ * arrived request
+ *
+ * @param[in] reg_mem	registered memory data structure
+ * @param[in] req	the incoming request.
+ *
+ * @return rkey of the registered memory
+ */
 uint32_t xio_lookup_rkey_by_request(const struct xio_reg_mem *reg_mem,
 				    const struct xio_msg *req);
+
+/**
+ * extract the rkey of the registered message assisting the
+ * arrived response
+ *
+ * @param[in] reg_mem	registered memory data structure
+ * @param[in] rsp	the incoming response.
+ *
+ * @return rkey of the registered memory
+ */
 uint32_t xio_lookup_rkey_by_response(const struct xio_reg_mem *reg_mem,
 				     const struct xio_msg *rsp);
 
@@ -500,7 +519,7 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  */
 int xio_mempool_add_slab(struct xio_mempool *mpool,
 			 size_t size, size_t min, size_t max,
-			 size_t alloc_quantum_nr, int alignement);
+			 size_t alloc_quantum_nr, int alignment);
 
 /**
  * destroy memory pool
