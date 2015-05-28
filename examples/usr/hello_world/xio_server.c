@@ -44,7 +44,7 @@
 
 #define QUEUE_DEPTH		512
 #define PRINT_COUNTER		4000000
-#define DISCONNECT_NR		(2*PRINT_COUNTER)
+#define DISCONNECT_NR		(2 * PRINT_COUNTER)
 
 int test_disconnect;
 
@@ -54,8 +54,23 @@ struct server_data {
 	struct xio_connection	*connection;
 	uint64_t		nsent;
 	uint64_t		cnt;
-	struct xio_msg		rsp[QUEUE_DEPTH];	/* global message */
+	int			pad;
+	int			ring_cnt;
+	struct xio_msg		rsp_ring[QUEUE_DEPTH];	/* global message */
 };
+
+/*---------------------------------------------------------------------------*/
+/* ring_get_next_msg							     */
+/*---------------------------------------------------------------------------*/
+static inline struct xio_msg *ring_get_next_msg(struct server_data *sd)
+{
+	struct xio_msg	*msg = &sd->rsp_ring[sd->ring_cnt++];
+
+	if (sd->ring_cnt == QUEUE_DEPTH)
+		sd->ring_cnt = 0;
+
+	return msg;
+}
 
 /*---------------------------------------------------------------------------*/
 /* process_request							     */
@@ -69,7 +84,6 @@ static void process_request(struct server_data *server_data,
 	int			len, i;
 	char			tmp;
 
-
 	/* note all data is packed together so in order to print each
 	 * part on its own NULL character is temporarily stuffed
 	 * before the print and the original character is restored after
@@ -79,7 +93,7 @@ static void process_request(struct server_data *server_data,
 		str = (char *)req->in.header.iov_base;
 		len = req->in.header.iov_len;
 		if (str) {
-			if (((unsigned) len) > 64)
+			if (((unsigned)len) > 64)
 				len = 64;
 			tmp = str[len];
 			str[len] = '\0';
@@ -91,7 +105,7 @@ static void process_request(struct server_data *server_data,
 			str = (char *)sglist[i].iov_base;
 			len = sglist[i].iov_len;
 			if (str) {
-				if (((unsigned) len) > 64)
+				if (((unsigned)len) > 64)
 					len = 64;
 				tmp = str[len];
 				str[len] = '\0';
@@ -153,7 +167,7 @@ static int on_new_session(struct xio_session *session,
 	/* automatically accept the request */
 	printf("new session event. session:%p\n", session);
 
-	if (server_data->connection == NULL)
+	if (!server_data->connection)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
 		xio_reject(session, (enum xio_status)EISCONN, NULL, 0);
@@ -170,15 +184,15 @@ static int on_request(struct xio_session *session,
 		      void *cb_user_context)
 {
 	struct server_data *server_data = (struct server_data *)cb_user_context;
-	int i = req->sn % QUEUE_DEPTH;
+	struct xio_msg	   *rsp = ring_get_next_msg(server_data);
 
 	/* process request */
 	process_request(server_data, req);
 
 	/* attach request to response */
-	server_data->rsp[i].request = req;
+	rsp->request = req;
 
-	xio_send_response(&server_data->rsp[i]);
+	xio_send_response(rsp);
 	server_data->nsent++;
 
 	if (test_disconnect) {
@@ -209,54 +223,53 @@ int main(int argc, char *argv[])
 	struct xio_server	*server;	/* server portal */
 	struct server_data	server_data;
 	char			url[256];
+	struct	xio_msg		*rsp;
 	int			i;
 
 	if (argc < 3) {
-		printf("Usage: %s <host> <port> <transport:optional>\
-				<finite run:optional>\n", argv[0]);
+		printf("Usage: %s <host> <port> <transport:optional>"\
+		       "<finite run:optional>\n", argv[0]);
 		exit(1);
 	}
+	if (argc > 4)
+		test_disconnect = atoi(argv[4]);
+	else
+		test_disconnect = 0;
 
 	/* initialize library */
 	xio_init();
 
-		/* create "hello world" message */
+	/* create "hello world" message */
 	memset(&server_data, 0, sizeof(server_data));
+	rsp = server_data.rsp_ring;
 	for (i = 0; i < QUEUE_DEPTH; i++) {
-		server_data.rsp[i].out.header.iov_base =
+		rsp->out.header.iov_base =
 			strdup("hello world header response");
-		server_data.rsp[i].out.header.iov_len =
+		rsp->out.header.iov_len =
 			strlen((const char *)
-				server_data.rsp[i].out.header.iov_base) + 1;
+				rsp->out.header.iov_base) + 1;
 
-		server_data.rsp[i].out.sgl_type	   = XIO_SGL_TYPE_IOV;
-		server_data.rsp[i].out.data_iov.max_nents = XIO_IOVLEN;
+		rsp->out.sgl_type	   = XIO_SGL_TYPE_IOV;
+		rsp->out.data_iov.max_nents = XIO_IOVLEN;
 
-		server_data.rsp[i].out.data_iov.sglist[0].iov_base =
+		rsp->out.data_iov.sglist[0].iov_base =
 			strdup("hello world data response");
 
-		server_data.rsp[i].out.data_iov.sglist[0].iov_len =
+		rsp->out.data_iov.sglist[0].iov_len =
 			strlen((const char *)
-			  server_data.rsp[i].out.data_iov.sglist[0].iov_base)
-			  + 1;
-
-		server_data.rsp[i].out.data_iov.nents = 1;
-}
+			       rsp->out.data_iov.sglist[0].iov_base) + 1;
+		rsp->out.data_iov.nents = 1;
+		rsp++;
+	}
 
 	/* create thread context for the client */
 	server_data.ctx	= xio_context_create(NULL, 0, -1);
-
 
 	/* create url to connect to */
 	if (argc > 3)
 		sprintf(url, "%s://%s:%s", argv[3], argv[1], argv[2]);
 	else
 		sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
-
-	if (argc > 4)
-		test_disconnect = atoi(argv[4]);
-	else
-		test_disconnect = 0;
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
@@ -273,9 +286,11 @@ int main(int argc, char *argv[])
 	}
 
 	/* free the message */
+	rsp = server_data.rsp_ring;
 	for (i = 0; i < QUEUE_DEPTH; i++) {
-		free(server_data.rsp[i].out.header.iov_base);
-		free(server_data.rsp[i].out.data_iov.sglist[0].iov_base);
+		free(rsp->out.header.iov_base);
+		free(rsp->out.data_iov.sglist[0].iov_base);
+		rsp++;
 	}
 
 	/* free the context */
@@ -285,5 +300,4 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
-
 

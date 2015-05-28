@@ -141,7 +141,7 @@ static int on_response(struct xio_session *session,
 		       void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
-	int i = rsp->request->sn % QUEUE_DEPTH;
+	struct xio_msg	    *req = rsp;
 
 	/* process the incoming message */
 	process_response(rsp);
@@ -150,7 +150,7 @@ static int on_response(struct xio_session *session,
 	xio_release_response(rsp);
 
 	/* resend the message */
-	xio_send_request(session_data->connection, &session_data->req[i]);
+	xio_send_request(session_data->connection, req);
 
 	return 0;
 }

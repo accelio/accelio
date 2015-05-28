@@ -1343,7 +1343,7 @@ const char *xio_strerror(int errnum);
 /**
  * return last xio error
  *
- * @return lasr xio error code
+ * @return last xio error code
  */
 int xio_errno(void);
 
