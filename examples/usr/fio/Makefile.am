@@ -15,7 +15,7 @@ AM_CFLAGS = -D_GNU_SOURCE -DFIO_INC_DEBUG -DPIC			    \
 	    -I$(FIO_ROOT)/engines/
 
 #AM_LDFLAGS = -lraio -lxio -lrdmacm -libverbs -ldl -lrt -lpthread  \
-#	     -L$(top_srcdir)/src/usr/ -L$(top_srcdir)/examples/usr/raio/
+#	     -L$(top_builddir)/src/usr/ -L$(top_builddir)/examples/usr/raio/
 
 
 ###############################################################################
@@ -30,7 +30,7 @@ lib_LTLIBRARIES = libraio_fio.la
 libraio_fio_la_SOURCES = libraio.c
 
 libraio_fio_la_LIBADD = -lraio -lxio $(libxio_rdma_ldflags) -lrt -ldl -lpthread  \
-	     		-L$(top_srcdir)/src/usr/ -L$(top_srcdir)/examples/usr/raio/
+	     		-L$(top_builddir)/src/usr/ -L$(top_builddir)/examples/usr/raio/
 
 
 ###############################################################################
