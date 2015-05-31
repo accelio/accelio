@@ -1488,25 +1488,27 @@ cleanup:
 EXPORT_SYMBOL(xio_session_create);
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_destroy							     */
+/* xio_session_post_destroy						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_destroy(struct xio_session *session)
+void xio_session_post_destroy(void *_session)
 {
 	int found;
 	int i;
+	struct xio_session *session = (struct xio_session *)_session;
 
-	if (!session)
-		return 0;
 
-	if (session->teardown_work_ctx)
+	if (session->teardown_work_ctx) {
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
 		xio_ctx_del_work(session->teardown_work_ctx,
 				 &session->teardown_work);
-
+	}
+		
 	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
 		ERROR_LOG("xio_session_destroy failed: " \
 			  "connections are still open\n");
-		return -1;
+		return;
 	}
 
 	found = xio_idr_lookup_uobj(usr_idr, session);
@@ -1515,7 +1517,7 @@ int xio_session_destroy(struct xio_session *session)
 	} else {
 		ERROR_LOG("session not found:%p\n", session);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
-		return -1;
+		return;
 	}
 
 	TRACE_LOG("session destroy:%p\n", session);
@@ -1533,8 +1535,37 @@ int xio_session_destroy(struct xio_session *session)
 	kfree(session->hs_private_data);
 	kfree(session->uri);
 	XIO_OBSERVER_DESTROY(&session->observer);
+	XIO_OBSERVER_DESTROY(&session->ctx_observer);
+
 	mutex_destroy(&session->lock);
 	kfree(session);
+
+	return;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_destroy							     */
+/*---------------------------------------------------------------------------*/
+int xio_session_destroy(struct xio_session *session)
+{
+	if (!session)
+		return 0;
+
+	TRACE_LOG("xio_post_destroy_session seesion:%p\n", session);
+
+	if (session->teardown_work_ctx &&
+	    xio_ctx_is_work_in_handler(session->teardown_work_ctx,
+				       &session->teardown_work)) {
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
+
+		xio_ctx_set_work_destructor(
+		     session->teardown_work_ctx, session,
+		     xio_session_post_destroy,
+		     &session->teardown_work);
+	} else {
+		xio_session_post_destroy(session);
+	}
 
 	return 0;
 }
@@ -1675,6 +1706,31 @@ int xio_session_notify_msg_error(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_on_context_event						     */
+/*---------------------------------------------------------------------------*/
+static int xio_session_on_context_event(void *observer, void *sender, int event,
+				void *event_data)
+{
+	struct xio_session *session = (struct xio_session *)observer;
+
+	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+		TRACE_LOG("context: [close] ctx:%p\n", sender);
+
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
+		/* clean the context so that upon session destroy do not
+		 * do not handle workqueue
+		 */
+		xio_ctx_del_work(session->teardown_work_ctx,
+				 &session->teardown_work);
+
+		session->teardown_work_ctx = NULL;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_pre_teardown						     */
 /*---------------------------------------------------------------------------*/
 static void xio_session_pre_teardown(void *_session)
@@ -1704,10 +1760,6 @@ static void xio_session_pre_teardown(void *_session)
 			   !session->lead_connection &&
 			   !session->redir_connection);
 
-	xio_ctx_del_work(session->teardown_work_ctx,
-			 &session->teardown_work);
-	session->teardown_work_ctx = NULL;
-
 	spin_unlock(&session->connections_list_lock);
 
 		/* last chance to teardown */
@@ -1717,6 +1769,17 @@ static void xio_session_pre_teardown(void *_session)
 		mutex_unlock(&session->lock);
 		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
+
+		/* start listen to context events  - context can be destroyed
+		 * while session still alive */
+		xio_context_unreg_observer(session->teardown_work_ctx,
+                                           &session->ctx_observer);
+
+		XIO_OBSERVER_INIT(&session->ctx_observer, session,
+				  xio_session_on_context_event);
+		xio_context_reg_observer(session->teardown_work_ctx,
+					 &session->ctx_observer);
+
 		xio_session_notify_teardown(session, session->teardown_reason);
 	} else {
 		mutex_unlock(&session->lock);
@@ -1732,9 +1795,11 @@ void xio_session_init_teardown(struct xio_session *session,
 {
 		session->teardown_reason = close_reason;
 		session->teardown_work_ctx = ctx;
+
 		xio_ctx_add_work(
 				ctx,
 				session,
 				xio_session_pre_teardown,
 				&session->teardown_work);
 }
+

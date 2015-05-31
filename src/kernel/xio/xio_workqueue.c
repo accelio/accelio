@@ -118,6 +118,7 @@ static void xio_ev_callback(void *user_context)
 {
 	int deleted = 0;
 	struct xio_uwork *uwork = user_context;
+	int try_destroy = 0;
 
 	set_bit(XIO_WORK_RUNNING, &uwork->flags);
 	if (test_bit(XIO_WORK_CANCELED, &uwork->flags)) {
@@ -141,10 +142,11 @@ static void xio_ev_callback(void *user_context)
 		if (deleted)
 			return;
 		clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+		try_destroy = !!uwork->destructor;
 	}
 	clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 	complete(&uwork->complete);
-	if (uwork->destructor)
+	if (try_destroy)
 		uwork->destructor(uwork->destructor_data);
 }
 
