@@ -85,7 +85,6 @@ struct xio_session {
 
 	struct xio_msg			*setup_req;
 	struct xio_observer		observer;
-	struct xio_observer		ctx_observer;
 
 	enum xio_session_type		type;
 

@@ -1342,12 +1342,10 @@ int xio_connection_xmit_msgs(struct xio_connection *connection)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_connection_post_close						     */
+/* xio_connection_close							     */
 /*---------------------------------------------------------------------------*/
-static void xio_connection_post_close(void *_connection)
+int xio_connection_close(struct xio_connection *connection)
 {
-	struct xio_connection *connection = (struct xio_connection *)_connection;
-
 	xio_ctx_del_work(connection->ctx, &connection->hello_work);
 
 	xio_ctx_del_delayed_work(connection->ctx,
@@ -1358,28 +1356,9 @@ static void xio_connection_post_close(void *_connection)
 
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
-	xio_ctx_del_work(connection->ctx, &connection->teardown_work);
-
 	list_del(&connection->ctx_list_entry);
 
 	kfree(connection);
-
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_connection_close							     */
-/*---------------------------------------------------------------------------*/
-int xio_connection_close(struct xio_connection *connection)
-{
-	if (xio_ctx_is_work_in_handler(connection->ctx,
-				       &connection->teardown_work)) {
-		xio_ctx_set_work_destructor(
-		     connection->ctx, connection,
-		     xio_connection_post_close,
-		     &connection->teardown_work);
-	} else {
-		xio_connection_post_close(connection);
-	}
 
 	return 0;
 }
