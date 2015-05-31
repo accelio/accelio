@@ -144,6 +144,8 @@ static void xio_ev_callback(void *user_context)
 	}
 	clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 	complete(&uwork->complete);
+	if (uwork->destructor)
+		uwork->destructor(uwork->destructor_data);
 }
 
 static void xio_uwork_add_event(struct xio_uwork *uwork)
@@ -418,3 +420,31 @@ int xio_workqueue_add_work(struct xio_workqueue *workqueue,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_set_work_destructor					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_set_work_destructor(struct xio_workqueue *work_queue,
+				      void *data,
+				      void (*destructor)(void *data),
+				      xio_work_handle_t *work)
+{
+	struct xio_uwork *uwork = &work->uwork;
+
+	uwork->destructor	= destructor;
+	uwork->destructor_data	= data;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_is_work_in_hanlder					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_is_work_in_handler(struct xio_workqueue *work_queue,
+				     xio_work_handle_t *work)
+{
+	struct xio_uwork *uwork = &work->uwork;
+
+	return test_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+}
+

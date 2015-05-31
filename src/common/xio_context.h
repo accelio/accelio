@@ -196,6 +196,19 @@ int xio_ctx_add_work(struct xio_context *ctx, void *data,
 		     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
+/* xio_ctx_set_work_destructor						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_set_work_destructor(
+		     struct xio_context *ctx, void *data,
+		     void (*destructor)(void *data),
+		     xio_ctx_work_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_is_work_in_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_is_work_in_handler(struct xio_context *ctx, xio_ctx_work_t *work);
+
+/*---------------------------------------------------------------------------*/
 /* xio_ctx_del_work							     */
 /*---------------------------------------------------------------------------*/
 int xio_ctx_del_work(struct xio_context *ctx,

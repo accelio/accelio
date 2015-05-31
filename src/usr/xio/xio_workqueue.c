@@ -225,10 +225,14 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			continue;
 		}
 
-		if (work->flags & XIO_WORK_PENDING) {
-			work->flags	&= ~XIO_WORK_PENDING;
+		if (test_bits(XIO_WORK_PENDING, &work->flags)) {
+			clr_bits(XIO_WORK_PENDING, &work->flags);
 
+			set_bits(XIO_WORK_IN_HANDLER, &work->flags);
 			work->function(work->data);
+			clr_bits(XIO_WORK_IN_HANDLER, &work->flags);
+			if (work->destructor)
+				work->destructor(work->destructor_data);
 		}
 	}
 }
@@ -458,5 +462,28 @@ int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 		return 0;
 	}
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_set_work_destructor					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_set_work_destructor(struct xio_workqueue *work_queue,
+				      void *data,
+				      void (*destructor)(void *data),
+				      xio_work_handle_t *work)
+{
+	work->destructor	= destructor;
+	work->destructor_data	= data;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_is_work_in_hanlder					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_is_work_in_handler(struct xio_workqueue *work_queue,
+				     xio_work_handle_t *work)
+{
+	return test_bits(XIO_WORK_IN_HANDLER, &work->flags);
 }
 

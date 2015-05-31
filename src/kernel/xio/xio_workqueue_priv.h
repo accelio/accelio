@@ -49,8 +49,12 @@ enum xio_work_flags {
 struct xio_uwork {
 	struct xio_ev_data ev_data;
 	struct xio_context *ctx;
+
 	void	(*function)(void *data);
 	void	*data;
+
+	void	(*destructor)(void *data);
+	void	*destructor_data;
 
 	volatile unsigned long flags;
 	int	*deleted;

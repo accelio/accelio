@@ -523,6 +523,43 @@ int xio_ctx_add_work(struct xio_context *ctx,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_ctx_set_work_destructor						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_set_work_destructor(
+		     struct xio_context *ctx, void *data,
+		     void (*destructor)(void *data),
+		     xio_ctx_work_t *work)
+{
+	int retval;
+
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
+
+	retval = xio_workqueue_set_work_destructor(
+					ctx->workqueue,
+					data, destructor, work);
+	if (retval) {
+		xio_set_error(errno);
+		ERROR_LOG("xio_workqueue_set_work_destructor failed. %m\n");
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_is_work_in_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_is_work_in_handler(struct xio_context *ctx, xio_ctx_work_t *work)
+{
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
+
+	return xio_workqueue_is_work_in_handler(ctx->workqueue, work);
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_ctx_del_work							     */
 /*---------------------------------------------------------------------------*/
 int xio_ctx_del_work(struct xio_context *ctx,
