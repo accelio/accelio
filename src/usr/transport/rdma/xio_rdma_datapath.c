@@ -1095,6 +1095,7 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 					      int last_in_rxq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
+	int		opcode = wc->opcode;
 
 	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
@@ -1103,13 +1104,17 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 		  ibv_wc_opcode_str(wc->opcode), wc->opcode);
 	*/
 
-	switch (wc->opcode) {
+	switch (opcode) {
 	case IBV_WC_RECV:
 		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_SEND:
-		xio_rdma_tx_comp_handler(rdma_hndl, task);
+	case IBV_WC_RDMA_WRITE:
+		if (opcode == IBV_WC_SEND ||
+		    (opcode == IBV_WC_RDMA_WRITE &&
+		     task->tlv_type == XIO_MSG_TYPE_RDMA))
+			xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IBV_WC_RDMA_READ:
 		task->last_in_rxq = last_in_rxq;
@@ -1121,10 +1126,6 @@ static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
 			xio_direct_rdma_rd_comp_handler(rdma_hndl, task);
 		else
 			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
-		break;
-	case IBV_WC_RDMA_WRITE:
-		if (task->tlv_type == XIO_MSG_TYPE_RDMA)
-			xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	default:
 		ERROR_LOG("unknown opcode :%s [%x]\n",

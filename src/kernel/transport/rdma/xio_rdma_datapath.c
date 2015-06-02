@@ -1255,7 +1255,8 @@ static void xio_rdma_rd_rsp_comp_handler(struct xio_rdma_transport *rdma_hndl,
 /*---------------------------------------------------------------------------*/
 static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 {
-	struct xio_task			*task = ptr_from_int64(wc->wr_id);
+	struct xio_task		*task = ptr_from_int64(wc->wr_id);
+	int			opcode = wc->opcode;
 
 	XIO_TO_RDMA_HNDL(task, rdma_hndl);
 
@@ -1264,13 +1265,17 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 		  xio_ib_wc_opcode_str(wc->opcode), wc->byte_len);
 	*/
 
-	switch (wc->opcode) {
+	switch (opcode) {
 	case IB_WC_RECV:
 		task->last_in_rxq = last_in_rxq;
 		xio_rdma_rx_handler(rdma_hndl, task);
 		break;
 	case IB_WC_SEND:
-		xio_rdma_tx_comp_handler(rdma_hndl, task);
+	case IB_WC_RDMA_WRITE:
+		if (opcode == IB_WC_SEND ||
+		    (opcode == IB_WC_RDMA_WRITE &&
+		     task->tlv_type == XIO_MSG_TYPE_RDMA))
+			xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_RDMA_READ:
 		task->last_in_rxq = last_in_rxq;
@@ -1282,10 +1287,6 @@ static inline void xio_handle_wc(struct ib_wc *wc, int last_in_rxq)
 			xio_direct_rdma_rd_comp_handler(rdma_hndl, task);
 		else
 			ERROR_LOG("Unexpected tlv_type %u\n", task->tlv_type);
-		break;
-	case IB_WC_RDMA_WRITE:
-		if (task->tlv_type == XIO_MSG_TYPE_RDMA)
-			xio_rdma_tx_comp_handler(rdma_hndl, task);
 		break;
 	case IB_WC_LOCAL_INV:
 	case IB_WC_FAST_REG_MR:
