@@ -198,8 +198,8 @@ static void *portal_server_cb(void *data)
 
 	pthread_setaffinity_np(tdata->thread_id, sizeof(cpu_set_t), &cpuset);
 
-	/* prepare data for the cuurent thread */
-	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth + 256);
+	/* prepare data for the current thread */
+	tdata->pool = msg_pool_alloc(tdata->user_param->queue_depth + 1024);
 
 	/* create thread context for the client */
 	tdata->ctx = xio_context_create(NULL, tdata->user_param->poll_timeout,
