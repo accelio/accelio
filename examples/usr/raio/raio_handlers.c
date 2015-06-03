@@ -63,9 +63,7 @@
 #define EXTRA_MSGS		512
 
 #define RAIO_CMD_HDR_SZ		512
-#define RAIO_CMD_IDX(id)	((id) - RAIO_CMD_OPEN)
-#define RAIO_CMDS_NR		(RAIO_CMD_LAST - RAIO_CMD_OPEN)
-
+#define RAIO_CMDS_POOL_SZ	128
 
 #ifndef TAILQ_FOREACH_SAFE
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
@@ -95,10 +93,9 @@ struct raio_io_portal_data {
 	struct raio_io_u		*io_us_free;
 
 	TAILQ_HEAD(, raio_io_u)		io_u_free_list;
-	struct msg_pool			*rsp_pool;
+	struct msg_pool			*rsp_pool; /* for submits */
 
-	struct xio_msg			rsp[RAIO_CMDS_NR];
-	char				rsp_hdr[RAIO_CMDS_NR][RAIO_CMD_HDR_SZ];
+	struct msg_pool			*cmds_rsp_pool; /* control messages */
 
 	struct xio_context		*ctx;
 };
@@ -147,13 +144,11 @@ void *raio_handler_init_portal_data(void *prv_session_data,
 	struct raio_io_session_data *sd =
 				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data *pd = &sd->pd[portal_nr];
-	int i;
 
 	pd->ctx = (struct xio_context *)ctx;
-	for (i = 0; i < RAIO_CMDS_NR; i++) {
-		pd->rsp[i].out.header.iov_base = pd->rsp_hdr[i];
-		pd->rsp[i].out.header.iov_len  = sizeof(pd->rsp_hdr[i]);
-	}
+	pd->cmds_rsp_pool = msg_pool_create(RAIO_CMD_HDR_SZ, 0,
+					    RAIO_CMDS_POOL_SZ);
+
 	pd->ndevs = 0;
 	TAILQ_INIT(&pd->dev_list);
 
@@ -167,6 +162,7 @@ void raio_handler_free_session_data(void *prv_session_data)
 {
 	struct raio_io_session_data *sd =
 				(struct raio_io_session_data *)prv_session_data;
+
 	free(sd->pd);
 
 	free(sd);
@@ -180,6 +176,8 @@ void raio_handler_free_portal_data(void *prv_portal_data)
 	struct raio_io_portal_data	*pd =
 				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_bs			*bs_dev, *tmp;
+
+	msg_pool_delete(pd->cmds_rsp_pool);
 
 	TAILQ_FOREACH_SAFE(bs_dev, &pd->dev_list, list, tmp) {
 		TAILQ_REMOVE(&pd->dev_list, bs_dev, list);
@@ -212,9 +210,8 @@ static int raio_handle_open(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_OPEN)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_OPEN)];
-
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	overall_size = sizeof(fd);
 
@@ -283,7 +280,7 @@ reject:
 
 	rsp->out.header.iov_len = (sizeof(struct raio_answer) +
 				   overall_size);
-
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	rsp->request = req;
 
 	xio_send_response(rsp);
@@ -312,9 +309,8 @@ static int raio_handle_close(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_CLOSE)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_CLOSE)];
-
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data);
@@ -364,7 +360,7 @@ reject:
 	 }
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer);
-
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	rsp->request = req;
 
 	xio_send_response(rsp);
@@ -389,9 +385,8 @@ static int raio_handle_fstat(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_FSTAT)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_FSTAT)];
-
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	unpack_u32((uint32_t *)&fd,
 		    cmd_data);
@@ -433,7 +428,7 @@ reject:
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer) +
 				  STAT_BLOCK_SIZE;
-
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	rsp->request = req;
 
 	xio_send_response(rsp);
@@ -461,8 +456,8 @@ static int raio_handle_setup(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_SETUP)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_SETUP)];
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	if (sizeof(int) != cmd->data_len) {
 		err = EINVAL;
@@ -512,6 +507,7 @@ reject:
 	 }
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer);
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	rsp->request = req;
 
 	xio_send_response(rsp);
@@ -534,9 +530,8 @@ static int raio_handle_destroy(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_DESTROY)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_DESTROY)];
-
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	if (0 != cmd->data_len) {
 		retval = -1;
@@ -563,7 +558,7 @@ reject:
 	}
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer);
-
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	rsp->request = req;
 
 	xio_send_response(rsp);
@@ -586,8 +581,8 @@ int raio_reject_request(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_REJECT)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_REJECT)];
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
 
 	pack_u32((uint32_t *)&ans.ret_errno,
 	pack_u32((uint32_t *)&ans.ret,
@@ -596,6 +591,7 @@ int raio_reject_request(void *prv_session_data,
 		 rsp_hdr))));
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer);
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	vmsg_sglist_set_nents(&rsp->out, 0);
 	rsp->request = req;
 
@@ -672,9 +668,6 @@ static int raio_handle_submit(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	rsp_hdr = &pd->rsp_hdr[RAIO_CMD_IDX(RAIO_CMD_IO_SUBMIT)][0];
-	rsp	= &pd->rsp[RAIO_CMD_IDX(RAIO_CMD_IO_SUBMIT)];
-
 	io_u = TAILQ_FIRST(&pd->io_u_free_list);
 	if (!io_u) {
 		printf("io_u_free_list empty\n");
@@ -742,6 +735,9 @@ static int raio_handle_submit(void *prv_session_data,
 
 	return 0;
 reject:
+	rsp	= msg_pool_get(pd->cmds_rsp_pool);
+	rsp_hdr = (char *)rsp->out.header.iov_base;
+
 	TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
 	pd->io_u_free_nr++;
 	msg_reset(rsp);
@@ -759,6 +755,7 @@ reject:
 
 	rsp->out.header.iov_len = sizeof(struct raio_answer);
 	rsp->request = req;
+	rsp->user_context = NULL;
 
 	xio_send_response(rsp);
 
@@ -782,7 +779,8 @@ static int raio_handle_submit_comp(void *prv_session_data,
 		sglist[0].iov_base = io_u->buf;
 		TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
 		pd->io_u_free_nr++;
-	}
+	} else
+		msg_pool_put(pd->cmds_rsp_pool, rsp);
 
 	return 0;
 }
@@ -904,8 +902,11 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 			      void *prv_portal_data,
 			      struct xio_msg *rsp)
 {
-	char			*buffer = (char *)rsp->out.header.iov_base;
-	struct raio_command	cmd;
+	char				*buffer =
+				(char *)rsp->out.header.iov_base;
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_command		cmd;
 
 	unpack_u32(&cmd.command, buffer);
 
@@ -919,12 +920,14 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 		raio_handle_destroy_comp(prv_session_data,
 					 prv_portal_data,
 					 rsp);
+		msg_pool_put(pd->cmds_rsp_pool, rsp);
 		break;
 	case RAIO_CMD_CLOSE:
 	case RAIO_CMD_UNKNOWN:
 	case RAIO_CMD_OPEN:
 	case RAIO_CMD_FSTAT:
 	case RAIO_CMD_IO_SETUP:
+		msg_pool_put(pd->cmds_rsp_pool, rsp);
 		break;
 	default:
 		printf("unknown answer %d\n", cmd.command);
