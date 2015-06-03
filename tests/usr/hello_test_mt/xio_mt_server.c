@@ -100,7 +100,7 @@ struct  thread_data {
 	struct xio_connection	*connection;
 	struct msg_pool		*pool;
 	void			*loop;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	char			portal[64];
 	int			affinity;
 	int			cnt;
@@ -198,7 +198,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&msg_prms, rsp,
+	msg_build_out_sgl(&msg_prms, rsp,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -287,11 +287,11 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (tdata->xbuf == NULL)
-		tdata->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (tdata->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &tdata->reg_mem);
 
-	sglist[0].iov_base = tdata->xbuf->addr;
-	sglist[0].mr = tdata->xbuf->mr;
+	sglist[0].iov_base = tdata->reg_mem.addr;
+	sglist[0].mr = tdata->reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -360,8 +360,8 @@ static void *portal_server_cb(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->xbuf)
-		xio_free(&tdata->xbuf);
+	if (tdata->reg_mem.addr)
+		xio_mem_free(&tdata->reg_mem);
 
 cleanup:
 	/* free the context */
@@ -611,7 +611,7 @@ int main(int argc, char *argv[])
 	int			i;
 	uint16_t		port;
 	int			max_cpus;
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnr;
 	int			cpu;
 	int			exit_code = 0;
@@ -676,7 +676,7 @@ int main(int argc, char *argv[])
 	/* spawn portals */
 	port = test_config.server_port;
 	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
-		while (1) {
+		while (cpusmask) {
 			if (cpusmask_test_bit(cpu, &cpusmask))
 				break;
 			if (++cpu == max_cpus)

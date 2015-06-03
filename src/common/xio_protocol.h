@@ -38,7 +38,6 @@
 #ifndef XIO_PROTOCOL_H
 #define XIO_PROTOCOL_H
 
-
 union generic_16bit {
 	uint8_t b[2];
 	int16_t s;
@@ -56,6 +55,7 @@ union generic_64bit {
 	int64_t	ll; /* Long long (64 bit) */
 	double	d; /* IEEE-754 double precision floating point */
 };
+
 /**
  * @brief Place an unsigned byte into the buffer
  *
@@ -168,7 +168,6 @@ static inline size_t xio_read_int16(int16_t *b, int bindex,
 {
 	return xio_read_uint16((uint16_t *)b, bindex, buffer);
 }
-
 
 /**
  * @brief Place four unsigned bytes into the buffer
@@ -317,6 +316,7 @@ static inline size_t xio_read_int64(int64_t *b, int bindex,
 static inline size_t xio_write_float(float b, int bindex, uint8_t *buffer)
 {
 	union generic_32bit g;
+
 	g.f = b;
 	return xio_write_int32(g.i, bindex, buffer);
 }
@@ -333,6 +333,7 @@ static inline size_t xio_read_float(float *b, int bindex,
 {
 	union generic_32bit g;
 	size_t len =  xio_read_int32(&g.i, bindex, buffer);
+
 	*b = g.f;
 
 	return len;
@@ -348,6 +349,7 @@ static inline size_t xio_read_float(float *b, int bindex,
 static inline size_t xio_write_double(double b, int bindex, uint8_t *buffer)
 {
 	union generic_64bit g;
+
 	g.d = b;
 	return xio_write_int64(g.ll, bindex, buffer);
 }
@@ -364,6 +366,7 @@ static inline size_t xio_read_double(double *b, int bindex,
 {
 	union generic_64bit g;
 	size_t len =  xio_read_int64(&g.ll, bindex, buffer);
+
 	*b = g.d;
 
 	return len;
@@ -411,12 +414,12 @@ static inline size_t xio_write_string(const char *b, size_t maxlength,
 				      int bindex, uint8_t *buffer)
 {
 	size_t length = 0;
+
 	/* Copy string into buffer, ensuring not to exceed the buffer size */
 	unsigned int i;
 
 	for (i = 2; i < maxlength - 1 || (b[i] == '\0'); i++)
 		buffer[bindex+i] = b[i];
-
 
 	length = i - 2;
 	/* Enforce null termination at end of buffer */
@@ -454,7 +457,6 @@ static inline size_t xio_read_string(char *b, size_t maxlength,
 
 	return length;
 }
-
 
 #endif /* XIO_PROTOCOL_H */
 

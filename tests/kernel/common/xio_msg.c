@@ -38,29 +38,26 @@
 
 #include "xio_msg.h"
 
+#include <linux/slab.h>
+
 #ifndef roundup
 # define roundup(x, y)  ((((x) + ((y) - 1)) / (y)) * (y))
 #endif /* !defined(roundup) */
 
-
-#define HUGE_PAGE_SZ (2*1024*1024)
+#define HUGE_PAGE_SZ (2 * 1024 * 1024)
 #define ALIGNHUGEPAGE(x) \
 	(size_t)((~(HUGE_PAGE_SZ - 1)) & ((x) + HUGE_PAGE_SZ - 1))
-
 
 /*---------------------------------------------------------------------------*/
 /* msg_api_free								     */
 /*---------------------------------------------------------------------------*/
 void msg_api_free(struct msg_params *msg_params)
 {
-	if (msg_params->g_hdr) {
-		kfree(msg_params->g_hdr);
-		msg_params->g_hdr = NULL;
-	}
-	if (msg_params->g_data) {
-		kfree(msg_params->g_data);
-		msg_params->g_data = NULL;
-	}
+	kfree(msg_params->g_hdr);
+	msg_params->g_hdr = NULL;
+
+	kfree(msg_params->g_data);
+	msg_params->g_data = NULL;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -111,12 +108,12 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_write								     */
+/* msg_build_out_sgl							     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct msg_params *msg_params,
-	       struct xio_msg *msg,
-	       size_t hdrlen,
-	       size_t data_iovlen, size_t datalen)
+void msg_build_out_sgl(struct msg_params *msg_params,
+		       struct xio_msg *msg,
+		       size_t hdrlen,
+		       size_t data_iovlen, size_t datalen)
 {
 	struct xio_vmsg		*pmsg = &msg->out;
 	struct scatterlist *sgl = pmsg->data_tbl.sgl;
@@ -146,14 +143,13 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz)
 	int			i;
 	uint8_t			*buf;
 
-
 	/* allocate the structures */
 	len = sizeof(struct msg_pool) +
-		max*(2*sizeof(struct xio_msg *)+sizeof(struct xio_msg));
+		max * (2 * sizeof(struct xio_msg *) + sizeof(struct xio_msg));
 
 	buf = vzalloc(len);
 	if (!buf) {
-		pr_err("Couldn't allocate message pool\n");
+		/*pr_err("Couldn't allocate message pool\n");*/
 		BUG();
 	}
 
@@ -234,6 +230,10 @@ inline void msg_pool_free(struct msg_pool *pool)
 {
 	int i;
 	struct xio_msg		*msg;
+
+	if (!pool)
+		return;
+
 	for (i = 0; i < pool->max; i++) {
 		msg = pool->array[i];
 		if (msg->in.sgl_type == XIO_SGL_TYPE_SCATTERLIST)
@@ -241,7 +241,6 @@ inline void msg_pool_free(struct msg_pool *pool)
 		if (msg->out.sgl_type == XIO_SGL_TYPE_SCATTERLIST)
 			sg_free_table(&msg->out.data_tbl);
 	}
-	if (pool)
-		vfree(pool);
-}
 
+	vfree(pool);
+}

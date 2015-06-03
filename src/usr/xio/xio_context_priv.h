@@ -38,5 +38,4 @@
 #ifndef XIO_CONTEXT_PRIV_H_
 #define XIO_CONTEXT_PRIV_H_
 
-
 #endif /* XIO_CONTEXT_PRIV_H_ */

@@ -44,17 +44,18 @@
 #include "xio_hash.h"
 #include "xio_observer.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
-#include "xio_context.h"
 #include "xio_protocol.h"
 #include "xio_mbuf.h"
 #include "xio_task.h"
 #include "xio_transport.h"
+#include "xio_context.h"
 #include "xio_nexus_cache.h"
 #include "xio_server.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* private structures							     */
@@ -65,6 +66,11 @@ struct xio_observers_htbl_node {
 	uint32_t		pad;
 	struct list_head	observers_htbl_node;
 
+};
+
+struct xio_event_params {
+	struct xio_nexus			*nexus;
+	union xio_transport_event_data		event_data;
 };
 
 static int xio_msecs[] = {60000, 30000, 15000, 0};
@@ -85,6 +91,9 @@ static void xio_nexus_on_transport_closed(struct xio_nexus *nexus,
 static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
+static void xio_nexus_destroy_handler(void *nexus_);
+static void xio_nexus_disconnect_handler(void *nexus_);
+static void xio_nexus_trans_error_handler(void *ev_params_);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_server_reconnect		                                     */
@@ -218,9 +227,16 @@ void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_get_primary_task						     */
 /*---------------------------------------------------------------------------*/
-inline struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
+struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
 {
-	return  xio_tasks_pool_get(nexus->primary_tasks_pool);
+	struct xio_task *task = xio_tasks_pool_get(
+			nexus->primary_tasks_pool, nexus->transport_hndl);
+
+	if (!task)
+		return  NULL;
+	task->nexus = nexus;
+
+	return  task;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -230,22 +246,6 @@ static inline struct xio_task *xio_nexus_task_lookup(void *nexus, int id)
 {
 	return xio_tasks_pool_lookup(
 			((struct xio_nexus *)nexus)->primary_tasks_pool, id);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_nexus_initial_free_tasks						     */
-/*---------------------------------------------------------------------------*/
-inline int xio_nexus_initial_free_tasks(struct xio_nexus *nexus)
-{
-	return xio_tasks_pool_free_tasks(nexus->initial_tasks_pool);
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_nexus_primary_free_tasks						     */
-/*---------------------------------------------------------------------------*/
-inline int xio_nexus_primary_free_tasks(struct xio_nexus *nexus)
-{
-	return xio_tasks_pool_free_tasks(nexus->primary_tasks_pool);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -383,22 +383,11 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 
 	TRACE_LOG("send setup request\n");
 
-	if (nexus->transport->send == NULL) {
+	if (!nexus->transport->send) {
 		ERROR_LOG("transport does not implement \"send\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-
-	task =  xio_tasks_pool_get(nexus->initial_tasks_pool);
-	if (task == NULL) {
-		ERROR_LOG("initial task pool is empty\n");
-		return -1;
-	}
-	task->tlv_type = XIO_NEXUS_SETUP_REQ;
-	task->omsg = NULL;
-
-	req.version = XIO_VERSION;
-
 	/* when reconnecting before the dup2 send is done via new handle */
 	if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
 		req.flags = XIO_RECONNECT;
@@ -410,21 +399,31 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		trans_hndl = nexus->transport_hndl;
 	}
 
+	task =  xio_tasks_pool_get(nexus->initial_tasks_pool, trans_hndl);
+	if (!task) {
+		ERROR_LOG("initial task pool is empty\n");
+		return -1;
+	}
+	task->nexus = nexus;
+	task->tlv_type = XIO_NEXUS_SETUP_REQ;
+	task->omsg = NULL;
+
+	req.version = XIO_VERSION;
+
 	retval = xio_nexus_write_setup_req(task, &req);
 	if (retval)
 		goto cleanup;
 
-
 	/* always add it to the top */
 	list_add(&task->tasks_list_entry, &nexus->tx_queue);
-
 
 	if (!trans_hndl) {
 		ERROR_LOG("null transport handle state=%d\n", nexus->state);
 		xio_tasks_pool_put(task);
 		return -1;
 	}
-
+	TRACE_LOG("%s: nexus:%p, rdma_hndl:%p\n", __func__,
+		  nexus, trans_hndl);
 	retval = nexus->transport->send(trans_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup request failed\n");
@@ -548,9 +547,10 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 		cid = req.cid;
 		flags = XIO_RECONNECT;
 		dis_nexus = xio_nexus_cache_lookup(cid);
-		if (dis_nexus) {
+		if (dis_nexus && dis_nexus != new_nexus) {
 			/* stop timer */
 			xio_nexus_cancel_dwork(dis_nexus);
+
 			retval = xio_nexus_swap(dis_nexus, new_nexus);
 			if (retval != 0) {
 				ERROR_LOG("swap nexus failed\n");
@@ -562,17 +562,18 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 			nexus = dis_nexus;
 		} else {
 			flags = XIO_CID;
-			status = -1;
+			status = XIO_E_UNSUCCESSFUL;
 		}
-	} else {
-		cid = nexus->cid;
-		/* time to prepare the primary pool */
-		retval = xio_nexus_primary_pool_create(nexus);
-		if (retval != 0) {
-			ERROR_LOG("create primary pool failed\n");
-			status = ENOMEM;
-			goto send_response;
-		}
+		goto send_response;
+	}
+
+	cid = nexus->cid;
+	/* time to prepare the primary pool */
+	retval = xio_nexus_primary_pool_create(nexus);
+	if (retval != 0) {
+		ERROR_LOG("create primary pool failed\n");
+		status = ENOMEM;
+		goto send_response;
 	}
 
 send_response:
@@ -582,19 +583,20 @@ send_response:
 	/* write response */
 	task->tlv_type	= XIO_NEXUS_SETUP_RSP;
 	task->omsg	= NULL;
+	task->nexus	= nexus;
 
 	rsp.cid		= cid;
 	rsp.status	= status;
 	rsp.version	= XIO_VERSION;
 	rsp.flags	= flags;
 
-	TRACE_LOG("send setup response\n");
-
 	retval = xio_nexus_write_setup_rsp(task, &rsp);
 	if (retval != 0)
 		goto cleanup;
 
 	/* send it */
+	TRACE_LOG("%s: nexus:%p, trans_hndl:%p\n", __func__,
+		  nexus, nexus->transport_hndl);
 	list_move(&task->tasks_list_entry, &nexus->tx_queue);
 	retval = nexus->transport->send(nexus->transport_hndl, task);
 	if (retval != 0) {
@@ -611,6 +613,43 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_prep_new_transport						     */
+/*---------------------------------------------------------------------------*/
+static int xio_nexus_prep_new_transport(struct xio_nexus *nexus)
+{
+	int retval;
+
+	/* ignore close event on transport_hndl (part of dup2) */
+	xio_observable_unreg_observer(
+			&nexus->transport_hndl->observable,
+			&nexus->trans_observer);
+
+	/* nexus is an observer of the new transport (see open API)
+	 * no need to register
+	 */
+	xio_tasks_pool_remap(nexus->primary_tasks_pool,
+			     nexus->new_transport_hndl);
+	/* make nexus->transport_hndl copy of nexus->new_transport_hndl
+	 * old nexus->trasport_hndl will be closed
+	 */
+	if (nexus->transport->dup2(nexus->new_transport_hndl,
+				   &nexus->transport_hndl)) {
+		ERROR_LOG("dup2 transport failed\n");
+		return -1;
+	}
+
+	/* TODO: what about messages held by the application */
+	/* be ready to receive messages */
+	retval = xio_nexus_primary_pool_recreate(nexus);
+	if (retval != 0) {
+		ERROR_LOG("recreate primary pool failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_on_recv_setup_rsp						     */
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
@@ -619,7 +658,7 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 	struct xio_nexus_setup_rsp	rsp;
 	int				retval;
 
-	TRACE_LOG("receiving setup response\n");
+	TRACE_LOG("receiving setup response. nexus:%p\n", nexus);
 	retval = xio_nexus_read_setup_rsp(task, &rsp);
 	if (retval != 0)
 		goto cleanup;
@@ -634,6 +673,15 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 			 */
 			/* Stop timer */
 			xio_nexus_cancel_dwork(nexus);
+			if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
+				retval = xio_nexus_prep_new_transport(nexus);
+				if (retval != 0) {
+					ERROR_LOG(
+					      "prep new transport failed\n");
+					return -1;
+				}
+			}
+
 			/* Kill nexus */
 			nexus->state = XIO_NEXUS_STATE_DISCONNECTED;
 			TRACE_LOG("nexus state changed to disconnected\n");
@@ -650,7 +698,11 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 					XIO_NEXUS_EVENT_ERROR,
 					&nexus_event_data);
 		}
-		return -1;
+		xio_tasks_pool_put(task->sender_task);
+		task->sender_task = NULL;
+		xio_tasks_pool_put(task);
+
+		return 0;
 	}
 	if (rsp.version != XIO_VERSION) {
 		xio_set_error(XIO_E_INVALID_VERSION);
@@ -658,7 +710,8 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 			  XIO_VERSION, rsp.version);
 		return -1;
 	}
-
+	TRACE_LOG("%s: nexus:%p, trans_hndl:%p\n", __func__,
+		  nexus, nexus->transport_hndl);
 	/* recycle the tasks */
 	xio_tasks_pool_put(task->sender_task);
 	task->sender_task = NULL;
@@ -682,36 +735,9 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 		/* Stop reconnect timer */
 		xio_nexus_cancel_dwork(nexus);
 
-		/* ignore close event on transport_hndl (part of dup2) */
-		xio_observable_unreg_observer(
-				&nexus->transport_hndl->observable,
-				&nexus->trans_observer);
-
-		/* nexus is an observer of the new transport (see open API)
-		 * no need to register
-		 */
-		xio_tasks_pool_remap(nexus->primary_tasks_pool,
-				     nexus->new_transport_hndl);
-		/* make nexus->transport_hndl copy of nexus->new_transport_hndl
-		 * old nexus->trasport_hndl will be closed
-		 */
-		if (nexus->transport->dup2(nexus->new_transport_hndl,
-					   &nexus->transport_hndl)) {
-			ERROR_LOG("dup2 transport failed\n");
-			return -1;
-		}
-
-		/* new_transport_hndl was "duplicated" on transport_hndl
-		 * thus we need to consume one reference count
-		 */
-		nexus->transport->close(nexus->new_transport_hndl);
-		nexus->new_transport_hndl = NULL;
-
-		/* TODO: what about messages held by the application */
-		/* be ready to receive messages */
-		retval = xio_nexus_primary_pool_recreate(nexus);
+		retval = xio_nexus_prep_new_transport(nexus);
 		if (retval != 0) {
-			ERROR_LOG("recreate primary pool failed\n");
+			ERROR_LOG("prep new transport failed\n");
 			return -1;
 		}
 		nexus->state = XIO_NEXUS_STATE_CONNECTED;
@@ -803,7 +829,6 @@ static int xio_nexus_on_recv_req(struct xio_nexus *nexus,
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_on_recv_rsp						     */
 /*---------------------------------------------------------------------------*/
@@ -849,7 +874,6 @@ static int xio_nexus_on_send_msg_comp(struct xio_nexus *nexus,
 	nexus_event_data.msg.task	= task;
 	nexus_event_data.msg.op		= XIO_WC_OP_SEND;
 
-
 	xio_observable_notify_observer(
 			&nexus->observable,
 			&task->session->observer,
@@ -864,80 +888,32 @@ static int xio_nexus_on_send_msg_comp(struct xio_nexus *nexus,
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 {
-	int				alloc_nr;
-	int				start_nr;
-	int				max_nr;
-	int				task_dd_sz;
-	int				slab_dd_sz;
-	int				pool_dd_sz;
-	struct xio_tasks_pool_cls	pool_cls;
-	struct xio_tasks_pool_params	params;
+	struct xio_tasks_pool_ops	*pool_ops;
 	struct xio_transport_base	*transport_hndl;
-
-	if (nexus->initial_pool_ops == NULL)
-		return -1;
-
-	if ((nexus->initial_pool_ops->pool_get_params == NULL) ||
-	    (nexus->initial_pool_ops->slab_pre_create == NULL) ||
-	    (nexus->initial_pool_ops->slab_init_task == NULL) ||
-	    (nexus->initial_pool_ops->pool_post_create == NULL) ||
-	    (nexus->initial_pool_ops->slab_destroy == NULL))
-		return -1;
+	struct xio_tasks_pool_cls	pool_cls;
+	struct xio_context		*ctx;
+	enum xio_proto			proto;
+	int				retval;
 
 	if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
 		transport_hndl = nexus->new_transport_hndl;
 	else
 		transport_hndl = nexus->transport_hndl;
 
-	/* get pool properties from the transport */
-	nexus->initial_pool_ops->pool_get_params(transport_hndl,
-						 &start_nr,
-						 &max_nr,
-						 &alloc_nr,
-						 &pool_dd_sz,
-						 &slab_dd_sz,
-						 &task_dd_sz);
+	proto		= transport_hndl->proto;
+	ctx		= transport_hndl->ctx;
 
-	memset(&params, 0, sizeof(params));
-
-	params.start_nr			   = start_nr;
-	params.max_nr			   = max_nr;
-	params.alloc_nr			   = alloc_nr;
-	params.pool_dd_data_sz		   = pool_dd_sz;
-	params.slab_dd_data_sz		   = slab_dd_sz;
-	params.task_dd_data_sz		   = task_dd_sz;
-	params.pool_hooks.context	   = transport_hndl;
-	params.pool_hooks.slab_pre_create  =
-		(int (*)(void *, int, void *, void *))
-				nexus->initial_pool_ops->slab_pre_create;
-	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
-				nexus->initial_pool_ops->slab_post_create;
-	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
-				nexus->initial_pool_ops->slab_destroy;
-	params.pool_hooks.slab_init_task   =
-		(int (*)(void *, void *, void *, int,  struct xio_task *))
-				nexus->initial_pool_ops->slab_init_task;
-	params.pool_hooks.slab_uninit_task =
-		(int (*)(void *, void *, void *, struct xio_task *))
-				nexus->initial_pool_ops->slab_uninit_task;
-	params.pool_hooks.slab_remap_task =
-		(int (*)(void *, void *, void *, void *, struct xio_task *))
-				nexus->initial_pool_ops->slab_remap_task;
-	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
-				nexus->initial_pool_ops->pool_pre_create;
-	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
-				nexus->initial_pool_ops->pool_post_create;
-	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
-				nexus->initial_pool_ops->pool_destroy;
-	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))
-		nexus->initial_pool_ops->task_pre_put;
-	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
-		nexus->initial_pool_ops->task_post_get;
+	retval = xio_ctx_pool_create(ctx, proto,
+				     XIO_CONTEXT_POOL_CLASS_INITIAL);
+	if (retval) {
+		ERROR_LOG("Failed to create initial pool. nexus:%p\n", nexus);
+		return -1;
+	}
 
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task *(*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
@@ -947,33 +923,17 @@ static int xio_nexus_initial_pool_create(struct xio_nexus *nexus)
 		nexus->transport->set_pools_cls(transport_hndl,
 						&pool_cls, NULL);
 	}
+	pool_ops = ctx->initial_pool_ops[proto];
 
-	/* initialize the tasks pool */
-	nexus->initial_tasks_pool = xio_tasks_pool_create(&params);
-	if (nexus->initial_tasks_pool == NULL) {
-		ERROR_LOG("xio_tasks_pool_create failed\n");
-		goto cleanup;
-	}
+	if (pool_ops->pool_post_create)
+		pool_ops->pool_post_create(
+				transport_hndl,
+				ctx->initial_tasks_pool[proto],
+				ctx->initial_tasks_pool[proto]->dd_data);
+
+	nexus->initial_tasks_pool = ctx->initial_tasks_pool[proto];
 
 	return 0;
-
-cleanup:
-	return -1;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_nexus_initial_pool_free						     */
-/*---------------------------------------------------------------------------*/
-static int xio_nexus_initial_pool_free(struct xio_nexus *nexus)
-{
-	if (!nexus->initial_tasks_pool)
-		return -1;
-
-	xio_tasks_pool_destroy(nexus->initial_tasks_pool);
-
-	nexus->initial_tasks_pool = NULL;
-
-	return  0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -981,95 +941,47 @@ static int xio_nexus_initial_pool_free(struct xio_nexus *nexus)
 /*---------------------------------------------------------------------------*/
 static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 {
-	int				alloc_nr;
-	int				start_nr;
-	int				max_nr;
-	int				task_dd_sz;
-	int				slab_dd_sz;
-	int				pool_dd_sz;
+	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_transport_base	*transport_hndl;
 	struct xio_tasks_pool_cls	pool_cls;
-	struct xio_tasks_pool_params	params;
+	struct xio_context		*ctx;
+	enum xio_proto			proto;
+	int				retval;
 
-	if (nexus->primary_pool_ops == NULL)
+	transport_hndl  = nexus->transport_hndl;
+	proto		= transport_hndl->proto;
+	ctx		= transport_hndl->ctx;
+
+	retval = xio_ctx_pool_create(ctx, proto,
+				     XIO_CONTEXT_POOL_CLASS_PRIMARY);
+	if (retval) {
+		ERROR_LOG("Failed to create primary pool. nexus:%p\n", nexus);
 		return -1;
-
-	if ((nexus->primary_pool_ops->pool_get_params == NULL) ||
-	    (nexus->primary_pool_ops->slab_pre_create == NULL) ||
-	    (nexus->primary_pool_ops->slab_init_task == NULL) ||
-	    (nexus->primary_pool_ops->pool_post_create == NULL) ||
-	    (nexus->primary_pool_ops->slab_destroy	== NULL))
-		return -1;
-
-	/* get pool properties from the transport */
-	nexus->primary_pool_ops->pool_get_params(nexus->transport_hndl,
-						&start_nr,
-						&max_nr,
-						&alloc_nr,
-						&pool_dd_sz,
-						&slab_dd_sz,
-						&task_dd_sz);
-
-	memset(&params, 0, sizeof(params));
-
-	params.start_nr			   = start_nr;
-	params.max_nr			   = max_nr;
-	params.alloc_nr			   = alloc_nr;
-	params.pool_dd_data_sz		   = pool_dd_sz;
-	params.slab_dd_data_sz		   = slab_dd_sz;
-	params.task_dd_data_sz		   = task_dd_sz;
-	params.pool_hooks.context	   = nexus->transport_hndl;
-	params.pool_hooks.slab_pre_create  =
-		(int (*)(void *, int, void *, void *))
-				nexus->primary_pool_ops->slab_pre_create;
-	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
-				nexus->primary_pool_ops->slab_post_create;
-	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
-				nexus->primary_pool_ops->slab_destroy;
-	params.pool_hooks.slab_init_task   =
-		(int (*)(void *, void *, void *, int,  struct xio_task *))
-				nexus->primary_pool_ops->slab_init_task;
-	params.pool_hooks.slab_uninit_task =
-		(int (*)(void *, void *, void *, struct xio_task *))
-				nexus->primary_pool_ops->slab_uninit_task;
-	params.pool_hooks.slab_remap_task =
-		(int (*)(void *, void *, void *, void *, struct xio_task *))
-				nexus->primary_pool_ops->slab_remap_task;
-	params.pool_hooks.pool_pre_create = (int (*)(void *, void *, void *))
-				nexus->primary_pool_ops->pool_pre_create;
-	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
-				nexus->primary_pool_ops->pool_post_create;
-	params.pool_hooks.pool_destroy = (int (*)(void *, void *, void *))
-				nexus->primary_pool_ops->pool_destroy;
-	params.pool_hooks.task_pre_put = (int (*)(void *, struct xio_task *))
-				nexus->primary_pool_ops->task_pre_put;
-	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
-				nexus->primary_pool_ops->task_post_get;
+	}
 
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task *(*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
-		pool_cls.task_put	= xio_tasks_pool_put;
-
-		nexus->transport->set_pools_cls(nexus->transport_hndl,
-					       NULL,
-					       &pool_cls);
+		pool_cls.task_put	= (void (*)(struct xio_task *))
+						xio_tasks_pool_put;
+		nexus->transport->set_pools_cls(transport_hndl,
+						NULL, &pool_cls);
 	}
+	pool_ops = ctx->primary_pool_ops[proto];
 
-	/* initialize the tasks pool */
-	nexus->primary_tasks_pool = xio_tasks_pool_create(&params);
-	if (nexus->primary_tasks_pool == NULL) {
-		ERROR_LOG("xio_tasks_pool_create failed\n");
-		goto cleanup;
-	}
+	if (pool_ops->pool_post_create)
+		pool_ops->pool_post_create(
+				transport_hndl,
+				ctx->primary_tasks_pool[proto],
+				ctx->primary_tasks_pool[proto]->dd_data);
+
+	nexus->primary_tasks_pool = ctx->primary_tasks_pool[proto];
 
 	return 0;
-
-cleanup:
-	return -1;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1078,17 +990,21 @@ cleanup:
 static int xio_nexus_primary_pool_recreate(struct xio_nexus *nexus)
 {
 	struct xio_tasks_pool_cls	pool_cls;
+	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_context		*ctx;
+	enum xio_proto			proto;
 
-	if (nexus->primary_pool_ops == NULL)
-		return -1;
+	proto		= nexus->transport_hndl->proto;
+	ctx		= nexus->transport_hndl->ctx;
+	pool_ops	= ctx->primary_pool_ops[proto];
 
-	if (nexus->primary_tasks_pool == NULL)
+	if (!pool_ops || !nexus->primary_tasks_pool)
 		return -1;
 
 	/* set pool helpers to the transport */
 	if (nexus->transport->set_pools_cls) {
 		pool_cls.pool		= NULL;
-		pool_cls.task_get	= (struct xio_task * (*)(void *))
+		pool_cls.task_get	= (struct xio_task *(*)(void *, void *))
 						xio_tasks_pool_get;
 		pool_cls.task_lookup	= (struct xio_task * (*)(void *, int))
 						xio_tasks_pool_lookup;
@@ -1101,29 +1017,13 @@ static int xio_nexus_primary_pool_recreate(struct xio_nexus *nexus)
 	/* Equivalent to old xio_rdma_primary_pool_run,
 	 * will call xio_rdma_rearm_rq
 	 */
-	if (nexus->primary_pool_ops->pool_post_create)
-		nexus->primary_pool_ops->pool_post_create(
+	if (pool_ops->pool_post_create)
+		pool_ops->pool_post_create(
 				nexus->transport_hndl,
 				nexus->primary_tasks_pool,
 				nexus->primary_tasks_pool->dd_data);
 
-
 	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* xio_nexus_primary_pool_destroy					     */
-/*---------------------------------------------------------------------------*/
-static int xio_nexus_primary_pool_destroy(struct xio_nexus *nexus)
-{
-	if (!nexus->primary_tasks_pool)
-		return -1;
-
-	xio_tasks_pool_destroy(nexus->primary_tasks_pool);
-
-	nexus->primary_tasks_pool = NULL;
-
-	return  0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1240,7 +1140,6 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	struct xio_nexus		*nexus;
 	int			retval;
 
-
 	if (parent_nexus->transport_hndl->is_client)
 		return NULL;
 
@@ -1272,7 +1171,6 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 
 	xio_context_reg_observer(transport_hndl->ctx, &nexus->ctx_observer);
 
-
 	/* add the nexus to temporary list */
 	nexus->transport_hndl		= transport_hndl;
 	nexus->transport		= parent_nexus->transport;
@@ -1293,9 +1191,15 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 				   &nexus->trans_observer);
 
 	if (nexus->transport->get_pools_setup_ops) {
-		nexus->transport->get_pools_setup_ops(nexus->transport_hndl,
-						     &nexus->initial_pool_ops,
-						     &nexus->primary_pool_ops);
+		struct xio_context *ctx  = nexus->transport_hndl->ctx;
+		enum xio_proto proto = nexus->transport_hndl->proto;
+
+		if (!ctx->primary_pool_ops[proto] ||
+		    !ctx->initial_pool_ops[proto])
+			nexus->transport->get_pools_setup_ops(
+					nexus->transport_hndl,
+					&ctx->initial_pool_ops[proto],
+					&ctx->primary_pool_ops[proto]);
 	} else {
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
 		goto cleanup;
@@ -1306,6 +1210,14 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 		ERROR_LOG("failed to setup initial pool\n");
 		goto cleanup;
 	}
+	nexus->destroy_event.handler		= xio_nexus_destroy_handler;
+	nexus->destroy_event.data		= nexus;
+
+	nexus->disconnect_event.handler		= xio_nexus_disconnect_handler;
+	nexus->disconnect_event.data		= nexus;
+
+	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
+	nexus->trans_error_event.data		= NULL;
 
 	TRACE_LOG("nexus: [new] ptr:%p, transport_hndl:%p\n", nexus,
 		  nexus->transport_hndl);
@@ -1349,8 +1261,10 @@ static void xio_nexus_on_new_transport(struct xio_nexus *nexus,
 			nexus,
 			event_data->new_connection.child_trans_hndl);
 
+	TRACE_LOG("%s: nexus:%p, trans_hndl:%p\n", __func__,
+		  child_nexus, event_data->new_connection.child_trans_hndl);
 	nexus_event_data.new_nexus.child_nexus = child_nexus;
-	if (child_nexus == NULL) {
+	if (!child_nexus) {
 		ERROR_LOG("failed to create child nexus\n");
 		goto exit;
 	}
@@ -1412,17 +1326,22 @@ static void xio_nexus_on_transport_established(struct xio_nexus *nexus,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_on_transport_disconnected				             */
+/* xio_nexus_destroy_handler						     */
 /*---------------------------------------------------------------------------*/
-static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
-						union xio_transport_event_data
-						*event_data)
+static void xio_nexus_destroy_handler(void *nexus_)
 {
-	int ret;
+	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
 
-	/* cancel old timers */
-	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
-				 &nexus->close_time_hndl);
+	xio_nexus_release(nexus);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_disconnect_handler						     */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_disconnect_handler(void *nexus_)
+{
+	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
+	int ret;
 
 	/* Try to reconnect */
 	if (g_options.reconnect) {
@@ -1434,9 +1353,8 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 		if (!ret) {
 			TRACE_LOG("reconnect attempt nexus:%p\n", nexus);
 			return;
-		} else {
-			ERROR_LOG("can't reconnect nexus:%p\n", nexus);
 		}
+		ERROR_LOG("can't reconnect nexus:%p\n", nexus);
 	}
 
 	/* Can't reconnect */
@@ -1449,10 +1367,47 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 		xio_observable_notify_all_observers(
 				&nexus->observable,
 				XIO_NEXUS_EVENT_DISCONNECTED,
-				&event_data);
+				NULL);
 	} else {
-		xio_nexus_release(nexus);
+		xio_context_add_event(nexus->transport_hndl->ctx,
+				      &nexus->destroy_event);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_trans_error_handler					     */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_trans_error_handler(void *ev_params_)
+{
+	struct xio_event_params *ev_params =
+				(struct xio_event_params *)ev_params_;
+
+	ev_params->nexus->trans_error_event.data = NULL;
+
+	xio_context_disable_event(&ev_params->nexus->trans_error_event);
+
+	if (ev_params->nexus->state == XIO_NEXUS_STATE_RECONNECT)
+		xio_nexus_client_reconnect_failed(ev_params->nexus);
+	else
+		xio_nexus_on_transport_error(ev_params->nexus,
+					     &ev_params->event_data);
+
+	kfree(ev_params);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_on_transport_disconnected				             */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
+						union xio_transport_event_data
+						*event_data)
+{
+	/* cancel old timers */
+	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
+				 &nexus->close_time_hndl);
+
+	xio_context_add_event(nexus->transport_hndl->ctx,
+			      &nexus->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1464,6 +1419,7 @@ static int xio_nexus_on_new_message(struct xio_nexus *nexus,
 	int	retval = -1;
 	struct xio_task	*task = event_data->msg.task;
 
+	task->nexus = nexus;
 	switch (task->tlv_type) {
 	case XIO_NEXUS_SETUP_RSP:
 		retval = xio_nexus_on_recv_setup_rsp(nexus, task);
@@ -1478,14 +1434,17 @@ static int xio_nexus_on_new_message(struct xio_nexus *nexus,
 	default:
 		if (IS_REQUEST(task->tlv_type))
 			retval = xio_nexus_on_recv_req(nexus, task);
-		else
+		else if (IS_RESPONSE(task->tlv_type))
 			retval = xio_nexus_on_recv_rsp(nexus, task);
+		else
+			ERROR_LOG("unexpected message type %u\n",
+				  task->tlv_type);
 		break;
 	};
 
 	if (retval != 0) {
 		ERROR_LOG("failed to handle message. " \
-			  "nexus:%p tlv_type:%d op:%d\n",
+			  "nexus:%p tlv_type:0x%x op:%d\n",
 			  nexus, task->tlv_type, event_data->msg.op);
 	}
 
@@ -1510,7 +1469,7 @@ static int xio_nexus_on_send_completion(struct xio_nexus *nexus,
 		retval = 0;
 		break;
 	default:
-		retval  = xio_nexus_on_send_msg_comp(nexus, task);
+		retval = xio_nexus_on_send_msg_comp(nexus, task);
 		break;
 	};
 
@@ -1521,6 +1480,27 @@ static int xio_nexus_on_send_completion(struct xio_nexus *nexus,
 	}
 
 	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_on_direct_rdma_completion					     */
+/*---------------------------------------------------------------------------*/
+static int xio_nexus_on_direct_rdma_completion(
+	struct xio_nexus *nexus,
+	union xio_transport_event_data *event_data)
+{
+	struct xio_task	*task = event_data->msg.task;
+	union xio_nexus_event_data nexus_event_data;
+
+	nexus_event_data.msg.task = task;
+	nexus_event_data.msg.op = event_data->msg.op;
+
+	xio_observable_notify_observer(
+			&nexus->observable,
+			&task->session->observer,
+			XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION,
+			&nexus_event_data);
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1556,6 +1536,7 @@ static int xio_nexus_on_cancel_request(struct xio_nexus *nexus,
 				       *event_data)
 {
 	union xio_nexus_event_data nexus_event_data = {};
+
 	nexus_event_data.cancel.ulp_msg = event_data->cancel.ulp_msg;
 	nexus_event_data.cancel.ulp_msg_sz = event_data->cancel.ulp_msg_sz;
 	nexus_event_data.cancel.task = event_data->cancel.task;
@@ -1578,6 +1559,7 @@ static int xio_nexus_on_cancel_response(struct xio_nexus *nexus,
 					*event_data)
 {
 	union xio_nexus_event_data nexus_event_data = {};
+
 	nexus_event_data.cancel.ulp_msg = event_data->cancel.ulp_msg;
 	nexus_event_data.cancel.ulp_msg_sz = event_data->cancel.ulp_msg_sz;
 	nexus_event_data.cancel.task = event_data->cancel.task;
@@ -1599,68 +1581,70 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 					int event, void *event_data)
 {
 	struct xio_nexus		*nexus = (struct xio_nexus *)observer;
+	struct xio_event_params		*ev_params;
+	int				 tx = 1;
 	union xio_transport_event_data *ev_data =
 			(union xio_transport_event_data *)event_data;
 
-
 	switch (event) {
-	case XIO_TRANSPORT_NEW_MESSAGE:
+	case XIO_TRANSPORT_EVENT_NEW_MESSAGE:
 /*
 		TRACE_LOG("nexus: [notification] - new message. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 */
 		xio_nexus_on_new_message(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_SEND_COMPLETION:
+	case XIO_TRANSPORT_EVENT_SEND_COMPLETION:
 /*
 		TRACE_LOG("nexus: [notification] - send completion. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 */
 		xio_nexus_on_send_completion(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_ASSIGN_IN_BUF:
-/*
-		DEBUG_LOG("nexus: [notification] - assign in buffer. " \
-			 "nexus:%p, transport:%p\n", observer, sender);
-*/
+	case XIO_TRANSPORT_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_nexus_on_direct_rdma_completion(nexus, ev_data);
+		break;
+	case XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF:
 		xio_nexus_on_assign_in_buf(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_MESSAGE_ERROR:
+	case XIO_TRANSPORT_EVENT_MESSAGE_ERROR:
 		DEBUG_LOG("nexus: [notification] - message error. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_message_error(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_CANCEL_REQUEST:
+	case XIO_TRANSPORT_EVENT_CANCEL_REQUEST:
 		DEBUG_LOG("nexus: [notification] - cancel request. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_cancel_request(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_CANCEL_RESPONSE:
+	case XIO_TRANSPORT_EVENT_CANCEL_RESPONSE:
 		DEBUG_LOG("nexus: [notification] - cancel respnose. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_cancel_response(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_NEW_CONNECTION:
+	case XIO_TRANSPORT_EVENT_NEW_CONNECTION:
 		DEBUG_LOG("nexus: [notification] - new transport. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_new_transport(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_ESTABLISHED:
+	case XIO_TRANSPORT_EVENT_ESTABLISHED:
 		DEBUG_LOG("nexus: [notification] - transport established. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_established(nexus, ev_data);
 		break;
-	case XIO_TRANSPORT_DISCONNECTED:
+	case XIO_TRANSPORT_EVENT_DISCONNECTED:
 		DEBUG_LOG("nexus: [notification] - transport disconnected. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_disconnected(nexus, ev_data);
+		tx = 0;
 		break;
-	case XIO_TRANSPORT_CLOSED:
+	case XIO_TRANSPORT_EVENT_CLOSED:
 		DEBUG_LOG("nexus: [notification] - transport closed. "  \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		xio_nexus_on_transport_closed(nexus, ev_data);
+		tx = 0;
 		return 0;
-	case XIO_TRANSPORT_REFUSED:
+	case XIO_TRANSPORT_EVENT_REFUSED:
 		DEBUG_LOG("nexus: [notification] - transport refused. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
 		if (nexus->state == XIO_NEXUS_STATE_RECONNECT) {
@@ -1674,18 +1658,32 @@ static int xio_nexus_on_transport_event(void *observer, void *sender,
 					XIO_NEXUS_EVENT_REFUSED,
 					&event_data);
 		}
+		tx = 0;
 		break;
-	case XIO_TRANSPORT_ERROR:
+	case XIO_TRANSPORT_EVENT_ERROR:
 		DEBUG_LOG("nexus: [notification] - transport error. " \
 			 "nexus:%p, transport:%p\n", observer, sender);
-		if (nexus->state == XIO_NEXUS_STATE_RECONNECT)
-			xio_nexus_client_reconnect_failed(nexus);
-		else
-			xio_nexus_on_transport_error(nexus, ev_data);
+		/* event still pending */
+		if (nexus->trans_error_event.data)
+			return 0;
+		ev_params = (struct xio_event_params *)
+				kmalloc(sizeof(*ev_params), GFP_KERNEL);
+		if (!ev_params) {
+			ERROR_LOG("failed to allocate memory\n");
+			return -1;
+		}
+		ev_params->nexus = nexus;
+		memcpy(&ev_params->event_data, ev_data, sizeof(*ev_data));
+		nexus->trans_error_event.data = ev_params;
+
+		xio_context_add_event(nexus->transport_hndl->ctx,
+				      &nexus->trans_error_event);
+
+		tx = 0;
 		break;
 	};
 
-	if (!list_empty(&nexus->tx_queue))
+	if (tx && !list_empty(&nexus->tx_queue))
 		xio_nexus_xmit(nexus);
 
 	return 0;
@@ -1698,6 +1696,12 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 {
 	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
+	xio_context_disable_event(&nexus->destroy_event);
+	xio_context_disable_event(&nexus->disconnect_event);
+	xio_context_disable_event(&nexus->trans_error_event);
+
+	kfree(nexus->trans_error_event.data);
+	nexus->trans_error_event.data = NULL;
 	if (nexus->server)
 		xio_server_unreg_observer(nexus->server,
 					  &nexus->srv_observer);
@@ -1715,12 +1719,6 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 				&nexus->close_time_hndl);
 
 	xio_nexus_flush_tx_queue(nexus);
-
-	xio_nexus_initial_free_tasks(nexus);
-	xio_nexus_initial_pool_free(nexus);
-
-	xio_nexus_primary_free_tasks(nexus);
-	xio_nexus_primary_pool_destroy(nexus);
 
 	xio_nexus_cache_remove(nexus->cid);
 
@@ -1762,7 +1760,6 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	struct xio_transport_init_attr	*ptrans_init_attr = NULL;
 	struct xio_nexus_query_params	query;
 
-
 	/* look for opened nexus */
 	query.ctx = ctx;
 	query.portal_uri = portal_uri;
@@ -1776,7 +1773,7 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	}
 
 	nexus = xio_nexus_cache_find(&query);
-	if (nexus != NULL &&
+	if (nexus &&
 	    (nexus->state == XIO_NEXUS_STATE_CONNECTED ||
 	     nexus->state == XIO_NEXUS_STATE_CONNECTING ||
 	     nexus->state == XIO_NEXUS_STATE_OPEN ||
@@ -1809,13 +1806,16 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	}
 	/* get the transport's proto */
 	transport = xio_get_transport(proto);
-	if (transport == NULL) {
-		ERROR_LOG("invalid protocol. proto: %s\n", proto);
-		xio_set_error(XIO_E_ADDR_ERROR);
+	if (!transport) {
+		ERROR_LOG("failed to load %s transport layer.\n", proto);
+		ERROR_LOG("validate that your system support %s " \
+			  "and the accelio's %s module is loaded\n",
+			  proto, proto);
+		xio_set_error(ENOPROTOOPT);
 		return NULL;
 	}
 
-	if (transport->open == NULL) {
+	if (!transport->open) {
 		ERROR_LOG("transport %s does not implement \"open\"\n",
 			  proto);
 		xio_set_error(ENOSYS);
@@ -1824,7 +1824,7 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	/* allocate nexus */
 	nexus = (struct xio_nexus *)
 			kcalloc(1, sizeof(struct xio_nexus), GFP_KERNEL);
-	if (nexus == NULL) {
+	if (!nexus) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kcalloc failed. %m\n");
 		return NULL;
@@ -1861,11 +1861,12 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 		}
 	}
 
-	nexus->transport_hndl = transport->open(transport, ctx,
-					        &nexus->trans_observer,
-					        nexus->trans_attr_mask,
-					        ptrans_init_attr);
-	if (nexus->transport_hndl == NULL) {
+	nexus->transport_hndl = transport->open(
+					transport, ctx,
+					&nexus->trans_observer,
+					nexus->trans_attr_mask,
+					ptrans_init_attr);
+	if (!nexus->transport_hndl) {
 		ERROR_LOG("transport open failed\n");
 		goto cleanup;
 	}
@@ -1874,13 +1875,27 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	nexus->state = XIO_NEXUS_STATE_OPEN;
 
 	if (nexus->transport->get_pools_setup_ops) {
-		nexus->transport->get_pools_setup_ops(nexus->transport_hndl,
-						      &nexus->initial_pool_ops,
-						      &nexus->primary_pool_ops);
+		struct xio_context *ctx  = nexus->transport_hndl->ctx;
+		enum xio_proto proto = nexus->transport_hndl->proto;
+
+		if (!ctx->primary_pool_ops[proto] ||
+		    !ctx->initial_pool_ops[proto])
+			nexus->transport->get_pools_setup_ops(
+					nexus->transport_hndl,
+					&ctx->initial_pool_ops[proto],
+					&ctx->primary_pool_ops[proto]);
 	} else {
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
 		goto cleanup;
 	}
+	nexus->destroy_event.handler	= xio_nexus_destroy_handler;
+	nexus->destroy_event.data	= nexus;
+
+	nexus->disconnect_event.handler	= xio_nexus_disconnect_handler;
+	nexus->disconnect_event.data	= nexus;
+
+	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
+	nexus->trans_error_event.data		= NULL;
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 
@@ -1919,7 +1934,7 @@ int xio_nexus_reconnect(struct xio_nexus *nexus)
 						   nexus->trans_attr_mask,
 						   &nexus->trans_attr);
 
-	if (nexus->new_transport_hndl == NULL) {
+	if (!nexus->new_transport_hndl) {
 		ERROR_LOG("transport open failed\n");
 		return -1;
 	}
@@ -1951,7 +1966,7 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 {
 	int retval;
 
-	if (nexus->transport->connect == NULL) {
+	if (!nexus->transport->connect) {
 		ERROR_LOG("transport does not implement \"connect\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
@@ -1974,6 +1989,8 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 				goto cleanup2;
 			}
 		}
+		TRACE_LOG("%s: nexus:%p, rdma_hndl:%p, portal:%s\n", __func__,
+			  nexus, nexus->transport_hndl, portal_uri);
 		retval = nexus->transport->connect(nexus->transport_hndl,
 						  portal_uri,
 						  out_if);
@@ -2013,7 +2030,7 @@ int xio_nexus_listen(struct xio_nexus *nexus, const char *portal_uri,
 {
 	int retval;
 
-	if (nexus->transport->listen == NULL) {
+	if (!nexus->transport->listen) {
 		ERROR_LOG("transport does not implement \"listen\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
@@ -2043,7 +2060,7 @@ int xio_nexus_accept(struct xio_nexus *nexus)
 {
 	int retval;
 
-	if (nexus->transport->accept == NULL) {
+	if (!nexus->transport->accept) {
 		ERROR_LOG("transport does not implement \"accept\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
@@ -2065,7 +2082,7 @@ int xio_nexus_reject(struct xio_nexus *nexus)
 {
 	int retval;
 
-	if (nexus->transport->reject == NULL) {
+	if (!nexus->transport->reject) {
 		ERROR_LOG("transport does not implement \"reject\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
@@ -2079,6 +2096,7 @@ int xio_nexus_reject(struct xio_nexus *nexus)
 	}
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_delayed_close		                                     */
 /*---------------------------------------------------------------------------*/
@@ -2101,18 +2119,13 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		break;
 	default:
 		/* only client shall cause disconnection */
-		if (nexus->transport_hndl->is_client) {
-			retval = xio_ctx_add_delayed_work(
-					nexus->transport_hndl->ctx,
-					XIO_NEXUS_CLOSE_TIMEOUT, nexus,
-					xio_nexus_release_cb,
-					&nexus->close_time_hndl);
-			if (retval)
-				ERROR_LOG("xio_nexus_delayed_close failed\n");
-		} else {
-			/* leave the server nexus alive */
-			kref_init(&nexus->kref);
-		}
+		retval = xio_ctx_add_delayed_work(
+				nexus->transport_hndl->ctx,
+				XIO_NEXUS_CLOSE_TIMEOUT, nexus,
+				xio_nexus_release_cb,
+				&nexus->close_time_hndl);
+		if (retval)
+			ERROR_LOG("xio_nexus_delayed_close failed\n");
 		break;
 	}
 }
@@ -2187,11 +2200,13 @@ static int xio_nexus_xmit(struct xio_nexus *nexus)
 				  xio_errno());
 			nexus_event_data.msg_error.reason =
 						(enum xio_status)xio_errno();
-			nexus_event_data.msg_error.direction = XIO_MSG_DIRECTION_OUT;
+			nexus_event_data.msg_error.direction =
+							XIO_MSG_DIRECTION_OUT;
 			nexus_event_data.msg_error.task	= task;
 
-			xio_set_error(ENOMSG); /* special error for connection */
-                        retval = -ENOMSG;
+			/* special error for connection */
+			xio_set_error(ENOMSG);
+			retval = -ENOMSG;
 
 			xio_observable_notify_any_observer(
 					&nexus->observable,
@@ -2311,7 +2326,6 @@ int xio_nexus_query(struct xio_nexus *nexus,
 	int			   tattr_mask = 0, retval;
 	struct xio_transport_attr tattr;
 
-
 	if (!nexus->transport->modify)
 		goto not_supported;
 
@@ -2323,7 +2337,7 @@ int xio_nexus_query(struct xio_nexus *nexus,
 		goto not_supported;
 
 	retval = nexus->transport->query(nexus->transport_hndl,
-				         &tattr, tattr_mask);
+					 &tattr, tattr_mask);
 	if (retval)
 		return -1;
 
@@ -2464,6 +2478,10 @@ static void xio_nexus_client_reconnect_failed(void *data)
 	struct xio_nexus *nexus = (struct xio_nexus *)data;
 	int retval;
 
+	retval = xio_nexus_prep_new_transport(nexus);
+	if (retval != 0)
+		ERROR_LOG("prep new transport failed\n");
+
 	/* Failed to reconnect (connect was called) */
 	if (nexus->reconnect_retries) {
 		nexus->reconnect_retries--;
@@ -2498,7 +2516,7 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 	if (nexus->state != XIO_NEXUS_STATE_CONNECTED)
 		return -1;
 
-	if (nexus->transport->dup2 == NULL)
+	if (!nexus->transport->dup2)
 		return -1;
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
@@ -2531,7 +2549,7 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task)
 {
 	/* transport may not need to update tasks */
-	if (nexus->transport->update_task == NULL)
+	if (!nexus->transport->update_task)
 		return 0;
 
 	if (nexus->transport->update_task(nexus->transport_hndl, task))
@@ -2541,13 +2559,25 @@ int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task)
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_update_rkey						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_update_rkey(struct xio_nexus *nexus,
+			  uint32_t *rkey)
+{
+	if (!nexus->transport->update_rkey)
+		return 0;
+
+	if (nexus->transport->update_rkey(nexus->transport_hndl, rkey))
+		return -1;
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_nexus_set_server(struct xio_nexus *nexus,
-				 struct xio_server *server)
+void xio_nexus_set_server(struct xio_nexus *nexus, struct xio_server *server)
 {
 	nexus->server = server;
 	if (server)
 		xio_server_reg_observer(server, &nexus->srv_observer);
 }
-

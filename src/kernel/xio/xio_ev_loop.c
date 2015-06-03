@@ -50,6 +50,7 @@
 #include "xio_common.h"
 #include "xio_ev_data.h"
 #include "xio_ev_loop.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 
@@ -91,7 +92,7 @@ void *xio_ev_loop_init(unsigned long flags, struct xio_context *ctx,
 	char queue_name[64];
 
 	loop = kzalloc(sizeof(*loop), GFP_KERNEL);
-	if (loop == NULL) {
+	if (!loop) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kmalloc failed. %m\n");
 		goto cleanup0;
@@ -170,7 +171,7 @@ void xio_ev_loop_destroy(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = (struct xio_ev_loop *)loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	if (test_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states)) {
@@ -322,12 +323,11 @@ static int priv_ev_add_workqueue(void *loop_hndl, struct xio_ev_data *event)
 		return 0;
 	}
 
-	event->work.func = priv_ev_loop_run_work;
+	INIT_WORK(&event->work, priv_ev_loop_run_work);
 	queue_work_on(loop->ctx->cpuid, loop->workqueue, &event->work);
 
 	return 0;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* priv_ev_loop_run_thread						     */
@@ -386,7 +386,7 @@ retry_dont_wait:
 			set_bit(XIO_EV_LOOP_IN_HANDLER, &loop->states);
 			clear_bit(XIO_EV_HANDLER_PENDING, &tev->states);
 			if (time_after(jiffies, start_time)) {
-				schedule();
+				/* schedule(); todo need to understand better */
 				start_time = jiffies;
 			}
 			if (test_bit(XIO_EV_HANDLER_ENABLED, &tev->states))
@@ -423,8 +423,6 @@ stopped:
 	if (test_bit(XIO_EV_LOOP_DOWN, &loop->states))
 		complete(&loop->complete);
 	clear_bit(XIO_EV_LOOP_ACTIVE, &loop->states);
-
-	return;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -485,7 +483,7 @@ int priv_ev_loop_run(void *loop_hndl)
 
 	switch (loop->flags) {
 	case XIO_LOOP_GIVEN_THREAD:
-		if (loop->ctx->worker != (uint64_t) get_current()) {
+		if (loop->ctx->worker != (uint64_t)get_current()) {
 			ERROR_LOG("worker kthread(%p) is not current(%p).\n",
 				  (void *)loop->ctx->worker, get_current());
 			goto cleanup0;
@@ -516,7 +514,7 @@ int priv_ev_loop_run(void *loop_hndl)
 						  ev_llist);
 				node = llist_next(node);
 				loop->first = node;
-				tev->work.func = priv_ev_loop_run_work;
+				INIT_WORK(&tev->work, priv_ev_loop_run_work);
 				queue_work_on(loop->ctx->cpuid, loop->workqueue,
 					      &tev->work);
 			}
@@ -541,7 +539,7 @@ void priv_ev_loop_stop(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
@@ -554,7 +552,7 @@ void priv_ev_loop_stop_thread(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return;
 
 	set_bit(XIO_EV_LOOP_STOP, &loop->states);
@@ -569,7 +567,7 @@ int priv_ev_is_loop_stopping(void *loop_hndl)
 {
 	struct xio_ev_loop *loop = loop_hndl;
 
-	if (loop == NULL)
+	if (!loop)
 		return 0;
 
 	return test_bit(XIO_EV_LOOP_STOP, &loop->states);

@@ -57,13 +57,11 @@ enum xio_connection_state {
 #define		SEND_ACK	0x0001
 #define		SEND_FIN	0x0002
 
-
 struct xio_transition {
 	int				valid;
 	enum xio_connection_state	next_state;
 	int				send_flags;
 };
-
 
 struct xio_connection {
 	struct xio_nexus		*nexus;
@@ -76,36 +74,43 @@ struct xio_connection {
 	uint16_t			req_sn;
 	uint16_t			req_exp_sn;
 	uint16_t			req_ack_sn;
+
 	uint16_t			rsp_sn;
 	uint16_t			rsp_exp_sn;
 	uint16_t			rsp_ack_sn;
 	uint16_t			credits_msgs;
+
 	uint16_t			peer_credits_msgs;
 	uint16_t			rx_queue_watermark_msgs;
 	uint16_t			conn_idx;
 	uint16_t			state;
+
 	uint16_t			fin_req_timeout;
 	uint16_t			disable_notify;
 	uint16_t			disconnecting;
+	uint16_t			restarted;
+
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
+	uint16_t			cd_bit;  /*close disconnect bit */
 	uint16_t			pad;
+
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
 	struct kref			kref;
+	uint32_t			pad2;
 
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;
 	struct xio_msg_list		in_flight_reqs_msgq;
 	struct xio_msg_list		in_flight_rsps_msgq;
 
-	struct xio_msg			*msg_array;
-	struct xio_msg_list		one_way_msg_pool;
 	xio_work_handle_t		hello_work;
 	xio_work_handle_t		fin_work;
 	xio_delayed_work_handle_t	fin_delayed_work;
 	xio_delayed_work_handle_t	fin_timeout_work;
 
+	struct list_head		managed_rkey_list;
 	struct list_head		io_tasks_list;
 	struct list_head		post_io_tasks_list;
 	struct list_head		pre_send_list;
@@ -121,6 +126,8 @@ struct xio_connection {
 
 	uint32_t			nexus_attr_mask;
 	struct xio_nexus_init_attr	nexus_attr;
+
+	xio_work_handle_t		teardown_work;
 
 #ifdef XIO_SESSION_DEBUG
 	uint64_t			peer_connection;
@@ -241,5 +248,10 @@ int xio_on_credits_ack_send_comp(struct xio_connection *connection,
 int xio_on_credits_ack_recv(struct xio_connection *connection,
 			    struct xio_task *task);
 
-#endif /*XIO_CONNECTION_H */
+const struct xio_transport_base *xio_req_to_transport_base(
+	const struct xio_msg *req);
 
+int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
+			 void *optval, int *optlen);
+
+#endif /*XIO_CONNECTION_H */

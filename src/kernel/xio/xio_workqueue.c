@@ -49,6 +49,7 @@
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue_priv.h"
 #include "xio_observer.h"
 #include "xio_ev_loop.h"
@@ -70,7 +71,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	char queue_name[64];
 
 	workqueue = kmalloc(sizeof(*workqueue), GFP_KERNEL);
-	if (workqueue == NULL) {
+	if (!workqueue) {
 		ERROR_LOG("kmalloc failed.\n");
 		return NULL;
 	}
@@ -117,6 +118,7 @@ static void xio_ev_callback(void *user_context)
 {
 	int deleted = 0;
 	struct xio_uwork *uwork = user_context;
+	int try_destroy = 0;
 
 	set_bit(XIO_WORK_RUNNING, &uwork->flags);
 	if (test_bit(XIO_WORK_CANCELED, &uwork->flags)) {
@@ -140,9 +142,12 @@ static void xio_ev_callback(void *user_context)
 		if (deleted)
 			return;
 		clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+		try_destroy = !!uwork->destructor;
 	}
 	clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 	complete(&uwork->complete);
+	if (try_destroy)
+		uwork->destructor(uwork->destructor_data);
 }
 
 static void xio_uwork_add_event(struct xio_uwork *uwork)
@@ -161,8 +166,6 @@ static void xio_uwork_add_event(struct xio_uwork *uwork)
 	ev_data->data    = uwork;
 
 	xio_context_add_event(uwork->ctx, ev_data);
-
-	return;
 }
 
 static void xio_dwork_callback(struct work_struct *workp)
@@ -206,7 +209,6 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			clear_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
 			clear_bit(XIO_WORK_RUNNING, &uwork->flags);
 			*uwork->deleted = 1;
-			return -1;
 		} else {
 			/* It is O.K. to arm a work and then to cancel it but
 			 * waiting for it will create a lockout situation.
@@ -229,8 +231,8 @@ static int xio_workqueue_del_uwork2(struct xio_workqueue *workqueue,
 			 * containing a work, e.g. nexus, connection, ...
 			 */
 			xio_context_disable_event(&uwork->ev_data);
-			return 0;
 		}
+		return 0;
 	}
 
 	/* work may be on event handler */
@@ -420,3 +422,31 @@ int xio_workqueue_add_work(struct xio_workqueue *workqueue,
 
 	return 0;
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_set_work_destructor					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_set_work_destructor(struct xio_workqueue *work_queue,
+				      void *data,
+				      void (*destructor)(void *data),
+				      xio_work_handle_t *work)
+{
+	struct xio_uwork *uwork = &work->uwork;
+
+	uwork->destructor	= destructor;
+	uwork->destructor_data	= data;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_is_work_in_hanlder					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_is_work_in_handler(struct xio_workqueue *work_queue,
+				     xio_work_handle_t *work)
+{
+	struct xio_uwork *uwork = &work->uwork;
+
+	return test_bit(XIO_WORK_IN_HANDLER, &uwork->flags);
+}
+

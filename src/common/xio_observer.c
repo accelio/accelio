@@ -35,11 +35,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <libxio.h>
 #include <xio_os.h>
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_observer_create							     */
@@ -50,7 +51,7 @@ struct xio_observer *xio_observer_create(void *impl, notify_fn_t notify)
 
 	observer = (struct xio_observer *)
 			kcalloc(1, sizeof(struct xio_observer), GFP_KERNEL);
-	if (observer == NULL) {
+	if (!observer) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -81,7 +82,7 @@ struct xio_observable *xio_observable_create(void *impl)
 
 	observable = (struct xio_observable *)
 			kcalloc(1, sizeof(struct xio_observable), GFP_KERNEL);
-	if (observable == NULL) {
+	if (!observable) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -151,7 +152,7 @@ void xio_observable_reg_observer(struct xio_observable *observable,
 
 	observer_node = (struct xio_observer_node *)kcalloc(1,
 				sizeof(struct xio_observer_node), GFP_KERNEL);
-	if (observer_node == NULL) {
+	if (!observer_node) {
 		xio_set_error(ENOMEM);
 		return;
 	}
@@ -174,7 +175,6 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 				   struct xio_observer *observer)
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
-
 
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
@@ -202,7 +202,7 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 		observer->notify(observer->impl, observable->impl,
 				 event, event_data);
 	else
-		DEBUG_LOG("spurious notification" \
+		DEBUG_LOG("spurious notification " \
 			  "observable:%p, observer:%p\n",
 			  observable, observer);
 }

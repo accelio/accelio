@@ -38,7 +38,6 @@
 #ifndef XIO_EV_LOOP_H
 #define XIO_EV_LOOP_H
 
-
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */
 /*									     */
@@ -100,7 +99,7 @@ int xio_ev_loop_is_stopping(void *loop_hndl);
  *
  * @param[in] loop		Pointer to event loop
  */
-void xio_ev_loop_destroy(void **loop);
+void xio_ev_loop_destroy(void *loop);
 
 /**
  * add event handlers on dispatcher
@@ -142,30 +141,39 @@ int xio_ev_loop_modify(void *loop_hndl, int fd, int events);
 int xio_ev_loop_del(void *loop, int fd);
 
 /**
- * get loop poll parameters to assign to external dispatcher
+ * get context poll fd, which can be later passed to an external dispatcher
  *
- * @param[in] loop	  the dispatcher context
- * @param[in] poll_params Structure with polling parameters
- *			  to be added to external dispatcher
+ * @param[in] loop	the dispatcher context
  *
- * @returns success (0), or a (negative) error value
+ * @return fd (non-negative) on success, or -1 on error. If an error occurs,
+ *         call xio_errno function to get the failure reason.
  */
-int xio_ev_loop_get_poll_params(void *loop,
-				struct xio_poll_params *poll_params);
+int xio_ev_loop_get_poll_fd(void *loop);
 
 /**
- * initialize event job
+ * poll for events for a specified (possibly infinite) amount of time;
  *
- * @param[in] evt	  the scheduled event data
- * @param[in] sched_handler callback function to call when event
- *			  is scheduled
- * @param[in] data	  user private data to pass to callback
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are invoked until the first
+ * successful polling attempt is made;
  *
- * @returns none
+ * all events which became pending till then are handled and the user callbacks
+ * are called as appropriate for those events; then the functions exits
+ *
+ * the number of actual events handled originated by any source of events is
+ * guaranteed to be limited
+ *
+ * @param[in] loop		Pointer to the xio loop handle
+ * @param[in] timeout_ms	number of milliseconds to wait before exiting,
+ *				with or without events handled
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: wait for at least a single event
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
-void xio_ev_loop_init_event(struct xio_ev_data *evt,
-			    xio_event_handler_t event_handler,
-			    void *data);
+int xio_ev_loop_poll_wait(void *loop, int timeout_ms);
 
 /**
  * add event job to scheduled events queue
@@ -181,13 +189,20 @@ void xio_ev_loop_add_event(void *loop,
 /**
  * remove event from events queue
  *
- * @param[in] loop	  the dispatcher context
  * @param[in] evt	  the scheduled event data
  *
  * @returns none
  */
-void xio_ev_loop_remove_event(void *loop,
-			      struct xio_ev_data *evt);
+void xio_ev_loop_remove_event(struct xio_ev_data *evt);
+
+/**
+ * check whether event is pending
+ *
+ * @param[in] evt	  the event data
+ *
+ * @returns 1 if pending, 0 if not pending
+ */
+int xio_ev_loop_is_pending_event(struct xio_ev_data *evt);
 
 #endif
 

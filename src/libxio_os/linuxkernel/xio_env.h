@@ -38,13 +38,11 @@
 #ifndef XIO_ENV_H
 #define XIO_ENV_H
 
-
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/
 /*---------------------------------------------------------------------------*/
-#define PACKED_MEMORY( __Declaration__ ) \
-		__Declaration__ __attribute__((__packed__))
-
+#define PACKED_MEMORY(__declaration__) \
+		__declaration__ __attribute__((__packed__))
 
 /*---------------------------------------------------------------------------*/
 #define inc_ptr(_ptr, inc)  ((_ptr) += (inc))
@@ -61,6 +59,9 @@
 	__sync_fetch_and_add((ptr), (value))
 
 /*---------------------------------------------------------------------------*/
+#define XIO_F_ALWAYS_INLINE inline __attribute__ ((always_inline))
+
+/*---------------------------------------------------------------------------*/
 /*-------------------- Socket related things --------------------------------*/
 /*---------------------------------------------------------------------------*/
 #define INVALID_SOCKET (-1)
@@ -70,6 +71,6 @@
 #define XIO_WOULDBLOCK		EWOULDBLOCK /* recv    on non-blocking socket */
 #define XIO_ECONNABORTED	ECONNABORTED
 #define XIO_ECONNRESET		ECONNRESET
-
+#define XIO_ECONNREFUSED        ECONNREFUSED
 
 #endif /* XIO_ENV_H */

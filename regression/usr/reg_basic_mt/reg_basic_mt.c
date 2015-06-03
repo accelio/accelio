@@ -85,22 +85,28 @@ void rand_params(struct program_vars *vars)
 	int max_dlen;
 	int max_qdepth;
 	int client_threads_num;
+	int cpus;
 
 	time((time_t *)&vars->seed);
+
+	cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	if (cpus > 16)
+		cpus = 16;
+
 	/*
-	vars->test_num = 1;
-	vars->seed = 1393651986;
+	vars->test_num = 0;
+	vars->seed = 1424589915;
 	*/
 	srandom(vars->seed);
 
 	do {
-		var = random() % 10;
+		var = random() % cpus;
 	} while (var == 0);
 	sprintf(vars->server_threads_num, "%d", var);
 
 	/* threads number [1,24] */
 	do {
-		var = random() % 10;
+		var = random() % cpus;
 	} while (var == 0);
 	client_threads_num = var;
 	sprintf(vars->client_threads_num, "%d", client_threads_num);

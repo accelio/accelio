@@ -44,6 +44,7 @@
 #ifndef XIO_API_H
 #define XIO_API_H
 
+#include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "xio_predefs.h"
@@ -53,6 +54,19 @@
 extern "C" {
 #endif
 
+/**
+ * @struct xio_reg_mem
+ * @brief registered memory buffer descriptor
+ *        used by all allocation and registration methods
+ *        it's the user responsibility to save allocation type and use an
+ *        appropriate free method appropriately
+ */
+struct xio_reg_mem {
+	void		*addr;		/**< buffer's memory address	     */
+	size_t		length;		/**< buffer's memory length	     */
+	struct xio_mr	*mr;		/**< xio specific memory region	     */
+	void		*priv;		/**< xio private data		     */
+};
 
 /*---------------------------------------------------------------------------*/
 /* message data type							     */
@@ -100,7 +114,7 @@ struct xio_sg_iovptr {
  */
 struct xio_vmsg {
 	struct xio_iovec		header;	    /**< header's io vector  */
-	enum xio_sgl_type		sgl_type;   /**< @ref xio_sgl_type   */
+	enum xio_sgl_type		sgl_type;   /**< sg list type enum   */
 	int				pad;	    /**< padding	     */
 	/**< union for different scatter gather representations		     */
 	union {
@@ -118,9 +132,6 @@ struct xio_vmsg {
  * peer.
  */
 struct xio_msg {
-	struct xio_vmsg		in;		/**< incoming side of message */
-	struct xio_vmsg		out;		/**< outgoing side of message */
-
 	union {
 		uint64_t		sn;	/**< unique message serial    */
 						/**< number returned by the   */
@@ -129,18 +140,22 @@ struct xio_msg {
 		struct xio_msg		*request;  /**< responder - attached  */
 						   /**< the request           */
 	};
+	struct xio_vmsg		in;		/**< incoming side of message */
+	struct xio_vmsg		out;		/**< outgoing side of message */
+	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
+
 	void			*user_context;	/**< private user data        */
 						/**< not sent to the peer     */
-
 	enum xio_msg_type	type;		/**< message type	      */
 	enum xio_receipt_result	receipt_res;    /**< the receipt result if    */
 	uint64_t		flags;		/**< message flags mask       */
 	uint64_t		timestamp;	/**< submission timestamp     */
+	uint64_t		hints;		/**< hints flags from library */
+						/**< to application	      */
 
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /**< send list of messages    */
 };
-
 
 /**
  *  helper macros to iterate over scatter lists
@@ -157,7 +172,59 @@ struct xio_msg {
 #define vmsg_sglist_set_nents(vmsg, n)				\
 		 (vmsg)->data_tbl.nents = (n)
 
+static inline void vmsg_sglist_set_by_reg_mem(struct xio_vmsg *vmsg,
+					      const struct xio_reg_mem *reg_mem)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
 
+	vmsg_sglist_set_nents(vmsg, 1);
+	sgl[0].iov_base = reg_mem->addr;
+	sgl[0].iov_len = reg_mem->length;
+	sgl[0].mr = reg_mem->mr;
+}
+
+static inline void *vmsg_sglist_one_base(const struct xio_vmsg *vmsg)
+{
+	const struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+	return sgl[0].iov_base;
+}
+
+static inline size_t vmsg_sglist_one_len(const struct xio_vmsg *vmsg)
+{
+	const struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
+	return sgl[0].iov_len;
+}
+
+static inline void vmsg_sglist_set_user_context(struct xio_vmsg *vmsg,
+						void *user_context)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
+	sgl[0].user_context = user_context;
+}
+
+static inline void *vmsg_sglist_get_user_context(struct xio_vmsg *vmsg)
+{
+	struct xio_iovec_ex *sgl = vmsg_sglist(vmsg);
+
+	return sgl[0].user_context;
+}
+
+static inline int xio_init_vmsg(struct xio_vmsg *vmsg, unsigned int nents)
+{
+	vmsg->sgl_type = XIO_SGL_TYPE_IOV;
+	return 0;
+}
+
+static inline void xio_fini_vmsg(struct xio_vmsg *vmsg)
+{
+}
+
+static inline void xio_reinit_msg(struct xio_msg *msg)
+{
+	memset(msg, 0, sizeof(*msg));
+}
 
 /*---------------------------------------------------------------------------*/
 /* XIO context API							     */
@@ -169,17 +236,53 @@ struct xio_msg {
 #define XIO_INFINITE			-1
 
 /**
+ * @struct xio_context_params
+ * @brief context creation parameters structure
+ */
+struct xio_context_params {
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< oriented callbacks      */
+	int			prealloc_pools; /**< pre allocate  rdma only */
+						/**< internal pools	     */
+	int			reserved;	/**< reserved for future use */
+};
+
+/**
+ * creates xio context - a context object represent concurrency unit
+ *
+ * @param[in] ctx_params: context creation parameters (can be NULL)
+ * @param[in] polling_timeout_us: Polling timeout in microsecs - 0 ignore
+ * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
+ *
+ * @return xio context handle, or NULL upon error
+ */
+struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
+				       int polling_timeout_us,
+				       int cpu_hint);
+
+/**
+ * get context poll fd, which can be later passed to an external dispatcher
+ *
+ * @param[in] ctx	  The xio context handle
+ *
+ * @return fd (non-negative) on success, or -1 on error. If an error occurs,
+ *         call xio_errno function to get the failure reason.
+ */
+int xio_context_get_poll_fd(struct xio_context *ctx);
+
+/**
  * @enum xio_ev_loop_events
  * @brief accelio's event dispatcher event types
  */
 enum xio_ev_loop_events {
-	XIO_POLLIN			= (1<<0),
-	XIO_POLLOUT			= (1<<1),
-	XIO_POLLET			= (1<<2),  /**< edge-triggered poll */
-	XIO_ONESHOT			= (1<<3),
-	XIO_POLLRDHUP			= (1<<4),
-	XIO_POLLHUP                     = (1<<5),
-	XIO_POLLERR                     = (1<<6),
+	XIO_POLLIN			= (1 << 0),
+	XIO_POLLOUT			= (1 << 1),
+	XIO_POLLET			= (1 << 2),  /**< edge-triggered poll */
+	XIO_ONESHOT			= (1 << 3),
+	XIO_POLLRDHUP			= (1 << 4),
+	XIO_POLLHUP                     = (1 << 5),
+	XIO_POLLERR                     = (1 << 6),
 };
 
 /**
@@ -193,45 +296,6 @@ enum xio_ev_loop_events {
 typedef void (*xio_ev_handler_t)(int fd, int events, void *data);
 
 /**
- * @struct xio_poll_params
- * @brief  polling parameters to be used by external dispatcher
- */
-struct xio_poll_params {
-	int			fd;	 /**< the descriptor	              */
-	int			events;	 /**< the types of signals as defined */
-					 /**< in enum xio_ev_loop_events      */
-	xio_ev_handler_t	handler; /**< event handler that handles the  */
-					 /**< event                           */
-	void			*data;	 /**< user private data provided to   */
-					 /**< the handler                     */
-};
-
-/**
- * creates xio context - a context object represent concurrency unit
- *
- * @param[in] ctx_attr context attributes
- * @param[in] polling_timeout_us Polling timeout in microsecs - 0 ignore
- * @param[in] cpu_hint: -1 - don't care, n - core on which the cpu is bounded
- *
- * @returns xio context handle, or NULL upon error
- */
-struct xio_context *xio_context_create(struct xio_context_attr *ctx_attr,
-				       int polling_timeout_us,
-				       int cpu_hint);
-
-/**
- * get context poll parameters to assign to external dispatcher
- *
- * @param[in] ctx	  The xio context handle
- * @param[in] poll_params Structure with polling parameters
- *			  to be added to external dispatcher
- *
- * @returns success (0), or a (negative) error value
- */
-int xio_context_get_poll_params(struct xio_context *ctx,
-				struct xio_poll_params *poll_params);
-
-/**
  * add external fd to be used by internal dispatcher
  *
  * @param[in] ctx	  The xio context handle
@@ -241,7 +305,8 @@ int xio_context_get_poll_params(struct xio_context *ctx,
  * @param[in] handler	event handler that handles the event
  * @param[in] data	user private data
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_add_ev_handler(struct xio_context *ctx,
 			       int fd, int events,
@@ -254,21 +319,31 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
  * @param[in] ctx	The xio context handle
  * @param[in] fd	the file descriptor
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_del_ev_handler(struct xio_context *ctx,
 			       int fd);
 
 /**
- * closes the xio context and free its resources
+ * run event loop for a specified (possibly infinite) amount of time;
+ *
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are continuously invoked
+ * until either the specified timeout period expires or the loop is stopped;
+ *
+ * all events which become pending during that time are handled and the user
+ * callbacks are called as appropriate for those events
  *
  * @param[in] ctx		Pointer to the xio context handle
- * @param[in] timeout_ms	The timeout argument specifies the minimum
- *				number of milliseconds that
- *				xio_context_loop_run will block
- *				before exiting
+ * @param[in] timeout_ms	number of milliseconds to run the loop
+ *				before exiting, if not stopped.
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: run continuously until stopped
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 
@@ -280,24 +355,30 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms);
 void xio_context_stop_loop(struct xio_context *ctx);
 
 /**
- * attempts to read at least min_nr events and up to nr events
- * from the completion queue associated with connection conn
+ * poll for events for a specified (possibly infinite) amount of time;
  *
+ * this function relies on polling and waiting mechanisms applied to all file
+ * descriptors and other event signaling resources (e.g. hw event queues)
+ * associated with the context; these mechanisms are invoked until the first
+ * successful polling attempt is made;
  *
- * @param[in] conn	The xio connection handle
- * @param[in] min_nr	read at least min_nr events
- * @param[in] nr	read no more then nr events
- * @param[in] timeout   specifies the amount of time to wait for events,
- *			where a NULL timeout waits until at least min_nr
- *			events have been seen.
+ * all events which became pending till then are handled and the user callbacks
+ * are called as appropriate for those events; then the functions exits
  *
- * @returns On success,  xio_poll_completions() returns the number of events
- *	    read: 0 if no events are available, or less than min_nr if the
- *	    timeout has elapsed.  the failure return -1.
+ * the number of actual events handled originated by any source of events is
+ * guaranteed to be limited
+ *
+ * @param[in] ctx		Pointer to the xio context handle
+ * @param[in] timeout_ms	number of milliseconds to wait before exiting,
+ *				with or without events handled
+ *				0 : just poll instantly, don't wait
+ *				XIO_INFINITE: wait for at least a single event
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
-int xio_poll_completions(struct xio_connection *conn,
-			 long min_nr, long nr,
-			 struct timespec *timeout);
+int xio_context_poll_wait(struct xio_context *ctx, int timeout_ms);
+
 
 /*---------------------------------------------------------------------------*/
 /* library initialization routines					     */
@@ -320,61 +401,78 @@ void xio_init(void);
 void xio_shutdown(void);
 
 /*---------------------------------------------------------------------------*/
-/* Memory registration API                                                   */
+/* Memory registration/allocation API					     */
 /*---------------------------------------------------------------------------*/
 /**
- * register memory region for RDMA operations
+ * register pre allocated memory for RDMA operations
  *
- * @param[in]	buf	Pre-allocated memory aimed to store the data
- * @param[in]   len	The pre allocated memory length
+ * @param[in] addr	buffer's memory address
+ * @param[in] length	buffer's memory length
+ * @param[out] reg_mem	registered memory data structure
  *
- * @returns pointer to memory region opaque structure
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
-struct xio_mr *xio_reg_mr(void *buf, size_t len);
+int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * unregister registered memory region
+ * unregister registered memory region, create by @ref xio_mem_register
  *
- * @param[in,out] p_mr Pointer to registered memory region handle
+ * @param[in,out] reg_mem - previously registered memory data structure.
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
-int xio_dereg_mr(struct xio_mr **p_mr);
-
-/*---------------------------------------------------------------------------*/
-/* Memory allocators API						     */
-/*---------------------------------------------------------------------------*/
-/**
- * allocates and register memory region for RDMA operations
- *
- * @param[in] len	The required memory length
- *
- * @returns pointer to memory buffer
- */
-struct xio_buf *xio_alloc(size_t len);
+int xio_mem_dereg(struct xio_reg_mem *reg_mem);
 
 /**
- * free and unregister registered memory region
+ * extract the rkey of the registered message assisting the
+ * arrived request
  *
- * @param[in] buf	Pointer to the allocated buffer
+ * @param[in] reg_mem	registered memory data structure
+ * @param[in] req	the incoming request.
  *
- * @returns success (0), or a (negative) error value
+ * @return rkey of the registered memory
  */
-int xio_free(struct xio_buf **buf);
+uint32_t xio_lookup_rkey_by_request(const struct xio_reg_mem *reg_mem,
+				    const struct xio_msg *req);
+
+/**
+ * extract the rkey of the registered message assisting the
+ * arrived response
+ *
+ * @param[in] reg_mem	registered memory data structure
+ * @param[in] rsp	the incoming response.
+ *
+ * @return rkey of the registered memory
+ */
+uint32_t xio_lookup_rkey_by_response(const struct xio_reg_mem *reg_mem,
+				     const struct xio_msg *rsp);
+
+/**
+ * allocate and register memory for RDMA operations
+ *
+ * @param[in] length	length of required buffer memory.
+ * @param[out] reg_mem	registered memory data structure
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem);
+
+/**
+ * free registered memory region, create by @ref xio_mem_alloc
+ *
+ * @param[in,out] reg_mem - previously registered memory data structure.
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_mem_free(struct xio_reg_mem *reg_mem);
 
 /*---------------------------------------------------------------------------*/
 /* XIO memory pool API							     */
 /*---------------------------------------------------------------------------*/
-/**
- * @struct xio_mempool_obj
- * @brief mempool object item
- */
-struct xio_mempool_obj {
-	void		*addr;		/**< allocated address		     */
-	size_t		length;		/**< allocted  length		     */
-	struct xio_mr	*mr;		/**< memory region		     */
-	void		*cache;		/**< private cache - xio internal    */
-};
 
 /**
  * @enum xio_mempool_flag
@@ -392,7 +490,6 @@ enum xio_mempool_flag {
 	XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB	= 0x0016
 };
 
-
 /**
  * create mempool with NO (!) slabs
  *
@@ -400,18 +497,9 @@ enum xio_mempool_flag {
  * @param[in] flags	  mask of mempool creation flags
  *			  defined (@ref xio_mempool_flag)
  *
- * @returns success (0), or a (negative) error value
+ * @return pointer to xio_mempool object or NULL upon failure
  */
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
-
-/* for backward compatibility - shall be deprecated in the future */
-
-/**
- * create mempool with NO (!) slabs
- *
- * for backward compatibility - shall be deprecated in the future
- */
-#define xio_mempool_create_ex	xio_mempool_create
 
 /**
  * add a slab to current set (setup only)
@@ -421,20 +509,17 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
  * @param[in] min	  initial buffers to allocate
  * @param[in] max	  maximum buffers to allocate
  * @param[in] alloc_quantum_nr	growing quantum
+ * @param[in] alignment	  if not 0, the address of the allocated
+ *			  memory will be a multiple of alignment, which
+ *			  must be a power of two and a multiple
+ *			  of sizeof(void *)
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mempool_add_slab(struct xio_mempool *mpool,
 			 size_t size, size_t min, size_t max,
-			 size_t alloc_quantum_nr);
-
-/**
- * add a slab to current set (setup only)
- *
- * for backward compatibility - shall be deprecated in the future
- */
-#define xio_mempool_add_allocator xio_mempool_add_slab
-
+			 size_t alloc_quantum_nr, int alignment);
 
 /**
  * destroy memory pool
@@ -445,30 +530,28 @@ int xio_mempool_add_slab(struct xio_mempool *mpool,
 void xio_mempool_destroy(struct xio_mempool *mpool);
 
 /**
- * allocate mempool object from memory pool
+ * allocate memory buffer from memory pool
  *
  * @param[in] mpool	  the memory pool
  * @param[in] length	  buffer size to allocate
- * @param[in] mp_obj	  the allocated mempool object
+ * @param[in] reg_mem	  registered memory data structure
  *
- * @returns success (0), or a (negative) error value
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
  */
 int xio_mempool_alloc(struct xio_mempool *mpool,
-		      size_t length, struct xio_mempool_obj *mp_obj);
+		      size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * free mempool object back to memory pool
+ * free memory buffer back to memory pool
  *
- * @param[in] mp_obj	  the allocated mempool object
+ * @param[in] reg_mem	  registered memory data structure
  *
  */
-void xio_mempool_free(struct xio_mempool_obj *mp_obj);
-
+void xio_mempool_free(struct xio_reg_mem *reg_mem);
 
 #ifdef __cplusplus
 }
 #endif
 
-
 #endif /*XIO_API_H */
-

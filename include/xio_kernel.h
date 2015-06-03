@@ -49,6 +49,16 @@
 #define DRV_VERSION "0.1"
 #define DRV_RELDATE "2013-Oct-01"
 
+/**
+ * @struct xio_reg_mem
+ * @brief registered memory buffer descriptor
+ *        (Compatibility with user mode)
+ */
+struct xio_reg_mem {
+	void		*addr;		/**< buffer's memory address	     */
+	size_t		length;		/**< buffer's memory length	     */
+};
+
 /*---------------------------------------------------------------------------*/
 /* message data type							     */
 /*---------------------------------------------------------------------------*/
@@ -95,12 +105,7 @@ struct xio_vmsg {
 	struct xio_iovec	header;	    /**< header's io vector  */
 	enum xio_sgl_type	sgl_type;
 	int			pad;
-	/* Only sg_table is used in the kernel other are ignored!!!*/
-	union {
-		struct xio_sg_iov	data_iov;   /**< iov vector	     */
-		struct xio_sg_iovptr	pdata_iov;  /**< iov pointer	     */
-		struct sg_table		data_tbl;   /**< data table	     */
-	};
+	struct sg_table		data_tbl;   /**< data table	     */
 	void			*user_context;	/**< private user data */
 };
 
@@ -112,8 +117,6 @@ struct xio_vmsg {
  * peer.
  */
 struct xio_msg {
-	struct xio_vmsg		in;
-	struct xio_vmsg		out;
 	union {
 		uint64_t		sn;	/* unique message serial number
 						 * returned by the library
@@ -122,17 +125,94 @@ struct xio_msg {
 						    * request
 						    */
 	};
+	struct xio_vmsg		in;		/**< incoming side of message */
+	struct xio_vmsg		out;
+	struct xio_rdma_msg	rdma;		/**< RDMA source/target       */
 	void			*user_context;	/* for user usage - not sent */
 
 	enum xio_msg_type	type;
 	enum xio_receipt_result	receipt_res;
 	uint64_t		flags;
 	uint64_t		timestamp;	/**< submission timestamp     */
+	uint64_t		hints;		/**< hints flags from library */
+						/**< to application	      */
 
 	struct xio_msg_pdata	pdata;		/**< accelio private data     */
 	struct xio_msg		*next;          /* internal use */
 };
 
+#define vmsg_sglist_nents(vmsg)					\
+		 (vmsg)->data_tbl.nents
+
+#define vmsg_sglist_set_nents(vmsg, n)				\
+		 (vmsg)->data_tbl.nents = (n)
+
+static inline void vmsg_sglist_set_by_reg_mem(struct xio_vmsg *vmsg,
+					      const struct xio_reg_mem *reg_mem)
+{
+	BUG_ON(vmsg->sgl_type != XIO_SGL_TYPE_SCATTERLIST);
+	vmsg_sglist_set_nents(vmsg, 1);
+	sg_init_one(vmsg->data_tbl.sgl, reg_mem->addr, reg_mem->length);
+}
+
+static inline void *vmsg_sglist_one_base(const struct xio_vmsg *vmsg)
+{
+	struct scatterlist *sg = vmsg->data_tbl.sgl;
+
+	return sg_virt(sg);
+}
+
+static inline size_t vmsg_sglist_one_len(const struct xio_vmsg *vmsg)
+{
+	const struct scatterlist *sg = vmsg->data_tbl.sgl;
+
+	return sg->length;
+}
+
+static inline void vmsg_sglist_set_user_context(struct xio_vmsg *vmsg,
+						void *user_context)
+{
+	vmsg->user_context = user_context;
+}
+
+static inline void *vmsg_sglist_get_user_context(struct xio_vmsg *vmsg)
+{
+	return vmsg->user_context;
+}
+
+static inline int xio_init_vmsg(struct xio_vmsg *vmsg, unsigned int nents)
+{
+	int ret;
+
+	vmsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+	ret = sg_alloc_table(&vmsg->data_tbl, nents, GFP_KERNEL);
+	vmsg_sglist_set_nents(vmsg, 0);
+
+	return ret;
+}
+
+static inline void xio_fini_vmsg(struct xio_vmsg *vmsg)
+{
+	sg_free_table(&vmsg->data_tbl);
+}
+
+static inline void xio_init_vmsg_from_sg_table(struct xio_vmsg *vmsg,
+					       const struct sg_table *tbl)
+{
+	vmsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
+	vmsg->data_tbl = *tbl;
+	vmsg_sglist_set_nents(vmsg, 0);
+}
+
+static inline void xio_reinit_msg(struct xio_msg *msg)
+{
+	const struct sg_table in_tbl = msg->in.data_tbl;
+	const struct sg_table out_tbl = msg->out.data_tbl;
+
+	memset(msg, 0, sizeof(*msg));
+	xio_init_vmsg_from_sg_table(&msg->in, &in_tbl);
+	xio_init_vmsg_from_sg_table(&msg->out, &out_tbl);
+}
 
 /*---------------------------------------------------------------------------*/
 /* XIO context API							     */
@@ -157,7 +237,7 @@ struct xio_ev_data {
 		struct llist_node  ev_llist;
 		struct work_struct work;
 	};
-	volatile long unsigned int states; /* xio private data */
+	volatile unsigned long int states; /* xio private data */
 };
 
 /**
@@ -171,26 +251,44 @@ struct xio_loop_ops {
 	int (*add_event)(void *loop, struct xio_ev_data *data);
 };
 
+/**
+ * @struct xio_context_params
+ * @brief context creation parameters structure
+ */
+struct xio_context_params {
+
+	unsigned int		flags;		/**< creation flags */
+
+	/* User's structure of callbacks operations for this context
+	 * (case flag XIO_LOOP_USER_LOOP)
+	 */
+	struct xio_loop_ops	*loop_ops;
+
+	/* kthread if flags XIO_LOOP_GIVEN_THREAD can be current
+	*/
+	struct task_struct	*worker;
+
+	void			*user_context;  /**< private user context to */
+						/**< pass to connection      */
+						/**< oriented callbacks      */
+	int			prealloc_pools; /**< pre allocate  rdma only */
+						/**< internal pools	     */
+};
 
 /**
  * xio_context - creates xio context - a context is mapped internally to
  *		a cpu core.
  *
- * @flags: Creation flags
- * @loop_ops: User's structure of callbacks operations for this context
- *	      (case flag XIO_LOOP_USER_LOOP)
- * @worker: kthread if flags XIO_LOOP_GIVEN_THREAD can be current
+ * @ctx_params: context creation creation flags
  * @polling_timeout: polling timeout in microsecs - 0 ignore
  * @cpu_hint: -1 (current)
  *
  * RETURNS: xio context handle, or NULL upon error.
  */
-struct xio_context *xio_context_create(unsigned int flags,
-				       struct xio_loop_ops *loop_ops,
-				       struct task_struct *worker,
-				       int polling_timeout,
-				       int cpu_hint);
-
+struct xio_context *xio_context_create(
+		struct xio_context_params  *ctx_params,
+		int polling_timeout,
+		int cpu_hint);
 
 /*---------------------------------------------------------------------------*/
 /* XIO default event loop API						     */
@@ -206,11 +304,10 @@ void xio_context_stop_loop(struct xio_context *ctx);
 
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data);
 
-
+void xio_destroy_context_continue(struct work_struct *work);
 /*---------------------------------------------------------------------------*/
 /* XIO debugfs facility							     */
 /*---------------------------------------------------------------------------*/
 struct dentry *xio_debugfs_root(void);
 
 #endif /*XIO_API_H */
-

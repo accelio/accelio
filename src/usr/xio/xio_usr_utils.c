@@ -35,7 +35,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <xio_env.h>
 #include <xio_os.h>
 #include "libxio.h"
 #include "xio_log.h"
@@ -44,6 +43,36 @@
 #include "xio_sg_table.h"
 #include "xio_observer.h"
 #include "xio_usr_transport.h"
+
+static int xio_get_addr(char *dst, char *port, struct sockaddr *addr)
+{
+	struct addrinfo *res;
+	int ret;
+
+	if (!dst) {
+		struct addrinfo hints;
+		memset(&hints, 0, sizeof(struct addrinfo));
+		hints.ai_family	= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
+		hints.ai_flags	= AI_PASSIVE;
+		ret = getaddrinfo(dst, port, &hints, &res);
+	} else {
+		ret = getaddrinfo(dst, NULL, NULL, &res);
+	}
+	if (ret) {
+		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(ret));
+		return ret;
+	}
+
+	if (res->ai_family == PF_INET)
+		memcpy(addr, res->ai_addr, sizeof(struct sockaddr_in));
+	else if (res->ai_family == PF_INET6)
+		memcpy(addr, res->ai_addr, sizeof(struct sockaddr_in6));
+	else
+		ret = -1;
+
+	freeaddrinfo(res);
+	return ret;
+}
 
 /*---------------------------------------------------------------------------*/
 /* xio_host_port_to_ss							     */
@@ -56,8 +85,6 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 	char		host[NI_MAXHOST];
 	char		port[NI_MAXSERV];
 	int		s = 0;
-	struct addrinfo hints;
-	struct addrinfo *result;
 	socklen_t	ss_len = -1;
 
 	/*
@@ -97,7 +124,7 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 				strcpy(port, "0");
 		} else {
 			tp = strrchr(cp, ':');
-			if (tp == NULL) {
+			if (!tp) {
 				strcpy(host, cp);
 				strcpy(port, "0");
 			}  else {
@@ -115,40 +142,27 @@ int xio_host_port_to_ss(const char *buf, struct sockaddr_storage *ss)
 
 	/*printf("host:%s, port:%s\n", host, port); */
 
-	/* Obtain address(es) matching host/port */
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family		= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
-	hints.ai_socktype	= SOCK_STREAM;	/* STREAM socket */
+	ss->ss_family = PF_INET;
 
-	s = getaddrinfo(host, port, &hints, &result);
+	if (host[0] == '*' || host[0] == 0)
+		s = xio_get_addr(NULL, port, (struct sockaddr *)ss);
+	else
+		s = xio_get_addr(host, NULL, (struct sockaddr *)ss);
+
 	if (s != 0) {
-		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
-		return -1;
-	}
-	if (result == NULL) {
 		ERROR_LOG("unresolved address\n");
 		return -1;
 	}
-	if (result->ai_next) {
-		ERROR_LOG("more then one address is matched\n");
-		goto cleanup;
-	}
-	switch (result->ai_family) {
+	switch (ss->ss_family) {
 	case AF_INET:
 		ss_len = sizeof(struct sockaddr_in);
-		memcpy(ss, result->ai_addr, ss_len);
+		((struct sockaddr_in *)ss)->sin_port = htons(atoi(port));
 		break;
 	case AF_INET6:
 		ss_len = sizeof(struct sockaddr_in6);
-		memcpy(ss, result->ai_addr, ss_len);
-		break;
-	default:
-		ERROR_LOG("unknown family :%d\n", result->ai_family);
+		((struct sockaddr_in6 *)ss)->sin6_port = htons(atoi(port));
 		break;
 	}
-cleanup:
-	freeaddrinfo(result);
-
 	return ss_len;
 }
 EXPORT_SYMBOL(xio_host_port_to_ss);
@@ -158,35 +172,33 @@ EXPORT_SYMBOL(xio_host_port_to_ss);
 /*---------------------------------------------------------------------------*/
 int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 {
-	char		*start;
+	const char	*start;
 	char		host[NI_MAXHOST];
 	char		port[NI_MAXSERV];
 	const char	*p1, *p2;
 	int		s = 0;
 	int		len;
-	struct addrinfo hints;
-	struct addrinfo *result;
 	socklen_t	ss_len = -1;
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
-	if (start == NULL)
+	if (!start)
 		return -1;
 
-	if (*(start+3) == '[') {  /* IPv6 */
+	if (*(start + 3) == '[') {  /* IPv6 */
 		p1 = strstr(start + 3, "]:");
-		if (p1 == NULL)
+		if (!p1)
 			return -1;
 
-		len = p1-(start+4);
+		len = p1 - (start + 4);
 		strncpy(host, (start + 4), len);
 		host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
-		if (p2 == NULL) {
+		if (!p2) {
 			strcpy(port, p1 + 2);
 		} else {
-			len = (p2-1)-(p1+2);
+			len = (p2 - 1) - (p1 + 2);
 			strncpy(port, (p1 + 2), len);
 			port[len] = 0;
 		}
@@ -202,9 +214,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				return  -1;
 		}
 
-		if (p2 == NULL) { /* no resource */
+		if (!p2) { /* no resource */
 			p1 = strrchr(uri, ':');
-			if (p1 == NULL || p1 == start)
+			if (!p1 || p1 == start)
 				return -1;
 			strcpy(port, (p1 + 1));
 		} else {
@@ -230,46 +242,42 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	}
 	/*printf("host:%s port:%s\n", host, port); */
 
+	ss->ss_family = PF_INET;
 
-	/* Obtain address(es) matching host/port */
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family		= AF_UNSPEC;	/* Allow IPv4 or IPv6 */
-	hints.ai_socktype	= SOCK_STREAM;	/* STREAM socket */
+	if (host[0] == '*' || host[0] == 0)
+		s = xio_get_addr(NULL, port, (struct sockaddr *)ss);
+	else
+		s = xio_get_addr(host, NULL, (struct sockaddr *)ss);
 
-	if (host[0] == '*' || host[0] == 0) {
-		hints.ai_flags	= AI_PASSIVE;
-		s = getaddrinfo(NULL, port, &hints, &result);
-	} else {
-		s = getaddrinfo(host, port, &hints, &result);
-	}
 	if (s != 0) {
-		ERROR_LOG("getaddrinfo failed. %s\n", gai_strerror(s));
-		return -1;
-	}
-	if (result == NULL) {
 		ERROR_LOG("unresolved address\n");
 		return -1;
 	}
-	if (result->ai_next && (hints.ai_flags != AI_PASSIVE)) {
-		ERROR_LOG("more then one address is matched\n");
-		return -1;
-	}
-	switch (result->ai_family) {
+	switch (ss->ss_family) {
 	case AF_INET:
 		ss_len = sizeof(struct sockaddr_in);
-		memcpy(ss, result->ai_addr, ss_len);
+		((struct sockaddr_in *)ss)->sin_port = htons(atoi(port));
 		break;
 	case AF_INET6:
 		ss_len = sizeof(struct sockaddr_in6);
-		memcpy(ss, result->ai_addr, ss_len);
+		((struct sockaddr_in6 *)ss)->sin6_port = htons(atoi(port));
 		break;
 	}
-	freeaddrinfo(result);
+#if 0
+	{
+		char buffer[NI_MAXHOST];
+		const char *result  =
+			inet_ntop(AF_INET,
+				  &((struct sockaddr_in *)ss)->sin_addr,
+				  buffer, sizeof(buffer));
 
+		printf("host:%s port:%d\n", result,
+		       ntohs(((struct sockaddr_in *)ss)->sin_port));
+	}
+#endif
 	return ss_len;
 }
 EXPORT_SYMBOL(xio_uri_to_ss);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_msg_dump								     */
@@ -290,7 +298,8 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	else if (xio_msg->type == XIO_MSG_TYPE_RSP)
 		ERROR_LOG("response:%p, serial number:%lld\n",
 			  xio_msg->request,
-			  ((xio_msg->request) ? xio_msg->request->sn : (uint64_t)-1));
+			  ((xio_msg->request) ?
+			   xio_msg->request->sn : (uint64_t)-1));
 
 	sgtbl		= xio_sg_table_get(&xio_msg->in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -348,5 +357,4 @@ void xio_msg_dump(struct xio_msg *xio_msg)
 	ERROR_LOG("*******************************************************\n");
 }
 EXPORT_SYMBOL(xio_msg_dump);
-
 

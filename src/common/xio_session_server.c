@@ -49,13 +49,14 @@
 #include "xio_hash.h"
 #include "xio_msg_list.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_nexus.h"
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_req_recv			                             */
@@ -71,6 +72,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	struct xio_session		*session = connection->session;
 	int				retval;
 	struct xio_session_event_data  error_event = {};
+
 	error_event.event = XIO_SESSION_ERROR_EVENT;
 
 	/* read session header */
@@ -90,7 +92,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	memset(&req, 0, sizeof(req));
 
 	/* session id */
-	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
+	len = xio_read_uint32(&session->peer_session_id, 0, ptr);
 	ptr  = ptr + len;
 
 	/* queue depth bytes */
@@ -118,8 +120,9 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	ptr = ptr + len;
 
 	if (req.uri_len) {
-		req.uri = (char *)kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
-		if (req.uri == NULL) {
+		req.uri =
+		  (char *)kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
+		if (!req.uri) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("uri allocation failed. len:%d\n",
 				  req.uri_len);
@@ -133,13 +136,14 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	if (req.private_data_len) {
 		req.private_data = kcalloc(req.private_data_len,
 					   sizeof(uint8_t), GFP_KERNEL);
-		if (req.private_data == NULL) {
+		if (!req.private_data) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("private data allocation failed. len:%d\n",
 				  req.private_data_len);
 			goto cleanup2;
 		}
-		len = xio_read_array((uint8_t *)req.private_data, req.private_data_len,
+		len = xio_read_array((uint8_t *)req.private_data,
+				     req.private_data_len,
 				     0, ptr);
 		ptr = ptr + len;
 	}
@@ -195,7 +199,6 @@ cleanup1:
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_accept_rsp						     */
 /*---------------------------------------------------------------------------*/
@@ -210,7 +213,6 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	uint8_t			*buf;
 	uint8_t			*ptr;
 	uint16_t		len, i, str_len, tot_len;
-
 
 	/* calculate length */
 	tot_len = 5*sizeof(uint16_t) + sizeof(uint32_t) + 2*sizeof(uint64_t);
@@ -227,7 +229,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	/* allocate message */
 	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
-	if (buf == NULL) {
+	if (!buf) {
 		ERROR_LOG("message allocation failed\n");
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -238,14 +240,13 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	msg->out.header.iov_base = buf + sizeof(struct xio_msg);
 	msg->out.header.iov_len = 0;
 
-
 	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
 
 	/* session_id */
-	len = xio_write_uint32(session->session_id , 0, ptr);
+	len = xio_write_uint32(session->session_id, 0, ptr);
 	ptr  = ptr + len;
 
 	/* action */
@@ -277,7 +278,6 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	/* user_context_len */
 	len = xio_write_uint16(user_context_len, 0, ptr);
 	ptr  = ptr + len;
-
 
 	for (i = 0; i < portals_array_len; i++) {
 		str_len = strlen(portals_array[i]);
@@ -321,7 +321,6 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	uint16_t		len,  tot_len;
 	uint16_t		action = XIO_ACTION_REJECT;
 
-
 	/* calclate length */
 	tot_len = 2*sizeof(uint16_t) + 2*sizeof(uint32_t);
 	tot_len += user_context_len;
@@ -335,7 +334,7 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	/* allocate message */
 	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
-	if (buf == NULL) {
+	if (!buf) {
 		ERROR_LOG("message allocation failed\n");
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -346,14 +345,13 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	msg->out.header.iov_base = buf + sizeof(struct xio_msg);
 	msg->out.header.iov_len = 0;
 
-
 	ptr = (uint8_t *)msg->out.header.iov_base;
 	len = 0;
 
 	/* serialize message into the buffer */
 
 	/* session_id */
-	len = xio_write_uint32(session->session_id , 0, ptr);
+	len = xio_write_uint32(session->session_id, 0, ptr);
 	ptr  = ptr + len;
 
 	/* action */
@@ -363,7 +361,6 @@ struct xio_msg *xio_session_write_reject_rsp(struct xio_session *session,
 	/* reason */
 	len = xio_write_uint32(reason, 0, ptr);
 	ptr  = ptr + len;
-
 
 	/* user_context_len */
 	len = xio_write_uint16(user_context_len, 0, ptr);
@@ -405,7 +402,7 @@ int xio_accept(struct xio_session *session,
 					   portals_array_len,
 					   user_context,
 					   user_context_len);
-	if (msg == NULL) {
+	if (!msg) {
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
 	}
@@ -434,7 +431,6 @@ int xio_accept(struct xio_session *session,
 					session->peer_rcv_queue_depth_bytes;
 		task->connection->credits_bytes	= 0;
 
-
 		/* server side state is changed to ONLINE, immediately  */
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state changed to ONLINE. session:%p\n",
@@ -462,7 +458,7 @@ int xio_redirect(struct xio_session *session,
 	struct xio_msg		*msg;
 	struct xio_task		*task;
 
-	if (portals_array_len == 0 || portals_array == NULL) {
+	if (portals_array_len == 0 || !portals_array) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("portals array for redirect is mandatory\n");
 		return -1;
@@ -474,7 +470,7 @@ int xio_redirect(struct xio_session *session,
 					   portals_array_len,
 					   NULL,
 					   0);
-	if (msg == NULL) {
+	if (!msg) {
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
 	}
@@ -515,7 +511,7 @@ int xio_reject(struct xio_session *session,
 
 	msg = xio_session_write_reject_rsp(session, reason, user_context,
 					   user_context_len);
-	if (msg == NULL) {
+	if (!msg) {
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
 	}
@@ -583,6 +579,10 @@ int xio_on_server_nexus_established(struct xio_session *session,
 				    struct xio_nexus *nexus,
 				    union xio_nexus_event_data *event_data)
 {
+
+	struct xio_connection *connection = xio_session_find_connection (session, nexus);
+	connection->restarted = 1;
+
 	return 0;
 }
 
@@ -598,7 +598,6 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 	union xio_nexus_event_data *event_data = (union xio_nexus_event_data *)
 							_event_data;
 
-
 	switch (event) {
 	case XIO_NEXUS_EVENT_NEW_MESSAGE:
 /*
@@ -612,6 +611,9 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 			 "session:%p, nexus:%p\n", observer, sender);
 */
 		xio_on_send_completion(session, nexus, event_data);
+		break;
+	case XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_on_rdma_direct_comp(session, nexus, event_data);
 		break;
 	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \

@@ -289,6 +289,7 @@ int ctx_xchg_data(struct perf_comm *comm,
 		return -1;
 
 	if (comm->user_param->machine_type == CLIENT) {
+		comm->control_ctx->msg.flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
@@ -316,19 +317,21 @@ int ctx_xchg_data(struct perf_comm *comm,
 			goto cleanup;
 
 		if (comm->control_ctx->reply &&
-		    comm->control_ctx->reply->in.header.iov_len)
+		    comm->control_ctx->reply->in.header.iov_len) {
 			memcpy(rem_data,
 			       comm->control_ctx->reply->in.header.iov_base,
 			       comm->control_ctx->reply->in.header.iov_len);
+		}
 
+		comm->control_ctx->msg.flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 		comm->control_ctx->msg.out.header.iov_base	= my_data;
 		comm->control_ctx->msg.out.header.iov_len	= size;
 		comm->control_ctx->msg.in.header.iov_len	= 0;
 		vmsg_sglist_set_nents(&comm->control_ctx->msg.out, 0);
 		vmsg_sglist_set_nents(&comm->control_ctx->msg.in, 0);
 
-
 		comm->control_ctx->msg.request = comm->control_ctx->reply;
+		comm->control_ctx->reply = NULL;
 
 		xio_send_response(&comm->control_ctx->msg);
 	}
@@ -352,6 +355,7 @@ int ctx_write_data(struct perf_comm *comm, void *data, int size)
 	    !comm->control_ctx->conn || comm->control_ctx->failed)
 		return -1;
 
+	comm->control_ctx->msg.flags = XIO_MSG_FLAG_IMM_SEND_COMP;
 	comm->control_ctx->msg.out.header.iov_base	= data;
 	comm->control_ctx->msg.out.header.iov_len	= size;
 	comm->control_ctx->msg.in.header.iov_len	= 0;
@@ -587,6 +591,7 @@ int intf_best_cpus(const char *addr, uint64_t *cpusmask, int *nr)
 	char		if_name[32];
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	retval = intf_name(addr, if_name);
 	if (retval < 0)
 		return  -1;
@@ -607,6 +612,7 @@ int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr)
 {
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	numa_node = intf_numa_node(if_name);
 	if (numa_node < 0)
 		return -1;

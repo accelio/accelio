@@ -38,7 +38,6 @@
 #ifndef XIO_TIMERS_LIST_H
 #define XIO_TIMERS_LIST_H
 
-
 #define XIO_MS_IN_SEC   1000ULL
 #define XIO_US_IN_SEC   1000000ULL
 #define XIO_NS_IN_SEC   1000000000ULL
@@ -49,11 +48,10 @@
 
 #define xio_timer_handle_t void *
 
-
 struct xio_timers_list {
 	struct list_head		timers_head;
 #ifdef SAFE_LIST
-	spinlock_t			lock;
+	spinlock_t			lock; /* timer list lock */
 	int				pad;
 #endif
 };
@@ -118,7 +116,6 @@ static inline enum timers_list_rc xio_timers_list_add(
 	int				found = 0;
 	enum timers_list_rc		retval = TIMERS_LIST_RC_OK;
 
-
 	list_for_each(timer_list, &timers_list->timers_head) {
 		tentry_from_list = list_entry(timer_list,
 					      struct xio_timers_list_entry,
@@ -178,7 +175,6 @@ static inline enum timers_list_rc xio_timers_list_del(
 unlock:
 	return retval;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_timers_list_close						     */
@@ -310,7 +306,6 @@ static inline int xio_timers_list_is_empty(struct xio_timers_list *timers_list)
 {
 	return list_empty(&timers_list->timers_head);
 }
-
 
 #endif /* XIO_TIMERS_LIST_H */
 

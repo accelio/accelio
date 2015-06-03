@@ -64,7 +64,7 @@ static int sessions_cache_add(struct xio_session *session,
 		session_id
 	};
 	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
-	if (s != NULL)
+	if (s)
 		return -1;
 
 	HT_INSERT(&sessions_cache, &key, session, sessions_htbl);
@@ -83,7 +83,7 @@ int xio_sessions_cache_remove(uint32_t session_id)
 	spin_lock(&ss_lock);
 	key.id = session_id;
 	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
-	if (s == NULL) {
+	if (!s) {
 		spin_unlock(&ss_lock);
 		return -1;
 	}

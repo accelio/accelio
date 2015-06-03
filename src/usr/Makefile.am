@@ -35,6 +35,9 @@ else
     libxio_version_script =
 endif
 
+install-exec-hook:
+	echo "$(libdir)" > /etc/ld.so.conf.d/libxio.conf
+	/sbin/ldconfig
 
 ###############################################################################
 # THE LIBRARIES TO BUILD
@@ -83,6 +86,7 @@ libxio_headers = 	./xio/get_clock.h 			\
 			../common/xio_observer.h		\
 			../common/xio_task.h			\
 			../common/xio_sg_table.h		\
+			../common/xio_objpool.h			\
 			../common/xio_transport.h		\
 			../common/sys/hashtable.h		\
 			./linux/atomic.h 			\
@@ -108,6 +112,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./xio/xio_usr_utils.c		\
 			./xio/xio_tls.c			\
 			./xio/xio_context.c		\
+			./xio/xio_netlink.c		\
 			./xio/xio_workqueue.c		\
 			./xio/xio_sg_iov.c		\
 			./xio/xio_sg_iovptr.c		\
@@ -117,6 +122,7 @@ libxio_la_SOURCES =	$(libxio_headers)		\
 			./transport/tcp/xio_tcp_datapath.c	\
 			./transport/xio_mempool.c	\
 			./transport/xio_usr_transport.c	\
+			../common/xio_objpool.c		\
 			../common/xio_options.c		\
 			../common/xio_error.c		\
 			../common/xio_utils.c		\

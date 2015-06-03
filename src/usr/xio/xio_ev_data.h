@@ -38,7 +38,6 @@
 #ifndef XIO_EV_DATA_H
 #define XIO_EV_DATA_H
 
-
 struct xio_ev_data;
 
 typedef void (*xio_event_handler_t)(void *data);
@@ -46,10 +45,10 @@ typedef void (*xio_event_handler_t)(void *data);
 /*---------------------------------------------------------------------------*/
 /* structs                                                                   */
 /*---------------------------------------------------------------------------*/
-typedef struct xio_ev_data {
+struct xio_ev_data {
 	union {
-		xio_ev_handler_t	handler;
-		xio_event_handler_t	event_handler;
+		xio_ev_handler_t	ev_handler;
+		xio_event_handler_t	handler;
 	};
 	union {
 		int			fd;
@@ -58,7 +57,7 @@ typedef struct xio_ev_data {
 	int				reserved;
 	void				*data;
 	struct list_head		events_list_entry;
-} xio_ev_data_t;
+};
 
 #endif
 

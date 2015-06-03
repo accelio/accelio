@@ -42,32 +42,28 @@
 #include "xio_mem.h"
 #include "xio_usr_utils.h"
 
-
 /* Accelio's default mempool profile (don't expose it) */
 #define XIO_MEM_SLABS_NR	4
 
-#define _16K_BLOCK_SZ		(16*1024)
+#define _16K_BLOCK_SZ		(16 * 1024)
 #define _16K_MIN_NR		0
-#define _16K_MAX_NR		(1024*24)
+#define _16K_MAX_NR		(1024 * 24)
 #define _16K_ALLOC_NR		128
 
-#define _64K_BLOCK_SZ		(64*1024)
+#define _64K_BLOCK_SZ		(64 * 1024)
 #define _64K_MIN_NR		0
-#define _64K_MAX_NR		(1024*24)
+#define _64K_MAX_NR		(1024 * 24)
 #define _64K_ALLOC_NR		128
 
-#define _256K_BLOCK_SZ		(256*1024)
+#define _256K_BLOCK_SZ		(256 * 1024)
 #define _256K_MIN_NR		0
-#define _256K_MAX_NR		(1024*24)
+#define _256K_MAX_NR		(1024 * 24)
 #define _256K_ALLOC_NR		128
 
-#define _1M_BLOCK_SZ		(1024*1024)
+#define _1M_BLOCK_SZ		(1024 * 1024)
 #define _1M_MIN_NR		0
-#define _1M_MAX_NR		(1024*24)
+#define _1M_MAX_NR		(1024 * 24)
 #define _1M_ALLOC_NR		128
-
-
-
 
 struct xio_mempool_config g_mempool_config = {
 	XIO_MEM_SLABS_NR,
@@ -94,6 +90,7 @@ struct xio_mem_block {
 	void				*buf;
 	struct xio_mem_block		*next;
 	combined_t			refcnt_claim;
+
 	volatile int			refcnt;
 	struct list_head		blocks_list_entry;
 };
@@ -111,7 +108,7 @@ struct xio_mem_slab {
 	struct list_head		blocks_list;
 
 	size_t				mb_size;	/*memory block size */
-	pthread_spinlock_t		lock;
+	spinlock_t			lock;
 
 	int				init_mb_nr;	/* initial mb
 							   size */
@@ -120,6 +117,8 @@ struct xio_mem_slab {
 	int				alloc_quantum_nr; /* number of items
 							   per allocation */
 	int				used_mb_nr;
+	int				align;
+	int				pad;
 };
 
 struct xio_mempool {
@@ -143,7 +142,7 @@ static inline int decrement_and_test_and_set(combined_t *ptr)
 		_new = old - 2;
 		if (_new == 0)
 			_new = 1; /* claimed be MP */
-	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
+	} while (!xio_sync_bool_compare_and_swap(ptr, old, _new));
 
 	return (old - _new) & 1;
 }
@@ -158,7 +157,7 @@ static inline void clear_lowest_bit(combined_t *ptr)
 	do {
 		old = *ptr;
 		_new = old - 1;
-	} while (!__sync_bool_compare_and_swap(ptr, old, _new));
+	} while (!xio_sync_bool_compare_and_swap(ptr, old, _new));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -171,7 +170,8 @@ static inline void reclaim(struct xio_mem_slab *slab, struct xio_mem_block *p)
 	do {
 		q = slab->free_blocks_list;
 		p->next = q;
-	} while (!__sync_bool_compare_and_swap(&slab->free_blocks_list, q, p));
+	} while (!xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+						 q, p));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -214,14 +214,14 @@ static struct xio_mem_block *safe_read(struct xio_mem_slab *slab)
 
 	while (1) {
 		q = slab->free_blocks_list;
-		if (q == NULL)
+		if (!q)
 			return NULL;
-		__sync_fetch_and_add(&q->refcnt_claim, 2);
+		xio_sync_fetch_and_add32(&q->refcnt_claim, 2);
 		/* make sure q is still the head */
-		if (__sync_bool_compare_and_swap(&slab->free_blocks_list, q, q))
+		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+						   q, q))
 			return q;
-		else
-			safe_release(slab, q);
+		safe_release(slab, q);
 	}
 }
 
@@ -234,16 +234,15 @@ static struct xio_mem_block *safe_new_block(struct xio_mem_slab *slab)
 
 	while (1) {
 		p = safe_read(slab);
-		if (p == NULL)
+		if (!p)
 			return NULL;
 
-		if (__sync_bool_compare_and_swap(&slab->free_blocks_list,
-						 p, p->next)) {
+		if (xio_sync_bool_compare_and_swap(&slab->free_blocks_list,
+						   p, p->next)) {
 			clear_lowest_bit(&p->refcnt_claim);
 			return p;
-		} else {
-			safe_release(slab, p);
 		}
+		safe_release(slab, p);
 	}
 }
 
@@ -254,7 +253,7 @@ static struct xio_mem_block *non_safe_new_block(struct xio_mem_slab *slab)
 {
 	struct xio_mem_block *p;
 
-	if (slab->free_blocks_list == NULL)
+	if (!slab->free_blocks_list)
 		return NULL;
 
 	p = slab->free_blocks_list;
@@ -286,23 +285,26 @@ static int xio_mem_slab_free(struct xio_mem_slab *slab)
 		list_for_each_entry_safe(r, tmp_r, &slab->mem_regions_list,
 					 mem_region_entry) {
 			list_del(&r->mem_region_entry);
-			if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR)
-				xio_dereg_mr(&r->omr);
+			if (test_bits(XIO_MEMPOOL_FLAG_REG_MR,
+				      &slab->pool->flags)) {
+				struct xio_reg_mem   reg_mem;
 
-			if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+				reg_mem.mr = r->omr;
+				xio_mem_dereg(&reg_mem);
+			}
+
+			if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+				      &slab->pool->flags))
 				ufree_huge_pages(r->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+					   &slab->pool->flags))
 				unuma_free(r->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+					   &slab->pool->flags))
 				ufree(r->buf);
 			ufree(r);
 		}
 	}
-
-	pthread_spin_destroy(&slab->lock);
 
 	return 0;
 }
@@ -323,6 +325,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	size_t				region_alloc_sz;
 	size_t				data_alloc_sz;
 	int				i;
+	int				aligned_sz;
 
 	if (slab->curr_mb_nr == 0) {
 		if (slab->init_mb_nr > slab->max_mb_nr)
@@ -340,9 +343,9 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 		return NULL;
 
 	region_alloc_sz = sizeof(*region) +
-		nr_blocks*sizeof(struct xio_mem_block);
+		nr_blocks * sizeof(struct xio_mem_block);
 	buf = (char *)ucalloc(region_alloc_sz, sizeof(uint8_t));
-	if (buf == NULL)
+	if (!buf)
 		return NULL;
 
 	/* region */
@@ -351,34 +354,39 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	block = (struct xio_mem_block *)buf;
 
 	/* region data */
-	data_alloc_sz = nr_blocks*slab->mb_size;
+	aligned_sz = ALIGN(slab->mb_size, slab->align);
+	data_alloc_sz = nr_blocks * aligned_sz;
 
 	/* allocate the buffers and register them */
-	if (slab->pool->flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
+	if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+		      &slab->pool->flags))
 		region->buf = umalloc_huge_pages(data_alloc_sz);
-	} else if (slab->pool->flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+	else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+			   &slab->pool->flags))
 		region->buf = unuma_alloc(data_alloc_sz, slab->pool->nodeid);
-	} else if (slab->pool->flags & XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC) {
-		/*region->buf = ucalloc(data_alloc_sz, sizeof(uint8_t)); */
-		region->buf = umemalign(64, data_alloc_sz);
-	}
+	else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+			   &slab->pool->flags))
+		region->buf = umemalign(slab->align, data_alloc_sz);
 
-	if (region->buf == NULL) {
+	if (!region->buf) {
 		ufree(region);
 		return NULL;
 	}
 
-	if (slab->pool->flags & XIO_MEMPOOL_FLAG_REG_MR) {
-		region->omr = xio_reg_mr(region->buf, data_alloc_sz);
-		if (region->omr == NULL) {
-			if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC)
+	if (test_bits(XIO_MEMPOOL_FLAG_REG_MR, &slab->pool->flags)) {
+		struct xio_reg_mem reg_mem;
+
+		xio_mem_register(region->buf, data_alloc_sz, &reg_mem);
+		region->omr = reg_mem.mr;
+		if (!region->omr) {
+			if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC,
+				      &slab->pool->flags))
 				ufree_huge_pages(region->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_NUMA_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC,
+					   &slab->pool->flags))
 				unuma_free(region->buf);
-			else if (slab->pool->flags &
-					XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC)
+			else if (test_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC,
+					   &slab->pool->flags))
 				ufree(region->buf);
 
 			ufree(region);
@@ -393,7 +401,7 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 
 		pblock->parent_slab = slab;
 		pblock->omr	= region->omr;
-		pblock->buf	= (char *)(region->buf) + i*slab->mb_size;
+		pblock->buf	= (char *)(region->buf) + i * aligned_sz;
 		pblock->refcnt_claim = 1; /* free - claimed be MP */
 		qblock->next = pblock;
 		qblock = pblock;
@@ -416,7 +424,8 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 	if (slab->pool->safe_mt) {
 		do {
 			qblock->next = slab->free_blocks_list;
-		} while (!__sync_bool_compare_and_swap(&slab->free_blocks_list,
+		} while (!xio_sync_bool_compare_and_swap(
+					&slab->free_blocks_list,
 					qblock->next, pblock));
 	} else  {
 		qblock->next = slab->free_blocks_list;
@@ -476,35 +485,34 @@ struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags)
 {
 	struct xio_mempool *p;
 
-	if (flags & XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC) {
-		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
+	if (test_bits(XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC, &flags)) {
+		clr_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
+		clr_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags);
 		DEBUG_LOG("mempool: using huge pages allocator\n");
-	} else if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
-		flags &= ~XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
+	} else if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags)) {
+		clr_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
 		DEBUG_LOG("mempool: using numa allocator\n");
 	} else {
-		flags &= ~XIO_MEMPOOL_FLAG_HUGE_PAGES_ALLOC;
-		flags &= ~XIO_MEMPOOL_FLAG_NUMA_ALLOC;
-		flags |= XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC;
+		set_bits(XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC, &flags);
 		DEBUG_LOG("mempool: using regular allocator\n");
 	}
 
-	if (flags & XIO_MEMPOOL_FLAG_NUMA_ALLOC) {
+	if (test_bits(XIO_MEMPOOL_FLAG_NUMA_ALLOC, &flags)) {
 		int ret;
+
 		if (nodeid == -1) {
 			int cpu = xio_get_cpu();
-			nodeid = numa_node_of_cpu(cpu);
+
+			nodeid = xio_numa_node_of_cpu(cpu);
 		}
 		/* pin to node */
-		ret = numa_run_on_node(nodeid);
+		ret = xio_numa_run_on_node(nodeid);
 		if (ret)
 			return NULL;
 	}
 
 	p = (struct xio_mempool *)ucalloc(1, sizeof(struct xio_mempool));
-	if (p == NULL)
+	if (!p)
 		return NULL;
 
 	p->nodeid = nodeid;
@@ -541,7 +549,8 @@ struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags)
 			g_mempool_config.slab_cfg[i].block_sz,
 			g_mempool_config.slab_cfg[i].init_blocks_nr,
 			g_mempool_config.slab_cfg[i].max_blocks_nr,
-			g_mempool_config.slab_cfg[i].grow_blocks_nr);
+			g_mempool_config.slab_cfg[i].grow_blocks_nr,
+			0); /*default alignment */
 		if (ret != 0)
 			goto cleanup;
 	}
@@ -567,12 +576,11 @@ static inline int size2index(struct xio_mempool *p, size_t sz)
 	return (i == p->slabs_nr) ? -1 : (int)i;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_mempool_alloc							     */
 /*---------------------------------------------------------------------------*/
 int xio_mempool_alloc(struct xio_mempool *p, size_t length,
-		      struct xio_mempool_obj *mp_obj)
+		      struct xio_reg_mem *reg_mem)
 {
 	int			index;
 	struct xio_mem_slab	*slab;
@@ -584,10 +592,10 @@ retry:
 	if (index == -1) {
 		errno = EINVAL;
 		ret = -1;
-		mp_obj->addr	= NULL;
-		mp_obj->mr	= NULL;
-		mp_obj->cache	= NULL;
-		mp_obj->length	= 0;
+		reg_mem->addr	= NULL;
+		reg_mem->mr	= NULL;
+		reg_mem->priv	= NULL;
+		reg_mem->length	= 0;
 		goto cleanup;
 	}
 	slab = &p->slab[index];
@@ -598,7 +606,7 @@ retry:
 		block = non_safe_new_block(slab);
 	if (!block) {
 		if (p->safe_mt) {
-			pthread_spin_lock(&slab->lock);
+			spin_lock(&slab->lock);
 		/* we may been blocked on the spinlock while other
 		 * thread resized the pool
 		 */
@@ -608,27 +616,28 @@ retry:
 		}
 		if (!block) {
 			block = xio_mem_slab_resize(slab, 1);
-			if (block == NULL) {
+			if (!block) {
 				if (++index == (int)p->slabs_nr ||
-				    (p->flags &
-				     XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB))
+				    test_bits(
+					XIO_MEMPOOL_FLAG_USE_SMALLEST_SLAB,
+					&p->flags))
 					index  = -1;
 
 				if (p->safe_mt)
-					pthread_spin_unlock(&slab->lock);
+					spin_unlock(&slab->lock);
 				ret = 0;
 				goto retry;
 			}
 			DEBUG_LOG("resizing slab size:%zd\n", slab->mb_size);
 		}
 		if (p->safe_mt)
-			pthread_spin_unlock(&slab->lock);
+			spin_unlock(&slab->lock);
 	}
 
-	mp_obj->addr	= block->buf;
-	mp_obj->mr	= block->omr;
-	mp_obj->cache	= block;
-	mp_obj->length	= length;
+	reg_mem->addr	= block->buf;
+	reg_mem->mr	= block->omr;
+	reg_mem->priv	= block;
+	reg_mem->length	= length;
 
 #ifdef DEBUG_MEMPOOL_MT
 	__sync_fetch_and_add(&slab->used_mb_nr, 1);
@@ -651,14 +660,14 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_mempool_free							     */
 /*---------------------------------------------------------------------------*/
-void xio_mempool_free(struct xio_mempool_obj *mp_obj)
+void xio_mempool_free(struct xio_reg_mem *reg_mem)
 {
 	struct xio_mem_block	*block;
 
-	if (!mp_obj || !mp_obj->cache)
+	if (!reg_mem || !reg_mem->priv)
 		return;
 
-	block = (struct xio_mem_block *)mp_obj->cache;
+	block = (struct xio_mem_block *)reg_mem->priv;
 
 #ifdef DEBUG_MEMPOOL_MT
 	if (__sync_fetch_and_sub(&block->refcnt, 1) != 1) {
@@ -681,27 +690,43 @@ void xio_mempool_free(struct xio_mempool_obj *mp_obj)
 /*---------------------------------------------------------------------------*/
 int xio_mempool_add_slab(struct xio_mempool *p,
 			 size_t size, size_t min, size_t max,
-		         size_t alloc_quantum_nr)
+			 size_t alloc_quantum_nr, int alignment)
 {
 	struct xio_mem_slab	*new_slab;
 	struct xio_mem_block	*block;
 	unsigned int ix, slab_ix, slab_shift = 0;
+	int align = alignment;
 
 	slab_ix = p->slabs_nr;
 	if (p->slabs_nr) {
 		for (ix = 0; ix < p->slabs_nr; ++ix) {
-			if (p->slab[ix].mb_size == size)
-				return -EEXIST;
+			if (p->slab[ix].mb_size == size) {
+				xio_set_error(EEXIST);
+				return -1;
+			}
 			if (p->slab[ix].mb_size > size) {
 				slab_ix = ix;
 				break;
 			}
 		}
 	}
+	if (!alignment) {
+		align = g_options.xfer_buf_align;
+	} else if (!is_power_of_2(alignment) ||
+		   !(alignment % sizeof(void *) == 0)) {
+		ERROR_LOG("invalid alignment %d\n", alignment);
+		xio_set_error(EINVAL);
+		return -1;
+	}
 
 	/* expand */
 	new_slab = (struct xio_mem_slab *)ucalloc(p->slabs_nr + 2,
 						  sizeof(struct xio_mem_slab));
+	if (!new_slab) {
+		xio_set_error(ENOMEM);
+		return -1;
+	}
+
 	/* fill/shift slabs */
 	for (ix = 0; ix < p->slabs_nr + 1; ++ix) {
 		if (ix == slab_ix) {
@@ -711,14 +736,14 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			new_slab[ix].init_mb_nr = min;
 			new_slab[ix].max_mb_nr = max;
 			new_slab[ix].alloc_quantum_nr = alloc_quantum_nr;
+			new_slab[ix].align = align;
 
-			(void) pthread_spin_init(&new_slab[ix].lock,
-						 PTHREAD_PROCESS_PRIVATE);
+			spin_lock_init(&new_slab[ix].lock);
 			INIT_LIST_HEAD(&new_slab[ix].mem_regions_list);
 			INIT_LIST_HEAD(&new_slab[ix].blocks_list);
 			new_slab[ix].free_blocks_list = NULL;
 			if (new_slab[ix].init_mb_nr) {
-				(void) xio_mem_slab_resize(
+				(void)xio_mem_slab_resize(
 					&new_slab[ix], 0);
 			}
 			/* src adjust */
@@ -726,12 +751,12 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 			continue;
 		}
 		/* shift it */
-		new_slab[ix] = p->slab[ix-slab_shift];
+		new_slab[ix] = p->slab[ix - slab_shift];
 		INIT_LIST_HEAD(&new_slab[ix].mem_regions_list);
-		list_splice_init(&p->slab[ix-slab_shift].mem_regions_list,
+		list_splice_init(&p->slab[ix - slab_shift].mem_regions_list,
 				 &new_slab[ix].mem_regions_list);
 		INIT_LIST_HEAD(&new_slab[ix].blocks_list);
-		list_splice_init(&p->slab[ix-slab_shift].blocks_list,
+		list_splice_init(&p->slab[ix - slab_shift].blocks_list,
 				 &new_slab[ix].blocks_list);
 		list_for_each_entry(block, &new_slab[ix].blocks_list,
 				    blocks_list_entry) {
@@ -740,7 +765,7 @@ int xio_mempool_add_slab(struct xio_mempool *p,
 	}
 
 	/* sentinel */
-	new_slab[p->slabs_nr+1].mb_size	= SIZE_MAX;
+	new_slab[p->slabs_nr + 1].mb_size = SIZE_MAX;
 
 	/* swap slabs */
 	ufree(p->slab);

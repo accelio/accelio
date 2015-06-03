@@ -6,16 +6,19 @@ mkdir_p = mkdir -p
 VERSION = @PACKAGE_VERSION@
 OFED_CFLAGS = @OFED_CFLAGS@
 XIO_SYMVERS = @XIO_SYMVERS@
+PRIVATE_COMMON = .common
 
 NOSTDINC_FLAGS += @OFED_CFLAGS@
 
 DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	xio_log.h  xio_mem.h  xio_os.h xio_mempool.h \
 	../../common/common/xio_observer.h \
-	io_context.c xio_ev_loop.c xio_mempool.c \
+	xio_context.c xio_ev_loop.c xio_mempool.c \
 	xio_init.c xio_mem.c xio_task.c xio_kernel_utils.c \
 	xio_workqueue.c	xio_sg_iov.c xio_sg_iovptr.c xio_sg_scatter.c \
-	xio_sg_table.c	\
+	xio_sg_table.c \
+	../../../version.c		\
+	../../common/xio_objpool.c 	\
 	../../common/xio_nexus.c 	\
 	../../common/xio_nexus_cache.c	\
 	../../common/xio_options.c 	\
@@ -30,10 +33,11 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_observer.c \
 	../../common/xio_idr.c \
 	../../common/xio_utils.c \
+	../transport/xio_ktransport.c
 
 xiomoduledir = @kmoduledir@/extra/net/xio
 
-xiomodule := xio.ko
+xiomodule := xio_core.ko
 
 all: all-@ENABLE_XIO_MODULE@
 install: install-@ENABLE_XIO_MODULE@
@@ -62,7 +66,8 @@ uninstall-y:
 	-/sbin/depmod -a
 
 clean:
-	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned ../../common/.*.cmd
+	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-rm -rf $(PRIVATE_COMMON)
 
 distclean: clean
 	rm -f Makefile configure config.status
@@ -77,8 +82,8 @@ distdir: $(DISTFILES)
 
 ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../common -I$(SUBDIRS)/../../../include -I$(SUBDIRS)/../../libxio_os/linuxkernel
 
-obj-m := xio.o
-xio-objs := \
+obj-m := xio_core.o
+xio_core-objs := \
 	xio_init.o \
 	xio_context.o \
 	xio_ev_loop.o \
@@ -92,22 +97,30 @@ xio-objs := \
 	xio_sg_iovptr.o	\
 	xio_sg_scatter.o \
 	xio_sg_table.o	\
-	../../common/xio_nexus.o \
-	../../common/xio_nexus_cache.o \
-	../../common/xio_options.o \
-	../../common/xio_session.o \
-	../../common/xio_session_server.o	\
-	../../common/xio_session_client.o	\
-	../../common/xio_transport.o \
-	../../common/xio_connection.o \
-	../../common/xio_error.o \
-	../../common/xio_server.o \
-	../../common/xio_sessions_cache.o \
-	../../common/xio_observer.o \
-	../../common/xio_idr.o \
-	../../common/xio_utils.o
+	../transport/xio_ktransport.o	\
+	$(PRIVATE_COMMON)/version.o \
+	$(PRIVATE_COMMON)/xio_objpool.o \
+	$(PRIVATE_COMMON)/xio_nexus.o \
+	$(PRIVATE_COMMON)/xio_nexus_cache.o \
+	$(PRIVATE_COMMON)/xio_options.o \
+	$(PRIVATE_COMMON)/xio_session.o \
+	$(PRIVATE_COMMON)/xio_session_server.o	\
+	$(PRIVATE_COMMON)/xio_session_client.o	\
+	$(PRIVATE_COMMON)/xio_transport.o \
+	$(PRIVATE_COMMON)/xio_connection.o \
+	$(PRIVATE_COMMON)/xio_error.o \
+	$(PRIVATE_COMMON)/xio_server.o \
+	$(PRIVATE_COMMON)/xio_sessions_cache.o \
+	$(PRIVATE_COMMON)/xio_observer.o \
+	$(PRIVATE_COMMON)/xio_idr.o \
+	$(PRIVATE_COMMON)/xio_utils.o
 
+$(PRIVATE_COMMON):
+	$(mkdir_p) $@
+	cp -ps `pwd`/../../../version.c $@/
+	cp -ps `pwd`/../../common/*.c $@/
+	cp -ps `pwd`/../../common/*.h $@/
 
-all-spec:
+all-spec: $(PRIVATE_COMMON)
 	export NOSTDINC_FLAGS
 	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` @KERNELMAKE_PARAMS@ KBUILD_EXTRA_SYMBOLS=$(XIO_SYMVERS) modules

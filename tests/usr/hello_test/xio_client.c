@@ -113,6 +113,7 @@ struct test_params {
 	uint16_t		finite_run;
 	uint16_t		padding[3];
 	uint64_t		disconnect_nr;
+	struct xio_reg_mem	reg_mem;
 };
 
 
@@ -298,6 +299,7 @@ static int on_response(struct xio_session *session,
 	sglist = vmsg_sglist(&msg->in);
 	vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
 
+	/* tell accelio to use 1MB buffer from its internal pool */
 	for (j = 0; j < test_config.in_iov_len; j++) {
 		sglist[j].iov_base = NULL;
 		sglist[j].iov_len  = ONE_MB;
@@ -307,7 +309,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  test_config.out_iov_len, test_config.data_len);
 
@@ -340,6 +342,7 @@ static int on_response(struct xio_session *session,
 	} else {
 		/* try to send it */
 		/*msg->flags = XIO_MSG_FLAG_REQUEST_READ_RECEIPT; */
+		/*msg->flags = XIO_MSG_FLAG_PEER_READ_REQ;*/
 		if (xio_send_request(test_params->connection, msg) == -1) {
 			if (xio_errno() != EAGAIN)
 				printf("**** [%p] Error - xio_send_request " \
@@ -387,6 +390,30 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
+#define XIO_READ_BUF_LEN	(4*1024*1024)
+
+/*---------------------------------------------------------------------------*/
+/* assign_data_in_buf							     */
+/*---------------------------------------------------------------------------*/
+static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
+{
+	struct test_params *test_params = (struct test_params *)cb_user_context;
+	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	int			nents = vmsg_sglist_nents(&msg->in);
+	int i;
+
+	if (test_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &test_params->reg_mem);
+
+	for (i = 0; i < nents; i++) {
+		sglist[i].iov_base = test_params->reg_mem.addr;
+		sglist[i].mr = test_params->reg_mem.mr;
+	}
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -395,7 +422,8 @@ static struct xio_session_ops ses_ops = {
 	.on_session_established		=  on_session_established,
 	.on_msg_delivered		=  on_msg_delivered,
 	.on_msg				=  on_response,
-	.on_msg_error			=  on_msg_error
+	.on_msg_error			=  on_msg_error,
+	.assign_data_in_buf		=  assign_data_in_buf
 };
 
 /*---------------------------------------------------------------------------*/
@@ -593,6 +621,7 @@ int send_one_by_one(struct test_params *test_params)
 		sglist = vmsg_sglist(&msg->in);
 		vmsg_sglist_set_nents(&msg->in, test_config.in_iov_len);
 
+		/* tell accelio to use  1MB buffer from its internal pool */
 		for (j = 0; j < test_config.in_iov_len; j++) {
 			sglist[j].iov_base = NULL;
 			sglist[j].iov_len  = ONE_MB;
@@ -600,7 +629,7 @@ int send_one_by_one(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
@@ -652,7 +681,7 @@ int send_chained(struct test_params *test_params)
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
@@ -682,7 +711,6 @@ int send_chained(struct test_params *test_params)
 		msg_pool_put(test_params->pool, msg);
 		return -1;
 	}
-
 	test_params->nsent += nsent;
 
 	return 0;
@@ -698,6 +726,7 @@ int main(int argc, char *argv[])
 	struct test_params		test_params;
 	struct xio_session_params	params;
 	struct xio_connection_params	cparams;
+	int				reconnect;
 	int				error;
 	int				retval;
 	static int			chain_messages = CHAIN_MESSAGES;
@@ -716,6 +745,11 @@ int main(int argc, char *argv[])
 	memset(&cparams, 0, sizeof(cparams));
 	test_params.stat.first_time = 1;
 	test_params.finite_run = test_config.finite_run;
+
+	/* enable reconnect */
+	reconnect = 1;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_RECONNECT,
+			&reconnect, sizeof(reconnect));
 
 	/* set accelio max message vector used */
 	xio_set_opt(NULL,
@@ -773,6 +807,12 @@ int main(int argc, char *argv[])
 #endif
 	/* connect the session  */
 	test_params.connection = xio_connect(&cparams);
+	if (!test_params.connection) {
+		error = xio_errno();
+		fprintf(stderr, "failed to create connection. %d - %s\n",
+			error, xio_strerror(error));
+		goto destroy_session;
+	}
 
 	printf("**** starting ...\n");
 
@@ -795,7 +835,7 @@ int main(int argc, char *argv[])
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
 
-
+destroy_session:
 	retval = xio_session_destroy(session);
 	if (retval != 0) {
 		error = xio_errno();
@@ -807,6 +847,9 @@ int main(int argc, char *argv[])
 	xio_context_destroy(test_params.ctx);
 
 	msg_pool_free(test_params.pool);
+
+	if (test_params.reg_mem.addr)
+		xio_mem_free(&test_params.reg_mem);
 
 cleanup:
 	msg_api_free(&test_params.msg_params);

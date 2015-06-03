@@ -47,12 +47,11 @@
 #include "xio_transport.h"
 #include "xio_usr_transport.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_tcp_transport.h"
 #include "xio_mem.h"
-
-
 
 extern struct xio_tcp_options tcp_options;
 
@@ -174,6 +173,7 @@ static void xio_tcp_write_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	PACK_LLVAL(msg, tmp_msg, buffer_sz);
 	PACK_LVAL(msg, tmp_msg, max_in_iovsz);
 	PACK_LVAL(msg, tmp_msg, max_out_iovsz);
+	PACK_LVAL(msg, tmp_msg, max_header_len);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -210,6 +210,7 @@ static void xio_tcp_read_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	UNPACK_LLVAL(tmp_msg, msg, buffer_sz);
 	UNPACK_LVAL(tmp_msg, msg, max_in_iovsz);
 	UNPACK_LVAL(tmp_msg, msg, max_out_iovsz);
+	UNPACK_LVAL(tmp_msg, msg, max_header_len);
 
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
@@ -219,22 +220,22 @@ static void xio_tcp_read_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	xio_mbuf_inc(&task->mbuf, sizeof(struct xio_tcp_setup_msg));
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_send_setup_req						     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 				  struct xio_task *task)
 {
-	uint16_t payload;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	uint16_t payload;
 	struct xio_tcp_setup_msg  req;
 
 	DEBUG_LOG("xio_tcp_send_setup_req\n");
 
-	req.buffer_sz		= tcp_hndl->max_inline_buf_sz;
+	req.buffer_sz		= xio_tcp_get_inline_buffer_size();
 	req.max_in_iovsz	= tcp_options.max_in_iovsz;
 	req.max_out_iovsz	= tcp_options.max_out_iovsz;
+	req.max_header_len      = g_options.max_inline_xio_hdr;
 
 	xio_tcp_write_setup_msg(tcp_hndl, task, &req);
 
@@ -253,7 +254,7 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 	tcp_task->txd.msg.msg_iov	 = tcp_task->txd.msg_iov;
 	tcp_task->txd.msg.msg_iovlen	 = tcp_task->txd.msg_len;
 
-	tcp_task->tcp_op		 = XIO_TCP_SEND;
+	tcp_task->out_tcp_op		 = XIO_TCP_SEND;
 
 	xio_task_addref(task);
 
@@ -270,14 +271,16 @@ static int xio_tcp_send_setup_req(struct xio_tcp_transport *tcp_hndl,
 static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 				  struct xio_task *task)
 {
-	uint16_t payload;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	uint16_t payload;
 	struct xio_tcp_setup_msg *rsp = &tcp_hndl->setup_rsp;
 
 	DEBUG_LOG("xio_tcp_send_setup_rsp\n");
 
 	rsp->max_in_iovsz	= tcp_options.max_in_iovsz;
 	rsp->max_out_iovsz	= tcp_options.max_out_iovsz;
+	rsp->buffer_sz          = tcp_hndl->membuf_sz;
+	rsp->max_header_len     = g_options.max_inline_xio_hdr;
 
 	xio_tcp_write_setup_msg(tcp_hndl, task, rsp);
 
@@ -296,7 +299,7 @@ static int xio_tcp_send_setup_rsp(struct xio_tcp_transport *tcp_hndl,
 	tcp_task->txd.msg.msg_iov	 = tcp_task->txd.msg_iov;
 	tcp_task->txd.msg.msg_iovlen	 = tcp_task->txd.msg_len;
 
-	tcp_task->tcp_op		 = XIO_TCP_SEND;
+	tcp_task->out_tcp_op		 = XIO_TCP_SEND;
 
 	xio_tcp_sendmsg_work(tcp_hndl->sock.cfd, &tcp_task->txd, 1);
 
@@ -313,11 +316,13 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 {
 	union xio_transport_event_data event_data;
 	struct xio_tcp_setup_msg *rsp  = &tcp_hndl->setup_rsp;
+	uint64_t local_buf_size;
 
 	DEBUG_LOG("xio_tcp_on_setup_msg\n");
 
 	if (tcp_hndl->base.is_client) {
 		struct xio_task *sender_task = NULL;
+
 		if (!list_empty(&tcp_hndl->in_flight_list))
 			sender_task = list_first_entry(
 					&tcp_hndl->in_flight_list,
@@ -337,20 +342,22 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 		xio_tcp_read_setup_msg(tcp_hndl, task, &req);
 
 		/* current implementation is symmetric */
-		rsp->buffer_sz	= min(req.buffer_sz,
-				tcp_hndl->max_inline_buf_sz);
+		local_buf_size		= xio_tcp_get_inline_buffer_size();
+		rsp->buffer_sz		= min(req.buffer_sz, local_buf_size);
 		rsp->max_in_iovsz	= req.max_in_iovsz;
 		rsp->max_out_iovsz	= req.max_out_iovsz;
+		rsp->max_header_len     = req.max_header_len;
 	}
 
 	tcp_hndl->max_inline_buf_sz	= (size_t)rsp->buffer_sz;
 	tcp_hndl->membuf_sz		= (size_t)rsp->buffer_sz;
 	tcp_hndl->peer_max_in_iovsz	= rsp->max_in_iovsz;
 	tcp_hndl->peer_max_out_iovsz	= rsp->max_out_iovsz;
+	tcp_hndl->peer_max_header      = rsp->max_header_len;
 
 	tcp_hndl->sn = 0;
 
-	tcp_hndl->state = XIO_STATE_CONNECTED;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_CONNECTED;
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;
@@ -359,7 +366,8 @@ static int xio_tcp_on_setup_msg(struct xio_tcp_transport *tcp_hndl,
 	list_move_tail(&task->tasks_list_entry, &tcp_hndl->io_list);
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_NEW_MESSAGE, &event_data);
+				      XIO_TRANSPORT_EVENT_NEW_MESSAGE,
+				      &event_data);
 	return 0;
 }
 
@@ -398,12 +406,12 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task,
 				    struct xio_tcp_req_hdr *req_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	struct xio_sge			sge;
 	size_t				hdr_len;
 	uint32_t			i;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_sg_table_ops		*sgtbl_ops;
 	void				*sgtbl;
 	void				*sg;
@@ -411,8 +419,6 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 	sgtbl		= xio_sg_table_get(&task->omsg->in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->in.sgl_type);
-
-
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -423,12 +429,12 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_req_hdr->version  = req_hdr->version;
 	tmp_req_hdr->flags    = req_hdr->flags;
 	PACK_SVAL(req_hdr, tmp_req_hdr, req_hdr_len);
-	PACK_SVAL(req_hdr, tmp_req_hdr, tid);
-	tmp_req_hdr->opcode	   = req_hdr->opcode;
+	PACK_LVAL(req_hdr, tmp_req_hdr, ltid);
+	tmp_req_hdr->in_tcp_op	   = req_hdr->in_tcp_op;
+	tmp_req_hdr->out_tcp_op	   = req_hdr->out_tcp_op;
 
-	PACK_SVAL(req_hdr, tmp_req_hdr, recv_num_sge);
-	PACK_SVAL(req_hdr, tmp_req_hdr, read_num_sge);
-	PACK_SVAL(req_hdr, tmp_req_hdr, write_num_sge);
+	PACK_SVAL(req_hdr, tmp_req_hdr, in_num_sge);
+	PACK_SVAL(req_hdr, tmp_req_hdr, out_num_sge);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_hdr_len);
 	PACK_SVAL(req_hdr, tmp_req_hdr, ulp_pad_len);
 	/*remain_data_len is not used		*/
@@ -439,41 +445,58 @@ static int xio_tcp_write_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	/* IN: requester expect small input written via send */
 	sg = sge_first(sgtbl_ops, sgtbl);
-	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
-		sge.addr = 0;
-		sge.length = sge_length(sgtbl_ops, sg);
-		sge.stag = 0;
-		PACK_LLVAL(&sge, tmp_sge, addr);
-		PACK_LVAL(&sge, tmp_sge, length);
-		PACK_LVAL(&sge, tmp_sge, stag);
-		tmp_sge++;
-		sg = sge_next(sgtbl_ops, sgtbl, sg);
+	if (req_hdr->in_tcp_op == XIO_TCP_SEND) {
+		for (i = 0;  i < req_hdr->in_num_sge; i++) {
+			sge.addr = 0;
+			sge.length = sge_length(sgtbl_ops, sg);
+			sge.stag = 0;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+			sg = sge_next(sgtbl_ops, sgtbl, sg);
+		}
 	}
 	/* IN: requester expect big input written rdma write */
-	for (i = 0;  i < req_hdr->read_num_sge; i++) {
-		sge.addr = uint64_from_ptr(tcp_task->read_sge[i].addr);
-		sge.length = tcp_task->read_sge[i].length;
-		sge.stag = 0;
-		PACK_LLVAL(&sge, tmp_sge, addr);
-		PACK_LVAL(&sge, tmp_sge, length);
-		PACK_LVAL(&sge, tmp_sge, stag);
-		tmp_sge++;
+	if (req_hdr->in_tcp_op == XIO_TCP_WRITE) {
+		for (i = 0;  i < req_hdr->in_num_sge; i++) {
+			sge.addr = uint64_from_ptr(tcp_task->read_reg_mem[i].addr);
+			sge.length = tcp_task->read_reg_mem[i].length;
+			sge.stag = 0;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+		}
 	}
 	/* OUT: requester want to write data via rdma read */
-	for (i = 0;  i < req_hdr->write_num_sge; i++) {
-		sge.addr = uint64_from_ptr(tcp_task->write_sge[i].addr);
-		sge.length = tcp_task->write_sge[i].length;
-		sge.stag = 0;
-		PACK_LLVAL(&sge, tmp_sge, addr);
-		PACK_LVAL(&sge, tmp_sge, length);
-		PACK_LVAL(&sge, tmp_sge, stag);
-		tmp_sge++;
+	if (req_hdr->out_tcp_op == XIO_TCP_READ) {
+		for (i = 0;  i < req_hdr->out_num_sge; i++) {
+			sge.addr = uint64_from_ptr(tcp_task->write_reg_mem[i].addr);
+			sge.length = tcp_task->write_reg_mem[i].length;
+			sge.stag = 0;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+		}
+	}
+	if (req_hdr->out_tcp_op == XIO_TCP_SEND) {
+		for (i = 0;  i < req_hdr->out_num_sge; i++) {
+			sge.addr = 0;
+			sge.length = sge_length(sgtbl_ops, sg);
+			sge.stag = 0;
+			PACK_LLVAL(&sge, tmp_sge, addr);
+			PACK_LVAL(&sge, tmp_sge, length);
+			PACK_LVAL(&sge, tmp_sge, stag);
+			tmp_sge++;
+			sg = sge_next(sgtbl_ops, sgtbl, sg);
+		}
 	}
 
 	hdr_len	= sizeof(struct xio_tcp_req_hdr);
-	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
-						   req_hdr->read_num_sge +
-						   req_hdr->write_num_sge);
+	hdr_len += sizeof(struct xio_sge) * (req_hdr->in_num_sge +
+					     req_hdr->out_num_sge);
 #ifdef EYAL_TODO
 	print_hex_dump_bytes("post_send: ", DUMP_PREFIX_ADDRESS,
 			     task->mbuf.curr,
@@ -494,8 +517,8 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 				   uint64_t ulp_imm_len,
 				   uint32_t status)
 {
-	struct xio_tcp_req_hdr	req_hdr;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	struct xio_tcp_req_hdr	req_hdr;
 
 	if (!IS_REQUEST(task->tlv_type)) {
 		ERROR_LOG("unknown message type\n");
@@ -507,21 +530,21 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 	/* fill request header */
 	req_hdr.version		= XIO_TCP_REQ_HEADER_VERSION;
 	req_hdr.req_hdr_len	= sizeof(req_hdr);
-	req_hdr.tid		= task->ltid;
-	req_hdr.opcode		= tcp_task->tcp_op;
+	req_hdr.ltid		= task->ltid;
+	req_hdr.in_tcp_op	= tcp_task->in_tcp_op;
+	req_hdr.out_tcp_op	= tcp_task->out_tcp_op;
 	req_hdr.flags		= 0;
 
-	if (test_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &task->omsg_flags))
-		set_bits(XIO_MSG_FLAG_SMALL_ZERO_COPY, &req_hdr.flags);
+	if (test_bits(XIO_MSG_FLAG_PEER_WRITE_RSP, &task->omsg_flags))
+		set_bits(XIO_MSG_FLAG_PEER_WRITE_RSP, &req_hdr.flags);
 	else if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg_flags))
 		set_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &req_hdr.flags);
 
 	req_hdr.ulp_hdr_len	= ulp_hdr_len;
 	req_hdr.ulp_pad_len	= ulp_pad_len;
 	req_hdr.ulp_imm_len	= ulp_imm_len;
-	req_hdr.recv_num_sge	= tcp_task->recv_num_sge;
-	req_hdr.read_num_sge	= tcp_task->read_num_sge;
-	req_hdr.write_num_sge	= tcp_task->write_num_sge;
+	req_hdr.in_num_sge	= tcp_task->read_num_reg_mem;
+	req_hdr.out_num_sge	= tcp_task->write_num_reg_mem;
 
 	if (xio_tcp_write_req_header(tcp_hndl, task, &req_hdr) != 0)
 		goto cleanup;
@@ -571,10 +594,10 @@ static int xio_tcp_write_send_data(
 	sg = sge_first(sgtbl_ops, sgtbl);
 	if (sge_mr(sgtbl_ops, sg) || !tcp_options.enable_mr_check) {
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			tcp_task->txd.msg_iov[i+1].iov_base =
-				sge_addr(sgtbl_ops, sg);
-			tcp_task->txd.msg_iov[i+1].iov_len =
-				sge_length(sgtbl_ops, sg);
+			tcp_task->txd.msg_iov[i + 1].iov_base =
+						sge_addr(sgtbl_ops, sg);
+			tcp_task->txd.msg_iov[i + 1].iov_len =
+						sge_length(sgtbl_ops, sg);
 
 			byte_len += sge_length(sgtbl_ops, sg);
 		}
@@ -613,63 +636,76 @@ static int xio_tcp_prep_req_out_data(
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_vmsg		*vmsg = &task->omsg->out;
 	uint64_t		xio_hdr_len;
-	uint64_t		ulp_out_hdr_len;
+	uint64_t		xio_max_hdr_len;
+	uint64_t		ulp_hdr_len;
 	uint64_t		ulp_pad_len = 0;
-	uint64_t		ulp_out_imm_len;
+	uint64_t		ulp_imm_len;
 	size_t			retval;
 	unsigned int		i;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
 	int			tx_by_sr;
+	int			nents;
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->out.sgl_type);
+	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
 	/* calculate headers */
-	ulp_out_hdr_len	= vmsg->header.iov_len;
-	ulp_out_imm_len	= tbl_length(sgtbl_ops, sgtbl);
+	ulp_hdr_len	= vmsg->header.iov_len;
+	ulp_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_tcp_req_hdr);
-	xio_hdr_len += sizeof(struct xio_sge)*(tcp_task->recv_num_sge +
-					       tcp_task->read_num_sge +
-					       tbl_nents(sgtbl_ops, sgtbl));
+	xio_hdr_len += sizeof(struct xio_sge) * tcp_task->read_num_reg_mem;
+	xio_max_hdr_len = xio_hdr_len + sizeof(struct xio_sge) * nents;
+
+	if (g_options.inline_xio_data_align && ulp_imm_len) {
+		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
+
+		ulp_pad_len = ALIGN(hdr_len, g_options.inline_xio_data_align) -
+			      hdr_len;
+	}
 
 	/*
-	if (tcp_hndl->max_inline_buf_sz	 < (xio_hdr_len + ulp_out_hdr_len)) {
+	if (tcp_hndl->max_inline_buf_sz	 < (xio_hdr_len + ulp_hdr_len)) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
-			  ulp_out_hdr_len, tcp_hndl->max_inline_buf_sz -
+			  ulp_hdr_len, tcp_hndl->max_inline_buf_sz -
 			  xio_hdr_len);
 		xio_set_error(XIO_E_MSG_SIZE);
 		return -1;
 	}
 	*/
 	/* test for using send/receive or rdma_read */
-	tx_by_sr = (((ulp_out_hdr_len + ulp_out_imm_len + xio_hdr_len) <=
-		      tcp_hndl->max_inline_buf_sz) &&
-		     (((int)(ulp_out_imm_len) <=
-			     g_options.max_inline_data) ||
-			     ulp_out_imm_len == 0));
+	if (test_bits(XIO_MSG_FLAG_PEER_READ_REQ, &task->omsg_flags) && nents)
+		tx_by_sr = 0;
+	else
+		tx_by_sr = (((ulp_hdr_len + ulp_pad_len +
+			      ulp_imm_len + xio_max_hdr_len) <=
+			     tcp_hndl->max_inline_buf_sz) &&
+			     (((int)(ulp_imm_len) <=
+			       g_options.max_inline_xio_data) ||
+			      ulp_imm_len == 0));
 
 	/* the data is outgoing via SEND */
 	if (tx_by_sr) {
-		tcp_task->tcp_op = XIO_TCP_SEND;
+		tcp_task->out_tcp_op = XIO_TCP_SEND;
 		/* user has small request - no rdma operation expected */
-		tcp_task->write_num_sge = 0;
+		tcp_task->write_num_reg_mem = 0;
 
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_req_header(
 				tcp_hndl, task,
-				(uint16_t)ulp_out_hdr_len,
-				(uint16_t)ulp_pad_len, ulp_out_imm_len,
+				(uint16_t)ulp_hdr_len,
+				(uint16_t)ulp_pad_len, ulp_imm_len,
 				XIO_E_SUCCESS);
 		if (retval)
 			return -1;
 
 		/* if there is data, set it to buffer or directly to the sge */
-		if (ulp_out_imm_len) {
+		if (ulp_imm_len) {
 			retval = xio_tcp_write_send_data(tcp_hndl, task);
 			if (retval)
 				return -1;
@@ -678,20 +714,20 @@ static int xio_tcp_prep_req_out_data(
 			tcp_task->txd.msg_len = 1;
 		}
 	} else {
-		tcp_task->tcp_op = XIO_TCP_READ;
+		tcp_task->out_tcp_op = XIO_TCP_READ;
 		sg = sge_first(sgtbl_ops, sgtbl);
 		if (sge_mr(sgtbl_ops, sg) || !tcp_options.enable_mr_check) {
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-				tcp_task->write_sge[i].addr =
+				tcp_task->write_reg_mem[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				tcp_task->write_sge[i].cache = NULL;
-				tcp_task->write_sge[i].mr =
+				tcp_task->write_reg_mem[i].priv = NULL;
+				tcp_task->write_reg_mem[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
-				tcp_task->write_sge[i].length =
+				tcp_task->write_reg_mem[i].length =
 					sge_length(sgtbl_ops, sg);
 			}
 		} else {
-			if (tcp_hndl->tcp_mempool == NULL) {
+			if (!tcp_hndl->tcp_mempool) {
 				xio_set_error(XIO_E_NO_BUFS);
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
@@ -704,9 +740,9 @@ static int xio_tcp_prep_req_out_data(
 				retval = xio_mempool_alloc(
 						tcp_hndl->tcp_mempool,
 						sge_length(sgtbl_ops, sg),
-						&tcp_task->write_sge[i]);
+						&tcp_task->write_reg_mem[i]);
 				if (retval) {
-					tcp_task->write_num_sge = i;
+					tcp_task->write_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG("mempool is empty " \
 						  "for %zd bytes\n",
@@ -714,28 +750,28 @@ static int xio_tcp_prep_req_out_data(
 					goto cleanup;
 				}
 
-				tcp_task->write_sge[i].length =
+				tcp_task->write_reg_mem[i].length =
 					sge_length(sgtbl_ops, sg);
 
 				/* copy the data to the buffer */
-				memcpy(tcp_task->write_sge[i].addr,
+				memcpy(tcp_task->write_reg_mem[i].addr,
 				       sge_addr(sgtbl_ops, sg),
 				       sge_length(sgtbl_ops, sg));
 			}
 		}
-		tcp_task->write_num_sge = tbl_nents(sgtbl_ops, sgtbl);
+		tcp_task->write_num_reg_mem = tbl_nents(sgtbl_ops, sgtbl);
 
-		if (ulp_out_imm_len) {
+		if (ulp_imm_len) {
 			tcp_task->txd.tot_iov_byte_len = 0;
-			for (i = 0; i < tcp_task->write_num_sge; i++)  {
-				tcp_task->txd.msg_iov[i+1].iov_base =
-						tcp_task->write_sge[i].addr;
-				tcp_task->txd.msg_iov[i+1].iov_len =
-						tcp_task->write_sge[i].length;
+			for (i = 0; i < tcp_task->write_num_reg_mem; i++)  {
+				tcp_task->txd.msg_iov[i + 1].iov_base =
+						tcp_task->write_reg_mem[i].addr;
+				tcp_task->txd.msg_iov[i + 1].iov_len =
+						tcp_task->write_reg_mem[i].length;
 				tcp_task->txd.tot_iov_byte_len +=
-						tcp_task->write_sge[i].length;
+						tcp_task->write_reg_mem[i].length;
 			}
-			tcp_task->txd.msg_len = tcp_task->write_num_sge + 1;
+			tcp_task->txd.msg_len = tcp_task->write_num_reg_mem + 1;
 		} else {
 			tcp_task->txd.tot_iov_byte_len = 0;
 			tcp_task->txd.msg_len = 1;
@@ -744,7 +780,7 @@ static int xio_tcp_prep_req_out_data(
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_req_header(
 				tcp_hndl, task,
-				(uint16_t)ulp_out_hdr_len, 0, 0, XIO_E_SUCCESS);
+				(uint16_t)ulp_hdr_len, 0, 0, XIO_E_SUCCESS);
 
 		if (retval) {
 			ERROR_LOG("Failed to write header\n");
@@ -755,10 +791,10 @@ static int xio_tcp_prep_req_out_data(
 	return 0;
 
 cleanup:
-	for (i = 0; i < tcp_task->write_num_sge; i++)
-		xio_mempool_free(&tcp_task->write_sge[i]);
+	for (i = 0; i < tcp_task->write_num_reg_mem; i++)
+		xio_mempool_free(&tcp_task->write_reg_mem[i]);
 
-	tcp_task->write_num_sge = 0;
+	tcp_task->write_num_reg_mem = 0;
 
 	return -1;
 }
@@ -780,7 +816,7 @@ static int xio_tcp_on_rsp_send_comp(struct xio_tcp_transport *tcp_hndl,
 	event_data.msg.task	= task;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_SEND_COMPLETION,
+				      XIO_TRANSPORT_EVENT_SEND_COMPLETION,
 				      &event_data);
 
 	return 0;
@@ -801,7 +837,7 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 	event_data.msg.task	= task;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_SEND_COMPLETION,
+				      XIO_TRANSPORT_EVENT_SEND_COMPLETION,
 				      &event_data);
 
 	return 0;
@@ -815,12 +851,12 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
 						xio_tcp_hndl;
 
-	if (tcp_hndl->state >= XIO_STATE_DISCONNECTED)
+	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
 		return;
 
-	tcp_hndl->state = XIO_STATE_DISCONNECTED;
+	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 
-	xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -828,23 +864,18 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_tx_completion_handler(void *xio_task)
 {
-	struct xio_task		*task, *ptask, *next_ptask;
-	struct xio_tcp_task	*tcp_task;
-	struct xio_tcp_transport *tcp_hndl;
+	struct xio_task		*ptask, *next_ptask;
 	int			found = 0;
 	int			removed = 0;
+	struct xio_task		*task = (struct xio_task *)xio_task;
 
-	task = (struct xio_task *)xio_task;
-	tcp_task = (struct xio_tcp_task *)task->dd_data;
-	tcp_hndl = tcp_task->tcp_hndl;
+	XIO_TO_TCP_HNDL(task, tcp_hndl);
 
 	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->in_flight_list,
 				 tasks_list_entry) {
 		list_move_tail(&ptask->tasks_list_entry,
 			       &tcp_hndl->tx_comp_list);
 		removed++;
-		tcp_task = (struct xio_tcp_task *)ptask->dd_data;
-
 		if (IS_REQUEST(ptask->tlv_type)) {
 			xio_tcp_on_req_send_comp(tcp_hndl, ptask);
 			xio_tasks_pool_put(ptask);
@@ -917,7 +948,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	if (tcp_hndl->tx_ready_tasks_num == 0)
 		return 0;
 
-	if (tcp_hndl->state != XIO_STATE_CONNECTED) {
+	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		xio_set_error(XIO_EAGAIN);
 		return -1;
 	}
@@ -960,7 +991,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			++batch_count;
 			if (batch_count != batch_nr &&
 			    batch_count != tcp_hndl->tx_ready_tasks_num &&
-			    next_task != NULL &&
+			    next_task &&
 			    next_tcp_task->txd.stage
 			    <= XIO_TCP_TX_IN_SEND_CTL) {
 				task = next_task;
@@ -1051,7 +1082,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 			++batch_count;
 			if (batch_count != batch_nr &&
 			    batch_count != tcp_hndl->tx_ready_tasks_num &&
-			    next_task != NULL &&
+			    next_task &&
 			    (next_tcp_task->txd.stage ==
 			    XIO_TCP_TX_IN_SEND_DATA) &&
 			    (next_tcp_task->txd.msg.msg_iovlen +
@@ -1179,7 +1210,7 @@ handle_completions:
 		tcp_hndl->tx_comp_cnt = 0;
 	}
 
-	xio_ctx_remove_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+	xio_context_disable_event(&tcp_hndl->flush_tx_event);
 
 	return retval < 0 ? retval : 0;
 }
@@ -1208,45 +1239,50 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	nents		= tbl_nents(sgtbl_ops, sgtbl);
 
 	if (nents == 0) {
-		tcp_task->recv_num_sge = 0;
-		tcp_task->read_num_sge = 0;
+		tcp_task->in_tcp_op = XIO_TCP_SEND;
+		tcp_task->read_num_reg_mem = 0;
 		return 0;
 	}
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
+	if (hdr_len && hdr_len >= tcp_hndl->peer_max_header) {
+		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%d\n",
+				hdr_len, tcp_hndl->peer_max_header);
+		return -1;
+	}
 
 	/* before working on the out - current place after the session header */
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_tcp_rsp_hdr);
-	xio_hdr_len += sizeof(struct xio_sge)*nents;
+	xio_hdr_len += sizeof(struct xio_sge) * nents;
 
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
-	if (!(task->omsg_flags & XIO_MSG_FLAG_SMALL_ZERO_COPY) &&
+	if (!(task->omsg_flags & XIO_MSG_FLAG_PEER_WRITE_RSP) &&
 	    data_len + hdr_len + xio_hdr_len < tcp_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
-		tcp_task->read_num_sge = 0;
-		if (data_len)
-			tcp_task->recv_num_sge = tbl_nents(sgtbl_ops, sgtbl);
+		tcp_task->in_tcp_op = XIO_TCP_SEND;
+		tcp_task->read_num_reg_mem = (data_len) ? tbl_nents(sgtbl_ops, sgtbl) : 0;
 	} else  {
 		/* user provided buffers with length for RDMA WRITE */
 		/* user provided mr */
+		tcp_task->in_tcp_op = XIO_TCP_WRITE;
 		sg = sge_first(sgtbl_ops, sgtbl);
 		if (sge_addr(sgtbl_ops, sg) &&
 		    (sge_mr(sgtbl_ops, sg) || !tcp_options.enable_mr_check)) {
 			for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-				tcp_task->read_sge[i].addr =
+				tcp_task->read_reg_mem[i].addr =
 					sge_addr(sgtbl_ops, sg);
-				tcp_task->read_sge[i].cache = NULL;
-				tcp_task->read_sge[i].mr =
+				tcp_task->read_reg_mem[i].priv = NULL;
+				tcp_task->read_reg_mem[i].mr =
 					(struct xio_mr *)sge_mr(sgtbl_ops, sg);
-				tcp_task->read_sge[i].length =
+				tcp_task->read_reg_mem[i].length =
 					sge_length(sgtbl_ops, sg);
 			}
 		} else {
-			if (tcp_hndl->tcp_mempool == NULL) {
+			if (!tcp_hndl->tcp_mempool) {
 				xio_set_error(XIO_E_NO_BUFS);
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
@@ -1258,27 +1294,26 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 				retval = xio_mempool_alloc(
 						tcp_hndl->tcp_mempool,
 						sge_length(sgtbl_ops, sg),
-						&tcp_task->read_sge[i]);
+						&tcp_task->read_reg_mem[i]);
 
 				if (retval) {
-					tcp_task->read_num_sge = i;
+					tcp_task->read_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG(
 					"mempool is empty for %zd bytes\n",
 					sge_length(sgtbl_ops, sg));
 					goto cleanup;
 				}
-				tcp_task->read_sge[i].length =
+				tcp_task->read_reg_mem[i].length =
 					sge_length(sgtbl_ops, sg);
 			}
 		}
-		tcp_task->read_num_sge = nents;
-		tcp_task->recv_num_sge = 0;
+		tcp_task->read_num_reg_mem = nents;
 	}
-	if (tcp_task->read_num_sge > tcp_hndl->peer_max_out_iovsz) {
+	if (tcp_task->read_num_reg_mem > tcp_hndl->peer_max_out_iovsz) {
 		ERROR_LOG("request in iovlen %d is bigger " \
 			  "than peer max out iovlen %d\n",
-			  tcp_task->read_num_sge,
+			  tcp_task->read_num_reg_mem,
 			  tcp_hndl->peer_max_out_iovsz);
 		goto cleanup;
 	}
@@ -1286,11 +1321,10 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	return 0;
 
 cleanup:
-	for (i = 0; i < tcp_task->read_num_sge; i++)
-		xio_mempool_free(&tcp_task->read_sge[i]);
+	for (i = 0; i < tcp_task->read_num_reg_mem; i++)
+		xio_mempool_free(&tcp_task->read_reg_mem[i]);
 
-	tcp_task->read_num_sge = 0;
-	tcp_task->recv_num_sge = 0;
+	tcp_task->read_num_reg_mem = 0;
 	xio_set_error(EMSGSIZE);
 
 	return -1;
@@ -1311,7 +1345,7 @@ size_t xio_tcp_single_sock_set_txd(struct xio_task *task)
 	tcp_task->txd.msg_iov[0].iov_len = iov_len;
 
 	tlv_len = iov_len - XIO_TLV_LEN;
-	if (tcp_task->tcp_op == XIO_TCP_SEND)
+	if (tcp_task->out_tcp_op == XIO_TCP_SEND)
 		tlv_len += (size_t)tcp_task->txd.tot_iov_byte_len;
 
 	tcp_task->txd.tot_iov_byte_len += iov_len;
@@ -1386,7 +1420,7 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 
 	xio_task_addref(task);
 
-	tcp_task->tcp_op = XIO_TCP_SEND;
+	tcp_task->out_tcp_op = XIO_TCP_SEND;
 
 	list_move_tail(&task->tasks_list_entry, &tcp_hndl->tx_ready_list);
 
@@ -1410,9 +1444,10 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
-        } else {
-                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
-        }
+	} else {
+		xio_context_add_event(tcp_hndl->base.ctx,
+				      &tcp_hndl->flush_tx_event);
+	}
 
 	return retval;
 }
@@ -1424,11 +1459,11 @@ static int xio_tcp_write_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task,
 				    struct xio_tcp_rsp_hdr *rsp_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1439,28 +1474,29 @@ static int xio_tcp_write_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	tmp_rsp_hdr->version  = rsp_hdr->version;
 	tmp_rsp_hdr->flags    = rsp_hdr->flags;
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, rsp_hdr_len);
-	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, tid);
-	tmp_rsp_hdr->opcode = rsp_hdr->opcode;
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, ltid);
+	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, rtid);
+	tmp_rsp_hdr->out_tcp_op = rsp_hdr->out_tcp_op;
 	PACK_LVAL(rsp_hdr, tmp_rsp_hdr, status);
-	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, write_num_sge);
+	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, out_num_sge);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_hdr_len);
 	PACK_SVAL(rsp_hdr, tmp_rsp_hdr, ulp_pad_len);
 	/* remain_data_len not in use */
 	PACK_LLVAL(rsp_hdr, tmp_rsp_hdr, ulp_imm_len);
 
-	if (rsp_hdr->write_num_sge) {
+	if (rsp_hdr->out_num_sge) {
 		wr_len = (uint32_t *)((uint8_t *)tmp_rsp_hdr +
 				sizeof(struct xio_tcp_rsp_hdr));
 
 		/* params for RDMA WRITE equivalent*/
-		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
-			*wr_len = htonl(tcp_task->rsp_write_sge[i].length);
+		for (i = 0;  i < rsp_hdr->out_num_sge; i++) {
+			*wr_len = htonl(tcp_task->rsp_out_sge[i].length);
 			wr_len++;
 		}
 	}
 
 	hdr_len	= sizeof(struct xio_tcp_rsp_hdr);
-	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
+	hdr_len += sizeof(uint32_t) * rsp_hdr->out_num_sge;
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
 
@@ -1492,10 +1528,11 @@ static int xio_tcp_prep_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	/* fill response header */
 	rsp_hdr.version		= XIO_TCP_RSP_HEADER_VERSION;
 	rsp_hdr.rsp_hdr_len	= sizeof(rsp_hdr);
-	rsp_hdr.tid		= task->rtid;
-	rsp_hdr.opcode		= tcp_task->tcp_op;
+	rsp_hdr.rtid            = task->rtid;
+	rsp_hdr.ltid		= task->ltid;
+	rsp_hdr.out_tcp_op	= tcp_task->out_tcp_op;
 	rsp_hdr.flags		= XIO_HEADER_FLAG_NONE;
-	rsp_hdr.write_num_sge	= tcp_task->rsp_write_num_sge;
+	rsp_hdr.out_num_sge	= tcp_task->rsp_out_num_sge;
 	rsp_hdr.ulp_hdr_len	= ulp_hdr_len;
 	rsp_hdr.ulp_pad_len	= ulp_pad_len;
 	rsp_hdr.ulp_imm_len	= ulp_imm_len;
@@ -1543,12 +1580,11 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
-
 	/* user did not provided mr */
 	sg = sge_first(sgtbl_ops, sgtbl);
-	if (sge_mr(sgtbl_ops, sg) == NULL &&
+	if (!sge_mr(sgtbl_ops, sg) &&
 	    tcp_options.enable_mr_check) {
-		if (tcp_hndl->tcp_mempool == NULL) {
+		if (!tcp_hndl->tcp_mempool) {
 			xio_set_error(XIO_E_NO_BUFS);
 			ERROR_LOG("message /read/write failed - " \
 				  "library's memory pool disabled\n");
@@ -1560,9 +1596,9 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 			retval = xio_mempool_alloc(
 					tcp_hndl->tcp_mempool,
 					sge_length(sgtbl_ops, sg),
-					&tcp_task->write_sge[i]);
+					&tcp_task->write_reg_mem[i]);
 			if (retval) {
-				tcp_task->write_num_sge = i;
+				tcp_task->write_num_reg_mem = i;
 				xio_set_error(ENOMEM);
 				ERROR_LOG("mempool is empty for %zd bytes\n",
 					  sge_length(sgtbl_ops, sg));
@@ -1570,21 +1606,21 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 			}
 
 			/* copy the data to the buffer */
-			memcpy(tcp_task->write_sge[i].addr,
+			memcpy(tcp_task->write_reg_mem[i].addr,
 			       sge_addr(sgtbl_ops, sg),
 			       sge_length(sgtbl_ops, sg));
 
-			tcp_task->txd.msg_iov[i+1].iov_base =
-					tcp_task->write_sge[i].addr;
-			tcp_task->txd.msg_iov[i+1].iov_len =
+			tcp_task->txd.msg_iov[i + 1].iov_base =
+					tcp_task->write_reg_mem[i].addr;
+			tcp_task->txd.msg_iov[i + 1].iov_len =
 					sge_length(sgtbl_ops, sg);
 			llen += sge_length(sgtbl_ops, sg);
 		}
 	} else {
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			tcp_task->txd.msg_iov[i+1].iov_base =
+			tcp_task->txd.msg_iov[i + 1].iov_base =
 				sge_addr(sgtbl_ops, sg);
-			tcp_task->txd.msg_iov[i+1].iov_len =
+			tcp_task->txd.msg_iov[i + 1].iov_len =
 					sge_length(sgtbl_ops, sg);
 			llen += sge_length(sgtbl_ops, sg);
 		}
@@ -1594,8 +1630,8 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 			tbl_nents(sgtbl_ops, sgtbl) + 1;
 	tcp_task->txd.tot_iov_byte_len = llen;
 
-	for (i = 0;  i < tcp_task->req_read_num_sge; i++)
-		rlen += tcp_task->req_read_sge[i].length;
+	for (i = 0;  i < tcp_task->req_in_num_sge; i++)
+		rlen += tcp_task->req_in_sge[i].length;
 
 	if (rlen  < llen) {
 		ERROR_LOG("peer provided too small iovec\n");
@@ -1606,24 +1642,24 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 
 	i = 0;
 	while (llen) {
-		if (tcp_task->req_read_sge[i].length < llen) {
-			tcp_task->rsp_write_sge[i].length =
-					tcp_task->req_read_sge[i].length;
+		if (tcp_task->req_in_sge[i].length < llen) {
+			tcp_task->rsp_out_sge[i].length =
+					tcp_task->req_in_sge[i].length;
 		} else {
-			tcp_task->rsp_write_sge[i].length =
+			tcp_task->rsp_out_sge[i].length =
 					llen;
 		}
-		llen -= tcp_task->rsp_write_sge[i].length;
+		llen -= tcp_task->rsp_out_sge[i].length;
 		++i;
 	}
-	tcp_task->rsp_write_num_sge = i;
+	tcp_task->rsp_out_num_sge = i;
 
 	return 0;
 cleanup:
-	for (i = 0; i < tcp_task->write_num_sge; i++)
-		xio_mempool_free(&tcp_task->write_sge[i]);
+	for (i = 0; i < tcp_task->write_num_reg_mem; i++)
+		xio_mempool_free(&tcp_task->write_reg_mem[i]);
 
-	tcp_task->write_num_sge = 0;
+	tcp_task->write_num_reg_mem = 0;
 	return -1;
 }
 
@@ -1640,7 +1676,7 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	uint64_t		ulp_imm_len;
 	size_t			retval;
 	int			must_send = 0;
-	int			small_zero_copy;
+	int			enforce_write_rsp;
 	int			tlv_len = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
@@ -1649,16 +1685,21 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->omsg->out.sgl_type);
 
-
 	/* calculate headers */
 	ulp_hdr_len	= task->omsg->out.header.iov_len;
 	ulp_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_tcp_rsp_hdr);
-	xio_hdr_len += (tcp_task->req_recv_num_sge +
-			tcp_task->req_read_num_sge)*sizeof(struct xio_sge);
-	small_zero_copy = task->imsg_flags & XIO_HEADER_FLAG_SMALL_ZERO_COPY;
+	xio_hdr_len += tcp_task->req_in_num_sge * sizeof(struct xio_sge);
+	enforce_write_rsp = task->imsg_flags & XIO_HEADER_FLAG_PEER_WRITE_RSP;
 
+	if (g_options.inline_xio_data_align && ulp_imm_len) {
+		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
+
+		ulp_pad_len = ALIGN(hdr_len, g_options.inline_xio_data_align) -
+			      hdr_len;
+	}
+	/*
 	if (tcp_hndl->max_inline_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
 			  ulp_hdr_len,
@@ -1666,14 +1707,16 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 		xio_set_error(XIO_E_MSG_SIZE);
 		goto cleanup;
 	}
+	*/
 
 	/* Small data is outgoing via SEND unless the requester explicitly
 	 * insisted on RDMA operation and provided resources.
 	 */
-	if ((ulp_imm_len == 0) || (!small_zero_copy &&
-				   ((xio_hdr_len + ulp_hdr_len + ulp_imm_len)
+	if ((ulp_imm_len == 0) || (!enforce_write_rsp &&
+				   ((xio_hdr_len + ulp_hdr_len +
+				     ulp_pad_len + ulp_imm_len)
 				    < tcp_hndl->max_inline_buf_sz))) {
-		tcp_task->tcp_op = XIO_TCP_SEND;
+		tcp_task->out_tcp_op = XIO_TCP_SEND;
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_rsp_header(
 				tcp_hndl, task,
@@ -1690,10 +1733,10 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 				goto cleanup;
 		}
 	} else {
-		if (tcp_task->req_read_sge[0].addr &&
-		    tcp_task->req_read_sge[0].length) {
+		if (tcp_task->req_in_sge[0].addr &&
+		    tcp_task->req_in_sge[0].length) {
 			/* the data is sent via RDMA_WRITE equivalent*/
-			tcp_task->tcp_op = XIO_TCP_WRITE;
+			tcp_task->out_tcp_op = XIO_TCP_WRITE;
 			/* prepare rdma write equivalent */
 			retval = xio_tcp_prep_rsp_wr_data(tcp_hndl, task);
 			if (retval)
@@ -1758,7 +1801,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 			retval = 0;
 		}
 	} else {
-                xio_ctx_add_event(tcp_hndl->base.ctx, &tcp_hndl->flush_tx_event);
+		xio_context_add_event(tcp_hndl->base.ctx,
+				      &tcp_hndl->flush_tx_event);
 	}
 
 	return retval;
@@ -1776,17 +1820,16 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 				   struct xio_task *task,
 				   struct xio_tcp_req_hdr *req_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr		*tmp_req_hdr;
 	struct xio_sge			*tmp_sge;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 	tmp_req_hdr = (struct xio_tcp_req_hdr *)
 			xio_mbuf_get_curr_ptr(&task->mbuf);
-
 
 	req_hdr->version  = tmp_req_hdr->version;
 	req_hdr->flags    = tmp_req_hdr->flags;
@@ -1800,12 +1843,12 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, sn);
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, tid);
-	req_hdr->opcode		= tmp_req_hdr->opcode;
+	UNPACK_LVAL(tmp_req_hdr, req_hdr, ltid);
+	req_hdr->out_tcp_op = tmp_req_hdr->out_tcp_op;
+	req_hdr->in_tcp_op = tmp_req_hdr->in_tcp_op;
 
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, recv_num_sge);
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, read_num_sge);
-	UNPACK_SVAL(tmp_req_hdr, req_hdr, write_num_sge);
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, in_num_sge);
+	UNPACK_SVAL(tmp_req_hdr, req_hdr, out_num_sge);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, ulp_pad_len);
 
@@ -1817,37 +1860,27 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_task->sn = req_hdr->sn;
 
-	/* params for SEND */
-	for (i = 0;  i < req_hdr->recv_num_sge; i++) {
-		UNPACK_LLVAL(tmp_sge, &tcp_task->req_recv_sge[i], addr);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_recv_sge[i], length);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_recv_sge[i], stag);
+	/* params for SEND/RDMA_WRITE */
+	for (i = 0;  i < req_hdr->in_num_sge; i++) {
+		UNPACK_LLVAL(tmp_sge, &tcp_task->req_in_sge[i], addr);
+		UNPACK_LVAL(tmp_sge, &tcp_task->req_in_sge[i], length);
+		UNPACK_LVAL(tmp_sge, &tcp_task->req_in_sge[i], stag);
 		tmp_sge++;
 	}
-	tcp_task->req_recv_num_sge	= i;
-
-	/* params for RDMA_WRITE */
-	for (i = 0;  i < req_hdr->read_num_sge; i++) {
-		UNPACK_LLVAL(tmp_sge, &tcp_task->req_read_sge[i], addr);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_read_sge[i], length);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_read_sge[i], stag);
-		tmp_sge++;
-	}
-	tcp_task->req_read_num_sge	= i;
+	tcp_task->req_in_num_sge	= i;
 
 	/* params for RDMA_READ */
-	for (i = 0;  i < req_hdr->write_num_sge; i++) {
-		UNPACK_LLVAL(tmp_sge, &tcp_task->req_write_sge[i], addr);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_write_sge[i], length);
-		UNPACK_LVAL(tmp_sge, &tcp_task->req_write_sge[i], stag);
+	for (i = 0;  i < req_hdr->out_num_sge; i++) {
+		UNPACK_LLVAL(tmp_sge, &tcp_task->req_out_sge[i], addr);
+		UNPACK_LVAL(tmp_sge, &tcp_task->req_out_sge[i], length);
+		UNPACK_LVAL(tmp_sge, &tcp_task->req_out_sge[i], stag);
 		tmp_sge++;
 	}
-	tcp_task->req_write_num_sge	= i;
+	tcp_task->req_out_num_sge	= i;
 
 	hdr_len	= sizeof(struct xio_tcp_req_hdr);
-	hdr_len += sizeof(struct xio_sge)*(req_hdr->recv_num_sge +
-						   req_hdr->read_num_sge +
-						   req_hdr->write_num_sge);
+	hdr_len += sizeof(struct xio_sge) * (req_hdr->in_num_sge +
+					     req_hdr->out_num_sge);
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
 
@@ -1861,11 +1894,11 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				   struct xio_task *task,
 				   struct xio_tcp_rsp_hdr *rsp_hdr)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr		*tmp_rsp_hdr;
 	uint32_t			*wr_len;
 	int				i;
 	size_t				hdr_len;
-	XIO_TO_TCP_TASK(task, tcp_task);
 
 	/* point to transport header */
 	xio_mbuf_set_trans_hdr(&task->mbuf);
@@ -1884,29 +1917,30 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, sn);
-	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, tid);
-	rsp_hdr->opcode = tmp_rsp_hdr->opcode;
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, rtid);
+	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, ltid);
+	rsp_hdr->out_tcp_op = tmp_rsp_hdr->out_tcp_op;
 	UNPACK_LVAL(tmp_rsp_hdr, rsp_hdr, status);
-	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, write_num_sge);
+	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, out_num_sge);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_hdr_len);
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, ulp_pad_len);
 	/* remain_data_len not in use */
 	UNPACK_LLVAL(tmp_rsp_hdr, rsp_hdr, ulp_imm_len);
 
-	if (rsp_hdr->write_num_sge) {
+	if (rsp_hdr->out_num_sge) {
 		wr_len = (uint32_t *)((uint8_t *)tmp_rsp_hdr +
 				sizeof(struct xio_tcp_rsp_hdr));
 
 		/* params for RDMA WRITE */
-		for (i = 0;  i < rsp_hdr->write_num_sge; i++) {
-			tcp_task->rsp_write_sge[i].length = ntohl(*wr_len);
+		for (i = 0;  i < rsp_hdr->out_num_sge; i++) {
+			tcp_task->rsp_out_sge[i].length = ntohl(*wr_len);
 			wr_len++;
 		}
-		tcp_task->rsp_write_num_sge = rsp_hdr->write_num_sge;
+		tcp_task->rsp_out_num_sge = rsp_hdr->out_num_sge;
 	}
 
 	hdr_len	= sizeof(struct xio_tcp_rsp_hdr);
-	hdr_len += sizeof(uint32_t)*rsp_hdr->write_num_sge;
+	hdr_len += sizeof(uint32_t) * rsp_hdr->out_num_sge;
 
 	xio_mbuf_inc(&task->mbuf, hdr_len);
 
@@ -1920,10 +1954,11 @@ static int xio_tcp_assign_in_buf(struct xio_tcp_transport *tcp_hndl,
 				 struct xio_task *task, int *is_assigned)
 {
 	union xio_transport_event_data event_data = {};
+
 	event_data.assign_in_buf.task = task;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_ASSIGN_IN_BUF,
+				      XIO_TRANSPORT_EVENT_ASSIGN_IN_BUF,
 				      &event_data);
 
 	*is_assigned = event_data.assign_in_buf.is_assigned;
@@ -1950,7 +1985,7 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 
 	while (xio_recv->tot_iov_byte_len) {
 		while (tcp_hndl->tmp_rx_buf_len == 0) {
-			retval = recv(fd, (char*)tcp_hndl->tmp_rx_buf,
+			retval = recv(fd, (char *)tcp_hndl->tmp_rx_buf,
 				      TMP_RX_BUF_SIZE, 0);
 			if (retval > 0) {
 				tcp_hndl->tmp_rx_buf_len = retval;
@@ -1968,21 +2003,20 @@ int xio_tcp_recv_ctl_work(struct xio_tcp_transport *tcp_hndl, int fd,
 						   xio_get_last_socket_error());
 						return -1;
 					}
-				}
-				else if (xio_get_last_socket_error() ==
-							XIO_ECONNRESET
-					|| xio_get_last_socket_error() ==
-							XIO_ECONNABORTED) {
+				} else if (xio_get_last_socket_error() ==
+						XIO_ECONNRESET ||
+					   xio_get_last_socket_error() ==
+						XIO_ECONNABORTED) {
 					xio_set_error(
 						   xio_get_last_socket_error());
 					DEBUG_LOG("recv failed.(errno=%d)\n",
-						xio_get_last_socket_error());
+						  xio_get_last_socket_error());
 					return 0;
 				} else {
 					xio_set_error(
 						   xio_get_last_socket_error());
 					ERROR_LOG("recv failed.(errno=%d)\n",
-						xio_get_last_socket_error());
+						  xio_get_last_socket_error());
 					return -1;
 				}
 			}
@@ -2038,8 +2072,9 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 				} else {
 					xio_recv->msg.msg_iov[i].iov_len -=
 							(retval - tmp_bytes);
-					inc_ptr(xio_recv->msg.msg_iov[i].iov_base,
-							retval - tmp_bytes);
+					inc_ptr(
+					  xio_recv->msg.msg_iov[i].iov_base,
+					  retval - tmp_bytes);
 					xio_recv->msg.msg_iov =
 						&xio_recv->msg.msg_iov[i];
 					xio_recv->msg.msg_iovlen -= i;
@@ -2054,23 +2089,23 @@ int xio_tcp_recvmsg_work(struct xio_tcp_transport *tcp_hndl, int fd,
 		} else {
 			if (xio_get_last_socket_error() == XIO_EAGAIN) {
 				if (!block) {
-					xio_set_error(xio_get_last_socket_error());
+					xio_set_error(
+						xio_get_last_socket_error());
 					return -1;
 				}
 			} else if (xio_get_last_socket_error() ==
-							XIO_ECONNRESET ||
- 				   xio_get_last_socket_error() ==
-							XIO_ECONNABORTED) {
+				   XIO_ECONNRESET ||
+				   xio_get_last_socket_error() ==
+				   XIO_ECONNABORTED) {
 				xio_set_error(xio_get_last_socket_error());
 				DEBUG_LOG("recvmsg failed. (errno=%d)\n",
 					  xio_get_last_socket_error());
 				return 0;
-			} else {
-				xio_set_error(xio_get_last_socket_error());
-				ERROR_LOG("recvmsg failed. (errno=%d)\n",
-					  xio_get_last_socket_error());
-				return -1;
 			}
+			xio_set_error(xio_get_last_socket_error());
+			ERROR_LOG("recvmsg failed. (errno=%d)\n",
+				  xio_get_last_socket_error());
+			return -1;
 		}
 	}
 
@@ -2123,7 +2158,6 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 	void			*sgtbl;
 	void			*sg;
 
-
 	/* responder side got request for rdma read */
 
 	/* need for buffer to do rdma read. there are two options:	   */
@@ -2134,33 +2168,24 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 	sgtbl		= xio_sg_table_get(&task->imsg.in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->imsg.in.sgl_type);
-	tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_write_num_sge);
+	tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_out_num_sge);
 	for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 		sge_set_addr(sgtbl_ops, sg, NULL);
 		sge_set_length(sgtbl_ops, sg,
-			       tcp_task->req_write_sge[i].length);
-		rlen += tcp_task->req_write_sge[i].length;
-		tcp_task->read_sge[i].cache = NULL;
+			       tcp_task->req_out_sge[i].length);
+		rlen += tcp_task->req_out_sge[i].length;
+		tcp_task->read_reg_mem[i].priv = NULL;
 	}
 	sgtbl		= xio_sg_table_get(&task->imsg.out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(task->imsg.out.sgl_type);
-	if (tcp_task->req_read_num_sge) {
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_read_num_sge);
+	if (tcp_task->req_in_num_sge) {
+		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_in_num_sge);
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			sge_set_addr(sgtbl_ops, sg, NULL);
 			sge_set_length(sgtbl_ops, sg,
-				       tcp_task->req_read_sge[i].length);
-			tcp_task->write_sge[i].cache = NULL;
-		}
-	} else if (tcp_task->req_recv_num_sge) {
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_recv_num_sge);
-		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			sge_set_addr(sgtbl_ops, sg, NULL);
-			sge_set_length(sgtbl_ops, sg,
-				       tcp_task->req_recv_sge[i].length);
-			sge_set_mr(sgtbl_ops, sg, NULL);
-			tcp_task->write_sge[i].cache = NULL;
+				       tcp_task->req_in_sge[i].length);
+			tcp_task->write_reg_mem[i].priv = NULL;
 		}
 	} else {
 		tbl_set_nents(sgtbl_ops, sgtbl, 0);
@@ -2180,13 +2205,13 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			if (sge_mr(sgtbl_ops, sg) == NULL) {
+			if (!sge_mr(sgtbl_ops, sg) && tcp_options.enable_mr_check) {
 				ERROR_LOG("application has not provided mr\n");
 				ERROR_LOG("tcp read is ignored\n");
 				task->status = XIO_E_NO_USER_MR;
 				return -1;
 			}
-			if (sge_addr(sgtbl_ops, sg) == NULL) {
+			if (!sge_addr(sgtbl_ops, sg)) {
 				ERROR_LOG("application has provided " \
 					  "null address\n");
 				ERROR_LOG("tcp read is ignored\n");
@@ -2196,11 +2221,15 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			llen += sge_length(sgtbl_ops, sg);
 			vec_size++;
 			if (llen > rlen) {
-				sge_set_length(sgtbl_ops, sg, rlen - (llen - sge_length(sgtbl_ops, sg)));
-				tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
+				sge_set_length(sgtbl_ops, sg, rlen -
+					       (llen -
+						sge_length(sgtbl_ops, sg)));
+				tcp_task->req_out_sge[i].length =
+						sge_length(sgtbl_ops, sg);
 				break;
 			}
-			tcp_task->req_write_sge[i].length = sge_length(sgtbl_ops, sg);
+			tcp_task->req_out_sge[i].length =
+						sge_length(sgtbl_ops, sg);
 		}
 		if (rlen  > llen) {
 			ERROR_LOG("application provided too small iovec\n");
@@ -2212,52 +2241,53 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 			return -1;
 		}
 
-		tcp_task->req_write_num_sge = vec_size;
+		tcp_task->req_out_num_sge = vec_size;
 		tbl_set_nents(sgtbl_ops, sgtbl, vec_size);
+		set_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &task->imsg.hints);
 	} else {
-		if (tcp_hndl->tcp_mempool == NULL) {
+		if (!tcp_hndl->tcp_mempool) {
 				ERROR_LOG("message /read/write failed - " \
 					  "library's memory pool disabled\n");
 				task->status = XIO_E_NO_BUFS;
 				goto cleanup;
 		}
 
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_write_num_sge);
+		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_out_num_sge);
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			retval = xio_mempool_alloc(
 					tcp_hndl->tcp_mempool,
-					tcp_task->req_write_sge[i].length,
-					&tcp_task->read_sge[i]);
+					tcp_task->req_out_sge[i].length,
+					&tcp_task->read_reg_mem[i]);
 
 			if (retval) {
-				tcp_task->read_num_sge = i;
+				tcp_task->read_num_reg_mem = i;
 				ERROR_LOG("mempool is empty for %zd bytes\n",
-					  tcp_task->read_sge[i].length);
+					  tcp_task->read_reg_mem[i].length);
 
 				task->status = ENOMEM;
 				goto cleanup;
 			}
 			sge_set_addr(sgtbl_ops, sg,
-				     tcp_task->read_sge[i].addr);
+				     tcp_task->read_reg_mem[i].addr);
 			sge_set_length(sgtbl_ops, sg,
-				       tcp_task->read_sge[i].length);
+				       tcp_task->read_reg_mem[i].length);
 			sge_set_mr(sgtbl_ops, sg,
-				   tcp_task->read_sge[i].mr);
+				   tcp_task->read_reg_mem[i].mr);
 		}
-		tcp_task->read_num_sge = tcp_task->req_write_num_sge;
+		tcp_task->read_num_reg_mem = tcp_task->req_out_num_sge;
 	}
 
 	sg = sge_first(sgtbl_ops, sgtbl);
-	for (i = 0;  i < tcp_task->req_write_num_sge; i++) {
+	for (i = 0;  i < tcp_task->req_out_num_sge; i++) {
 		tcp_task->rxd.msg_iov[i + 1].iov_base =
 			sge_addr(sgtbl_ops, sg);
 		tcp_task->rxd.msg_iov[i + 1].iov_len =
-			tcp_task->req_write_sge[i].length;
+			tcp_task->req_out_sge[i].length;
 		sge_set_length(sgtbl_ops, sg,
-			       tcp_task->req_write_sge[i].length);
+			       tcp_task->req_out_sge[i].length);
 		sg = sge_next(sgtbl_ops, sgtbl, sg);
 	}
-	tcp_task->rxd.msg_len += tcp_task->req_write_num_sge;
+	tcp_task->rxd.msg_len += tcp_task->req_out_num_sge;
 
 	/* prepare the in side of the message */
 	tcp_task->rxd.tot_iov_byte_len += rlen;
@@ -2269,10 +2299,10 @@ static int xio_tcp_rd_req_header(struct xio_tcp_transport *tcp_hndl,
 
 	return 0;
 cleanup:
-	for (i = 0; i < tcp_task->read_num_sge; i++)
-		xio_mempool_free(&tcp_task->read_sge[i]);
+	for (i = 0; i < tcp_task->read_num_reg_mem; i++)
+		xio_mempool_free(&tcp_task->read_reg_mem[i]);
 
-	tcp_task->read_num_sge = 0;
+	tcp_task->read_num_reg_mem = 0;
 	return -1;
 }
 
@@ -2282,8 +2312,8 @@ cleanup:
 static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 				      struct xio_task *task)
 {
-	int			retval = 0;
 	XIO_TO_TCP_TASK(task, tcp_task);
+	int			retval = 0;
 	struct xio_tcp_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
@@ -2291,7 +2321,6 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	void			*sg;
-
 
 	/* read header */
 	retval = xio_tcp_read_req_header(tcp_hndl, task, &req_hdr);
@@ -2301,7 +2330,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	}
 
 	/* save originator identifier */
-	task->rtid		= req_hdr.tid;
+	task->rtid		= req_hdr.ltid;
 	task->imsg_flags	= req_hdr.flags;
 
 	imsg		= &task->imsg;
@@ -2314,38 +2343,33 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	imsg->type = (enum xio_msg_type)task->tlv_type;
 	imsg->in.header.iov_len	= req_hdr.ulp_hdr_len;
 
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
+
 	if (req_hdr.ulp_hdr_len)
 		imsg->in.header.iov_base	= ulp_hdr;
 	else
 		imsg->in.header.iov_base	= NULL;
 
 	/* hint upper layer about expected response */
-	if (tcp_task->req_read_num_sge) {
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_read_num_sge);
+	if (tcp_task->req_in_num_sge) {
+		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_in_num_sge);
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			sge_set_addr(sgtbl_ops, sg, NULL);
 			sge_set_length(sgtbl_ops, sg,
-				       tcp_task->req_read_sge[i].length);
-				       sge_set_mr(sgtbl_ops, sg, NULL);
-		}
-	} else if (tcp_task->req_recv_num_sge) {
-		tbl_set_nents(sgtbl_ops, sgtbl, tcp_task->req_recv_num_sge);
-		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
-			sge_set_addr(sgtbl_ops, sg, NULL);
-			sge_set_length(sgtbl_ops, sg,
-				       tcp_task->req_recv_sge[i].length);
+				       tcp_task->req_in_sge[i].length);
 				       sge_set_mr(sgtbl_ops, sg, NULL);
 		}
 	} else {
 		tbl_set_nents(sgtbl_ops, sgtbl, 0);
 	}
 
-	tcp_task->tcp_op = (enum xio_tcp_op_code)req_hdr.opcode;
+	tcp_task->out_tcp_op = (enum xio_tcp_op_code)req_hdr.out_tcp_op;
+	tcp_task->in_tcp_op = (enum xio_tcp_op_code)req_hdr.in_tcp_op;
 
 	tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, req_hdr.ulp_hdr_len +
 			req_hdr.ulp_pad_len + (uint32_t)req_hdr.ulp_imm_len);
 
-	switch (req_hdr.opcode) {
+	switch (req_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		sgtbl		= xio_sg_table_get(&imsg->in);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
@@ -2355,7 +2379,6 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 			/* if data arrived, set the pointers */
 			tbl_set_nents(sgtbl_ops, sgtbl, 1);
 			sg = sge_first(sgtbl_ops, sgtbl);
-
 
 			sge_set_addr(sgtbl_ops, sg,
 				     sum_to_ptr(ulp_hdr,
@@ -2387,7 +2410,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	return 0;
 
 cleanup:
-	retval = xio_errno(); // no need get_last_socket_error()
+	retval = xio_errno(); /* no need get_last_socket_error() */
 	ERROR_LOG("xio_tcp_on_recv_req failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
 	xio_transport_notify_observer_error(&tcp_hndl->base, retval);
@@ -2404,7 +2427,7 @@ static int xio_tcp_on_recv_req_data(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	union xio_transport_event_data event_data;
 
-	switch (tcp_task->tcp_op) {
+	switch (tcp_task->out_tcp_op) {
 	case XIO_TCP_SEND:
 		break;
 	case XIO_TCP_READ:
@@ -2423,7 +2446,8 @@ static int xio_tcp_on_recv_req_data(struct xio_tcp_transport *tcp_hndl,
 	list_move_tail(&task->tasks_list_entry, &tcp_hndl->io_list);
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_NEW_MESSAGE, &event_data);
+				      XIO_TRANSPORT_EVENT_NEW_MESSAGE,
+				      &event_data);
 
 	return 0;
 }
@@ -2434,11 +2458,11 @@ static int xio_tcp_on_recv_req_data(struct xio_tcp_transport *tcp_hndl,
 static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				      struct xio_task *task)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	int			retval = 0;
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
 	unsigned int		i;
 	struct xio_sg_table_ops	*isgtbl_ops;
@@ -2456,7 +2480,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 
 	/* find the sender task */
 	task->sender_task =
-		xio_tcp_primary_task_lookup(tcp_hndl, rsp_hdr.tid);
+		xio_tcp_primary_task_lookup(tcp_hndl, rsp_hdr.rtid);
+	task->rtid       = rsp_hdr.ltid;
 
 	tcp_sender_task = (struct xio_tcp_task *)task->sender_task->dd_data;
 
@@ -2467,6 +2492,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	isgtbl		= xio_sg_table_get(&imsg->in);
 	isgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(imsg->in.sgl_type);
+
+	clr_bits(XIO_MSG_HINT_ASSIGNED_DATA_IN_BUF, &imsg->hints);
 
 	ulp_hdr = xio_mbuf_get_curr_ptr(&task->mbuf);
 	/* msg from received message */
@@ -2479,9 +2506,9 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	}
 	task->status = rsp_hdr.status;
 
-	tcp_task->tcp_op = (enum xio_tcp_op_code)rsp_hdr.opcode;
+	tcp_task->out_tcp_op = (enum xio_tcp_op_code)rsp_hdr.out_tcp_op;
 
-	switch (rsp_hdr.opcode) {
+	switch (rsp_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, rsp_hdr.ulp_hdr_len +
 					    rsp_hdr.ulp_pad_len +
@@ -2504,31 +2531,31 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		tcp_hndl->sock.ops->set_rxd(task->sender_task, ulp_hdr,
 					    rsp_hdr.ulp_hdr_len +
 					    rsp_hdr.ulp_pad_len);
-		if (tcp_task->rsp_write_num_sge >
-		    tcp_sender_task->read_num_sge) {
+		if (tcp_task->rsp_out_num_sge >
+		    tcp_sender_task->read_num_reg_mem) {
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
-				  tcp_sender_task->read_num_sge,
-				  tcp_task->rsp_write_num_sge);
+				  tcp_sender_task->read_num_reg_mem,
+				  tcp_task->rsp_out_num_sge);
 			goto partial_msg;
 		}
 
 		tbl_set_nents(isgtbl_ops, isgtbl,
-			      tcp_task->rsp_write_num_sge);
+			      tcp_task->rsp_out_num_sge);
 		sg = sge_first(isgtbl_ops, isgtbl);
-		for (i = 0; i < tcp_task->rsp_write_num_sge; i++) {
+		for (i = 0; i < tcp_task->rsp_out_num_sge; i++) {
 			sge_set_addr(isgtbl_ops, sg,
-				     tcp_sender_task->read_sge[i].addr);
+				     tcp_sender_task->read_reg_mem[i].addr);
 			sge_set_length(isgtbl_ops, sg,
-				       tcp_task->rsp_write_sge[i].length);
+				       tcp_task->rsp_out_sge[i].length);
 			tcp_sender_task->rxd.msg_iov[i + 1].iov_base =
-					tcp_sender_task->read_sge[i].addr;
+					tcp_sender_task->read_reg_mem[i].addr;
 			tcp_sender_task->rxd.msg_iov[i + 1].iov_len =
-					tcp_task->rsp_write_sge[i].length;
+					tcp_task->rsp_out_sge[i].length;
 			sg = sge_next(isgtbl_ops, isgtbl, sg);
 		}
 
 		tcp_sender_task->rxd.msg_len +=
-				tcp_task->rsp_write_num_sge;
+				tcp_task->rsp_out_num_sge;
 		tcp_sender_task->rxd.tot_iov_byte_len +=
 				rsp_hdr.ulp_imm_len;
 		if (tcp_sender_task->rxd.msg.msg_iovlen)
@@ -2541,7 +2568,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 				tcp_sender_task->rxd.msg_len;
 		break;
 	default:
-		ERROR_LOG("unexpected opcode %d\n", rsp_hdr.opcode);
+		ERROR_LOG("unexpected opcode %d\n", rsp_hdr.out_tcp_op);
 		break;
 	}
 
@@ -2563,11 +2590,11 @@ cleanup:
 static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	union xio_transport_event_data event_data;
 	struct xio_msg		*imsg;
 	struct xio_msg		*omsg;
 	unsigned int		i;
-	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task	*tcp_sender_task;
 	struct xio_sg_table_ops	*isgtbl_ops;
 	void			*isgtbl;
@@ -2588,6 +2615,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 	if (omsg->in.header.iov_base) {
 		/* copy header to user buffers */
 		size_t hdr_len = 0;
+
 		if (imsg->in.header.iov_len > omsg->in.header.iov_len)  {
 			hdr_len = omsg->in.header.iov_len;
 			task->status = XIO_E_MSG_SIZE;
@@ -2608,7 +2636,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 		memclonev(&omsg->in.header, 1, &imsg->in.header, 1);
 	}
 
-	switch (tcp_task->tcp_op) {
+	switch (tcp_task->out_tcp_op) {
 	case XIO_TCP_SEND:
 		if (tbl_nents(osgtbl_ops, osgtbl)) {
 			/* deep copy */
@@ -2667,13 +2695,14 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 				tcp_sender_task = (struct xio_tcp_task *)
 						task->sender_task->dd_data;
 				/* put buffers back to pool */
-				for (i = 0; i < tcp_sender_task->read_num_sge;
+				for (i = 0; i < tcp_sender_task->read_num_reg_mem;
 						i++) {
 					xio_mempool_free(
-						&tcp_sender_task->read_sge[i]);
-					tcp_sender_task->read_sge[i].cache = 0;
+						&tcp_sender_task->read_reg_mem[i]);
+					tcp_sender_task->read_reg_mem[i].priv =
+						NULL;
 				}
-				tcp_sender_task->read_num_sge = 0;
+				tcp_sender_task->read_num_reg_mem = 0;
 			} else {
 				/* use provided only length - set user
 				 * pointers */
@@ -2683,7 +2712,7 @@ static int xio_tcp_on_recv_rsp_data(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	default:
-		ERROR_LOG("unexpected opcode %d\n", tcp_task->tcp_op);
+		ERROR_LOG("unexpected opcode %d\n", tcp_task->out_tcp_op);
 		break;
 	}
 
@@ -2697,7 +2726,7 @@ partial_msg:
 
 	/* notify the upper layer of received message */
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_NEW_MESSAGE,
+				      XIO_TRANSPORT_EVENT_NEW_MESSAGE,
 				      &event_data);
 	return 0;
 }
@@ -2717,7 +2746,7 @@ static int xio_tcp_cancel_req_handler(struct xio_tcp_transport *tcp_hndl,
 	event_data.cancel.result	   =  (enum xio_status)0;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_CANCEL_REQUEST,
+				      XIO_TRANSPORT_EVENT_CANCEL_REQUEST,
 				      &event_data);
 
 	return 0;
@@ -2772,7 +2801,7 @@ static int xio_tcp_cancel_rsp_handler(struct xio_tcp_transport *tcp_hndl,
 
 			xio_transport_notify_observer(
 					&tcp_hndl->base,
-					XIO_TRANSPORT_CANCEL_RESPONSE,
+					XIO_TRANSPORT_EVENT_CANCEL_RESPONSE,
 					&event_data);
 			return 0;
 		}
@@ -2785,7 +2814,7 @@ static int xio_tcp_cancel_rsp_handler(struct xio_tcp_transport *tcp_hndl,
 	event_data.cancel.result	  = (enum xio_status)cancel_hdr->result;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      XIO_TRANSPORT_EVENT_CANCEL_RESPONSE,
 				      &event_data);
 
 	return 0;
@@ -2840,11 +2869,11 @@ static int xio_tcp_on_recv_cancel_rsp_header(
 		struct xio_tcp_transport *tcp_hndl,
 		struct xio_task *task)
 {
-	int			retval = 0;
+	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
-	XIO_TO_TCP_TASK(task, tcp_task);
+	int			retval = 0;
 
 	/* read the response header */
 	retval = xio_tcp_read_rsp_header(tcp_hndl, task, &rsp_hdr);
@@ -2874,7 +2903,7 @@ static int xio_tcp_on_recv_cancel_rsp_header(
 static int xio_tcp_on_recv_cancel_req_data(struct xio_tcp_transport *tcp_hndl,
 					   struct xio_task *task)
 {
-	struct  xio_tcp_cancel_hdr cancel_hdr;
+	struct xio_tcp_cancel_hdr cancel_hdr;
 	struct xio_msg		*imsg;
 	void			*buff;
 	uint16_t		ulp_msg_sz;
@@ -2916,11 +2945,11 @@ static int xio_tcp_on_recv_cancel_req_header(
 		struct xio_tcp_transport *tcp_hndl,
 		struct xio_task *task)
 {
-	int			retval = 0;
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr	req_hdr;
 	struct xio_msg		*imsg;
 	void			*ulp_hdr;
+	int			retval = 0;
 
 	/* read header */
 	retval = xio_tcp_read_req_header(tcp_hndl, task, &req_hdr);
@@ -2945,7 +2974,7 @@ static int xio_tcp_on_recv_cancel_req_header(
 	return 0;
 
 cleanup:
-	retval = xio_errno(); // no need get_last_socket_error()
+	retval = xio_errno(); /* no need get_last_socket_error() */
 	ERROR_LOG("recv_cancel_req_header failed. (errno=%d %s)\n", retval,
 		  xio_strerror(retval));
 	xio_transport_notify_observer_error(&tcp_hndl->base, retval);
@@ -2981,14 +3010,13 @@ static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
 
 	task->tlv_type			= tlv_type;
 	tcp_task			= (struct xio_tcp_task *)task->dd_data;
-	tcp_task->tcp_op		= XIO_TCP_SEND;
-	tcp_task->write_num_sge		= 0;
-	tcp_task->read_num_sge		= 0;
+	tcp_task->out_tcp_op		= XIO_TCP_SEND;
+	tcp_task->write_num_reg_mem		= 0;
+	tcp_task->read_num_reg_mem		= 0;
 
 	ulp_hdr_len = sizeof(*cancel_hdr) + sizeof(uint16_t) + ulp_msg_sz;
 	tcp_hndl->dummy_msg.out.header.iov_base = ucalloc(1, ulp_hdr_len);
 	tcp_hndl->dummy_msg.out.header.iov_len = ulp_hdr_len;
-
 
 	/* write the message */
 	/* get the pointer */
@@ -3002,7 +3030,7 @@ static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
 	inc_ptr(buff, xio_write_uint32(cancel_hdr->result, 0,
 				       (uint8_t *)buff));
 	inc_ptr(buff, xio_write_uint16((uint16_t)(ulp_msg_sz), 0,
-					(uint8_t *)buff));
+				       (uint8_t *)buff));
 	inc_ptr(buff, xio_write_array((const uint8_t *)ulp_msg, ulp_msg_sz, 0,
 				      (uint8_t *)buff));
 
@@ -3085,7 +3113,7 @@ struct xio_tcp_work_req *xio_tcp_get_data_rxd(struct xio_task *task)
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_task *tcp_sender_task;
 
-	switch (tcp_task->tcp_op) {
+	switch (tcp_task->out_tcp_op) {
 	case XIO_TCP_SEND:
 	case XIO_TCP_READ:
 		return &tcp_task->rxd;
@@ -3094,7 +3122,7 @@ struct xio_tcp_work_req *xio_tcp_get_data_rxd(struct xio_task *task)
 					task->sender_task->dd_data;
 		return &tcp_sender_task->rxd;
 	default:
-		ERROR_LOG("unexpected opcode %d\n", tcp_task->tcp_op);
+		ERROR_LOG("unexpected opcode %d\n", tcp_task->out_tcp_op);
 		break;
 	}
 
@@ -3134,7 +3162,16 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				 next_tcp_task->rxd.stage == XIO_TCP_RX_IO_DATA)
 				 ? xio_tcp_get_data_rxd(next_task) : NULL;
 
+		/* An Accelio application runs on Side A would crush,
+		 * when it connects Side B by a port binded by an
+		 * application (not accelio) run on Side B.
+		 */
 		rxd_work = xio_tcp_get_data_rxd(task);
+		if (!rxd_work) {
+			ERROR_LOG("rxd_work is NULL! Disconnect!\n");
+			xio_tcp_disconnect_helper(tcp_hndl);
+			return -1;
+		}
 
 		for (i = 0; i < rxd_work->msg.msg_iovlen; i++) {
 			tcp_hndl->tmp_work.msg_iov
@@ -3151,7 +3188,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		++batch_count;
 		++tmp_count;
 
-		if (batch_count != batch_nr && next_rxd_work != NULL &&
+		if (batch_count != batch_nr && next_rxd_work &&
 		    (next_rxd_work->msg.msg_iovlen + tcp_hndl->tmp_work.msg_len)
 		    < IOV_MAX) {
 			task = next_task;
@@ -3216,7 +3253,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				break;
 			default:
 				task->last_in_rxq =
-				    (IS_APPLICATION_MSG( task->tlv_type) &&
+				    (IS_APPLICATION_MSG(task->tlv_type) &&
 				     (i == 0));
 				if (IS_REQUEST(task->tlv_type)) {
 					retval =
@@ -3242,12 +3279,12 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		if (recvmsg_retval == 0) {
 			DEBUG_LOG("tcp transport got EOF, tcp_hndl=%p\n",
 				  tcp_hndl);
-			if (tcp_task->tcp_op == XIO_TCP_READ) { /*TODO needed?*/
-				for (i = 0; i < tcp_task->read_num_sge; i++) {
+			if (tcp_task->out_tcp_op == XIO_TCP_READ) { /*TODO needed?*/
+				for (i = 0; i < tcp_task->read_num_reg_mem; i++) {
 					xio_mempool_free(
-						&tcp_task->read_sge[i]);
+						&tcp_task->read_reg_mem[i]);
 				}
-				tcp_task->read_num_sge = 0;
+				tcp_task->read_num_reg_mem = 0;
 			}
 			xio_tcp_disconnect_helper(tcp_hndl);
 			return -1;
@@ -3300,11 +3337,13 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		switch (tcp_task->rxd.stage) {
 		case XIO_TCP_RX_START:
 			/* ORK todo find a better place to rearm rx_list?*/
-			if (tcp_hndl->state == XIO_STATE_CONNECTED ||
-			    tcp_hndl->state == XIO_STATE_DISCONNECTED) {
+			if (tcp_hndl->state ==
+					XIO_TRANSPORT_STATE_CONNECTED ||
+			    tcp_hndl->state ==
+					XIO_TRANSPORT_STATE_DISCONNECTED) {
 				task_next =
 					xio_tcp_primary_task_alloc(tcp_hndl);
-				if (task_next == NULL) {
+				if (!task_next) {
 					ERROR_LOG(
 						"primary task pool is empty\n");
 					exit = 1;
@@ -3417,8 +3456,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 	retval = tcp_hndl->sock.ops->rx_data_handler(tcp_hndl, batch_nr);
 	if (retval < 0)
 		return retval;
-	else
-		count = retval;
+	count = retval;
 
 	/* No need - using flush_tx work*/
 	/*if (tcp_hndl->tx_ready_tasks_num) {
@@ -3452,11 +3490,11 @@ int xio_tcp_poll(struct xio_transport_base *transport,
 		return -1;
 
 	if (ts_timeout)
-		timeout = (cycles_t)(timespec_to_usecs(ts_timeout)*g_mhz);
+		timeout = (cycles_t)(timespec_to_usecs(ts_timeout) * g_mhz);
 
 	tcp_hndl = (struct xio_tcp_transport *)transport;
 
-	if (tcp_hndl->state != XIO_STATE_CONNECTED) {
+	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		ERROR_LOG("tcp transport is not connected, state=%d\n",
 			  tcp_hndl->state);
 		return -1;
@@ -3492,6 +3530,7 @@ int xio_tcp_cancel_req(struct xio_transport_base *transport,
 	union xio_transport_event_data	event_data;
 	struct xio_tcp_task		*tcp_task;
 	struct xio_tcp_cancel_hdr	cancel_hdr = {};
+
 	cancel_hdr.hdr_len = sizeof(cancel_hdr);
 
 	/* look in the tx_ready */
@@ -3522,7 +3561,7 @@ int xio_tcp_cancel_req(struct xio_transport_base *transport,
 
 			xio_transport_notify_observer(
 					&tcp_hndl->base,
-					XIO_TRANSPORT_CANCEL_RESPONSE,
+					XIO_TRANSPORT_EVENT_CANCEL_RESPONSE,
 					&event_data);
 			return 0;
 		}
@@ -3560,7 +3599,7 @@ int xio_tcp_cancel_req(struct xio_transport_base *transport,
 	event_data.cancel.result	   =  XIO_E_MSG_NOT_FOUND;
 
 	xio_transport_notify_observer(&tcp_hndl->base,
-				      XIO_TRANSPORT_CANCEL_RESPONSE,
+				      XIO_TRANSPORT_EVENT_CANCEL_RESPONSE,
 				      &event_data);
 
 	return 0;
@@ -3588,8 +3627,8 @@ int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
 	struct xio_tcp_transport *tcp_hndl =
 		(struct xio_tcp_transport *)transport;
 	struct xio_tcp_task	*tcp_task;
-
 	struct  xio_tcp_cancel_hdr cancel_hdr = {};
+
 	cancel_hdr.hdr_len	= sizeof(cancel_hdr);
 	cancel_hdr.result	= result;
 

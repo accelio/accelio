@@ -255,12 +255,13 @@ static void *worker_thread(void *data)
 		sglist = vmsg_sglist(&msg->in);
 		vmsg_sglist_set_nents(&msg->in, 1);
 
+		/* tell accelio to use  1MB buffer from its internal pool */
 		sglist[0].iov_base = NULL;
 		sglist[0].iov_len  = ONE_MB;
 		sglist[0].mr = NULL;
 
 		/* create "hello world" message */
-		msg_write(&msg_params, msg,
+		msg_build_out_sgl(&msg_params, msg,
 			  test_config.hdr_len,
 			  1, test_config.data_len);
 
@@ -328,9 +329,11 @@ static int on_session_event(struct xio_session *session,
 		break;
 	case XIO_SESSION_REJECT_EVENT:
 	case XIO_SESSION_TEARDOWN_EVENT:
-		for (i = 0; i < MAX_THREADS; i++)
-			if (session_data->tdata[i].exit_code == 0)
-				xio_context_stop_loop(session_data->tdata[i].ctx);
+		for (i = 0; i < MAX_THREADS; i++) {
+			struct thread_data *tdata = &session_data->tdata[i];
+			if (tdata->exit_code == 0 && tdata->ctx)
+				xio_context_stop_loop(tdata->ctx);
+		}
 		break;
 	default:
 		break;
@@ -375,7 +378,7 @@ static int on_response(struct xio_session *session,
 	sglist = vmsg_sglist(&msg->in);
 	vmsg_sglist_set_nents(&msg->in, 1);
 
-
+	/* tell accelio to use  1MB buffer from its internal pool */
 	sglist[0].iov_base = NULL;
 	sglist[0].iov_len  = ONE_MB;
 	sglist[0].mr = NULL;
@@ -383,7 +386,7 @@ static int on_response(struct xio_session *session,
 	msg->sn = 0;
 
 	/* recycle the message and fill new request */
-	msg_write(&msg_params, msg,
+	msg_build_out_sgl(&msg_params, msg,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -620,7 +623,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			i = 0;
 	int			max_cpus;
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnr;
 	int			cpu;
 	int			exit_code = 0;
@@ -673,7 +676,7 @@ int main(int argc, char *argv[])
 
 	/* spawn threads to handle connection */
 	for (i = 0, cpu = 0; i < MAX_THREADS; i++, cpu++) {
-		while (1) {
+		while (cpusmask) {
 			if (cpusmask_test_bit(cpu, &cpusmask))
 				break;
 			if (++cpu == max_cpus)

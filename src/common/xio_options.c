@@ -50,23 +50,27 @@
 #define XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL		0
 #define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS		1024
 #define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS		1024
-#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64*1024*1024)
-#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64*1024*1024)
-#define XIO_OPTVAL_DEF_MAX_INLINE_HEADER		256
-#define XIO_OPTVAL_DEF_MAX_INLINE_DATA			(8*1024)
+#define XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
+#define XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES		(64 * 1024 * 1024)
+#define XIO_OPTVAL_DEF_MAX_INLINE_XIO_HEADER		256
+#define XIO_OPTVAL_DEF_MAX_INLINE_XIO_DATA		(8 * 1024)
+#define XIO_OPTVAL_DEF_XFER_BUF_ALIGN			(64)
+#define XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN		(0)
 
 /* xio options */
 struct xio_options			g_options = {
 	XIO_OPTVAL_DEF_MAX_IN_IOVSZ,		/*max_in_iovsz*/
 	XIO_OPTVAL_DEF_MAX_OUT_IOVSZ,		/*max_out_iovsz*/
 	XIO_OPTVAL_DEF_ENABLE_RECONNECT,	/*reconnect*/
-	XIO_OPTVAL_DEF_MAX_INLINE_HEADER,	/*max_inline_hdr*/
-	XIO_OPTVAL_DEF_MAX_INLINE_DATA,		/*max_inline_data*/
+	XIO_OPTVAL_DEF_MAX_INLINE_XIO_HEADER,	/*max_inline_xio_hdr*/
+	XIO_OPTVAL_DEF_MAX_INLINE_XIO_DATA,	/*max_inline_xio_data*/
 	XIO_OPTVAL_DEF_ENABLE_FLOW_CONTROL,	/*enable_flow_control*/
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_MSGS,	/*snd_queue_depth_msgs*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_MSGS,	/*rcv_queue_depth_msgs*/
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,	/*snd_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,	/*rcv_queue_depth_bytes*/
+	XIO_OPTVAL_DEF_XFER_BUF_ALIGN,		/* xfer_buf_align */
+	XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN	/* inline_xio_data_align */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -84,9 +88,11 @@ EXPORT_SYMBOL(xio_get_options);
 static int xio_general_set_opt(void *xio_obj, int optname,
 			       const void *optval, int optlen)
 {
+	int tmp;
+
 	switch (optname) {
 	case XIO_OPTNAME_LOG_FN:
-		if (optlen == 0 && optval == NULL)
+		if (optlen == 0 && !optval)
 			return xio_set_log_fn(NULL);
 		else if (optlen == sizeof(xio_log_fn))
 			return xio_set_log_fn((xio_log_fn)optval);
@@ -95,7 +101,6 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		if (optlen != sizeof(enum xio_log_level))
 			return -1;
 		return xio_set_log_level(*((enum xio_log_level *)optval));
-		break;
 	case XIO_OPTNAME_DISABLE_HUGETBL:
 		xio_disable_huge_pages(*((int *)optval));
 		return 0;
@@ -186,51 +191,67 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		g_options.reconnect = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_ENABLE_FLOW_CONTROL:
 		g_options.enable_flow_control = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_msgs = (int)*((uint64_t *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS:
 		if (*((int *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_msgs = *((int *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
 		if (*((int32_t *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
-		break;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
 		if (*((int32_t *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
-		break;
-	case XIO_OPTNAME_MAX_INLINE_HEADER:
+	case XIO_OPTNAME_MAX_INLINE_XIO_HEADER:
 		if (optlen != sizeof(int))
 			break;
 		if (*((int *)optval) < 0)
 			break;
-		g_options.max_inline_hdr = *((int *)optval);
+		g_options.max_inline_xio_hdr = *((int *)optval);
 		return 0;
-		break;
-	case XIO_OPTNAME_MAX_INLINE_DATA:
+	case XIO_OPTNAME_MAX_INLINE_XIO_DATA:
 		if (optlen != sizeof(int))
 			break;
 		if (*((int *)optval) < 0)
 			break;
-		g_options.max_inline_data = *((int *)optval);
+		g_options.max_inline_xio_data = *((int *)optval);
 		return 0;
-		break;
+	case XIO_OPTNAME_XFER_BUF_ALIGN:
+		if (optlen != sizeof(int))
+			break;
+		tmp = *(int *)optval;
+		if (!is_power_of_2(tmp) || !(tmp % sizeof(void *) == 0)) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		g_options.xfer_buf_align = tmp;
+		return 0;
+	case XIO_OPTNAME_INLINE_XIO_DATA_ALIGN:
+		if (optlen != sizeof(int))
+			break;
+		tmp = *(int *)optval;
+		if (!tmp) {
+			g_options.inline_xio_data_align = tmp;
+			return 0;
+		}
+		if (!is_power_of_2(tmp) || !(tmp % sizeof(void *) == 0)) {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		g_options.inline_xio_data_align = tmp;
+		return 0;
 	default:
 		break;
 	}
@@ -250,17 +271,14 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*((enum xio_log_level *)optval) = xio_get_log_level();
 		*optlen = sizeof(enum xio_log_level);
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_IN_IOVLEN:
 		*optlen = sizeof(int);
 		*((int *)optval) = g_options.max_in_iovsz;
 		return 0;
-		break;
 	case XIO_OPTNAME_MAX_OUT_IOVLEN:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.max_in_iovsz;
 		 return 0;
-		 break;
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.reconnect;
@@ -285,13 +303,21 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(uint64_t);
 		 *((uint64_t *)optval) = g_options.rcv_queue_depth_bytes;
 		 return 0;
-	case XIO_OPTNAME_MAX_INLINE_HEADER:
+	case XIO_OPTNAME_MAX_INLINE_XIO_HEADER:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.max_inline_hdr;
+		 *((int *)optval) = g_options.max_inline_xio_hdr;
 		 return 0;
-	case XIO_OPTNAME_MAX_INLINE_DATA:
+	case XIO_OPTNAME_MAX_INLINE_XIO_DATA:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.max_inline_data;
+		 *((int *)optval) = g_options.max_inline_xio_data;
+		 return 0;
+	case XIO_OPTNAME_INLINE_XIO_DATA_ALIGN:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.inline_xio_data_align;
+		 return 0;
+	case XIO_OPTNAME_XFER_BUF_ALIGN:
+		*optlen = sizeof(int);
+		 *((int *)optval) = g_options.xfer_buf_align;
 		 return 0;
 	default:
 		break;
@@ -392,4 +418,3 @@ int xio_get_opt(void *xio_obj, int level,  int optname,
 	return -1;
 }
 EXPORT_SYMBOL(xio_get_opt);
-

@@ -6,12 +6,14 @@
 *.log
 .deps
 Makefile
+Makefile.in
 configure
 autom4te.cache
 config.status
 aclocal.m4
 m4/*
 .libs
+.common
 libtool
 ltmain.sh
 compile
@@ -26,6 +28,8 @@ raio_client
 raio_server
 xio_client
 xio_server
+xio_rdma_client
+xio_rdma_server
 xio_bidi_client
 xio_bidi_server
 xio_lat_client
@@ -38,6 +42,7 @@ xio_read_lat
 xio_read_bw
 xioclntd
 xiosrvd
+event_loop_tests
 src/tools/usr/Makefile.in
 src/tools/usr/xio_mem_usage
 src/tools/usr/xio_if_numa_cpus
@@ -57,3 +62,12 @@ Doxyfile
 modules.order
 Module.symvers
 .tmp_versions
+*.vcxproj.filters
+*.vcxproj.user
+*.v12.suo
+*.sdf
+Debug
+Release
+GPATH
+GRTAGS
+GTAGS

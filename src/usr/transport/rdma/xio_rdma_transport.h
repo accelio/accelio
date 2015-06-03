@@ -47,25 +47,28 @@ extern struct xio_rdma_options	rdma_options;
 extern struct list_head		dev_list;
 extern spinlock_t		dev_list_lock;
 
-#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000 /* 1 minute */
-#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	0    /*  0 milliseconds */
+#define XIO_DISCONNECT_TIMEOUT		100     /* 100 mili */
+#define XIO_TIMEWAIT_EXIT_TIMEOUT	60000  /* 1 minute */
+#define XIO_TIMEWAIT_EXIT_FAST_TIMEOUT	0     /*  0 milliseconds */
 
 /* poll_cq definitions */
 #define MAX_RDMA_ADAPTERS		64   /* 64 adapters per unit */
 #define MAX_POLL_WC			128
+#define NUM_POLL_CQ			16
 
 #define ADDR_RESOLVE_TIMEOUT		1000
 #define ROUTE_RESOLVE_TIMEOUT		1000
 
-#define MAX_SEND_WR			257  /* 256 rdma_write + 1 send */
-#define MAX_RECV_WR			256
+					/* 256 rdma_write + 1 send */
+#define MAX_SEND_WR			(XIO_MAX_IOV + 1)
+#define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
 #define MAX_ACKED_CQE			128
+#define XIO_DEV_ATTR_MAX_SGE		 30
 
-#define MAX_CQE_PER_QP			(MAX_SEND_WR+MAX_RECV_WR+EXTRA_RQE)
-#define CQE_ALLOC_SIZE			(10*MAX_CQE_PER_QP)
+#define MAX_CQE_PER_QP			(MAX_SEND_WR + MAX_RECV_WR + EXTRA_RQE)
+#define CQE_ALLOC_SIZE			(10 * MAX_CQE_PER_QP)
 
-#define MAX_INLINE_DATA			200
 #define BUDGET_SIZE			1024
 #define MAX_NUM_DELAYED_ARM		16
 
@@ -75,19 +78,21 @@ extern spinlock_t		dev_list_lock;
 
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
-#define SEND_TRESHOLD			8
+#define SEND_THRESHOLD			8
 
 #define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
 #define PAGE_SIZE			page_size
 /* see if a pointer is page aligned. */
-#define IS_PAGE_ALIGNED(ptr)		(((PAGE_SIZE-1) & (intptr_t)(ptr)) == 0)
+#define IS_PAGE_ALIGNED(ptr)		\
+			(((PAGE_SIZE - 1) & (intptr_t)(ptr)) == 0)
 
 #define XIO_TO_RDMA_TASK(xt, rt)			\
 		struct xio_rdma_task *(rt) =		\
 			(struct xio_rdma_task *)(xt)->dd_data
-
-
+#define XIO_TO_RDMA_HNDL(xt, rh)				\
+		struct xio_rdma_transport *(rh) =		\
+			(struct xio_rdma_transport *)(xt)->context
 
 #ifdef HAVE_MPAGES_EXP
 #    define IBV_XIO_ACCESS_ALLOCATE_MR		IBV_EXP_ACCESS_ALLOCATE_MR
@@ -123,7 +128,6 @@ static inline struct ibv_mr *ibv_xio_reg_mr(struct ibv_exp_reg_mr_in *in)
 }
 #endif
 
-
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
@@ -132,9 +136,10 @@ enum xio_ib_op_code {
 	XIO_IB_RECV		= 1,
 	XIO_IB_SEND,
 	XIO_IB_RDMA_WRITE,
-	XIO_IB_RDMA_READ
+	XIO_IB_RDMA_READ,
+	XIO_IB_RDMA_WRITE_DIRECT,
+	XIO_IB_RDMA_READ_DIRECT
 };
-
 
 struct xio_transport_base;
 struct xio_rdma_transport;
@@ -145,6 +150,7 @@ struct xio_rdma_options {
 	int			enable_dma_latency;
 	int			max_in_iovsz;
 	int			max_out_iovsz;
+	int			qp_cap_max_inline_data;
 };
 
 #define XIO_REQ_HEADER_VERSION	1
@@ -157,14 +163,13 @@ struct __attribute__((__packed__)) xio_rdma_req_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint16_t		tid;		/* originator identifier*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[3];
+	uint32_t		ltid;		/* originator identifier*/
+	uint8_t			in_ib_op;	/* opcode  for peers	*/
+	uint8_t			out_ib_op;
 
-	uint16_t		recv_num_sge;
-	uint16_t		read_num_sge;
-	uint16_t		write_num_sge;
-	uint16_t		pad1;
+	uint16_t		in_num_sge;
+	uint16_t		out_num_sge;
+	uint32_t		pad1;
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
@@ -182,17 +187,20 @@ struct __attribute__((__packed__)) xio_rdma_rsp_hdr {
 	uint16_t		ack_sn;		/* ack serial number	*/
 
 	uint16_t		credits;	/* peer send credits	*/
-	uint16_t		tid;		/* originator identifier*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[3];
+	uint32_t		rtid;		/* originator identifier*/
+	uint8_t			out_ib_op;	/* opcode  for peers	*/
+	uint8_t			pad;
 
-	uint16_t		write_num_sge;
-	uint16_t		pad1;
+	uint16_t                pad1;
+	uint16_t		out_num_sge;
 	uint32_t		status;		/* status		*/
+
+	uint32_t		ltid;		/* local task id	*/
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 };
 
@@ -204,6 +212,8 @@ struct __attribute__((__packed__)) xio_rdma_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
+	uint32_t                max_header_len;
+	uint32_t		pad;
 };
 
 struct __attribute__((__packed__)) xio_nop_hdr {
@@ -214,6 +224,11 @@ struct __attribute__((__packed__)) xio_nop_hdr {
 	uint8_t			opcode;		/* opcode for peers	*/
 	uint8_t			flags;		/* not used		*/
 	uint16_t		pad;
+};
+
+struct __attribute__((__packed__)) xio_rdma_read_ack_hdr {
+	uint16_t		hdr_len;	 /* req header length	*/
+	uint32_t		rtid;		 /* remote task id	*/
 };
 
 struct __attribute__((__packed__)) xio_rdma_cancel_hdr {
@@ -230,9 +245,10 @@ struct xio_work_req {
 	struct ibv_sge			*sge;
 };
 
-
 struct xio_rdma_task {
-	struct xio_rdma_transport	*rdma_hndl;
+	enum xio_ib_op_code		out_ib_op;
+	enum xio_ib_op_code		in_ib_op;
+
 	/* The buffer mapped with the 3 xio_work_req
 	 * used to transfer the headers
 	 */
@@ -241,35 +257,32 @@ struct xio_rdma_task {
 	struct xio_work_req		rdmad;
 
 	/* User (from vmsg) or pool buffer used for */
-	uint32_t			read_num_sge;
-	uint32_t			write_num_sge;
-	uint32_t			recv_num_sge;
+	uint16_t			read_num_reg_mem;
+	uint16_t			write_num_reg_mem;
 	uint32_t			pad0;
-	struct xio_mempool_obj		*read_sge;
-	struct xio_mempool_obj		*write_sge;
+	struct xio_reg_mem		*read_reg_mem;
+	struct xio_reg_mem		*write_reg_mem;
 
 	/* What this side got from the peer for RDMA R/W
 	 */
-	uint32_t			req_read_num_sge;
-	uint32_t			req_write_num_sge;
-	uint32_t			req_recv_num_sge;
-	uint32_t			rsp_write_num_sge;
-	struct xio_sge			*req_read_sge;
-	struct xio_sge			*req_write_sge;
+	uint16_t			req_in_num_sge;
+	uint16_t			req_out_num_sge;
+	uint16_t			rsp_out_num_sge;
+	uint16_t			pad1;
 
-	/* What this side got from the peer for SEND
-	*/
-	struct xio_sge			*req_recv_sge;
+	/* can serve send/rdma write  */
+	struct xio_sge			*req_in_sge;
 
-	/* What this side writes to the peer on RDMA W
-	 */
-	struct xio_sge			*rsp_write_sge;
+	/* can serve send/rdma read  */
+	struct xio_sge			*req_out_sge;
+
+	/* can serve send/rdma read response/rdma write  */
+	struct xio_sge			*rsp_out_sge;
 
 	unsigned int			phantom_idx;
-	enum xio_ib_op_code		ib_op;
 	uint16_t			sn;
 	uint8_t				rflags;
-	uint8_t				pad[5];
+	uint8_t				pad;
 };
 
 struct xio_cq  {
@@ -277,8 +290,8 @@ struct xio_cq  {
 	struct ibv_comp_channel		*channel;
 	struct xio_context		*ctx;
 	struct xio_device		*dev;
-	xio_ctx_event_t			consume_cq_event_data;
-	xio_ctx_event_t			poll_cq_event_data;
+	struct xio_ev_data		consume_cq_event;
+	struct xio_ev_data		poll_cq_event;
 	struct ibv_wc			*wc_array;
 	int32_t				wc_array_len;
 	int32_t				cq_events_that_need_ack;
@@ -288,6 +301,8 @@ struct xio_cq  {
 	int32_t				cqe_avail;    /* free elements  */
 	struct kref			kref;       /* utilization counter */
 	int32_t				num_delayed_arm;
+	int32_t				num_poll_cq;
+	int32_t				pad;
 	struct list_head		trans_list;   /* list of all transports
 						       * attached to this cq
 						       */
@@ -321,8 +336,8 @@ struct xio_rdma_tasks_slab {
 	void				*data_pool;
 
 	/* memory registration for data */
-	struct ibv_mr			*data_mr;
-	struct xio_buf			*io_buf;
+	struct xio_mr			*data_mr;
+	struct xio_reg_mem		reg_mem;
 	int				buf_size;
 	int				alloc_nr;
 };
@@ -352,16 +367,17 @@ struct xio_rdma_transport {
 	struct list_head		in_flight_list;
 	struct list_head		rx_list;
 	struct list_head		io_list;
-	struct list_head		rdma_rd_list;
-	struct list_head		rdma_rd_in_flight_list;
+	struct list_head		rdma_rd_req_list;
+	struct list_head		rdma_rd_req_in_flight_list;
+	struct list_head		rdma_rd_rsp_list;
+	struct list_head		rdma_rd_rsp_in_flight_list;
 
-	/* rx parameters */
+		/* rx parameters */
 	int				rq_depth;	 /* max rcv allowed  */
-	int				actual_rq_depth; /* max rcv allowed  */
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
 	uint16_t			sim_peer_credits;  /* simulates the peer
-							    * credits managment
+							    * credits management
 							    * to control nop
 							    * sends
 							    */
@@ -370,20 +386,23 @@ struct xio_rdma_transport {
 	uint16_t			peer_credits;
 
 	uint16_t			pad;
+	uint32_t                        peer_max_header;
 
 	/* fast path params */
-	int				rdma_in_flight;
+	int				rdma_rd_req_in_flight;
+	int				rdma_rd_rsp_in_flight;
 	int				sqe_avail;
 	enum xio_transport_state	state;
 
 	/* tx parameters */
-	size_t				max_inline_buf_sz;
-	int				kick_rdma_rd;
+	int				kick_rdma_rd_req;
+	int				kick_rdma_rd_rsp;
 	int				reqs_in_flight_nr;
 	int				rsps_in_flight_nr;
 	int				tx_ready_tasks_num;
 	int				max_tx_ready_tasks_num;
 	int				max_inline_data;
+	size_t				max_inline_buf_sz;
 	int				max_sge;
 	uint16_t			req_sig_cnt;
 	uint16_t			rsp_sig_cnt;
@@ -401,7 +420,7 @@ struct xio_rdma_transport {
 	uint16_t			max_exp_sn; /* upper edge of
 						       receiver's window + 1 */
 
-	uint16_t			timewait; /* flag */
+	uint16_t			pad1;
 
 	/* control path params */
 	int				sq_depth;     /* max snd allowed  */
@@ -423,24 +442,30 @@ struct xio_rdma_transport {
 	struct xio_rdma_setup_msg	setup_rsp;
 
 	/* for reconnect */
+	struct xio_device		*dev;
 	struct xio_rkey_tbl		*rkey_tbl;
 	struct xio_rkey_tbl		*peer_rkey_tbl;
 
 	/* for reconnect */
 	uint16_t			rkey_tbl_size;
 	uint16_t			peer_rkey_tbl_size;
-	uint16_t			pad1;
 
-	uint16_t			ignore_timewait;
+	uint32_t			ignore_timewait:1;
+	uint32_t			timewait_nr:1; /* flag */
+	uint32_t			ignore_disconnect:1;
+	uint32_t			disconnect_nr:1; /* flag */
+	uint32_t                        beacon_sent:1;
+	uint32_t			reserved:27;
 
 	/* too big to be on stack - use as temporaries */
 	union {
 		struct xio_msg		dummy_msg;
 		struct xio_work_req	dummy_wr;
 	};
-	struct xio_ev_data		ev_data_close;
-	struct xio_ev_data		ev_data_timewait_exit;
+	struct xio_ev_data		close_event;
+	struct xio_ev_data		timewait_exit_event;
 	xio_delayed_work_handle_t	timewait_timeout_work;
+	xio_delayed_work_handle_t	disconnect_timeout_work;
 	struct ibv_send_wr		beacon;
 	struct xio_task			beacon_task;
 	uint32_t			trans_attr_mask;
@@ -460,14 +485,10 @@ struct xio_dev_tdata {
 	void				*async_loop;
 };
 
-
 /* xio_rdma_verbs.c */
 void xio_mr_list_init(void);
 int xio_mr_list_free(void);
 const char *ibv_wc_opcode_str(enum ibv_wc_opcode opcode);
-
-
-
 
 void xio_cq_event_handler(int fd, int events, void *data);
 int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
@@ -489,6 +510,10 @@ int xio_rdma_cancel_rsp(struct xio_transport_base *transport,
 			void *ulp_msg, size_t ulp_msg_sz);
 
 /* xio_rdma_management.c */
+int xio_rdma_get_max_header_size(void);
+
+int xio_rdma_get_inline_buffer_size(void);
+
 struct xio_task *xio_rdma_primary_task_alloc(
 				struct xio_rdma_transport *rdma_hndl);
 
@@ -503,6 +528,7 @@ static inline void xio_device_get(struct xio_device *dev)
 {
 	kref_get(&dev->kref);
 }
+
 void xio_rdma_close_cb(struct kref *kref);
 
 void xio_device_down(struct kref *kref);
@@ -530,5 +556,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev);
 /*---------------------------------------------------------------------------*/
 int xio_rkey_table_create(struct xio_device *old, struct xio_device *_new,
 			  struct xio_rkey_tbl **htbl, uint16_t *len);
+
+void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us);
 
 #endif  /* XIO_RDMA_TRANSPORT_H */

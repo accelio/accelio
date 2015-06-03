@@ -38,7 +38,6 @@
 #ifndef XIO_NEXUS_CACHE_H
 #define XIO_NEXUS_CACHE_H
 
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations			                                     */
 /*---------------------------------------------------------------------------*/
@@ -71,7 +70,6 @@ struct xio_nexus *xio_nexus_cache_lookup(
 		int nexus_id);
 
 struct xio_nexus *xio_nexus_cache_find(struct xio_nexus_query_params *query);
-
 
 #endif /*XIO_NEXUS_CACHE_H */
 

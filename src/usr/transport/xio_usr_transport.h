@@ -38,13 +38,8 @@
 #ifndef XIO_COMMON_TRANSPORT_H
 #define XIO_COMMON_TRANSPORT_H
 
-
 #define MAX_SGE				(XIO_IOVLEN + 1)
 
-#define DEF_DATA_ALIGNMENT		0
-#define DEF_APP_DATA_BUF_SZ		8192
-#define DEF_APP_HDR_SZ			768
-#define SEND_BUF_SZ			(DEF_APP_HDR_SZ + DEF_APP_DATA_BUF_SZ)
 #define MAX_HDR_SZ			512
 
 #define NUM_CONN_SETUP_TASKS		2 /* one posted for req rx,
@@ -67,26 +62,21 @@
 		}				\
 	} while (0)
 
-
 #define xio_prefetch(p)            __builtin_prefetch(p)
-
-/* header flags */
-#define XIO_HEADER_FLAG_NONE		0x00
-#define XIO_HEADER_FLAG_SMALL_ZERO_COPY	0x01
-
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
 /*---------------------------------------------------------------------------*/
 enum xio_transport_state {
-	XIO_STATE_INIT,
-	XIO_STATE_LISTEN,
-	XIO_STATE_CONNECTING,
-	XIO_STATE_CONNECTED,
-	XIO_STATE_DISCONNECTED,
-	XIO_STATE_RECONNECT,
-	XIO_STATE_CLOSED,
-	XIO_STATE_DESTROYED
+	XIO_TRANSPORT_STATE_INIT,
+	XIO_TRANSPORT_STATE_LISTEN,
+	XIO_TRANSPORT_STATE_CONNECTING,
+	XIO_TRANSPORT_STATE_CONNECTED,
+	XIO_TRANSPORT_STATE_DISCONNECTED,
+	XIO_TRANSPORT_STATE_RECONNECT,
+	XIO_TRANSPORT_STATE_CLOSED,
+	XIO_TRANSPORT_STATE_DESTROYED,
+	XIO_TRANSPORT_STATE_ERROR
 };
 
 struct xio_mr {
@@ -108,14 +98,15 @@ static inline int16_t before(uint16_t seq1, uint16_t seq2)
 {
 	return (int16_t)(seq1 - seq2) < 0;
 }
+
 #define after(seq2, seq1)       before(seq1, seq2)
 
 static inline int16_t before_eq(uint16_t seq1, uint16_t seq2)
 {
 	return (int16_t)(seq1 - seq2) <= 0;
 }
-#define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
+#define after_eq(seq2, seq1)       before_eq(seq1, seq2)
 
 /* is s2<=s1<s3 ? */
 static inline int16_t between(uint16_t seq1, uint16_t seq2, uint16_t seq3)

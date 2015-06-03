@@ -16,5 +16,5 @@ if [ $# -eq 3 ]; then
 	trans=$3
 fi
 
-taskset -c 1 ./xioclntd -a ${server_ip} -p ${port} -t ${trans}
+taskset -c 1 ./xioclntd -a ${server_ip} -p ${port} -r ${trans}
 

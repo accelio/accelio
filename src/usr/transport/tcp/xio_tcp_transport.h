@@ -38,14 +38,15 @@
 #ifndef XIO_TCP_TRANSPORT_H_
 #define XIO_TCP_TRANSPORT_H_
 
+struct xio_tcp_transport;
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
 extern double				g_mhz;
 
-
 /* definitions */
-#define NUM_TASKS			3264 /* 6 * (MAX_SEND_WR +
+#define NUM_TASKS			54400 /* 100 * (MAX_SEND_WR +
 					      * MAX_RECV_WR + EXTRA_RQE)
 					      */
 
@@ -77,7 +78,11 @@ extern double				g_mhz;
 #define XIO_TO_TCP_TASK(xt, tt)			\
 		struct xio_tcp_task *(tt) =		\
 			(struct xio_tcp_task *)(xt)->dd_data
+#define XIO_TO_TCP_HNDL(xt, th)				\
+		struct xio_tcp_transport *(th) =		\
+			(struct xio_tcp_transport *)(xt)->context
 
+#define PAGE_SIZE                       page_size
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -125,25 +130,28 @@ struct xio_tcp_options {
 	int			pad;
 };
 
-
 #define XIO_TCP_REQ_HEADER_VERSION	1
 
-PACKED_MEMORY(struct xio_tcp_req_hdr{
+PACKED_MEMORY(struct xio_tcp_req_hdr {
 	uint8_t			version;	/* request version	*/
 	uint8_t			flags;
 	uint16_t		req_hdr_len;	/* req header length	*/
 	uint16_t		sn;		/* serial number	*/
-	uint16_t		tid;		/* originator identifier*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint16_t		pad0;
 
-	uint16_t		recv_num_sge;
-	uint16_t		read_num_sge;
-	uint16_t		write_num_sge;
+	uint32_t		ltid;		/* originator identifier*/
+	uint16_t		pad;
+	uint8_t			in_tcp_op;	/* opcode  for peers	*/
+	uint8_t			out_tcp_op;
+
+	uint16_t		in_num_sge;
+	uint16_t		out_num_sge;
+	uint32_t		pad1;
 
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 });
 
@@ -154,17 +162,20 @@ PACKED_MEMORY(struct xio_tcp_rsp_hdr {
 	uint8_t			flags;
 	uint16_t		rsp_hdr_len;	/* rsp header length	*/
 	uint16_t		sn;		/* serial number	*/
-	uint16_t		tid;		/* originator identifier*/
-	uint8_t			opcode;		/* opcode  for peers	*/
-	uint8_t			pad[1];
+	uint16_t		pad;
 
-	uint16_t		write_num_sge;
+	uint32_t		ltid;		/* local task id	*/
+	uint32_t                rtid;           /* remote task id       */
 
+	uint8_t			out_tcp_op;	/* opcode  for peers	*/
+	uint8_t			pad1;
+	uint16_t		out_num_sge;
 	uint32_t		status;		/* status		*/
+
 	uint16_t		ulp_hdr_len;	/* ulp header length	*/
 	uint16_t		ulp_pad_len;	/* pad_len length	*/
-
 	uint32_t		remain_data_len;/* remaining data length */
+
 	uint64_t		ulp_imm_len;	/* ulp data length	*/
 });
 
@@ -178,6 +189,8 @@ PACKED_MEMORY(struct xio_tcp_setup_msg {
 	uint64_t		buffer_sz;
 	uint32_t		max_in_iovsz;
 	uint32_t		max_out_iovsz;
+	uint32_t                max_header_len;
+	uint32_t		pad;
 });
 
 PACKED_MEMORY(struct xio_tcp_cancel_hdr {
@@ -198,49 +211,44 @@ struct xio_tcp_work_req {
 };
 
 struct xio_tcp_task {
-	struct xio_tcp_transport	*tcp_hndl;
-
-	enum xio_tcp_op_code		tcp_op;
-
-	uint32_t			recv_num_sge;
-	uint32_t			read_num_sge;
-	uint32_t			write_num_sge;
-
-	uint32_t			req_write_num_sge;
-	uint32_t			rsp_write_num_sge;
-	uint32_t			req_read_num_sge;
-	uint32_t			req_recv_num_sge;
-
-	uint16_t			sn;
-	uint16_t			pad[3];
+	enum xio_tcp_op_code		in_tcp_op;
+	enum xio_tcp_op_code		out_tcp_op;
 
 	struct xio_tcp_work_req		txd;
 	struct xio_tcp_work_req		rxd;
 
+
 	/* User (from vmsg) or pool buffer used for */
-	struct xio_mempool_obj		*read_sge;
-	struct xio_mempool_obj		*write_sge;
+	uint16_t			read_num_reg_mem;
+	uint16_t			write_num_reg_mem;
+	uint32_t			pad0;
+
+	struct xio_reg_mem		*read_reg_mem;
+	struct xio_reg_mem		*write_reg_mem;
+
+	uint16_t			req_in_num_sge;
+	uint16_t			req_out_num_sge;
+	uint16_t			rsp_out_num_sge;
+	uint16_t			sn;
 
 	/* What this side got from the peer for SEND */
 	/* What this side got from the peer for RDMA equivalent R/W
 	 */
-	struct xio_sge			*req_read_sge;
-	struct xio_sge			*req_write_sge;
+	/* can serve send/rdma write  */
+	struct xio_sge			*req_in_sge;
 
-	/* What this side got from the peer for SEND
-	 */
-	struct xio_sge			*req_recv_sge;
+	/* can serve send/rdma read  */
+	struct xio_sge			*req_out_sge;
 
-	/* What this side writes to the peer on RDMA equivalent W
-	 */
-	struct xio_sge			*rsp_write_sge;
+	/* can serve send/rdma read response/rdma write  */
+	struct xio_sge			*rsp_out_sge;
 
 	xio_work_handle_t		comp_work;
 };
 
 struct xio_tcp_tasks_slab {
 	void				*data_pool;
-	struct xio_buf			*io_buf;
+	struct xio_reg_mem		reg_mem;
 	int				buf_size;
 	int				pad;
 };
@@ -331,7 +339,7 @@ struct xio_tcp_transport {
 	void				*tmp_rx_buf;
 	void				*tmp_rx_buf_cur;
 	uint32_t			tmp_rx_buf_len;
-	uint32_t			pad;
+	uint32_t			peer_max_header;
 
 	uint32_t			trans_attr_mask;
 	struct xio_transport_attr	trans_attr;
@@ -339,10 +347,14 @@ struct xio_tcp_transport {
 	struct xio_tcp_work_req		tmp_work;
 	struct iovec			tmp_iovec[IOV_MAX];
 
-	xio_ctx_event_t                 flush_tx_event;
-	xio_ctx_event_t			ctl_rx_event;
-	xio_ctx_event_t			disconnect_event;
+	struct xio_ev_data              flush_tx_event;
+	struct xio_ev_data		ctl_rx_event;
+	struct xio_ev_data		disconnect_event;
 };
+
+int xio_tcp_get_max_header_size(void);
+
+int xio_tcp_get_inline_buffer_size(void);
 
 int xio_tcp_send(struct xio_transport_base *transport,
 		 struct xio_task *task);

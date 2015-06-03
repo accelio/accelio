@@ -53,9 +53,17 @@
 #include "xio_idr.h"
 #include "xio_ev_data.h"
 #include "xio_ev_loop.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_mempool.h"
+#include "xio_protocol.h"
+#include "xio_mbuf.h"
+#include "xio_task.h"
+#include "xio_transport.h"
+
+#define MSGPOOL_INIT_NR	8
+#define MSGPOOL_GROW_NR	64
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -82,16 +90,16 @@ EXPORT_SYMBOL(xio_context_unreg_observer);
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_create							     */
 /*---------------------------------------------------------------------------*/
-struct xio_context *xio_context_create(unsigned int flags,
-				       struct xio_loop_ops *loop_ops,
-				       struct task_struct *worker,
+struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int polling_timeout,
 				       int cpu_hint)
 {
-	struct xio_context *ctx;
-	struct dentry *xio_root;
-	char name[32];
-	int cpu;
+	struct xio_context		*ctx;
+	struct xio_loop_ops		*loop_ops = ctx_params->loop_ops;
+	struct task_struct		*worker = ctx_params->worker;
+	struct xio_transport		*transport;
+	int				flags = ctx_params->flags;
+	int				cpu;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
 		xio_set_error(EINVAL);
@@ -118,7 +126,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 
 	/* allocate new context */
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-	if (ctx == NULL) {
+	if (!ctx) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("kzalloc failed\n");
 		goto cleanup0;
@@ -128,15 +136,25 @@ struct xio_context *xio_context_create(unsigned int flags,
 		cpu_hint = cpu;
 
 	ctx->run_private = 0;
+	ctx->user_context = ctx_params->user_context;
 	ctx->flags = flags;
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
 	ctx->polling_timeout = polling_timeout;
+	ctx->prealloc_pools = !!ctx_params->prealloc_pools;
+
 	ctx->workqueue = xio_workqueue_create(ctx);
 	if (!ctx->workqueue) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("xio_workqueue_init failed.\n");
 		goto cleanup1;
+	}
+	ctx->msg_pool = xio_objpool_create(sizeof(struct xio_msg),
+					   MSGPOOL_INIT_NR, MSGPOOL_GROW_NR);
+	if (!ctx->msg_pool) {
+		xio_set_error(ENOMEM);
+		ERROR_LOG("context's msg_pool create failed. %m\n");
+		goto cleanup2;
 	}
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
@@ -147,7 +165,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		break;
 	case XIO_LOOP_GIVEN_THREAD:
 		set_cpus_allowed_ptr(worker, cpumask_of(cpu_hint));
-		ctx->worker = (uint64_t) worker;
+		ctx->worker = (uint64_t)worker;
 		break;
 	case XIO_LOOP_TASKLET:
 		break;
@@ -155,18 +173,7 @@ struct xio_context *xio_context_create(unsigned int flags,
 		break;
 	default:
 		ERROR_LOG("wrong type. %u\n", flags);
-		goto cleanup2;
-	}
-
-	xio_root = xio_debugfs_root();
-	if (xio_root) {
-		/* More then one contexts can share the core */
-		sprintf(name, "ctx-%d-%p", cpu_hint, worker);
-		ctx->ctx_dentry = debugfs_create_dir(name, xio_root);
-		if (!ctx->ctx_dentry) {
-			ERROR_LOG("debugfs entry %s create failed\n", name);
-			goto cleanup2;
-		}
+		goto cleanup3;
 	}
 
 	ctx->ev_loop = xio_ev_loop_init(flags, ctx, loop_ops);
@@ -182,12 +189,28 @@ struct xio_context *xio_context_create(unsigned int flags,
 	ctx->stats.name[XIO_STAT_DELAY]    = kstrdup("DELAY", GFP_KERNEL);
 	ctx->stats.name[XIO_STAT_APPDELAY] = kstrdup("APPDELAY", GFP_KERNEL);
 
+	/* initialize rdma pools only */
+	transport = xio_get_transport("rdma");
+	if (transport && ctx->prealloc_pools) {
+		int retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					         XIO_CONTEXT_POOL_CLASS_INITIAL);
+		if (retval) {
+			ERROR_LOG("Failed to create initial pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+		retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
+					     XIO_CONTEXT_POOL_CLASS_PRIMARY);
+		if (retval) {
+			ERROR_LOG("Failed to create primary pool. ctx:%p\n", ctx);
+			goto cleanup2;
+		}
+	}
+
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;
 
 cleanup3:
-	debugfs_remove_recursive(ctx->ctx_dentry);
-	ctx->ctx_dentry = NULL;
+	xio_objpool_destroy(ctx->msg_pool);
 
 cleanup2:
 	xio_workqueue_destroy(ctx->workqueue);
@@ -243,11 +266,76 @@ int xio_query_context(struct xio_context *ctx,
 EXPORT_SYMBOL(xio_query_context);
 
 /*---------------------------------------------------------------------------*/
-/* xio_context_destroy	                                                     */
+/* xio_ctx_tasks_pools_destroy						     */
 /*---------------------------------------------------------------------------*/
-void xio_context_destroy(struct xio_context *ctx)
+static void xio_ctx_task_pools_destroy(struct xio_context *ctx)
 {
 	int i;
+
+	for (i = 0; i < XIO_PROTO_LAST; i++) {
+		if (ctx->initial_tasks_pool[i]) {
+			xio_tasks_pool_free_tasks(ctx->initial_tasks_pool[i]);
+			xio_tasks_pool_destroy(ctx->initial_tasks_pool[i]);
+			ctx->initial_tasks_pool[i] = NULL;
+		}
+		if (ctx->primary_tasks_pool[i]) {
+			xio_tasks_pool_free_tasks(ctx->primary_tasks_pool[i]);
+			xio_tasks_pool_destroy(ctx->primary_tasks_pool[i]);
+			ctx->primary_tasks_pool[i] = NULL;
+		}
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy	                                                     */
+/*---------------------------------------------------------------------------*/
+void xio_destroy_context_continue(struct work_struct *work)
+{
+	xio_work_handle_t *xio_work;
+	struct xio_context *ctx;
+	int i;
+
+	xio_work = container_of(work, xio_work_handle_t, work);
+	ctx = container_of(xio_work, struct xio_context, destroy_ctx_work);
+	if (ctx->run_private)
+		ERROR_LOG("not all observers finished! run_private=%d\n",
+			  ctx->run_private);
+
+	xio_observable_notify_all_observers(&ctx->observable,
+					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
+
+	if (!xio_observable_is_empty(&ctx->observable))
+		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
+
+	xio_observable_unreg_all_observers(&ctx->observable);
+
+	for (i = 0; i < XIO_STAT_LAST; i++)
+		kfree(ctx->stats.name[i]);
+
+	xio_workqueue_destroy(ctx->workqueue);
+	xio_objpool_destroy(ctx->msg_pool);
+
+	/* can free only xio created loop */
+	if (ctx->flags != XIO_LOOP_USER_LOOP)
+		xio_ev_loop_destroy(ctx->ev_loop);
+
+	ctx->ev_loop = NULL;
+
+	XIO_OBSERVABLE_DESTROY(&ctx->observable);
+
+	xio_ctx_task_pools_destroy(ctx);
+
+	if (ctx->mempool) {
+		xio_mempool_destroy(ctx->mempool);
+		ctx->mempool = NULL;
+	}
+
+	kfree(ctx);
+}
+EXPORT_SYMBOL(xio_destroy_context_continue);
+
+void xio_context_destroy(struct xio_context *ctx)
+{
 	int found;
 
 	found = xio_idr_lookup_uobj(usr_idr, ctx);
@@ -265,41 +353,8 @@ void xio_context_destroy(struct xio_context *ctx)
 	/* allow internally to run the loop for final cleanup */
 	if (ctx->run_private)
 		xio_context_run_loop(ctx);
-
-	if (ctx->run_private)
-		ERROR_LOG("not all observers finished! run_private=%d\n",
-			  ctx->run_private);
-
-	xio_observable_notify_all_observers(&ctx->observable,
-					    XIO_CONTEXT_EVENT_POST_CLOSE, NULL);
-
-	if (!xio_observable_is_empty(&ctx->observable))
-		ERROR_LOG("context destroy: observers leak - %p\n", ctx);
-
-	xio_observable_unreg_all_observers(&ctx->observable);
-
-	for (i = 0; i < XIO_STAT_LAST; i++)
-		kfree(ctx->stats.name[i]);
-
-	xio_workqueue_destroy(ctx->workqueue);
-
-	/* can free only xio created loop */
-	if (ctx->flags != XIO_LOOP_USER_LOOP)
-		xio_ev_loop_destroy(ctx->ev_loop);
-
-	ctx->ev_loop = NULL;
-
-	debugfs_remove_recursive(ctx->ctx_dentry);
-	ctx->ctx_dentry = NULL;
-
-	XIO_OBSERVABLE_DESTROY(&ctx->observable);
-
-	if (ctx->mempool) {
-		xio_mempool_destroy(ctx->mempool);
-		ctx->mempool = NULL;
-	}
-
-	kfree(ctx);
+	if (ctx->run_private == 0)
+		xio_destroy_context_continue(&ctx->destroy_ctx_work.work);
 }
 EXPORT_SYMBOL(xio_context_destroy);
 
@@ -342,23 +397,19 @@ int xio_ctx_del_delayed_work(struct xio_context *ctx,
 		return 0;
 
 	retval = xio_workqueue_del_delayed_work(ctx->workqueue, work);
-	if (retval == -1) {
+	if (retval) {
 		xio_set_error(retval);
-		DEBUG_LOG(" WARN workqueue_del_delayed_work failed. err=%d\n",
-			 retval);
-	} else if (retval) {
-		xio_set_error(retval);
-		WARN_LOG("workqueue_del_delayed_work failed. err=%d\n",
-			 retval);
+		ERROR_LOG("workqueue_del_delayed_work failed. err=%d\n",
+			  retval);
 	}
 
 	return retval;
 }
 
-
 int xio_context_run_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->run(ev_loop->loop_object);
 }
 EXPORT_SYMBOL(xio_context_run_loop);
@@ -366,6 +417,7 @@ EXPORT_SYMBOL(xio_context_run_loop);
 void xio_context_stop_loop(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	ev_loop->stop(ev_loop->loop_object);
 }
 EXPORT_SYMBOL(xio_context_stop_loop);
@@ -373,15 +425,47 @@ EXPORT_SYMBOL(xio_context_stop_loop);
 int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *data)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->add_event(ev_loop->loop_object, data);
 }
 EXPORT_SYMBOL(xio_context_add_event);
 
+/*
+ * Suspend the current handler run.
+ * Note: Not protected against a race. Another thread may reactivate the event.
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_disable_event	                                             */
+/*---------------------------------------------------------------------------*/
+void xio_context_disable_event(struct xio_ev_data *data)
+{
+	clear_bit(XIO_EV_HANDLER_ENABLED, &data->states);
+}
+EXPORT_SYMBOL(xio_context_disable_event);
+
+/*
+ * Check if the event is pending.
+ * Return true if the event is pending in any list.
+ * Return false once the event is removed from the list in order to be executed.
+ * (When inside the event handler, the event is no longer pending)
+ * Note: Not protected against a race. Another thread may reactivate the event.
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_is_pending_event	                                             */
+/*---------------------------------------------------------------------------*/
+int xio_context_is_pending_event(struct xio_ev_data *data)
+{
+	return test_bit(XIO_EV_HANDLER_PENDING, &data->states);
+}
+EXPORT_SYMBOL(xio_context_is_pending_event);
+
 int xio_context_is_loop_stopping(struct xio_context *ctx)
 {
 	struct xio_ev_loop *ev_loop = (struct xio_ev_loop *)ctx->ev_loop;
+
 	return ev_loop->is_stopping(ev_loop->loop_object);
 }
+EXPORT_SYMBOL(xio_context_is_loop_stopping);
 
 /*---------------------------------------------------------------------------*/
 /* xio_ctx_add_work							     */
@@ -405,6 +489,43 @@ int xio_ctx_add_work(struct xio_context *ctx,
 	}
 
 	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_set_work_destructor						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_set_work_destructor(
+		     struct xio_context *ctx, void *data,
+		     void (*destructor)(void *data),
+		     xio_ctx_work_t *work)
+{
+	int retval;
+
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
+
+	retval = xio_workqueue_set_work_destructor(
+					ctx->workqueue,
+					data, destructor, work);
+	if (retval) {
+		xio_set_error(retval);
+		ERROR_LOG("xio_workqueue_set_work_destructor failed. %m\n");
+	}
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_is_work_in_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_is_work_in_handler(struct xio_context *ctx, xio_ctx_work_t *work)
+{
+	/* test if work is pending */
+	if (xio_is_work_pending(work))
+		return 0;
+
+	return xio_workqueue_is_work_in_handler(ctx->workqueue, work);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -446,3 +567,182 @@ struct xio_mempool *xio_mempool_get(struct xio_context *ctx)
 	return ctx->mempool;
 }
 EXPORT_SYMBOL(xio_mempool_get);
+
+/*
+ * should be called only from loop context
+ */
+/*---------------------------------------------------------------------------*/
+/* xio_context_destroy_resume	                                             */
+/*---------------------------------------------------------------------------*/
+void xio_context_destroy_resume(struct xio_context *ctx)
+{
+	if (ctx->run_private) {
+		if (!--ctx->run_private) {
+			switch (ctx->flags) {
+			case XIO_LOOP_GIVEN_THREAD:
+				xio_context_stop_loop(ctx);
+				break;
+			case XIO_LOOP_WORKQUEUE:
+				INIT_WORK(&ctx->destroy_ctx_work.work,
+					  xio_destroy_context_continue);
+				schedule_work(&ctx->destroy_ctx_work.work);
+				break;
+			default:
+				ERROR_LOG("Not supported type. %d\n", ctx->flags);
+				break;
+			}
+		}
+	}
+}
+EXPORT_SYMBOL(xio_context_destroy_resume);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx)
+{
+	ctx->poll_completions_ctx = poll_completions_ctx;
+	ctx->poll_completions_fn =  poll_completions_fn;
+}
+EXPORT_SYMBOL(xio_context_set_poll_completions_fn);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_poll_completions		                                     */
+/*---------------------------------------------------------------------------*/
+int xio_context_poll_completions(struct xio_context *ctx, int timeout_us)
+{
+	if (ctx->poll_completions_fn)
+		return ctx->poll_completions_fn(ctx->poll_completions_ctx,
+					       timeout_us);
+
+	return 0;
+}
+EXPORT_SYMBOL(xio_context_poll_completions);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_pool_create							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
+		        enum xio_context_pool_class pool_cls)
+{
+	struct xio_tasks_pool_ops	*pool_ops;
+	struct xio_tasks_pool		**tasks_pool;
+	struct xio_transport		*transport;
+	struct xio_tasks_pool_params	params;
+	char				pool_name[64];
+	const char			*proto_str = xio_proto_str(proto);
+
+	/* get the transport's proto */
+	transport = xio_get_transport(proto_str);
+	if (!transport) {
+		ERROR_LOG("failed to load %s transport layer.\n", proto_str);
+		ERROR_LOG("validate that your system support %s " \
+			  "and the accelio's %s module is loaded\n",
+			  proto_str, proto_str);
+		xio_set_error(ENOPROTOOPT);
+		return -1;
+	}
+
+	if (transport->get_pools_setup_ops) {
+		if (!ctx->primary_pool_ops[proto] ||
+		    !ctx->initial_pool_ops[proto])
+			transport->get_pools_setup_ops(
+					NULL,
+					&ctx->initial_pool_ops[proto],
+					&ctx->primary_pool_ops[proto]);
+	} else {
+		ERROR_LOG("transport does not implement " \
+			  "\"get_pools_setup_ops\"\n");
+		return -1;
+	}
+
+	switch(pool_cls) {
+	case XIO_CONTEXT_POOL_CLASS_INITIAL:
+		tasks_pool = &ctx->initial_tasks_pool[proto];
+		pool_ops = ctx->initial_pool_ops[proto];
+		sprintf(pool_name, "ctx:%p - initial_pool_%s", ctx, proto_str);
+
+	break;
+	case XIO_CONTEXT_POOL_CLASS_PRIMARY:
+		tasks_pool = &ctx->primary_tasks_pool[proto];
+		pool_ops = ctx->primary_pool_ops[proto];
+		sprintf(pool_name, "ctx:%p - primary_pool_%s", ctx, proto_str);
+	break;
+	default:
+		xio_set_error(EINVAL);
+		ERROR_LOG("unknown pool class\n");
+		return -1;
+	};
+
+	/* if already exist */
+	if (*tasks_pool)
+		return 0;
+
+	if (!pool_ops)
+		return -1;
+
+	if (!pool_ops->pool_get_params ||
+	    !pool_ops->slab_pre_create ||
+	    !pool_ops->slab_init_task ||
+	    !pool_ops->pool_post_create ||
+	    !pool_ops->slab_destroy)
+		return -1;
+
+	/* get pool properties from the transport */
+	memset(&params, 0, sizeof(params));
+
+	pool_ops->pool_get_params(NULL,
+				  (int *)&params.start_nr,
+				  (int *)&params.max_nr,
+				  (int *)&params.alloc_nr,
+				  (int *)&params.pool_dd_data_sz,
+				  (int *)&params.slab_dd_data_sz,
+				  (int *)&params.task_dd_data_sz);
+	if (ctx->prealloc_pools) {
+		params.start_nr = params.max_nr;
+		params.alloc_nr = 0;
+	}
+
+	params.pool_hooks.slab_pre_create  =
+		(int (*)(void *, int, void *, void *))
+				pool_ops->slab_pre_create;
+	params.pool_hooks.slab_post_create = (int (*)(void *, void *, void *))
+				pool_ops->slab_post_create;
+	params.pool_hooks.slab_destroy	   = (int (*)(void *, void *, void *))
+				pool_ops->slab_destroy;
+	params.pool_hooks.slab_init_task   =
+		(int (*)(void *, void *, void *, int,  struct xio_task *))
+				pool_ops->slab_init_task;
+	params.pool_hooks.slab_uninit_task =
+		(int (*)(void *, void *, void *, struct xio_task *))
+				pool_ops->slab_uninit_task;
+	params.pool_hooks.slab_remap_task =
+		(int (*)(void *, void *, void *, void *, struct xio_task *))
+				pool_ops->slab_remap_task;
+	params.pool_hooks.pool_pre_create  = (int (*)(void *, void *, void *))
+				pool_ops->pool_pre_create;
+	params.pool_hooks.pool_post_create = (int (*)(void *, void *, void *))
+				pool_ops->pool_post_create;
+	params.pool_hooks.pool_destroy	   = (int (*)(void *, void *, void *))
+				pool_ops->pool_destroy;
+	params.pool_hooks.task_pre_put  = (int (*)(void *, struct xio_task *))
+		pool_ops->task_pre_put;
+	params.pool_hooks.task_post_get = (int (*)(void *, struct xio_task *))
+		pool_ops->task_post_get;
+
+	params.pool_name = kstrdup(pool_name, GFP_KERNEL);
+
+	/* initialize the tasks pool */
+	*tasks_pool = xio_tasks_pool_create(&params);
+	if (!*tasks_pool) {
+		ERROR_LOG("xio_tasks_pool_create failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+

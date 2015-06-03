@@ -49,13 +49,15 @@
 #include <io.h>
 #include <stdint.h>
 #include <errno.h>
-#include <assert.h>
 #include <BaseTsd.h>
 
 #include <xio_base.h>
-#include <xio-basic-env.h>
+#include <xio_env_basic.h>
 #include "list.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef SSIZE_T ssize_t;
 typedef __int32 int32_t;
@@ -68,6 +70,7 @@ typedef int64_t __s64;
 #define likely(x)		__builtin_expect(!!(x), 1)
 #define unlikely(x)		__builtin_expect(!!(x), 0)
 
+#define XIO_F_ALWAYS_INLINE	__forceinline
 
 /*---------------------------------------------------------------------------*/
 /*-------------------- Memory related things --------------------------------*/
@@ -135,7 +138,6 @@ static inline void xio_numa_free(void *start, size_t size) {
 
 #define xio_tls __declspec(thread)
 
-
 typedef INIT_ONCE thread_once_t;
 static const INIT_ONCE INIT_ONCE_RESET_VALUE = INIT_ONCE_STATIC_INIT;
 #define THREAD_ONCE_INIT     INIT_ONCE_STATIC_INIT
@@ -174,6 +176,9 @@ NOTICE:     if you'll use DllMain here - DO NOT call WSAStartup from DllMain */
 
 #define sum_to_ptr(_ptr, a) ( ((char*)(_ptr)) + (a) )
 
+static inline uint64_t xio_get_current_thread_id() {
+	return GetCurrentThreadId();
+}
 
 /*---------------------------------------------------------------------------*/
 /*------------------- CPU and Clock related things --------------------------*/
@@ -191,11 +196,43 @@ static inline long xio_get_num_processors(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static inline long xio_get_current_processor_number(void)
+static inline long xio_get_cpu(void)
 {
 	/*TODO: consider GetCurrentProcessorNumberEx */
 	return GetCurrentProcessorNumber();
 }
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_node_of_cpu(int cpu)
+{
+//	assert(0 && "not yet supported");
+	return -1; /* error */
+}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_numa_run_on_node(int node)
+{
+//	assert(0 && "not yet supported");
+	return -1; /* error */
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_cpu - pin to specific cpu					     */
+/*---------------------------------------------------------------------------*/
+static int inline xio_pin_to_cpu(int cpu) {
+	/* not supported yet in Windows */
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_pin_to_node - pin to the numa node of the cpu			     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_pin_to_node(int cpu) {
+	/* not supported yet in Windows */
+	return 0;
+}
+
+
 
 struct timespec {
 	time_t   tv_sec;        /* seconds */
@@ -256,6 +293,26 @@ int static inline gettimeofday(struct timeval *tv, struct timezone2 *tz)
 	(*(_result) = *localtime((const time_t *)(_clock)), \
 	(_result))
 
+/*---------------------------------------------------------------------------*
+ * xio_get_cpu_mhz							     *
+ *									     *
+ * since this operation may take time cache it on a cookie,		     *
+ * and use the cookie if exist						     *
+ *									     *
+ *---------------------------------------------------------------------------*/
+static inline double xio_get_cpu_mhz(void)
+{
+	static double cpu_mhz;
+
+	if (!cpu_mhz) {
+		LARGE_INTEGER performanceFrequency;
+		QueryPerformanceFrequency(&performanceFrequency);
+		cpu_mhz = (double)performanceFrequency.QuadPart;
+	}
+
+	return cpu_mhz;
+}
+
 /*---------------------------------------------------------------------------*/
 static inline int xio_clock_gettime(struct timespec *ts)
 {
@@ -291,6 +348,7 @@ static inline int xio_clock_gettime(struct timespec *ts)
 #define XIO_WOULDBLOCK              WSAEWOULDBLOCK /* recv    on non-blocking */
 #define XIO_ECONNABORTED            WSAECONNABORTED
 #define XIO_ECONNRESET              WSAECONNRESET
+#define XIO_ECONNREFUSED            WSAECONNREFUSED
 
 
 #define SHUT_RDWR SD_BOTH
@@ -301,6 +359,19 @@ typedef SOCKET socket_t;
 
 /*---------------------------------------------------------------------------*/
 static inline int xio_get_last_socket_error() { return WSAGetLastError(); }
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_closesocket(socket_t sock) {return closesocket(sock);}
+
+/*---------------------------------------------------------------------------*/
+static inline int xio_write(socket_t sock, const void *buf, size_t len) {
+	return send(sock, (const char *)buf, len, 0);
+}
+
+/*---------------------------------------------------------------------------*/
+static inline ssize_t xio_read(socket_t sock, void *buf, size_t count) {
+	return recv(sock, (char *)buf, count, 0);
+}
 
 /*---------------------------------------------------------------------------*/
 /*
@@ -325,7 +396,8 @@ static inline int socketpair(int domain, int type, int protocol,
 	socket_t listener;
 	int e;
 	socklen_t addrlen = sizeof(a.inaddr);
-	DWORD flags = 0; /* was: (make_overlapped ? WSA_FLAG_OVERLAPPED : 0); */
+//	DWORD flags = 0; /* was: (make_overlapped ? WSA_FLAG_OVERLAPPED : 0); */
+	DWORD flags = WSA_FLAG_OVERLAPPED;
 	int reuse = 1;
 
 	if (socks == 0) {
@@ -364,15 +436,15 @@ static inline int socketpair(int domain, int type, int protocol,
 		if (socks[1] == INVALID_SOCKET)
 			break;
 
-		closesocket(listener);
+		xio_closesocket(listener);
 		return 0;
 
 	} while (0);
 
 	e = WSAGetLastError();
-	closesocket(listener);
-	closesocket(socks[0]);
-	closesocket(socks[1]);
+	xio_closesocket(listener);
+	xio_closesocket(socks[0]);
+	xio_closesocket(socks[1]);
 	WSASetLastError(e);
 	return SOCKET_ERROR;
 }
@@ -391,6 +463,20 @@ static inline int xio_set_blocking(socket_t sock, unsigned long mode)
 }
 
 /*---------------------------------------------------------------------------*/
+static inline int xio_pipe(socket_t socks[2], int is_blocking)
+{
+	int ret = socketpair(AF_INET, SOCK_STREAM, IPPROTO_TCP, socks);
+	if (ret) return -1;
+	if (!is_blocking)
+		if (xio_set_blocking(socks[0],0)||xio_set_blocking(socks[1],0)){
+			xio_closesocket(socks[0]);
+			xio_closesocket(socks[1]);
+			return -1;
+		}
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 static inline socket_t xio_socket_non_blocking(int domain, int type,
 					       int protocol)
 {
@@ -401,7 +487,7 @@ static inline socket_t xio_socket_non_blocking(int domain, int type,
 	}
 
 	if (xio_set_blocking(sock_fd, 0) < 0) {
-		closesocket(sock_fd);
+		xio_closesocket(sock_fd);
 		return -1;
 	}
 	return sock_fd;
@@ -418,7 +504,7 @@ static inline socket_t xio_accept_non_blocking(int sockfd,
 	}
 
 	if (xio_set_blocking(new_sock_fd, 0) < 0) {
-		closesocket(new_sock_fd);
+		xio_closesocket(new_sock_fd);
 		return -1;
 	}
 	return new_sock_fd;
@@ -631,5 +717,42 @@ static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
 	assert(gfp == GFP_KERNEL);
 	return strndup(s, len);
 }
+
+
+/*---------------------------------------------------------------------------*/
+/* ****** this section is devoted for not yet supported in Windows ********* */
+/*---------------------------------------------------------------------------*/
+
+static inline int xio_timerfd_create()
+{
+	return (int)xio_socket_non_blocking(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+}
+
+static inline int xio_timerfd_settime(int fd, int flags,
+	const struct itimerspec *new_value,
+	struct itimerspec *old_value)
+{
+	return 0;
+}
+
+static inline int  xio_netlink(struct xio_context *ctx)
+{
+	/* not supported in Windows*/
+	return 0;
+}
+
+/*
+ *  Determine whether some value is a power of two, where zero is
+ * *not* considered a power of two.
+ */
+
+static inline const bool is_power_of_2(unsigned long n)
+{
+	return (n != 0 && ((n & (n - 1)) == 0));
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* XIO_ENV_H */

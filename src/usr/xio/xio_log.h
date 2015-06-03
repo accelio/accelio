@@ -38,6 +38,9 @@
 #ifndef XIO_LOG_H
 #define XIO_LOG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Enable compiler checks for printf-like formatting.
@@ -95,12 +98,16 @@ static inline enum xio_log_level xio_get_log_level(void)
 
 static inline int xio_set_log_fn(xio_log_fn fn)
 {
-	if (fn == NULL)
+	if (!fn)
 		xio_vlog_fn = xio_vlog;
 	else
 		xio_vlog_fn = fn;
 
 	return 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* XIO_LOG_H */

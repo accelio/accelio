@@ -39,7 +39,6 @@
 #include "libxio.h"
 #include "xio_common.h"
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_gen_status_str					                     */
 /*---------------------------------------------------------------------------*/
@@ -145,5 +144,3 @@ const char *xio_strerror(int errnum)
 	return "Unknown error";
 }
 EXPORT_SYMBOL(xio_strerror);
-
-

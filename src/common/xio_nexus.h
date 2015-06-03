@@ -38,6 +38,9 @@
 #ifndef XIO_NEXUS_H
 #define XIO_NEXUS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* defines	                                                             */
@@ -65,7 +68,8 @@ enum xio_nexus_event {
 	XIO_NEXUS_EVENT_CANCEL_REQUEST,
 	XIO_NEXUS_EVENT_CANCEL_RESPONSE,
 	XIO_NEXUS_EVENT_ERROR,
-	XIO_NEXUS_EVENT_MESSAGE_ERROR
+	XIO_NEXUS_EVENT_MESSAGE_ERROR,
+	XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION,
 };
 
 enum xio_nexus_state {
@@ -138,10 +142,8 @@ struct xio_nexus {
 	struct xio_transport_base	*transport_hndl;
 
 	struct xio_tasks_pool		*primary_tasks_pool;
-	struct xio_tasks_pool_ops	*primary_pool_ops;
-
 	struct xio_tasks_pool		*initial_tasks_pool;
-	struct xio_tasks_pool_ops	*initial_pool_ops;
+
 	struct xio_observer		trans_observer;
 	struct xio_observer		ctx_observer;
 	struct xio_observer		srv_observer;
@@ -168,6 +170,9 @@ struct xio_nexus {
 	char				*out_if_addr;
 	uint32_t			trans_attr_mask;
 	struct xio_transport_init_attr	trans_attr;
+	struct xio_ev_data		destroy_event;
+	struct xio_ev_data		disconnect_event;
+	struct xio_ev_data		trans_error_event;
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };
@@ -259,8 +264,7 @@ int xio_nexus_primary_free_tasks(struct xio_nexus *nexus);
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_set_server							     */
 /*---------------------------------------------------------------------------*/
-inline void xio_nexus_set_server(struct xio_nexus *nexus,
-				 struct xio_server *server);
+void xio_nexus_set_server(struct xio_nexus *nexus, struct xio_server *server);
 
 /*---------------------------------------------------------------------------*/
 /* xio_nexus_reg_observer						     */
@@ -360,6 +364,12 @@ static inline void xio_nexus_state_set(struct xio_nexus *nexus,
 int xio_nexus_update_task(struct xio_nexus *nexus, struct xio_task *task);
 
 /*---------------------------------------------------------------------------*/
+/* xio_nexus_update_rkey						     */
+/*---------------------------------------------------------------------------*/
+int xio_nexus_update_rkey(struct xio_nexus *nexus,
+			  uint32_t *rkey);
+
+/*---------------------------------------------------------------------------*/
 /* xio_nexus_modify							     */
 /*---------------------------------------------------------------------------*/
 int xio_nexus_modify(struct xio_nexus *nexus,
@@ -373,6 +383,8 @@ int xio_nexus_query(struct xio_nexus *nexus,
 		    struct xio_nexus_attr *attr,
 		    int attr_mask);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*XIO_NEXUS_H */
-

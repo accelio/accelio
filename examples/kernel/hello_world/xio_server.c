@@ -54,7 +54,7 @@ MODULE_DESCRIPTION("XIO hello server "	\
 		   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static char *xio_argv[] = {"xio_hello_server", 0, 0};
+static char *xio_argv[] = {"xio_server_example", 0, 0};
 
 module_param_named(ip, xio_argv[1], charp, 0);
 MODULE_PARM_DESC(ip, "IP of NIC to receice request from");
@@ -101,7 +101,7 @@ static void process_request(struct xio_msg *req)
 		str = (char *)req->in.header.iov_base;
 		len = req->in.header.iov_len;
 		if (str) {
-			if (((unsigned) len) > 64)
+			if (((unsigned)len) > 64)
 				len = 64;
 			tmp = str[len];
 			str[len] = '\0';
@@ -114,7 +114,7 @@ static void process_request(struct xio_msg *req)
 			str = (char *)sg_virt(sg);
 			len = sg->length;
 			if (str) {
-				if (((unsigned) len) > 64)
+				if (((unsigned)len) > 64)
 					len = 64;
 				tmp = str[len];
 				str[len] = '\0';
@@ -126,14 +126,6 @@ static void process_request(struct xio_msg *req)
 		}
 		g_server_data->cnt = 0;
 	}
-
-#if 0
-	/* Server didn't allocate this memory */
-	req->in.header.iov_base = NULL;
-	req->in.header.iov_len  = 0;
-	/* Server didn't allocate in data table to reset it */
-	memset(&req->in.data_tbl, 0, sizeof(req->in.data_tbl));
-#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -182,7 +174,7 @@ static int on_new_session(struct xio_session *session,
 	server_data->session = session;
 
 	/* Automatically accept the request */
-	if (server_data->connection == NULL)
+	if (!server_data->connection)
 		xio_accept(session, NULL, 0, NULL, 0);
 	else
 		xio_reject(session, EISCONN, NULL, 0);
@@ -258,6 +250,7 @@ static int xio_server_main(void *data)
 	struct xio_server	*server;	/* server portal */
 	struct server_data	*server_data;
 	char			url[256];
+	struct xio_context_params ctx_params;
 	struct xio_context	*ctx;
 	int			i;
 
@@ -265,13 +258,16 @@ static int xio_server_main(void *data)
 
 	server_data = vzalloc(sizeof(*server_data));
 	if (!server_data) {
-		pr_err("server_data alloc failed\n");
+		/*pr_err("server_data alloc failed\n");*/
 		return 0;
 	}
 
 	/* create thread context for the server */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-				 current, 0, -1);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		vfree(server_data);
 		pr_err("context open filed\n");

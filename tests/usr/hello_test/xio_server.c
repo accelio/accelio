@@ -53,14 +53,14 @@
 #define XIO_DEF_ADDRESS		"127.0.0.1"
 #define XIO_DEF_PORT		2061
 #define XIO_DEF_TRANSPORT	"rdma"
-#define XIO_DEF_HEADER_SIZE	32
-#define XIO_DEF_DATA_SIZE	32
+#define XIO_DEF_HEADER_SIZE	0
+#define XIO_DEF_DATA_SIZE	0
 #define XIO_DEF_CPU		0
 #define XIO_DEF_IOV_LEN		1
 #define XIO_TEST_VERSION	"1.0.0"
 #define XIO_READ_BUF_LEN	(1024*1024)
 #define TEST_DISCONNECT		0
-#define DISCONNECT_NR		12000000
+#define DISCONNECT_NR		(30*PRINT_COUNTER)
 #define PEER_MAX_IN_IOVLEN	4
 #define PEER_MAX_OUT_IOVLEN	4
 
@@ -79,7 +79,7 @@ struct test_params {
 	struct msg_pool		*pool;
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	uint64_t		nsent;
 	uint64_t		ncomp;
 	struct msg_params	msg_params;
@@ -207,7 +207,7 @@ static int on_request(struct xio_session *session,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&test_params->msg_params, rsp,
+	msg_build_out_sgl(&test_params->msg_params, rsp,
 		  test_config.hdr_len,
 		  test_config.iov_len, test_config.data_len);
 
@@ -287,12 +287,12 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	int			nents = vmsg_sglist_nents(&msg->in);
 	int i;
 
-	if (test_params->xbuf == NULL)
-		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (test_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &test_params->reg_mem);
 
 	for (i = 0; i < nents; i++) {
-		sglist[i].iov_base = test_params->xbuf->addr;
-	        sglist[i].mr = test_params->xbuf->mr;
+		sglist[i].iov_base = test_params->reg_mem.addr;
+		sglist[i].mr = test_params->reg_mem.mr;
 	}
 
 	return 0;
@@ -463,6 +463,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			in_iov_len = PEER_MAX_OUT_IOVLEN;
 	int			out_iov_len = PEER_MAX_IN_IOVLEN;
+	int			reconnect;
 
 
 	if (parse_cmdline(&test_config, argc, argv) != 0)
@@ -473,6 +474,11 @@ int main(int argc, char *argv[])
 	set_cpu_affinity(test_config.cpu);
 
 	xio_init();
+
+	/* enable reconnect */
+	reconnect = 1;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_RECONNECT,
+			&reconnect, sizeof(reconnect));
 
 	/* set accelio max message vector used */
 	xio_set_opt(NULL,
@@ -523,7 +529,6 @@ int main(int argc, char *argv[])
 	} else {
 		printf("**** Error - xio_bind failed. %s\n",
 		       xio_strerror(xio_errno()));
-		xio_assert(0);
 	}
 
 	xio_context_destroy(test_params.ctx);
@@ -531,10 +536,8 @@ int main(int argc, char *argv[])
 	if (test_params.pool)
 		msg_pool_free(test_params.pool);
 
-	if (test_params.xbuf) {
-		xio_free(&test_params.xbuf);
-		test_params.xbuf = NULL;
-	}
+	if (test_params.reg_mem.addr)
+		xio_mem_free(&test_params.reg_mem);
 
 cleanup:
 	msg_api_free(&test_params.msg_params);

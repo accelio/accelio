@@ -50,97 +50,86 @@
 #include "xio_usr_transport.h"
 #include "xio_mempool.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 
-
-
 #ifndef HAVE_INFINIBAND_VERBS_H
 
-static struct xio_mr dummy_mr;
-
 /*---------------------------------------------------------------------------*/
-/* xio_reg_mr								     */
+/* xio_mem_register							     */
 /*---------------------------------------------------------------------------*/
-struct xio_mr *xio_reg_mr(void *addr, size_t length)
+int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 {
-	if (addr == NULL) {
+	static struct xio_mr dummy_mr;
+
+	if (!addr || !reg_mem) {
 		xio_set_error(EINVAL);
-		return NULL;
+		return -1;
 	}
 
-	return &dummy_mr;
-}
+	reg_mem->addr = addr;
+	reg_mem->length = length;
+	reg_mem->mr = &dummy_mr;
 
-/*---------------------------------------------------------------------------*/
-/* xio_dereg_mr								     */
-/*---------------------------------------------------------------------------*/
-int xio_dereg_mr(struct xio_mr **p_tmr)
-{
-	*p_tmr = NULL;
 	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_alloc								     */
+/* xio_mem_dereg							     */
 /*---------------------------------------------------------------------------*/
-struct xio_buf *xio_alloc(size_t length)
+int xio_mem_dereg(struct xio_reg_mem *reg_mem)
 {
-	struct xio_buf		*buf;
-	size_t			real_size;
-	int			alloced = 0;
-
-	buf = (struct xio_buf *)ucalloc(1, sizeof(*buf));
-	if (!buf) {
-		xio_set_error(errno);
-		ERROR_LOG("calloc failed. (errno=%d %m)\n", errno);
-		return NULL;
-	}
-
-	real_size = ALIGN(length, page_size);
-	buf->addr = umemalign(page_size, real_size);
-	if (!buf->addr) {
-		ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
-		goto cleanup;
-	}
-	memset(buf->addr, 0, real_size);
-	alloced = 1;
-
-	buf->mr = xio_reg_mr(&buf->addr, length);
-	if (!buf->mr) {
-		ERROR_LOG("xio_reg_mr failed. addr:%p, length:%d\n",
-			  buf->addr, length, access);
-
-		goto cleanup1;
-	}
-	buf->length = length;
-
-	return buf;
-
-cleanup1:
-	if (alloced)
-		ufree(buf->addr);
-
-cleanup:
-	ufree(buf);
-	return NULL;
+	reg_mem->mr = NULL;
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_free								     */
+/* xio_mem_alloc							     */
 /*---------------------------------------------------------------------------*/
-int xio_free(struct xio_buf **buf)
+int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 {
-	struct xio_mr		*tmr = (*buf)->mr;
+	size_t			real_size;
+	int			alloced = 0;
+
+	real_size = ALIGN(length, page_size);
+	reg_mem->addr = umemalign(page_size, real_size);
+	if (!reg_mem->addr) {
+		ERROR_LOG("xio_memalign failed. sz:%zu\n", real_size);
+		goto cleanup;
+	}
+	/*memset(reg_mem->addr, 0, real_size);*/
+	alloced = 1;
+
+	xio_mem_register(reg_mem->addr, length, reg_mem);
+	if (!reg_mem->mr) {
+		ERROR_LOG("xio_reg_mr failed. addr:%p, length:%d\n",
+			  reg_mem->addr, length, access);
+
+		goto cleanup1;
+	}
+	reg_mem->length = length;
+
+	return 0;
+
+cleanup1:
+	if (alloced)
+		ufree(reg_mem->addr);
+cleanup:
+	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_mem_free								     */
+/*---------------------------------------------------------------------------*/
+int xio_mem_free(struct xio_reg_mem *reg_mem)
+{
 	int			retval = 0;
 
-	if ((*buf)->addr)
-		ufree((*buf)->addr);
+	if (reg_mem->addr)
+		ufree(reg_mem->addr);
 
-	retval = xio_dereg_mr(&tmr);
-
-	ufree(*buf);
-	*buf = NULL;
+	retval = xio_mem_dereg(reg_mem);
 
 	return retval;
 }
@@ -174,33 +163,26 @@ struct xio_mempool *xio_transport_mempool_get(
 char *xio_transport_state_str(enum xio_transport_state state)
 {
 	switch (state) {
-	case XIO_STATE_INIT:
+	case XIO_TRANSPORT_STATE_INIT:
 		return "INIT";
-		break;
-	case XIO_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_LISTEN:
 		return "LISTEN";
-		break;
-	case XIO_STATE_CONNECTING:
+	case XIO_TRANSPORT_STATE_CONNECTING:
 		return "CONNECTING";
-		break;
-	case XIO_STATE_CONNECTED:
+	case XIO_TRANSPORT_STATE_CONNECTED:
 		return "CONNECTED";
-		break;
-	case XIO_STATE_DISCONNECTED:
+	case XIO_TRANSPORT_STATE_DISCONNECTED:
 		return "DISCONNECTED";
-		break;
-	case XIO_STATE_RECONNECT:
+	case XIO_TRANSPORT_STATE_RECONNECT:
 		return "RECONNECT";
-		break;
-	case XIO_STATE_CLOSED:
+	case XIO_TRANSPORT_STATE_CLOSED:
 		return "CLOSED";
-		break;
-	case XIO_STATE_DESTROYED:
+	case XIO_TRANSPORT_STATE_DESTROYED:
 		return "DESTROYED";
-		break;
+	case XIO_TRANSPORT_STATE_ERROR:
+		return "ERROR";
 	default:
 		return "UNKNOWN";
-		break;
 	}
 
 	return NULL;

@@ -70,11 +70,13 @@ static void *alloc_mem_buf(size_t pool_size, int *shmid)
 	/* allocate memory */
 	shmemid = shmget(IPC_PRIVATE, pool_size,
 			 SHM_HUGETLB | IPC_CREAT | SHM_R | SHM_W);
-
 	if (shmemid < 0) {
 		fprintf(stderr,
-			"shmget rdma pool sz:%zu failed (errno=%d %m)\n",
-			pool_size, errno);
+			"warning - failed to allocate %zu bytes with " \
+			"hugepages. (errno=%d %m)\n", pool_size, errno);
+		fprintf(stderr,
+			"check that hugepages are configured. " \
+			"falling back to 4K pages allocations...\n");
 		goto failed_huge_page;
 	}
 
@@ -138,7 +140,9 @@ void msg_api_free(struct msg_params *msg_params)
 		msg_params->g_hdr = NULL;
 	}
 	if (msg_params->g_data_mr) {
-		xio_dereg_mr(&msg_params->g_data_mr);
+		struct xio_reg_mem reg_mem;
+		reg_mem.mr = msg_params->g_data_mr;
+		xio_mem_dereg(&reg_mem);
 		msg_params->g_data_mr = NULL;
 	}
 	if (msg_params->g_data) {
@@ -160,6 +164,7 @@ int msg_api_init(struct msg_params *msg_params,
 	const char	*ptr;
 	size_t		len;
 	int		pagesize = sysconf(_SC_PAGESIZE);
+	struct xio_reg_mem reg_mem;
 
 	if (pagesize < 0)
 		return -1;
@@ -192,8 +197,8 @@ int msg_api_init(struct msg_params *msg_params,
 			strncpy((char *)msg_params->g_data, ptr, len);
 		msg_params->g_data[len] = 0;
 
-		msg_params->g_data_mr =
-			xio_reg_mr(msg_params->g_data, datalen);
+		xio_mem_register(msg_params->g_data, datalen, &reg_mem);
+		msg_params->g_data_mr = reg_mem.mr;
 		if (!msg_params->g_data_mr)
 			goto cleanup;
 	}
@@ -205,12 +210,12 @@ cleanup:
 }
 
 /*---------------------------------------------------------------------------*/
-/* msg_write								     */
+/* msg_build_out_sgl							     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct msg_params *msg_params,
-	       struct xio_msg *msg,
-	       size_t hdrlen,
-	       size_t data_iovlen, size_t datalen)
+void msg_build_out_sgl(struct msg_params *msg_params,
+		       struct xio_msg *msg,
+		       size_t hdrlen,
+		       size_t data_iovlen, size_t datalen)
 {
 	struct xio_vmsg		*pmsg = &msg->out;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(pmsg);

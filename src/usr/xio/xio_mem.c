@@ -42,8 +42,11 @@
 #include "xio_mem.h"
 
 #define HUGE_PAGE_SZ			(2*1024*1024)
-
+#ifndef WIN32
 int			  disable_huge_pages	= 0;
+#else
+int			  disable_huge_pages	= 1; /* bypass hugepages */
+#endif
 int			  allocator_assigned	= 0;
 struct xio_mem_allocator  g_mem_allocator;
 struct xio_mem_allocator *mem_allocator = &g_mem_allocator;
@@ -59,6 +62,7 @@ void *malloc_huge_pages(size_t size)
 
 	if (disable_huge_pages) {
 		long page_size = xio_get_page_size();
+
 		if (page_size < 0) {
 			xio_set_error(errno);
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
@@ -84,6 +88,7 @@ void *malloc_huge_pages(size_t size)
 	if (!ptr || ptr == MAP_FAILED) {
 		/* The mmap() call failed. Try to malloc instead */
 		long page_size = xio_get_page_size();
+
 		if (page_size < 0) {
 			xio_set_error(errno);
 			ERROR_LOG("sysconf failed. (errno=%d %m)\n", errno);
@@ -120,7 +125,7 @@ void free_huge_pages(void *ptr)
 	void	*real_ptr;
 	size_t	real_size;
 
-	if (ptr == NULL)
+	if (!ptr)
 		return;
 
 	if (disable_huge_pages)  {
@@ -145,7 +150,6 @@ void free_huge_pages(void *ptr)
 		free(real_ptr);
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_numa_alloc	                                                     */
 /*---------------------------------------------------------------------------*/
@@ -153,6 +157,7 @@ void *xio_numa_alloc(size_t bytes, int node)
 {
 	size_t real_size = ALIGN((bytes + page_size), page_size);
 	void *p = xio_numa_alloc_onnode(real_size, node);
+
 	if (!p) {
 		ERROR_LOG("numa_alloc_onnode failed sz:%zu. %m\n",
 			  real_size);
@@ -176,7 +181,7 @@ void xio_numa_free_ptr(void *ptr)
 	void	*real_ptr;
 	size_t	real_size;
 
-	if (ptr == NULL)
+	if (!ptr)
 		return;
 
 	/* Jump back to the page with metadata */

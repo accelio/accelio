@@ -83,7 +83,7 @@ AS_IF([test "x$havempages" != "xyes"],
 ##########################################################################
 # usage: ./configure --enable-perf=yes
 #
-AC_MSG_CHECKING([whether to build with debug information])
+AC_MSG_CHECKING([whether to enable profiler perf tool flags])
 AC_ARG_ENABLE([perf],
 	      [AS_HELP_STRING([--enable-perf],
 			      [enable perf profiling])],
@@ -129,6 +129,22 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
+##########################################################################
+# performance compilation support
+##########################################################################
+# usage: ./configure --enable-performance=yes
+#
+AC_MSG_CHECKING([suppress extra checks to achieve performance - dangerous])
+AC_ARG_ENABLE([performance],
+	      [AS_HELP_STRING([--enable-performance],
+			      [enable extra optimized code for performance])],
+			       [enable_performance="$enableval"],
+			       [enable_performance=no])
+AC_MSG_RESULT([$enable_performance])
+
+if test "$enable_performance" = "yes"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_PERFORMANCE"
+fi
 
 ##########################################################################
 # raio compilation support
@@ -178,21 +194,25 @@ AC_MSG_RESULT([$enable_kernel_module])
 
 if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/xio])
-	AC_CONFIG_SUBDIRS([src/kernel/rdma])
-	AC_CONFIG_SUBDIRS([src/kernel/tcp])
+	AC_CONFIG_SUBDIRS([src/kernel/transport/rdma])
+	AC_CONFIG_SUBDIRS([src/kernel/transport/tcp])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test])
+	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_lat])
+	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_ow])
+	AC_CONFIG_SUBDIRS([tests/kernel/direct_rdma_test])
 else
 	subdirs2="src/usr";
 	subdirs2="$subdirs2 src/tools/usr/";
 	subdirs2="$subdirs2 examples/usr/hello_world";
+	subdirs2="$subdirs2 examples/usr/hello_world_mt";
+	subdirs2="$subdirs2 examples/usr/hello_world_iov";
 	subdirs2="$subdirs2 examples/usr/hello_world_daemon";
 
 if test "$mypj_found_event_headers" == "yes"; then
 	subdirs2="$subdirs2 examples/usr/hello_world_libevent";
 fi
-	subdirs2="$subdirs2 examples/usr/hello_world_mt";
 if test "$enable_raio_build" != "no"; then
 	subdirs2="$subdirs2 examples/usr/raio";
 if test "$enable_fio_build" != "no"; then
@@ -206,6 +226,10 @@ fi
 	subdirs2="$subdirs2 tests/usr/hello_test_lat";
 	subdirs2="$subdirs2 tests/usr/hello_test_ow";
 	subdirs2="$subdirs2 tests/usr/hello_test_oneway";
+	subdirs2="$subdirs2 tests/usr/event_loop_tests";
+if test "$enable_rdma" != "no"; then
+	subdirs2="$subdirs2 tests/usr/direct_rdma_test";
+fi
 	subdirs2="$subdirs2 benchmarks/usr/xio_perftest";
 	subdirs2="$subdirs2 regression/usr/reg_basic_mt";
 fi
@@ -216,7 +240,7 @@ fi
 # add version.c uses strings to get GIT hash version
 ##########################################################################
 if test -d "${GIT_DIR:-${ac_top_srcdir:-./}/.git}" ; then
-	GITHEAD=`git describe 2>/dev/null`
+	GITHEAD=`git describe --tags --long 2>/dev/null`
 	if test -z ${GITHEAD} ; then
 		GITHEAD=`git rev-parse HEAD`
 	fi
@@ -228,6 +252,7 @@ else
 fi
 echo "const char XIO_GIT_HEAD@<:@@:>@ = \"GIT_VERSION: $GITHEAD\";" \/\* for use with strings \*\/ >version.c
 echo "const char XIO_GIT_HEAD_STRING@<:@@:>@ = \"$GITHEAD\";" >>version.c
+echo "const char XIO_VERSION_STRING@<:@@:>@ = \"accelio_$GITHEAD\";" >>version.c
 
 AC_MSG_CHECKING([for git head])
 AC_MSG_RESULT([$GITHEAD])
@@ -251,6 +276,7 @@ AC_CONFIG_FILES([src/usr/Makefile])
 AC_CONFIG_FILES([src/tools/usr/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_mt/Makefile])
+AC_CONFIG_FILES([examples/usr/hello_world_iov/Makefile])
 AC_CONFIG_FILES([examples/usr/hello_world_daemon/Makefile])
 if test "$mypj_found_event_headers" == "yes"; then
 	AC_CONFIG_FILES([examples/usr/hello_world_libevent/Makefile])
@@ -266,6 +292,8 @@ AC_CONFIG_FILES([tests/usr/hello_test_bidi/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_ow/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
+AC_CONFIG_FILES([tests/usr/event_loop_tests/Makefile])
+AC_CONFIG_FILES([tests/usr/direct_rdma_test/Makefile])
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
 

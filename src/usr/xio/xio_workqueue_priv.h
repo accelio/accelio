@@ -39,7 +39,8 @@
 #define XIO_WORKQUEUE_PRIV_H
 
 enum xio_work_flags {
-	XIO_WORK_PENDING	=  1 << 0
+	XIO_WORK_PENDING	= 1 << 0,
+	XIO_WORK_IN_HANDLER	= 1 << 1
 };
 
 struct xio_timers_list_entry {
@@ -50,6 +51,10 @@ struct xio_timers_list_entry {
 typedef struct xio_work_struct {
 	void			(*function)(void *data);
 	void			*data;
+
+	void	(*destructor)(void *data);
+	void	*destructor_data;
+
 	volatile uint32_t	flags;
 	uint32_t		pad;
 } xio_work_handle_t;

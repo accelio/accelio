@@ -39,7 +39,7 @@
 
 /* Note: only x86 CPUs which have rdtsc instruction are supported. */
 typedef unsigned long long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	union {
 		cycles_t val;
@@ -56,7 +56,7 @@ static inline cycles_t get_cycles()
 /* Note: only PPC CPUs which have mftb instruction are supported. */
 /* PPC64 has mftb */
 typedef unsigned long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	cycles_t ret;
 
@@ -66,22 +66,23 @@ static inline cycles_t get_cycles()
 #elif defined(__ia64__)
 /* Itanium2 and up has ar.itc (Itanium1 has errata) */
 typedef unsigned long cycles_t;
-static inline cycles_t get_cycles()
+static inline cycles_t get_cycles(void)
 {
 	cycles_t ret;
 
 	asm volatile ("mov %0=ar.itc" : "=r" (ret));
 	return ret;
 }
-
-#elif defined (WIN32)
+#elif defined(WIN32)
 #include <Windows.h>
 
 typedef LONGLONG cycles_t;
-static __inline cycles_t get_cycles()
+static __inline cycles_t get_cycles(void)
 {
-	LARGE_INTEGER performanceCount;
-	return QueryPerformanceCounter(&performanceCount) ? performanceCount.QuadPart : 0;
+	LARGE_INTEGER performance_count;
+
+	return QueryPerformanceCounter(&performance_count) ?
+				       performance_count.QuadPart : 0;
 }
 
 #else

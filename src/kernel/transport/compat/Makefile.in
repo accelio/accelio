@@ -1,0 +1,53 @@
+# Makefile.in for kernel module
+
+SHELL = /bin/sh
+INSTALL = @INSTALL@
+mkdir_p = mkdir -p
+VERSION = @PACKAGE_VERSION@
+
+compatmoduledir = @kmoduledir@/extra/compat
+
+compatmodule := compat.ko
+
+all: all-@ENABLE_COMPAT_MODULE@
+install: install-@ENABLE_COMPAT_MODULE@
+uninstall: uninstall-@ENABLE_COMPAT_MODULE@
+
+all-n:
+install-n:
+uninstall-n:
+
+all-y: all-spec
+
+SUBDIRS ?=`pwd`
+
+install-y: all
+	$(mkdir_p) $(DESTDIR)$(compatmoduledir)
+	$(INSTALL) -m 644 $(compatmodule) $(DESTDIR)$(compatmoduledir)/$(compatmodule)
+	-/sbin/depmod -a
+
+uninstall-y:
+	rm -f $(DESTDIR)$(compatmoduledir)/$(compatmodule)
+	-/sbin/depmod -a
+
+clean:
+	-rm -f $(compatmodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+	-cd ./compat && $(MAKE) clean && cd ../
+
+distclean: clean
+	rm -f Makefile configure config.status
+	rm -f config.h config.log config.status config.cache
+	rm -rf .tmp_versions autom4te.cache
+
+maintainer-clean: distclean
+
+distdir: $(DISTFILES)
+	cp -p $(DISTFILES) $(distdir)
+
+compat/.git:
+	cd ../../../ && git submodule update --init
+
+all-spec: compat/.git
+	@export KLIB_BUILD=@kernelsrc@ @KERNELMAKE_PARAMS@
+	cd ./compat && $(MAKE)
+	@cp -f ./compat/compat/$(compatmodule) ./ && cp -f ./compat/Module.symvers ./

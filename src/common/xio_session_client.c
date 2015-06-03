@@ -51,13 +51,14 @@
 #include "xio_hash.h"
 #include "xio_msg_list.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_nexus.h"
 #include "xio_session.h"
 #include "xio_connection.h"
 #include "xio_session_priv.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_write_setup_req						     */
@@ -69,11 +70,10 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	uint8_t			*ptr;
 	uint16_t		len;
 
-
 	/* allocate message */
 	buf = kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
-	if (buf == NULL) {
+	if (!buf) {
 		ERROR_LOG("message allocation failed\n");
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -85,11 +85,8 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	msg->out.header.iov_base = buf;
 	msg->out.header.iov_len = 0;
 	msg->out.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->out.pdata_iov.nents = 0;
-	msg->out.pdata_iov.max_nents = 0;
 	msg->in.sgl_type = XIO_SGL_TYPE_IOV_PTR;
-	msg->in.pdata_iov.nents = 0;
-	msg->in.pdata_iov.max_nents = 0;
+	/* All other in/out parameters are zero because of kcalloc anyway */
 
 	msg->type = (enum xio_msg_type)XIO_SESSION_SETUP_REQ;
 
@@ -97,7 +94,7 @@ struct xio_msg *xio_session_write_setup_req(struct xio_session *session)
 	len = 0;
 
 	/* serialize message on the buffer */
-	len = xio_write_uint32(session->session_id , 0, ptr);
+	len = xio_write_uint32(session->session_id, 0, ptr);
 	ptr  = ptr + len;
 
 	/* tx queue depth bytes*/
@@ -163,7 +160,7 @@ int xio_session_accept_connections(struct xio_session *session)
 	list_for_each_entry_safe(connection, tmp_connection,
 				 &session->connections_list,
 				 connections_list_entry) {
-		if (connection->nexus == NULL) {
+		if (!connection->nexus) {
 			if (connection->conn_idx == 0) {
 				portal = session->portals_array[
 						session->last_opened_portal++];
@@ -181,18 +178,19 @@ int xio_session_accept_connections(struct xio_session *session)
 					       connection->nexus_attr_mask,
 					       &connection->nexus_attr);
 
-			if (nexus == NULL) {
+			if (!nexus) {
 				ERROR_LOG("failed to open connection to %s\n",
 					  portal);
 				retval = -1;
 				break;
 			}
 			connection = xio_session_assign_nexus(session, nexus);
-			if (connection == NULL) {
+			if (!connection) {
 				ERROR_LOG("failed to assign connection\n");
 				retval = -1;
 				break;
 			}
+			connection->cd_bit = 0;
 			DEBUG_LOG("reconnecting to %s. connection:%p, " \
 				  "nexus:%p\n",
 				  portal, connection, nexus);
@@ -226,7 +224,7 @@ int xio_session_redirect_connection(struct xio_session *session)
 			       NULL, 0,
 			       session->lead_connection->nexus_attr_mask,
 			       &session->lead_connection->nexus_attr);
-	if (nexus == NULL) {
+	if (!nexus) {
 		ERROR_LOG("failed to open connection to %s\n",
 			  service);
 		return -1;
@@ -234,6 +232,7 @@ int xio_session_redirect_connection(struct xio_session *session)
 	/* initialize the redirected connection */
 	tmp_nexus = session->lead_connection->nexus;
 	session->redir_connection = session->lead_connection;
+	session->redir_connection->cd_bit = 0;
 	xio_connection_set_nexus(session->redir_connection, nexus);
 
 	ERROR_LOG("connection redirected to %s\n", service);
@@ -317,7 +316,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 	ptr = (uint8_t *)msg->in.header.iov_base;
 
 	/* read the payload */
-	len = xio_read_uint32(&session->peer_session_id , 0, ptr);
+	len = xio_read_uint32(&session->peer_session_id, 0, ptr);
 	ptr  = ptr + len;
 
 	len = xio_read_uint16(action, 0, ptr);
@@ -355,7 +354,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 			session->portals_array = (char **)kcalloc(
 					session->portals_array_len,
 				       sizeof(char *), GFP_KERNEL);
-			if (session->portals_array == NULL) {
+			if (!session->portals_array) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
@@ -378,7 +377,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		if (session->new_ses_rsp.private_data_len) {
 			rsp->private_data = kcalloc(rsp->private_data_len,
 					sizeof(uint8_t), GFP_KERNEL);
-			if (rsp->private_data == NULL) {
+			if (!rsp->private_data) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
@@ -402,7 +401,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 			session->services_array = (char **)kcalloc(
 					session->services_array_len,
 					sizeof(char *), GFP_KERNEL);
-			if (session->services_array == NULL) {
+			if (!session->services_array) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
@@ -425,7 +424,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 		break;
 
 	case XIO_ACTION_REJECT:
-		len = xio_read_uint32(&session->reject_reason , 0, ptr);
+		len = xio_read_uint32(&session->reject_reason, 0, ptr);
 		ptr  = ptr + len;
 
 		len = xio_read_uint16(&rsp->private_data_len, 0, ptr);
@@ -435,7 +434,7 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 			rsp->private_data = kcalloc(
 						rsp->private_data_len,
 						sizeof(uint8_t), GFP_KERNEL);
-			if (rsp->private_data == NULL) {
+			if (!rsp->private_data) {
 				ERROR_LOG("allocation failed\n");
 				xio_set_error(ENOMEM);
 				return -1;
@@ -456,11 +455,10 @@ int xio_read_setup_rsp(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_prep_portal							     */
+/* xio_session_fill_portals_array					     */
 /*---------------------------------------------------------------------------*/
-static int xio_prep_portal(struct xio_connection *connection)
+static int xio_session_fill_portals_array(struct xio_session *session)
 {
-	struct xio_session *session = connection->session;
 	char portal[64];
 
 	/* extract portal from uri */
@@ -472,7 +470,7 @@ static int xio_prep_portal(struct xio_connection *connection)
 	session->portals_array = (char **)kcalloc(
 			1,
 			sizeof(char *), GFP_KERNEL);
-	if (session->portals_array == NULL) {
+	if (!session->portals_array) {
 		ERROR_LOG("allocation failed\n");
 		xio_set_error(ENOMEM);
 		return -1;
@@ -483,7 +481,6 @@ static int xio_prep_portal(struct xio_connection *connection)
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_on_setup_rsp_recv			                             */
 /*---------------------------------------------------------------------------*/
@@ -493,9 +490,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 	uint16_t			action = 0;
 	struct xio_session		*session = connection->session;
 	struct xio_new_session_rsp	*rsp = &session->new_ses_rsp;
-	int				retval = 0;
+	int				retval = 0, fill_portals = 0;
 	struct xio_connection		*tmp_connection;
-
 
 	retval = xio_read_setup_rsp(connection, task, &action);
 
@@ -513,9 +509,12 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 
 	switch (action) {
 	case XIO_ACTION_ACCEPT:
+		if (!session->portals_array)  {
+			xio_session_fill_portals_array(session);
+			fill_portals = 1;
+		}
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state is now ONLINE. session:%p\n", session);
-
 		/* notify the upper layer */
 		if (session->ses_ops.on_session_established)
 			session->ses_ops.on_session_established(
@@ -525,9 +524,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		kfree(rsp->private_data);
 		rsp->private_data = NULL;
 
-		if (session->portals_array == NULL)  {
+		if (fill_portals)  {
 			xio_on_connection_hello_rsp_recv(connection, NULL);
-			xio_prep_portal(connection);
 			/* insert the connection into list */
 			xio_session_assign_nexus(session, connection->nexus);
 			session->lead_connection = NULL;
@@ -544,7 +542,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 					return -1;
 				}
 			}
-			return 0;
 		} else { /* reconnect to peer other session */
 			TRACE_LOG("session state is now ACCEPT. session:%p\n",
 				  session);
@@ -580,9 +577,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 				ERROR_LOG("failed to accept connection\n");
 				return -1;
 			}
-			return 0;
 		}
-		break;
+		return 0;
 	case XIO_ACTION_REDIRECT:
 		TRACE_LOG("session state is now REDIRECT. session:%p\n",
 			  session);
@@ -603,7 +599,6 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		xio_disconnect_initial_connection(session->lead_connection);
 
 		return 0;
-		break;
 	case XIO_ACTION_REJECT:
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ESTABLISHED);
@@ -625,13 +620,10 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		rsp->private_data = NULL;
 
 		return retval;
-
-		break;
 	}
 
 	return -1;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_refused							     */
@@ -640,8 +632,7 @@ int xio_on_nexus_refused(struct xio_session *session,
 			 struct xio_nexus *nexus,
 			 union xio_nexus_event_data *event_data)
 {
-	struct xio_connection *connection,
-			      *curr_connection, *next_connection;
+	struct xio_connection *connection, *next_connection;
 
 	/* enable the teardown */
 	session->disable_teardown  = 0;
@@ -652,14 +643,11 @@ int xio_on_nexus_refused(struct xio_session *session,
 	case XIO_SESSION_STATE_CONNECT:
 	case XIO_SESSION_STATE_REDIRECTED:
 		session->state = XIO_SESSION_STATE_REFUSED;
-		list_for_each_entry_safe(curr_connection, next_connection,
-					 &session->connections_list,
-					 connections_list_entry) {
-					 connection = list_first_entry(
-						&session->connections_list,
-						struct xio_connection,
-						connections_list_entry);
-					 xio_connection_refused(connection);
+		list_for_each_entry_safe(
+				connection, next_connection,
+				&session->connections_list,
+				connections_list_entry) {
+			xio_connection_refused(connection);
 		}
 		break;
 	default:
@@ -682,13 +670,14 @@ int xio_on_client_nexus_established(struct xio_session *session,
 	struct xio_connection		*connection;
 	struct xio_msg			*msg;
 	struct xio_session_event_data	ev_data = {};
+
 	ev_data.event = XIO_SESSION_ERROR_EVENT;
 	ev_data.reason = XIO_E_SESSION_REFUSED;
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:
 		msg = xio_session_write_setup_req(session);
-		if (msg == NULL) {
+		if (!msg) {
 			ERROR_LOG("setup request creation failed\n");
 			return -1;
 		}
@@ -710,7 +699,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 		break;
 	case XIO_SESSION_STATE_REDIRECTED:
 		msg = xio_session_write_setup_req(session);
-		if (msg == NULL) {
+		if (!msg) {
 			ERROR_LOG("setup request creation failed\n");
 			return -1;
 		}
@@ -732,7 +721,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 	case XIO_SESSION_STATE_ONLINE:
 	case XIO_SESSION_STATE_ACCEPTED:
 		connection = xio_session_find_connection(session, nexus);
-		if (connection == NULL) {
+		if (!connection) {
 			ERROR_LOG("failed to find connection session:%p," \
 				  "nexus:%p\n", session, nexus);
 			return -1;
@@ -747,23 +736,6 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			xio_connection_xmit_msgs(connection);
 		}
 		break;
-#if 0
-	case XIO_SESSION_STATE_ONLINE:
-		connection = xio_session_find_connection(session, nexus);
-		if (connection == NULL)  {
-			ERROR_LOG("failed to find connection\n");
-			return -1;
-		}
-		DEBUG_LOG("connection established: " \
-			  "connection:%p, session:%p, nexus:%p\n",
-			   connection, connection->session,
-			   connection->nexus);
-		/* now try to send */
-		xio_connection_set_state(connection,
-					 XIO_CONNECTION_STATE_ONLINE);
-		xio_connection_xmit_msgs(connection);
-		break;
-#endif
 	default:
 		break;
 	}
@@ -779,10 +751,8 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 {
 	struct xio_session	*session = (struct xio_session *)observer;
 	struct xio_nexus	*nexus	= (struct xio_nexus *)sender;
-	int			retval  = 0;
-	union xio_nexus_event_data * event_data =
+	union xio_nexus_event_data *event_data =
 			(union xio_nexus_event_data *)_event_data;
-
 
 	switch (event) {
 	case XIO_NEXUS_EVENT_NEW_MESSAGE:
@@ -797,6 +767,9 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 			 "session:%p, nexus:%p\n", observer, sender);
 */
 		xio_on_send_completion(session, nexus, event_data);
+		break;
+	case XIO_NEXUS_EVENT_DIRECT_RDMA_COMPLETION:
+		xio_on_rdma_direct_comp(session, nexus, event_data);
 		break;
 	case XIO_NEXUS_EVENT_ASSIGN_IN_BUF:
 /*		TRACE_LOG("session: [notification] - assign in buf. " \
@@ -857,7 +830,7 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 		break;
 	}
 
-	return retval;
+	return 0;
 }
 
 static inline void xio_session_refuse_connection(void *conn)
@@ -882,13 +855,13 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	struct			xio_nexus_init_attr *pattr = NULL;
 	struct			xio_nexus_init_attr  attr;
 
-	if (cparams == NULL) {
+	if (!cparams) {
 		ERROR_LOG("invalid parameter\n");
 		xio_set_error(EINVAL);
 		return NULL;
 	}
 
-	if ((cparams->ctx == NULL) || (cparams->session == NULL)) {
+	if (!cparams->ctx || !cparams->session) {
 		ERROR_LOG("invalid parameters ctx:%p, session:%p\n",
 			  cparams->ctx, cparams->session);
 		xio_set_error(EINVAL);
@@ -904,7 +877,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 
 	/* lookup for session in cache */
 	psession = xio_sessions_cache_lookup(session->session_id);
-	if (psession == NULL) {
+	if (!psession) {
 		ERROR_LOG("failed to find session\n");
 		xio_set_error(EINVAL);
 		return NULL;
@@ -914,7 +887,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 
 	/* only one connection per context allowed */
 	connection = xio_session_find_connection_by_ctx(session, ctx);
-	if (connection != NULL) {
+	if (connection) {
 		ERROR_LOG("context:%p, already assigned connection:%p\n",
 			  ctx, connection);
 		goto cleanup;
@@ -932,7 +905,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
 				       session->session_id,
 				       attr_mask, pattr);
-		if (nexus == NULL) {
+		if (!nexus) {
 			ERROR_LOG("failed to create connection\n");
 			goto cleanup;
 		}
@@ -973,21 +946,21 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 					connection,
 					xio_session_refuse_connection,
 					&connection->fin_work);
-			if (retval != 0) {
+			if (retval != 0)
 				ERROR_LOG("xio_ctx_timer_add failed.\n");
-			}
-			return connection;
 
+			return connection;
 		} else if (session->state == XIO_SESSION_STATE_CLOSING ||
-		           session->state == XIO_SESSION_STATE_CLOSED) {
-			DEBUG_LOG("refusing connection %p - session is closing\n",
-				  connection);
+			   session->state == XIO_SESSION_STATE_CLOSED) {
+			DEBUG_LOG("refusing connection %p - " \
+				  "session is closing\n", connection);
 			goto cleanup;
 		}
 	} else if (session->state == XIO_SESSION_STATE_ONLINE ||
 		   session->state == XIO_SESSION_STATE_ACCEPTED) {
 		struct xio_nexus *nexus;
 		char *portal;
+
 		if (cparams->conn_idx == 0) {
 			portal = session->portals_array[
 					session->last_opened_portal++];
@@ -995,7 +968,10 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 			    session->portals_array_len)
 					session->last_opened_portal = 0;
 		} else {
-			int pid = (cparams->conn_idx % session->portals_array_len);
+			int pid =
+				(cparams->conn_idx %
+				 session->portals_array_len);
+
 			portal = session->portals_array[pid];
 		}
 		connection  = xio_session_alloc_connection(
@@ -1006,7 +982,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 		nexus = xio_nexus_open(ctx, portal, &session->observer,
 				       session->session_id,
 				       attr_mask, pattr);
-		if (nexus == NULL) {
+		if (!nexus) {
 			ERROR_LOG("failed to open connection\n");
 			goto cleanup;
 		}
@@ -1029,7 +1005,6 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 		    session->state == XIO_SESSION_STATE_CLOSED) {
 		goto cleanup2;
 	}
-
 
 	xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 
@@ -1060,4 +1035,3 @@ cleanup2:
 	return NULL;
 }
 EXPORT_SYMBOL(xio_connect);
-

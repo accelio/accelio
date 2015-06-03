@@ -38,7 +38,6 @@
 #ifndef XIO_MSG_LIST_H
 #define XIO_MSG_LIST_H
 
-
 struct xio_msg_list {
 	struct xio_msg *first;			/* first element */
 	struct xio_msg **last;			/* addr of last next element */
@@ -128,13 +127,13 @@ struct xio_msg_list {
 		nextelm = (curelm)->field.next;				\
 		xio_msg_list_insert_tail((head), (curelm));		\
 		curelm = nextelm;					\
-	} while (curelm != NULL);					\
+	} while (curelm);					\
 } while (/*CONSTCOND*/0)
 
 /*
  * message list access methods.
  */
-#define	xio_msg_list_empty(head)		((head)->first == NULL)
+#define	xio_msg_list_empty(head)		(!(head)->first)
 #define	xio_msg_list_first(head)		((head)->first)
 #define	xio_msg_list_next(elm, field)		((elm)->field.next)
 

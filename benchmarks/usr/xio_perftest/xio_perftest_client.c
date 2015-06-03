@@ -71,7 +71,7 @@ struct thread_data {
 	struct thread_stat_data stat;
 	struct session_data    *sdata;
 	struct msg_pool		*pool;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	struct xio_session	*session;
 	struct xio_connection	*conn;
 	struct xio_context	*ctx;
@@ -222,7 +222,7 @@ static void *worker_thread(void *data)
 	tdata->conn = xio_connect(&cparams);
 
 	if (tdata->data_len)
-		tdata->xbuf = xio_alloc(tdata->data_len);
+		xio_mem_alloc(tdata->data_len, &tdata->reg_mem);
 
 	for (i = 0;  i < tdata->user_param->queue_depth; i++) {
 		/* create transaction */
@@ -240,9 +240,9 @@ static void *worker_thread(void *data)
 		sglist = vmsg_sglist(&msg->out);
 		if (tdata->data_len) {
 			vmsg_sglist_set_nents(&msg->out, 1);
-			sglist[0].iov_base	= tdata->xbuf->addr;
-			sglist[0].iov_len	= tdata->xbuf->length;
-			sglist[0].mr		= tdata->xbuf->mr;
+			sglist[0].iov_base	= tdata->reg_mem.addr;
+			sglist[0].iov_len	= tdata->reg_mem.length;
+			sglist[0].mr		= tdata->reg_mem.mr;
 		} else {
 			vmsg_sglist_set_nents(&msg->out, 0);
 		}
@@ -270,8 +270,8 @@ static void *worker_thread(void *data)
 	if (tdata->pool)
 		msg_pool_free(tdata->pool);
 
-	if (tdata->xbuf)
-		xio_free(&tdata->xbuf);
+	if (tdata->reg_mem.addr)
+		xio_mem_free(&tdata->reg_mem);
 
 
 	/* free the context */
@@ -417,7 +417,7 @@ int run_client_test(struct perf_parameters *user_param)
 	int			cpu;
 	int			max_cpus;
 	int			cpusnr;
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	pthread_t		statistics_thread_id;
 	struct perf_command	command;
 	int			size_log2;
@@ -429,7 +429,7 @@ int run_client_test(struct perf_parameters *user_param)
 
 	g_mhz		= get_cpu_mhz(0);
 	max_cpus	= sysconf(_SC_NPROCESSORS_ONLN);
-	threads_iter	= 1;
+	threads_iter    = user_param->start_thread;
 	size_log2	= 0;
 
 	tdata = (struct thread_data *)
@@ -505,7 +505,7 @@ int run_client_test(struct perf_parameters *user_param)
 
 		/* spawn threads to handle connection */
 		for (i = 0, cpu = 0; i < threads_iter; i++, cpu++) {
-			while (1) {
+			while (cpusmask) {
 				if (cpusmask_test_bit(cpu, &cpusmask))
 					break;
 				if (++cpu == max_cpus)
@@ -585,9 +585,9 @@ cleanup:
 
 	ctx_hand_shake(comm);
 
+cleanup2:
 	ctx_close_connection(comm);
 
-cleanup2:
 	destroy_comm_struct(comm);
 
 	free(tdata);

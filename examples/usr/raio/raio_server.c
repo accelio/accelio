@@ -53,6 +53,7 @@
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
 #define MAX_THREADS		6
+#define POLLING_TIME_USEC	70
 
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -127,6 +128,7 @@ static char		*server_addr;
 static char		*transport;
 static int		finite_run;
 static uint16_t		server_port;
+static uint64_t		cpumask;
 
 /*---------------------------------------------------------------------------*/
 /* portals_get								     */
@@ -279,7 +281,8 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, 0, tdata->affinity);
+	tdata->ctx = xio_context_create(NULL, POLLING_TIME_USEC,
+					tdata->affinity);
 
 	/* bind a listener server to a portal/url */
 	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
@@ -500,6 +503,7 @@ static void usage(const char *app) {
 	printf("options:\n");
 	printf("\t--addr, -a <addr>      : server ip address\n");
 	printf("\t--port, -p <port>      : server port\n");
+	printf("\t--cpumask, -c <cpumask>: cpumask\n");
 	printf("\t--finite, -f           : finite run (default: infinite)\n");
 	printf("\t--transport, -t <name> : rdma,tcp (default: rdma)\n");
 	printf("\t--help, -h             : print this message and exit\n");
@@ -524,17 +528,19 @@ int parse_cmdline(int argc, char **argv) {
 	static struct option const long_options[] = {
 		{ .name = "addr", .has_arg = 1, .val = 'a'},
 		{ .name = "port", .has_arg = 1, .val = 'p'},
+		{ .name = "cpumask", .has_arg = 1, .val = 'c'},
 		{ .name = "transport", .has_arg = 1, .val = 't'},
 		{ .name = "finite", .has_arg = 1, .val = 'f'},
 		{ .name = "help", .has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
-	static char *short_options = "a:p:t:f:h";
+	static char *short_options = "a:p:c:t:f:h";
 	int c;
 
 	server_addr = NULL;
 	transport = NULL;
 	server_port = 0;
+	cpumask = 0;
 	finite_run = 0;
 
 	optind = 0;
@@ -556,6 +562,9 @@ int parse_cmdline(int argc, char **argv) {
 		case 'p':
 			server_port =
 				(uint16_t) strtol(optarg, NULL, 0);
+			break;
+		case 'c':
+			cpumask = strtoll(optarg, NULL, 16);
 			break;
 		case 't':
 			if (transport == NULL)
@@ -607,6 +616,7 @@ int main(int argc, char *argv[])
 	int			curr_cpu;
 	int			max_cpus;
 	int			opt;
+	uint64_t		cpu_mask;
 
 	parse_cmdline(argc, argv);
 	if ((server_addr == NULL) || (server_port == 0)) {
@@ -620,7 +630,6 @@ int main(int argc, char *argv[])
 			transport);
 		usage(argv[0]);
 	}
-
 	xio_init();
 
 	opt = 0;
@@ -642,6 +651,7 @@ int main(int argc, char *argv[])
 
 	curr_cpu = sched_getcpu();
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	cpu_mask = cpumask;
 
 	memset(&server_data, 0, sizeof(server_data));
 	server_data.last_reaped = -1;
@@ -665,10 +675,18 @@ int main(int argc, char *argv[])
 	/* spawn portals */
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
-		server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
+		if (cpu_mask) {
+			int cpu = ffsll(cpu_mask) - 1;
+			server_data.tdata[i].affinity = cpu;
+			cpu_mask &= ~(1ULL << cpu);
+			if (!cpu_mask)
+				cpu_mask = cpumask;
+		} else {
+			server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
+		}
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
-		server_port ++;
+		server_port++;
 		sprintf(server_data.tdata[i].portal, "%s://%s:%d",
 			transport, server_addr, server_port);
 		pthread_create(&server_data.thread_id[i], NULL,

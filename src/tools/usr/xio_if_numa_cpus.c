@@ -47,7 +47,6 @@
 #define cpusmask_test_bit(nr, addr)	(*(addr) & (1ULL << (nr)))
 #define cpusmask_set_bit(nr, addr)	(*(addr) |=  (1ULL << (nr)))
 
-
 /*---------------------------------------------------------------------------*/
 /* intf_master_name							     */
 /*---------------------------------------------------------------------------*/
@@ -63,7 +62,7 @@ static int intf_master_name(const char *iface, char *master)
 	if (fd == -1)
 		return -1;
 
-	len = read(fd, buf, sizeof(buf)-1);
+	len = read(fd, buf, sizeof(buf) - 1);
 	if (len < 0) {
 		len = readlink(path, buf, sizeof(buf) - 1);
 		if (len < 0)
@@ -145,6 +144,7 @@ static int intf_name_best_cpus(const char *if_name, uint64_t *cpusmask, int *nr)
 {
 	int		numa_node, retval;
 
+	*cpusmask = 0;
 	numa_node = intf_numa_node(if_name);
 	if (numa_node < 0)
 		return -1;
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
 	char			host[NI_MAXHOST] = {0};
 	char			cpus_str[256];
 	char			flags[1024];
-	uint64_t		cpusmask;
+	uint64_t		cpusmask = 0;
 	int			cpusnum;
 	int			retval = -1;
 	int			ec = EXIT_FAILURE;
@@ -189,13 +189,12 @@ int main(int argc, char *argv[])
 		perror("getifaddrs");
 		goto cleanup;
 	}
-	printf("%-10s %-16s %-30s %-5s %-4s\n",
-	       "interface", "host", "flags", "numa", "cpus");
+	printf("%-10s %-16s %-30s %-5s %-10s %-40s\n",
+	       "interface", "host", "flags", "numa", "cpus mask", "cpus");
 	printf("---------------------------------------------------");
-	printf("-------------------------------------------------\n");
+	printf("-------------------------------------------------------\n");
 
-
-	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			if (!(ifa->ifa_flags & IFF_UP))
@@ -227,6 +226,7 @@ int main(int argc, char *argv[])
 			sprintf(flags, "%s %s", flags, "RUNNING");
 		if (ifa->ifa_flags & IFF_SLAVE) {
 			char master[256];
+
 			intf_master_name(ifa->ifa_name, master);
 			sprintf(flags, "%s %s - [%s]", flags, "SLAVE", master);
 		}
@@ -238,15 +238,15 @@ int main(int argc, char *argv[])
 					     &cpusmask, &cpusnum);
 		if (retval != 0) {
 			/*perror("intf_name_best_cpus"); */
-			printf("%-10s %-16s %-30s %-5c %-4s [0]\n",
-			       ifa->ifa_name, host, flags, 0x20, "cpus");
+			printf("%-10s %-16s %-30s %-5c 0x%-8lx %-4s[0]\n",
+			       ifa->ifa_name, host, flags, 0x20, 0UL, "cpus");
 			continue;
 		}
 		intf_cpusmask_str(cpusmask, cpusnum, cpus_str);
 
-		printf("%-10s %-16s %-30s %-5d %-4s [%d] - %s\n",
-		       ifa->ifa_name, host, flags, numa_node, "cpus",
-		       cpusnum, cpus_str);
+		printf("%-10s %-16s %-30s %-5d 0x%-8lx %-4s[%d] - %s\n",
+		       ifa->ifa_name, host, flags, numa_node, cpusmask,
+		       "cpus",  cpusnum, cpus_str);
 	}
 	ec = EXIT_SUCCESS;
 

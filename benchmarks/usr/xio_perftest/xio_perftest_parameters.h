@@ -60,6 +60,7 @@ typedef enum { READ, WRITE} Verb;
 
 #define XIO_DEF_PORT			2061
 #define XIO_DEF_CPU			0
+#define XIO_DEF_START_THREAD		1
 
 #define XIO_DEF_TRANSPORT		"rdma"
 
@@ -89,16 +90,18 @@ typedef enum { READ, WRITE} Verb;
 /* The format of the results */
 #define RESULT_FMT		" #bytes     #threads   #TPS       BW average[MBps]   Latency average[usecs]   Latency low[usecs]   Latency peak[usecs]\n"
 /* Result print format */
-#define REPORT_FMT		" %-7lu     %d         %-7.2lu	  %-7.2lf            %-7.2lf		      %-7.2lf		    %-7.2lf\n"
+#define REPORT_FMT		" %-7lu     %-2d         %-9.2lu	  %-9.2lf     %-9.2lf                  %-9.2lf              %-9.2lf\n"
 
 
 struct perf_parameters {
 	uint16_t		server_port;
 	uint16_t		cpu;
+	uint32_t		start_thread;
 	uint32_t		queue_depth;
 	uint32_t		poll_timeout;
 	uint32_t		threads_num;
 	uint32_t		portals_arr_len;
+	uint32_t		pad;
 	TestType		test_type;
 	MachineType		machine_type;
 	Verb			verb;

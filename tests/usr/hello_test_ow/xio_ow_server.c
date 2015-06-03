@@ -75,7 +75,7 @@ struct xio_test_config {
 struct test_params {
 	struct xio_connection	*connection;
 	struct xio_context	*ctx;
-	struct xio_buf		*xbuf;
+	struct xio_reg_mem	reg_mem;
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
@@ -230,11 +230,11 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (test_params->xbuf == NULL)
-		test_params->xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (test_params->reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &test_params->reg_mem);
 
-	sglist[0].iov_base = test_params->xbuf->addr;
-	sglist[0].mr = test_params->xbuf->mr;
+	sglist[0].iov_base = test_params->reg_mem.addr;
+	sglist[0].mr = test_params->reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -445,8 +445,8 @@ int main(int argc, char *argv[])
 
 	xio_context_destroy(test_params.ctx);
 
-	if (test_params.xbuf)
-		xio_free(&test_params.xbuf);
+	if (test_params.reg_mem.addr)
+		xio_mem_free(&test_params.reg_mem);
 
 	xio_shutdown();
 

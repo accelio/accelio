@@ -205,13 +205,15 @@ inline void msg_pool_free(struct msg_pool *pool)
 /*---------------------------------------------------------------------------*/
 struct perf_buf *xio_buf_alloc(size_t size)
 {
-	struct perf_buf * pbuf;
+	struct perf_buf		*pbuf;
+	struct xio_reg_mem	reg_mem;
 
 	pbuf = (struct perf_buf *)calloc(1, sizeof(*pbuf));
 
 	pbuf->addr = alloc_mem_buf(ALIGNHUGEPAGE(size) , &pbuf->shmid);
 	pbuf->length = size;
-	pbuf->mr = xio_reg_mr(pbuf->addr, pbuf->length);
+	xio_mem_register(pbuf->addr, pbuf->length, &reg_mem);
+	pbuf->mr = reg_mem.mr;
 
 	return pbuf;
 
@@ -219,8 +221,12 @@ struct perf_buf *xio_buf_alloc(size_t size)
 
 void  xio_buf_free(struct perf_buf *pbuf)
 {
-	if (pbuf->mr)
-		xio_dereg_mr(&pbuf->mr);
+	if (pbuf->mr) {
+		struct xio_reg_mem	reg_mem;
+
+		reg_mem.mr = pbuf->mr;
+		xio_mem_dereg(&reg_mem);
+	}
 
 	if (pbuf->addr)
 		free_mem_buf((uint8_t *)pbuf->addr, pbuf->shmid);

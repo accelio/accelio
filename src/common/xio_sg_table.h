@@ -39,6 +39,10 @@
 #ifndef XIO_SG_TABLE_OPS
 #define XIO_SG_TABLE_OPS
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef	void		(*sge_set_buf_fn)(void *sge, const void *buf,
 					  uint32_t buflen, void *mr);
 typedef	void		*(*sge_addr_fn)(void *sge);
@@ -85,6 +89,9 @@ struct  xio_sg_table_ops {
 int tbl_copy(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	     struct xio_sg_table_ops *stbl_ops, void *stbl);
 
+int tbl_copy_sg(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
+		struct xio_sg_table_ops *stbl_ops, void *stbl);
+
 int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	      struct xio_sg_table_ops *stbl_ops, void *stbl);
 
@@ -128,10 +135,13 @@ int tbl_clone(struct xio_sg_table_ops *dtbl_ops, void *dtbl,
 	     (__i) < tbl_nents((ops), (sgtbl));			\
 	     (__i)++, (sg) = sge_next((ops), (sgtbl), (sg)))
 
-
 #define xio_sg_table_get(vmsg)	\
-	((void *)&((vmsg)->data_iov))
+	((void *)&((vmsg)->data_tbl))
 
 void *xio_sg_table_ops_get(enum xio_sgl_type sgl_type);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

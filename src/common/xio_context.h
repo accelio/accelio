@@ -38,17 +38,21 @@
 #ifndef XIO_CONTEXT_H
 #define XIO_CONTEXT_H
 
-
 #define xio_ctx_work_t  xio_work_handle_t
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
-#define xio_ctx_event_t xio_ev_data_t
 
+#define XIO_PROTO_LAST  2	/* from enum xio_proto */
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
 enum xio_context_event {
 	XIO_CONTEXT_EVENT_CLOSE,
 	XIO_CONTEXT_EVENT_POST_CLOSE
+};
+
+enum xio_context_pool_class {
+	XIO_CONTEXT_POOL_CLASS_INITIAL,
+	XIO_CONTEXT_POOL_CLASS_PRIMARY
 };
 
 enum xio_counters {
@@ -63,6 +67,8 @@ enum xio_counters {
 	XIO_STAT_LAST = 16
 };
 
+typedef int (*poll_completions_fn_t)(void *, int);
+
 /*---------------------------------------------------------------------------*/
 /* structs								     */
 /*---------------------------------------------------------------------------*/
@@ -75,13 +81,32 @@ struct xio_statistics {
 struct xio_context {
 	void				*ev_loop;
 	void				*mempool;
+	/* pools per transport */
+	struct xio_tasks_pool		*primary_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*primary_pool_ops[XIO_PROTO_LAST];
+
+	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
+
+	/* pool per connection */
+	struct xio_objpool		*msg_pool;
+
+	void				*poll_completions_ctx;
+	poll_completions_fn_t		poll_completions_fn;
+
 	int				cpuid;
 	int				nodeid;
 	int				polling_timeout;
 	unsigned int			flags;
 	uint64_t			worker;
-	int				run_private;
-	int				pad;
+
+	int32_t				run_private;
+
+	uint32_t			is_running:1;
+	uint32_t			defered_destroy:1;
+	uint32_t			prealloc_pools:1;
+	uint32_t			resereved:29;
+
 	struct xio_statistics		stats;
 	void				*user_context;
 	struct xio_workqueue		*workqueue;
@@ -90,7 +115,7 @@ struct xio_context {
 	/* list of sessions using this connection */
 	struct xio_observable		observable;
 	void				*netlink_sock;
-	struct dentry			*ctx_dentry;
+	xio_work_handle_t               destroy_ctx_work;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -171,36 +196,51 @@ int xio_ctx_add_work(struct xio_context *ctx, void *data,
 		     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
+/* xio_ctx_set_work_destructor						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_set_work_destructor(
+		     struct xio_context *ctx, void *data,
+		     void (*destructor)(void *data),
+		     xio_ctx_work_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_is_work_in_handler						     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_is_work_in_handler(struct xio_context *ctx, xio_ctx_work_t *work);
+
+/*---------------------------------------------------------------------------*/
 /* xio_ctx_del_work							     */
 /*---------------------------------------------------------------------------*/
 int xio_ctx_del_work(struct xio_context *ctx,
 		     xio_ctx_work_t *work);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_init_event							     */
-/*---------------------------------------------------------------------------*/
-void xio_ctx_init_event(xio_ctx_event_t *evt,
-			void (*event_handler)(void *data),
-			void *data);
-
-/*---------------------------------------------------------------------------*/
 /* xio_ctx_add_event							     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_add_event(struct xio_context *ctx,
-		       xio_ctx_event_t *evt);
+int xio_context_add_event(struct xio_context *ctx, struct xio_ev_data *evt);
 
 /*---------------------------------------------------------------------------*/
-/* xio_ctx_remove_event							     */
+/* xio_context_disable_event						     */
 /*---------------------------------------------------------------------------*/
-void xio_ctx_remove_event(struct xio_context *ctx,
-			  xio_ctx_event_t *evt);
+void xio_context_disable_event(struct xio_ev_data *evt);
 
+/*---------------------------------------------------------------------------*/
+/* xio_context_is_pending_event						     */
+/*---------------------------------------------------------------------------*/
+int xio_context_is_pending_event(struct xio_ev_data *evt);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_is_loop_stopping						     */
 /*---------------------------------------------------------------------------*/
 int xio_context_is_loop_stopping(struct xio_context *ctx);
 
+/*---------------------------------------------------------------------------*/
+/* xio_context_set_poll_completions_fn	                                     */
+/*---------------------------------------------------------------------------*/
+void xio_context_set_poll_completions_fn(
+		struct xio_context *ctx,
+		poll_completions_fn_t poll_completions_fn,
+		void *poll_completions_ctx);
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_modify_ev_handler					     */
@@ -225,13 +265,28 @@ static inline void xio_context_destroy_wait(struct xio_context *ctx)
 /*---------------------------------------------------------------------------*/
 /* xio_context_destroy_resume	                                             */
 /*---------------------------------------------------------------------------*/
-static inline void xio_context_destroy_resume(struct xio_context *ctx)
+void xio_context_destroy_resume(struct xio_context *ctx);
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_msg_pool_get	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void *xio_context_msg_pool_get(struct xio_context *ctx)
 {
-	if (ctx->run_private) {
-		if (!--ctx->run_private)
-			xio_context_stop_loop(ctx);
-	}
+	return xio_objpool_alloc(ctx->msg_pool);
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_context_msg_pool_put	                                             */
+/*---------------------------------------------------------------------------*/
+static inline void xio_context_msg_pool_put(void *obj)
+{
+	xio_objpool_free(obj);
+}
+/*---------------------------------------------------------------------------*/
+/* xio_ctx_pool_create							     */
+/*---------------------------------------------------------------------------*/
+int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
+		        enum xio_context_pool_class pool_cls);
 
 #endif /*XIO_CONTEXT_H */
 

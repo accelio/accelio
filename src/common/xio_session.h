@@ -80,12 +80,15 @@ struct xio_session {
 	uint64_t			peer_rcv_queue_depth_bytes;
 	struct list_head		sessions_list_entry;
 	struct list_head		connections_list;
+
 	HT_ENTRY(xio_session, xio_key_int32) sessions_htbl;
 
 	struct xio_msg			*setup_req;
 	struct xio_observer		observer;
+	struct xio_observer		ctx_observer;
 
 	enum xio_session_type		type;
+
 	volatile enum xio_session_state	state;
 
 	struct xio_new_session_rsp	new_ses_rsp;
@@ -120,6 +123,7 @@ struct xio_session {
 	int				disable_teardown;
 	struct xio_connection		*lead_connection;
 	struct xio_connection		*redir_connection;
+	struct xio_context		*teardown_work_ctx;
 	xio_work_handle_t		teardown_work;
 
 };

@@ -1,0 +1,63 @@
+# Makefile.in for kernel module
+
+SHELL = /bin/sh
+INSTALL = @INSTALL@
+mkdir_p = mkdir -p
+VERSION = @PACKAGE_VERSION@
+OFED_CFLAGS = @OFED_CFLAGS@
+KSYMVERS = @TCP_SYMVERS@
+
+NOSTDINC_FLAGS += @OFED_CFLAGS@
+
+DISTFILES = Makefile.in configure.ac configure ../install-sh \
+	xio_log.h  xio_mem.h  xio_os.h \
+	xio_tcp_transport.h \
+	xio_tcp_datapath.c  xio_tcp_management.c
+
+xiomoduledir = @kmoduledir@/extra/net/xio
+
+xiomodule := xio_tcp.ko
+
+all: all-@ENABLE_XIO_MODULE@
+install: install-@ENABLE_XIO_MODULE@
+uninstall: uninstall-@ENABLE_XIO_MODULE@
+
+all-n:
+install-n:
+uninstall-n:
+
+all-y: all-spec
+
+install-y: all
+	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
+	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	-/sbin/depmod -a
+
+uninstall-y:
+	rm -f $(DESTDIR)$(xiomoduledir)/$(xiomodule)
+	-/sbin/depmod -a
+
+clean:
+	-rm -f $(xiomodule) *.o .*.cmd *.mod.c *.ko *.s */*.o *.order *.symvers *.unsigned
+
+distclean: clean
+	rm -f Makefile configure config.status
+	rm -f config.h config.log config.status config.cache
+	rm -rf .tmp_versions autom4te.cache
+
+maintainer-clean: distclean
+
+distdir: $(DISTFILES)
+	cp -p $(DISTFILES) $(distdir)
+
+
+ccflags-y += $(OFED_CFLAGS) -I$(SUBDIRS) -I$(SUBDIRS)/.. -I$(SUBDIRS)/../.. -I$(SUBDIRS)/../../xio -I$(SUBDIRS)/../../../common -I$(SUBDIRS)/../../../../include -I$(SUBDIRS)/../../../libxio_os/linuxkernel
+
+obj-m := xio_tcp.o
+xio_tcp-objs := \
+	xio_tcp_datapath.o \
+	xio_tcp_management.o
+
+all-spec:
+	export NOSTDINC_FLAGS
+	$(MAKE) -C @kernelsrc@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" @KERNELMAKE_PARAMS@ modules

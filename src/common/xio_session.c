@@ -50,6 +50,7 @@
 #include "xio_idr.h"
 #include "xio_msg_list.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_nexus.h"
@@ -57,7 +58,7 @@
 #include "xio_sessions_cache.h"
 #include "xio_session.h"
 #include "xio_session_priv.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
 /* forward declarations							     */
@@ -84,7 +85,7 @@ struct xio_connection *xio_session_alloc_connection(
 	/* allocate and initialize connection */
 	connection = xio_connection_create(session, ctx, connection_idx,
 					   connection_user_context);
-	if (connection == NULL) {
+	if (!connection) {
 		ERROR_LOG("failed to initialize connection. " \
 			  "seesion:%p, ctx:%p, connection_idx:%d\n",
 			  session, ctx, connection_idx);
@@ -135,7 +136,7 @@ struct xio_connection *xio_session_assign_nexus(
 	list_for_each_entry(connection, &session->connections_list,
 			    connections_list_entry) {
 		if ((connection->ctx == nexus->transport_hndl->ctx)  &&
-		    ((connection->nexus == NULL) ||
+		    (!connection->nexus ||
 		     (connection->nexus == nexus))) {
 			/* remove old observer if exist */
 			spin_unlock(&session->connections_list_lock);
@@ -204,7 +205,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	dest_session_id = ntohl(tmp_hdr->dest_session_id);
 
 	observer = xio_nexus_observer_lookup(task->nexus, dest_session_id);
-	if (observer != NULL &&  observer->impl)
+	if (observer &&  observer->impl)
 		return (struct xio_session *)observer->impl;
 
 	/* fall back to cache - this is should only happen when new connection
@@ -212,7 +213,7 @@ struct xio_session *xio_find_session(struct xio_task *task)
 	 * message
 	 */
 	session = xio_sessions_cache_lookup(dest_session_id);
-	if (session == NULL)
+	if (!session)
 		ERROR_LOG("failed to find session %d\n", dest_session_id);
 
 	return session;
@@ -227,7 +228,8 @@ void xio_session_write_header(struct xio_task *task,
 	struct xio_session_hdr *tmp_hdr;
 
 	/* set start of the session header */
-	tmp_hdr = (struct xio_session_hdr *)xio_mbuf_set_session_hdr(&task->mbuf);
+	tmp_hdr =
+	     (struct xio_session_hdr *)xio_mbuf_set_session_hdr(&task->mbuf);
 
 	/* fill header */
 	PACK_LVAL(hdr, tmp_hdr,  dest_session_id);
@@ -281,8 +283,10 @@ void xio_session_read_header(struct xio_task *task,
 void xio_session_notify_teardown(struct xio_session *session, int reason)
 {
 	struct xio_session_event_data  event = {};
+
 	event.event = XIO_SESSION_TEARDOWN_EVENT;
 	event.reason = (enum xio_status)reason;
+
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
@@ -296,6 +300,7 @@ void xio_session_notify_new_connection(struct xio_session *session,
 				       struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {};
+
 	event.conn = connection;
 	event.conn_user_context = connection->cb_user_context;
 	event.event = XIO_SESSION_NEW_CONNECTION_EVENT;
@@ -315,6 +320,7 @@ void xio_session_notify_connection_established(
 		struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {};
+
 	event.conn = connection;
 	event.conn_user_context = connection->cb_user_context;
 	event.event = XIO_SESSION_CONNECTION_ESTABLISHED_EVENT;
@@ -326,7 +332,6 @@ void xio_session_notify_connection_established(
 				session->cb_user_context);
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_notify_connection_closed					     */
 /*---------------------------------------------------------------------------*/
@@ -334,10 +339,16 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 					  struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {};
+
+	if (connection->cd_bit)
+		return;
+
+	connection->cd_bit = 1;
 	event.event = XIO_SESSION_CONNECTION_CLOSED_EVENT;
 	event.reason = (enum xio_status)connection->close_reason;
 	event.conn = connection;
 	event.conn_user_context = connection->cb_user_context;
+
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
 				session, &event,
@@ -353,6 +364,12 @@ void xio_session_notify_connection_disconnected(
 		enum xio_status reason)
 {
 	struct xio_session_event_data  event = {};
+
+	if (connection->cd_bit)
+		return;
+
+	connection->cd_bit = 1;
+
 	event.event = XIO_SESSION_CONNECTION_DISCONNECTED_EVENT;
 	event.reason = reason;
 	event.conn = connection;
@@ -372,6 +389,7 @@ void xio_session_notify_connection_refused(struct xio_session *session,
 					   enum xio_status reason)
 {
 	struct xio_session_event_data  event = {};
+
 	event.event = XIO_SESSION_CONNECTION_REFUSED_EVENT;
 	event.reason = reason;
 	event.conn = connection;
@@ -390,11 +408,11 @@ void xio_session_notify_connection_teardown(struct xio_session *session,
 					    struct xio_connection *connection)
 {
 	struct xio_session_event_data  event = {};
+
 	event.event = XIO_SESSION_CONNECTION_TEARDOWN_EVENT;
 	event.reason = (enum xio_status)connection->close_reason;
 	event.conn = connection;
 	event.conn_user_context = connection->cb_user_context;
-
 
 	if (session->ses_ops.on_session_event)
 		session->ses_ops.on_session_event(
@@ -410,6 +428,7 @@ void xio_session_notify_connection_error(struct xio_session *session,
 					 enum xio_status reason)
 {
 	struct xio_session_event_data  event = {};
+
 	event.event = XIO_SESSION_CONNECTION_ERROR_EVENT;
 	event.reason = reason;
 	event.conn = connection;
@@ -448,9 +467,15 @@ static int xio_on_req_recv(struct xio_connection *connection,
 			connection->peer_credits_msgs += hdr.credits_msgs;
 			connection->peer_credits_bytes += hdr.credits_bytes;
 		}
+		connection->restarted = 0;
 	} else {
-		ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
-			  connection->req_exp_sn, hdr.sn);
+		if (unlikely(connection->restarted)) {
+			connection->req_exp_sn = hdr.sn + 1;
+			connection->restarted = 0;
+		} else {
+			ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
+				  connection->req_exp_sn, hdr.sn);
+		}
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
@@ -555,13 +580,19 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	if (connection->rsp_exp_sn == hdr.sn) {
 		connection->rsp_exp_sn++;
 		connection->rsp_ack_sn = hdr.sn;
+		connection->restarted  = 0;
 		if (connection->enable_flow_control) {
 			connection->peer_credits_msgs += hdr.credits_msgs;
 			connection->peer_credits_bytes += hdr.credits_bytes;
 		}
 	} else {
-		ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
-			  connection->rsp_exp_sn, hdr.sn);
+		if (unlikely(connection->restarted)) {
+			connection->rsp_exp_sn = hdr.sn + 1;
+			connection->restarted = 0;
+		} else {
+			ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
+				  connection->rsp_exp_sn, hdr.sn);
+		}
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
@@ -704,7 +735,6 @@ exit:
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_on_rsp_send_comp				                             */
 /*---------------------------------------------------------------------------*/
@@ -837,6 +867,46 @@ exit:
 	return 0;
 }
 
+int xio_on_rdma_direct_comp(struct xio_session *session,
+			    struct xio_nexus *nexus,
+			    union xio_nexus_event_data *event_data)
+{
+	struct xio_task	*task  = event_data->msg.task;
+	struct xio_msg *omsg = task->omsg;
+	struct xio_connection *connection = task->connection;
+
+	if (unlikely(task->tlv_type != XIO_MSG_TYPE_RDMA)) {
+		ERROR_LOG("Unexpected message type %u\n",
+			  task->tlv_type);
+		return 0;
+	}
+
+	if (connection->is_flushed) {
+		xio_tasks_pool_put(task);
+		goto xmit;
+	}
+
+	if (!omsg)
+		return 0;
+
+	xio_connection_remove_in_flight(connection, omsg);
+	omsg->flags = task->omsg_flags;
+	connection->tx_queued_msgs--;
+
+	if (connection->ses_ops.on_rdma_direct_complete) {
+		connection->ses_ops.on_rdma_direct_complete(
+				connection->session, omsg,
+				connection->cb_user_context);
+	}
+	xio_tasks_pool_put(task);
+
+xmit:
+	/* now try to send */
+	xio_connection_xmit_msgs(connection);
+
+	return 0;
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_on_nexus_disconnected			                             */
 /*---------------------------------------------------------------------------*/
@@ -916,7 +986,6 @@ int xio_on_nexus_closed(struct xio_session *session,
 		connection = xio_session_find_connection(session, nexus);
 	connection->nexus = NULL;
 
-
 	return 0;
 }
 
@@ -940,7 +1009,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 				task->omsg,
 				task->connection->cb_user_context);
 
-	if (IS_REQUEST(task->tlv_type))
+	if (IS_REQUEST(task->tlv_type) || task->tlv_type == XIO_MSG_TYPE_RDMA)
 		xio_tasks_pool_put(task);
 	else
 		xio_release_response_task(task);
@@ -954,8 +1023,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 		       union xio_nexus_event_data *event_data)
 {
-	struct xio_connection *connection =
-				xio_session_find_connection(session, nexus);
+	struct xio_connection *connection, *next_connection;
 
 	/* disable the teardown */
 	session->disable_teardown = 0;
@@ -966,16 +1034,17 @@ int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 	case XIO_SESSION_STATE_CONNECT:
 	case XIO_SESSION_STATE_REDIRECTED:
 		session->state = XIO_SESSION_STATE_REFUSED;
-		while (!list_empty(&session->connections_list)) {
-			connection = list_first_entry(
-					&session->connections_list,
-					struct xio_connection,
-					connections_list_entry);
+		list_for_each_entry_safe(
+				connection, next_connection,
+				&session->connections_list,
+				connections_list_entry) {
 			xio_connection_error_event(connection,
 						   event_data->error.reason);
 		}
+
 		break;
 	default:
+		connection = xio_session_find_connection(session, nexus);
 		xio_connection_error_event(connection,
 					   event_data->error.reason);
 		break;
@@ -997,24 +1066,23 @@ int xio_on_new_message(struct xio_session *s,
 	int			retval = -1;
 	int			xmit = 0;
 
-
 	if (task->sender_task) {
 		session = task->sender_task->session;
 		connection = task->sender_task->connection;
 	}
 
-	if (session == NULL) {
+	if (!session) {
 		session = xio_find_session(task);
-		if (session == NULL) {
+		if (!session) {
 			ERROR_LOG("failed to find session\n");
 			xio_tasks_pool_put(task);
 			return -1;
 		}
 	}
 
-	if (connection == NULL) {
+	if (!connection) {
 		connection = xio_session_find_connection(session, nexus);
-		if (connection == NULL) {
+		if (!connection) {
 			/* leading connection is refused */
 			if (session->lead_connection &&
 			    session->lead_connection->nexus == nexus) {
@@ -1033,8 +1101,6 @@ int xio_on_new_message(struct xio_session *s,
 
 	task->session		= session;
 	task->connection	= connection;
-
-
 
 	switch (task->tlv_type) {
 	case XIO_MSG_REQ:
@@ -1081,7 +1147,6 @@ int xio_on_new_message(struct xio_session *s,
 	/* now try to send */
 	if (xmit)
 		xio_connection_xmit_msgs(connection);
-
 
 	if (retval != 0)
 		ERROR_LOG("receiving new message failed. type:0x%x\n",
@@ -1146,8 +1211,6 @@ int xio_on_send_completion(struct xio_session *session,
 	if (xmit)
 		xio_connection_xmit_msgs(connection);
 
-
-
 	if (retval != 0)
 		ERROR_LOG("message send completion failed. type:0x%x\n",
 			  task->tlv_type);
@@ -1165,13 +1228,13 @@ int xio_on_assign_in_buf(struct xio_session *session,
 	struct xio_task	*task  = event_data->assign_in_buf.task;
 	struct xio_connection	*connection;
 
-	if (session == NULL)
+	if (!session)
 		session = xio_find_session(task);
 
 	connection = xio_session_find_connection(session, nexus);
-	if (connection == NULL) {
+	if (!connection) {
 		connection = xio_session_assign_nexus(session, nexus);
-		if (connection == NULL) {
+		if (!connection) {
 			ERROR_LOG("failed to find connection :%p. " \
 				  "dropping message:%d\n", nexus,
 				  event_data->msg.op);
@@ -1206,14 +1269,13 @@ int xio_on_cancel_request(struct xio_session *sess,
 	struct xio_task			*task;
 	struct xio_observer		*observer;
 
-
 	tmp_hdr			 = (struct xio_session_cancel_hdr *)
 					event_data->cancel.ulp_msg;
 	hdr.sn			 = ntohll(tmp_hdr->sn);
 	hdr.responder_session_id = ntohl(tmp_hdr->responder_session_id);
 
 	observer = xio_nexus_observer_lookup(nexus, hdr.responder_session_id);
-	if (observer == NULL) {
+	if (!observer) {
 		ERROR_LOG("failed to find session\n");
 		return -1;
 	}
@@ -1221,7 +1283,7 @@ int xio_on_cancel_request(struct xio_session *sess,
 	session = (struct xio_session *)observer->impl;
 
 	connection = xio_session_find_connection(session, nexus);
-	if (connection == NULL) {
+	if (!connection) {
 		ERROR_LOG("failed to find session\n");
 		return -1;
 	}
@@ -1235,14 +1297,13 @@ int xio_on_cancel_request(struct xio_session *sess,
 				&task->imsg,
 				connection->cb_user_context);
 			return 0;
-		} else {
-			WARN_LOG("cancel is not supported on responder\n");
 		}
+		WARN_LOG("cancel is not supported on responder\n");
 	}
 	TRACE_LOG("message to cancel not found %llu\n", hdr.sn);
 
 	req = (struct xio_msg *)kcalloc(1, sizeof(*req), GFP_KERNEL);
-	if (req == NULL) {
+	if (!req) {
 		ERROR_LOG("req allocation failed\n");
 		return -1;
 	}
@@ -1276,7 +1337,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 		return -1;
 	}
 
-	if (event_data->cancel.task == NULL) {
+	if (!event_data->cancel.task) {
 		tmp_hdr			 = (struct xio_session_cancel_hdr *)
 						event_data->cancel.ulp_msg;
 		hdr.sn			 = ntohll(tmp_hdr->sn);
@@ -1284,7 +1345,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 
 		observer = xio_nexus_observer_lookup(nexus,
 						     hdr.requester_session_id);
-		if (observer == NULL) {
+		if (!observer) {
 			ERROR_LOG("failed to find session\n");
 			return -1;
 		}
@@ -1292,7 +1353,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 
 		/* large object - allocate it */
 		msg = (struct xio_msg *)kcalloc(1, sizeof(*msg), GFP_KERNEL);
-		if (msg == NULL) {
+		if (!msg) {
 			ERROR_LOG("msg allocation failed\n");
 			return -1;
 		}
@@ -1306,7 +1367,7 @@ int xio_on_cancel_response(struct xio_session *sess,
 	}
 
 	connection = xio_session_find_connection(session, nexus);
-	if (connection == NULL) {
+	if (!connection) {
 		ERROR_LOG("failed to find session\n");
 		kfree(msg);
 		return -1;
@@ -1331,7 +1392,6 @@ int xio_on_cancel_response(struct xio_session *sess,
 	return 0;
 }
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_session_create			                                     */
 /*---------------------------------------------------------------------------*/
@@ -1341,9 +1401,8 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 	int			retval;
 	int			uri_len = 0;
 
-
 	/* input validation */
-	if (params == NULL || params->uri == NULL) {
+	if (!params || !params->uri) {
 		xio_set_error(EINVAL);
 		ERROR_LOG("xio_session_open: invalid parameter\n");
 		return NULL;
@@ -1354,7 +1413,7 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 	/* create the session */
 	session = (struct xio_session *)
 			kcalloc(1, sizeof(struct xio_session), GFP_KERNEL);
-	if (session == NULL) {
+	if (!session) {
 		ERROR_LOG("failed to create session\n");
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -1373,11 +1432,11 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 	if (session->hs_private_data_len) {
 		session->hs_private_data = kmalloc(session->hs_private_data_len,
 						GFP_KERNEL);
-		if (session->hs_private_data  == NULL) {
+		if (!session->hs_private_data) {
 			xio_set_error(ENOMEM);
 			goto cleanup;
 		}
-		memcpy(session->hs_private_data , params->private_data,
+		memcpy(session->hs_private_data, params->private_data,
 		       session->hs_private_data_len);
 	}
 	mutex_init(&session->lock);
@@ -1397,10 +1456,9 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 	memcpy(&session->ses_ops, params->ses_ops,
 	       sizeof(*params->ses_ops));
 
-
 	session->uri_len = uri_len;
 	session->uri = kstrdup(params->uri, GFP_KERNEL);
-	if (session->uri == NULL) {
+	if (!session->uri) {
 		xio_set_error(ENOMEM);
 		goto cleanup2;
 	}
@@ -1430,22 +1488,27 @@ cleanup:
 EXPORT_SYMBOL(xio_session_create);
 
 /*---------------------------------------------------------------------------*/
-/* xio_session_destroy							     */
+/* xio_session_post_destroy						     */
 /*---------------------------------------------------------------------------*/
-int xio_session_destroy(struct xio_session *session)
+void xio_session_post_destroy(void *_session)
 {
 	int found;
 	int i;
+	struct xio_session *session = (struct xio_session *)_session;
 
 
-	if (session == NULL)
-		return 0;
-
+	if (session->teardown_work_ctx) {
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
+		xio_ctx_del_work(session->teardown_work_ctx,
+				 &session->teardown_work);
+	}
+		
 	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
 		ERROR_LOG("xio_session_destroy failed: " \
 			  "connections are still open\n");
-		return -1;
+		return;
 	}
 
 	found = xio_idr_lookup_uobj(usr_idr, session);
@@ -1454,7 +1517,7 @@ int xio_session_destroy(struct xio_session *session)
 	} else {
 		ERROR_LOG("session not found:%p\n", session);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
-		return -1;
+		return;
 	}
 
 	TRACE_LOG("session destroy:%p\n", session);
@@ -1472,8 +1535,37 @@ int xio_session_destroy(struct xio_session *session)
 	kfree(session->hs_private_data);
 	kfree(session->uri);
 	XIO_OBSERVER_DESTROY(&session->observer);
+	XIO_OBSERVER_DESTROY(&session->ctx_observer);
+
 	mutex_destroy(&session->lock);
 	kfree(session);
+
+	return;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_destroy							     */
+/*---------------------------------------------------------------------------*/
+int xio_session_destroy(struct xio_session *session)
+{
+	if (!session)
+		return 0;
+
+	TRACE_LOG("xio_post_destroy_session seesion:%p\n", session);
+
+	if (session->teardown_work_ctx &&
+	    xio_ctx_is_work_in_handler(session->teardown_work_ctx,
+				       &session->teardown_work)) {
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
+
+		xio_ctx_set_work_destructor(
+		     session->teardown_work_ctx, session,
+		     xio_session_post_destroy,
+		     &session->teardown_work);
+	} else {
+		xio_session_post_destroy(session);
+	}
 
 	return 0;
 }
@@ -1614,6 +1706,31 @@ int xio_session_notify_msg_error(struct xio_connection *connection,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_on_context_event						     */
+/*---------------------------------------------------------------------------*/
+static int xio_session_on_context_event(void *observer, void *sender, int event,
+				void *event_data)
+{
+	struct xio_session *session = (struct xio_session *)observer;
+
+	if (event == XIO_CONTEXT_EVENT_CLOSE) {
+		TRACE_LOG("context: [close] ctx:%p\n", sender);
+
+		xio_context_unreg_observer(session->teardown_work_ctx,
+					   &session->ctx_observer);
+		/* clean the context so that upon session destroy do not
+		 * do not handle workqueue
+		 */
+		xio_ctx_del_work(session->teardown_work_ctx,
+				 &session->teardown_work);
+
+		session->teardown_work_ctx = NULL;
+	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_session_pre_teardown						     */
 /*---------------------------------------------------------------------------*/
 static void xio_session_pre_teardown(void *_session)
@@ -1636,32 +1753,53 @@ static void xio_session_pre_teardown(void *_session)
 		reason = session->teardown_reason;
 		break;
 	}
+	mutex_lock(&session->lock);
 
 	spin_lock(&session->connections_list_lock);
 	destroy_session = ((session->connections_nr == 0) &&
-			(session->lead_connection == NULL) &&
-			(session->redir_connection == NULL));
+			   !session->lead_connection &&
+			   !session->redir_connection);
+
 	spin_unlock(&session->connections_list_lock);
 
-	/* last chance to teardown */
+		/* last chance to teardown */
 	if (destroy_session) {
+		/* remove the session from cache */
+		xio_sessions_cache_remove(session->session_id);
+		mutex_unlock(&session->lock);
 		session->state = XIO_SESSION_STATE_CLOSING;
 		session->teardown_reason = reason;
+
+		/* start listen to context events  - context can be destroyed
+		 * while session still alive */
+		xio_context_unreg_observer(session->teardown_work_ctx,
+                                           &session->ctx_observer);
+
+		XIO_OBSERVER_INIT(&session->ctx_observer, session,
+				  xio_session_on_context_event);
+		xio_context_reg_observer(session->teardown_work_ctx,
+					 &session->ctx_observer);
+
 		xio_session_notify_teardown(session, session->teardown_reason);
+	} else {
+		mutex_unlock(&session->lock);
 	}
 }
 
 /*---------------------------------------------------------------------------*/
 /* xio_session_init_teardown						     */
 /*---------------------------------------------------------------------------*/
-inline void xio_session_init_teardown(struct xio_session *session,
-				      struct xio_context *ctx,
-				      int close_reason)
+void xio_session_init_teardown(struct xio_session *session,
+			       struct xio_context *ctx,
+			       int close_reason)
 {
 		session->teardown_reason = close_reason;
+		session->teardown_work_ctx = ctx;
+
 		xio_ctx_add_work(
 				ctx,
 				session,
 				xio_session_pre_teardown,
 				&session->teardown_work);
 }
+

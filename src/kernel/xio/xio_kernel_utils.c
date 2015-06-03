@@ -68,7 +68,6 @@ EXPORT_SYMBOL(xio_set_error);
 int xio_errno(void) { return _xio_errno; }
 EXPORT_SYMBOL(xio_errno);
 
-
 static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 			      struct sockaddr_storage *ss)
 {
@@ -77,6 +76,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 	if (strnchr(str, len, '.')) {
 		/* Try IPv4 */
 		struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
+
 		if (in4_pton(str, len, (void *)&s4->sin_addr, -1, &end) > 0) {
 			if (!*end) {
 				/* reached the '\0' */
@@ -88,6 +88,7 @@ static int priv_parse_ip_addr(const char *str, size_t len, __be16 port,
 	} else if (strnchr(str, len, ':')) {
 		/* Try IPv6 */
 		struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
+
 		if (in6_pton(str, -1, (void *)&s6->sin6_addr, -1, &end) > 0) {
 			if (!*end) {
 				/* reached the '\0' */
@@ -122,21 +123,22 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 	/* only supported protocol is rdma */
 	start = strstr(uri, "://");
-	if (start == NULL)
+	if (!start)
 		return -1;
 
 	if (*(start+3) == '[') {  /* IPv6 */
 		ipv6_hint = 1;
 		p1 = strstr(start + 3, "]:");
-		if (p1 == NULL)
+		if (!p1)
 			return -1;
 
 		len = p1-(start+4);
 		host = kstrndup((char *)(start + 4), len, GFP_KERNEL);
-		host[len] = 0;
+		if (host)
+			host[len] = 0;
 
 		p2 = strchr(p1 + 2, '/');
-		if (p2 == NULL) {
+		if (!p2) {
 			strcpy(port, p1 + 2);
 		} else {
 			len = (p2-1)-(p1+2);
@@ -155,9 +157,9 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 				goto cleanup;
 		}
 
-		if (p2 == NULL) { /* no resource */
+		if (!p2) { /* no resource */
 			p1 = strrchr(uri, ':');
-			if (p1 == NULL || p1 == start)
+			if (!p1 || p1 == start)
 				goto cleanup;
 			strcpy(port, (p1 + 1));
 		} else {
@@ -179,7 +181,8 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 
 		/* extract the address */
 		host = kstrndup((char *)(start + 3), len, GFP_KERNEL);
-		host[len] = 0;
+		if (host)
+			host[len] = 0;
 	}
 
 	/* debug */
@@ -199,6 +202,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 	if (!host || (host && (host[0] == '*' || host[0] == 0))) {
 		if (ipv6_hint) {
 			struct sockaddr_in6 *s6 = (struct sockaddr_in6 *)ss;
+
 			/* what about scope and flow */
 			s6->sin6_family = AF_INET6;
 			/* s6->sin6_addr	= IN6ADDR_ANY_INIT; */
@@ -208,6 +212,7 @@ int xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss)
 			ss_len = sizeof(struct sockaddr_in6);
 		} else {
 			struct sockaddr_in *s4 = (struct sockaddr_in *)ss;
+
 			s4->sin_family		= AF_INET;
 			s4->sin_addr.s_addr	= INADDR_ANY;
 			s4->sin_port		= port_be16;

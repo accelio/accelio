@@ -40,6 +40,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/bitops.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
 #include <asm/atomic.h>
@@ -72,9 +73,9 @@
 #define	CHAIN_MESSAGES		0
 
 #define MAX_POOL_SIZE		MAX_OUTSTANDING_REQS
-#define ONE_MB			(1 << 20)
+#define ONE_MB			BIT(20)
 
-#define SG_TBL_LEN		64
+#define SG_TBL_LEN		256
 
 MODULE_AUTHOR("Eyal Solomon, Or Kehati, Shlomo Pongratz");
 MODULE_DESCRIPTION("XIO hello client " \
@@ -118,7 +119,7 @@ struct xio_test_config {
 	char			server_addr[32];
 	uint16_t		server_port;
 	char			transport[16];
-	int16_t			cpu;
+	uint64_t		cpu_mask;
 	uint32_t		hdr_len;
 	uint32_t		data_len;
 	uint32_t		in_iov_len;
@@ -156,10 +157,11 @@ struct test_params {
 	uint64_t		nsent;
 	uint64_t		nrecv;
 	uint16_t		finite_run;
-	uint16_t		padding[3];
+	uint16_t		padding;
+	uint32_t		iov_sz;
 	uint64_t		disconnect_nr;
+	int			cpu;
 };
-
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -212,9 +214,9 @@ static void process_response(struct test_params *test_params,
 
 		data_len = test_params->stat.txlen > test_params->stat.rxlen ?
 			   test_params->stat.txlen : test_params->stat.rxlen;
-		data_len = data_len/1024;
+		data_len = data_len / 1024;
 		test_params->stat.print_counter = (data_len ?
-				 PRINT_COUNTER/data_len : PRINT_COUNTER);
+				 PRINT_COUNTER / data_len : PRINT_COUNTER);
 		if (test_params->stat.print_counter < 1000)
 			test_params->stat.print_counter = 1000;
 		test_params->disconnect_nr =
@@ -224,10 +226,10 @@ static void process_response(struct test_params *test_params,
 		char		timeb[40];
 
 		uint64_t delta = get_cpu_usecs() - test_params->stat.start_time;
-		uint64_t pps = (test_params->stat.cnt*USECS_IN_SEC)/delta;
+		uint64_t pps = (test_params->stat.cnt * USECS_IN_SEC) / delta;
+		double txbw = (1.0 * pps * test_params->stat.txlen / ONE_MB);
+		double rxbw = (1.0 * pps * test_params->stat.rxlen / ONE_MB);
 
-		double txbw = (1.0*pps*test_params->stat.txlen/ONE_MB);
-		double rxbw = (1.0*pps*test_params->stat.rxlen/ONE_MB);
 		pr_info("transactions per second: %llu, bandwidth: " \
 		       "TX %d MB/s, RX: %d MB/s, length: TX: %zd B, RX: %zd B\n",
 		       pps, (int)txbw, (int)rxbw,
@@ -236,10 +238,10 @@ static void process_response(struct test_params *test_params,
 
 		in_sgl = rsp->in.data_tbl.sgl;
 		pr_info("**** [%s] - message [%llu] %s - %s\n",
-		       timeb, (rsp->request->sn + 1),
-		       (char *)rsp->in.header.iov_base,
-		       (char *)(rsp->in.data_tbl.nents > 0 ?
-				sg_virt(in_sgl) : NULL));
+			timeb, (rsp->request->sn + 1),
+			(char *)rsp->in.header.iov_base,
+			(char *)(rsp->in.data_tbl.nents > 0 ?
+				 sg_virt(in_sgl) : NULL));
 
 		test_params->stat.cnt = 0;
 		test_params->stat.start_time = get_cpu_usecs();
@@ -256,15 +258,15 @@ static int on_session_event(struct xio_session *session,
 	struct test_params *test_params = cb_user_context;
 
 	pr_info("session event: %s. reason: %s\n",
-	       xio_session_event_str(event_data->event),
-	       xio_strerror(event_data->reason));
+		xio_session_event_str(event_data->event),
+		xio_strerror(event_data->reason));
 
 	switch (event_data->event) {
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
 		pr_info("nsent:%llu, nrecv:%llu, " \
 		       "delta:%llu\n",
 		       test_params->nsent, test_params->nrecv,
-		       test_params->nsent-test_params->nrecv);
+		       test_params->nsent - test_params->nrecv);
 
 		xio_connection_destroy(event_data->conn);
 		break;
@@ -280,6 +282,7 @@ static int on_session_event(struct xio_session *session,
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* on_session_established						     */
 /*---------------------------------------------------------------------------*/
@@ -291,6 +294,7 @@ static int on_session_established(struct xio_session *session,
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* on_msg_delivered							     */
 /*---------------------------------------------------------------------------*/
@@ -300,7 +304,7 @@ static int on_msg_delivered(struct xio_session *session,
 			    void *cb_user_context)
 {
 	/*
-	printf("**** on message delivered\n");
+	pr_info("**** on message delivered\n");
 	*/
 
 	return 0;
@@ -340,7 +344,7 @@ static int on_response(struct xio_session *session,
 
 	/* peek message from the pool */
 	msg = msg_pool_get(test_params->pool);
-	if (msg == NULL) {
+	if (!msg) {
 		pr_err("pool is empty\n");
 		return 0;
 	}
@@ -351,22 +355,20 @@ static int on_response(struct xio_session *session,
 	xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 	for (j = 0; j < test_config.in_iov_len; j++) {
-		sg_set_buf(sgl, NULL, ONE_MB);
+		sg_set_buf(sgl, NULL, test_params->iov_sz);
 		sgl = sg_next(sgl);
 	}
 
 	msg->sn = 0;
 
 	/* assign buffers to the message */
-	msg_write(&test_params->msg_params, msg,
+	msg_build_out_sgl(&test_params->msg_params, msg,
 		  test_config.hdr_len,
 		  test_config.out_iov_len, test_config.data_len);
 
-
-
 	if (chain_messages) {
 		msg->next = NULL;
-		if (test_params->chain.head  == NULL) {
+		if (!test_params->chain.head) {
 			test_params->chain.head = msg;
 			test_params->chain.tail = test_params->chain.head;
 		} else {
@@ -377,10 +379,11 @@ static int on_response(struct xio_session *session,
 			if (xio_send_request(test_params->connection,
 					     test_params->chain.head) == -1) {
 				if (xio_errno() != EAGAIN)
-					pr_err("**** [%p] Error - xio_send_request " \
-							"failed %s\n",
-							session,
-							xio_strerror(xio_errno()));
+					pr_err("**** [%p] Error - "\
+					       "xio_send_request " \
+					       "failed %s\n",
+					       session,
+					       xio_strerror(xio_errno()));
 				msg_pool_put(test_params->pool, msg);
 				xio_assert(xio_errno() == EAGAIN);
 			}
@@ -419,11 +422,11 @@ static int on_msg_error(struct xio_session *session,
 
 	if (direction == XIO_MSG_DIRECTION_OUT) {
 		pr_info("**** [%p] message %llu failed. reason: %s\n",
-		       session, msg->sn, xio_strerror(error));
+			session, msg->sn, xio_strerror(error));
 	} else {
 		xio_release_response(msg);
 		pr_info("**** [%p] message %llu failed. reason: %s\n",
-		       session, msg->request->sn, xio_strerror(error));
+			session, msg->request->sn, xio_strerror(error));
 	}
 
 	msg_pool_put(test_params->pool, msg);
@@ -438,6 +441,7 @@ static int on_msg_error(struct xio_session *session,
 
 	return 0;
 }
+
 /*---------------------------------------------------------------------------*/
 /* callbacks								     */
 /*---------------------------------------------------------------------------*/
@@ -465,11 +469,11 @@ static void usage(const char *argv0)
 
 	pr_info("\tport=<port> ");
 	pr_info("\t\tConnect to port <port> (default %d)\n",
-	        XIO_DEF_PORT);
+		XIO_DEF_PORT);
 
 	pr_info("\ttransport=<type> ");
 	pr_info("\t\tUse rdma/tcp as transport <type> (default %s)\n",
-	       XIO_DEF_TRANSPORT);
+		XIO_DEF_TRANSPORT);
 
 	pr_info("\theader_len=<number> ");
 	pr_info("\t\tSet the header length of the message to <number> bytes " \
@@ -492,7 +496,7 @@ static void usage(const char *argv0)
 			"(default 0)\n");
 
 	pr_info("\tcpu=<cpu num> ");
-	pr_info("\t\tBind the process to specific cpu\n");
+	pr_info("\t\tSet cpu mask to bind the process to specific cpu\n");
 }
 
 /*---------------------------------------------------------------------------*/
@@ -511,7 +515,7 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	sprintf(test_config->server_addr, "%s", argv[1]);
 
 	if (argv[2]) {
-		if(kstrtouint(argv[2], 0, &tmp))
+		if (kstrtouint(argv[2], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->server_port = (uint16_t)tmp;
 	}
@@ -520,15 +524,15 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 		sprintf(test_config->transport, "%s", argv[3]);
 
 	if (argv[4])
-		if(kstrtouint(argv[4], 0, &test_config->hdr_len))
+		if (kstrtouint(argv[4], 0, &test_config->hdr_len))
 			pr_err("parse error\n");
 
 	if (argv[5])
-		if(kstrtouint(argv[5], 0, &test_config->data_len))
+		if (kstrtouint(argv[5], 0, &test_config->data_len))
 			pr_err("parse error\n");
 
 	if (argv[6]) {
-		if(kstrtouint(argv[6], 0, &test_config->out_iov_len))
+		if (kstrtouint(argv[6], 0, &test_config->out_iov_len))
 			pr_err("parse error\n");
 		if (test_config->out_iov_len > SG_TBL_LEN) {
 			pr_err("out_iov_len (%d) > %d\n",
@@ -538,7 +542,7 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 	}
 
 	if (argv[7]) {
-		if(kstrtouint(argv[7], 0, &test_config->in_iov_len))
+		if (kstrtouint(argv[7], 0, &test_config->in_iov_len))
 			pr_err("parse error\n");
 		if (test_config->in_iov_len > SG_TBL_LEN) {
 			pr_err("in_iov_len (%d) > %d\n",
@@ -549,15 +553,14 @@ int parse_cmdline(struct xio_test_config *test_config, char **argv)
 
 	if (argv[8]) {
 		tmp = 0;
-		if(kstrtouint(argv[8], 0, &tmp))
+		if (kstrtouint(argv[8], 0, &tmp))
 			pr_err("parse error\n");
 		test_config->finite_run = (uint16_t)tmp;
 	}
 
 	if (argv[9]) {
-		if(kstrtouint(argv[9], 0, &tmp))
+		if (kstrtoull(argv[9], 16, &test_config->cpu_mask))
 			pr_err("parse error\n");
-		test_config->cpu = (int16_t)tmp;
 	}
 
 	return 0;
@@ -580,7 +583,7 @@ static void print_test_config(
 	pr_info(" Out Vector Length	: %u\n", test_config_p->out_iov_len);
 	pr_info(" In Vector Length	: %u\n", test_config_p->in_iov_len);
 	pr_info(" Connection Index	: %u\n", test_config_p->conn_idx);
-	pr_info(" CPU Affinity		: %x\n", test_config_p->cpu);
+	pr_info(" CPU Mask		: 0x%llx\n", test_config_p->cpu_mask);
 	pr_info(" Finite run		: %x\n", test_config_p->finite_run);
 	pr_info(" =============================================\n");
 }
@@ -590,7 +593,7 @@ static void print_test_config(
 /*---------------------------------------------------------------------------*/
 int send_one_by_one(struct test_params *test_params)
 {
-	struct scatterlist 	*sgl;
+	struct scatterlist	*sgl;
 	struct xio_msg		*msg;
 	int			i;
 	size_t			j;
@@ -598,7 +601,7 @@ int send_one_by_one(struct test_params *test_params)
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(test_params->pool);
-		if (msg == NULL)
+		if (!msg)
 			break;
 
 		/* get pointers to internal buffers */
@@ -609,12 +612,12 @@ int send_one_by_one(struct test_params *test_params)
 		xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 		for (j = 0; j < test_config.in_iov_len; j++) {
-			sg_set_buf(sgl, NULL, ONE_MB);
+			sg_set_buf(sgl, NULL, g_test_params.iov_sz);
 			sgl = sg_next(sgl);
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
@@ -640,7 +643,7 @@ int send_one_by_one(struct test_params *test_params)
 /*---------------------------------------------------------------------------*/
 int send_chained(struct test_params *test_params)
 {
-	struct scatterlist 	*sgl;
+	struct scatterlist	*sgl;
 	struct xio_msg		*msg, *head = NULL, *tail = NULL;
 	int			i;
 	size_t			j;
@@ -649,7 +652,7 @@ int send_chained(struct test_params *test_params)
 	for (i = 0; i < MAX_OUTSTANDING_REQS; i++) {
 		/* create transaction */
 		msg = msg_pool_get(test_params->pool);
-		if (msg == NULL)
+		if (!msg)
 			break;
 
 		/* get pointers to internal buffers */
@@ -660,19 +663,19 @@ int send_chained(struct test_params *test_params)
 		xio_tbl_set_nents(&msg->in.data_tbl, test_config.in_iov_len);
 
 		for (j = 0; j < test_config.in_iov_len; j++) {
-			sg_set_buf(sgl, NULL, ONE_MB);
+			sg_set_buf(sgl, NULL, g_test_params.iov_sz);
 			sgl = sg_next(sgl);
 		}
 
 		/* assign buffers to the message */
-		msg_write(&test_params->msg_params, msg,
+		msg_build_out_sgl(&test_params->msg_params, msg,
 			  test_config.hdr_len,
 			  test_config.out_iov_len, test_config.data_len);
 
 		msg->next = NULL;
 
 		/* append the message */
-		if (head == NULL) {
+		if (!head) {
 			head = msg;
 			tail = head;
 		} else {
@@ -742,6 +745,7 @@ static int xio_client_main(void *data)
 	struct xio_connection_params	cparams;
 	int				error;
 	int				retval;
+	struct xio_context_params	ctx_params;
 	static int			chain_messages = CHAIN_MESSAGES;
 
 	atomic_add(2, &module_state);
@@ -763,14 +767,23 @@ static int xio_client_main(void *data)
 	g_test_params.pool = msg_pool_alloc(MAX_POOL_SIZE,
 					  test_config.in_iov_len,
 					  test_config.out_iov_len);
-	if (g_test_params.pool == NULL) {
+	/* accelio kernel can support up to 256 pages so only ONE_MB is
+	 * allowed */
+	g_test_params.iov_sz = (test_config.in_iov_len) ?
+		ONE_MB / test_config.in_iov_len : 0;
+	if (!g_test_params.pool) {
 		pr_err("msg_pool_alloc failed\n");
 		goto cleanup;
 	}
 
 	/* create thread context for the client */
-	g_test_params.ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL,
-					     current, 0, test_config.cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+
+	g_test_params.ctx = xio_context_create(&ctx_params,
+					       0, g_test_params.cpu);
 	if (!g_test_params.ctx) {
 		pr_err("context open failed\n");
 		goto cleanup;
@@ -787,9 +800,8 @@ static int xio_client_main(void *data)
 	params.uri		= url;
 
 	g_test_params.session = xio_session_create(&params);
-	if (g_test_params.session == NULL) {
+	if (!g_test_params.session)
 		pr_err("session creation failed\n");
-	}
 
 	cparams.session			= g_test_params.session;
 	cparams.ctx			= g_test_params.ctx;
@@ -816,7 +828,7 @@ static int xio_client_main(void *data)
 	if (retval != 0) {
 		error = xio_errno();
 		pr_err("running event loop failed. reason %d - (%s)\n",
-			error, xio_strerror(error));
+		       error, xio_strerror(error));
 		xio_assert(retval == 0);
 	}
 
@@ -841,9 +853,8 @@ static int __init xio_hello_init_module(void)
 {
 	int iov_len = SG_TBL_LEN;
 
-	if (parse_cmdline(&test_config, xio_argv)) {
+	if (parse_cmdline(&test_config, xio_argv))
 		return -EINVAL;
-	}
 
 	atomic_set(&module_state, 1);
 	init_completion(&cleanup_complete);
@@ -856,12 +867,20 @@ static int __init xio_hello_init_module(void)
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
 		    &iov_len, sizeof(int));
 
-	xio_main_th = kthread_run(xio_client_main, xio_argv,
-				  "xio-hello-client");
+	xio_main_th = kthread_create(xio_client_main, xio_argv,
+				     "xio-hello-client");
 	if (IS_ERR(xio_main_th)) {
 		complete(&cleanup_complete);
 		return PTR_ERR(xio_main_th);
 	}
+
+	if (test_config.cpu_mask) {
+		g_test_params.cpu = __ffs64(test_config.cpu_mask);
+		pr_info("cpu is %d\n", g_test_params.cpu);
+		kthread_bind(xio_main_th, g_test_params.cpu);
+	}
+
+	wake_up_process(xio_main_th);
 
 	return 0;
 }

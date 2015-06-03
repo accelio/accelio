@@ -38,7 +38,6 @@
 #ifndef XIO_MEM_H
 #define XIO_MEM_H
 
-
 extern int			disable_huge_pages;
 extern int			allocator_assigned;
 extern struct xio_mem_allocator *mem_allocator;

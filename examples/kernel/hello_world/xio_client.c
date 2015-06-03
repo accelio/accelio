@@ -54,7 +54,7 @@ MODULE_DESCRIPTION("XIO hello client " \
 		   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static char *xio_argv[] = {"xio_hello_client", 0, 0};
+static char *xio_argv[] = {"xio_client_example", 0, 0};
 
 module_param_named(ip, xio_argv[1], charp, 0);
 MODULE_PARM_DESC(ip, "IP of NIC to send request to");
@@ -141,7 +141,7 @@ static int on_response(struct xio_session *session,
 		       void *cb_user_context)
 {
 	struct session_data *session_data = cb_user_context;
-	int i = rsp->request->sn % QUEUE_DEPTH;
+	struct xio_msg	    *req = rsp;
 
 	/* process the incoming message */
 	process_response(rsp);
@@ -150,7 +150,7 @@ static int on_response(struct xio_session *session,
 	xio_release_response(rsp);
 
 	/* resend the message */
-	xio_send_request(session_data->connection, &session_data->req[i]);
+	xio_send_request(session_data->connection, req);
 
 	return 0;
 }
@@ -205,6 +205,7 @@ static int xio_client_main(void *data)
 
 	struct xio_session	*session;
 	struct xio_session_params params;
+	struct xio_context_params ctx_params;
 	struct xio_connection_params cparams;
 	char			url[256];
 	struct xio_context	*ctx;
@@ -215,12 +216,16 @@ static int xio_client_main(void *data)
 
 	session_data = vzalloc(sizeof(*session_data));
 	if (!session_data) {
-		pr_err("session_data alloc failed\n");
+		/*pr_err("session_data alloc failed\n");*/
 		return 0;
 	}
 
 	/* create thread context for the client */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, -1);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		vfree(session_data);
 		pr_err("context open filed\n");

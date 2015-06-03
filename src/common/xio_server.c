@@ -49,13 +49,14 @@
 #include "xio_idr.h"
 #include "xio_msg_list.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
 #include "xio_connection.h"
 #include "xio_server.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 static int xio_on_nexus_event(void *observer, void *notifier, int event,
 			      void *event_data);
@@ -114,6 +115,7 @@ static int xio_on_new_message(struct xio_server *server,
 	struct xio_task			*task;
 	uint32_t			tlv_type;
 	struct xio_session_params	params;
+	int				locked = 0;
 
 	if (!server || !nexus || !event_data || !event_data->msg.task) {
 		ERROR_LOG("server [new session]: failed " \
@@ -136,7 +138,7 @@ static int xio_on_new_message(struct xio_server *server,
 	if (tlv_type == XIO_SESSION_SETUP_REQ) {
 		/* create new session */
 		session = xio_session_create(&params);
-		if (session == NULL) {
+		if (!session) {
 			ERROR_LOG("server [new session]: failed " \
 				"  allocating session failed\n");
 			return -1;
@@ -171,13 +173,29 @@ static int xio_on_new_message(struct xio_server *server,
 		task->session		= session;
 		task->connection	= connection;
 	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
-			/* find the old session */
+		struct xio_session *session1;
+		/* find the old session without lock */
 		session = xio_find_session(event_data->msg.task);
-		if (session == NULL) {
+		if (!session) {
 			ERROR_LOG("server [new connection]: failed " \
-				  "session not found\n");
+				  "session not found. server:%p\n",
+				  server);
+			xio_nexus_close(nexus, NULL);
 			return -1;
 		}
+		/* lock it and retry find */
+		mutex_lock(&session->lock);
+		/* session before destruction - try to lock before continue */
+		session1 = xio_find_session(event_data->msg.task);
+		if (!session1) {
+			ERROR_LOG("server [new connection]: failed " \
+				  "session not found. server:%p\n",
+				  server);
+			xio_nexus_close(nexus, NULL);
+			mutex_unlock(&session->lock);
+			return -1;
+		}
+		locked = 1;
 		task->session = session;
 
 		DEBUG_LOG("server [new connection]: server:%p, " \
@@ -209,6 +227,7 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
+
 		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 	} else {
 		ERROR_LOG("server unexpected message\n");
@@ -219,6 +238,8 @@ static int xio_on_new_message(struct xio_server *server,
 	if (session)
 		xio_nexus_notify_observer(nexus, &session->observer,
 					  event, event_data);
+	if (locked)
+		mutex_unlock(&session->lock);
 
 	return 0;
 
@@ -289,9 +310,9 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 {
 	struct xio_server	*server;
 	int			retval;
-	int			backlog = 0;
+	int			backlog = 4;
 
-	if ((ctx == NULL) || (ops == NULL) || (uri == NULL)) {
+	if (!ctx  || !ops || !uri) {
 		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
 			  ctx, ops, uri);
 		xio_set_error(EINVAL);
@@ -303,7 +324,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	/* create the server */
 	server = (struct xio_server *)
 			kcalloc(1, sizeof(struct xio_server), GFP_KERNEL);
-	if (server == NULL) {
+	if (!server) {
 		xio_set_error(ENOMEM);
 		return NULL;
 	}
@@ -322,7 +343,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
 
 	server->listener = xio_nexus_open(ctx, uri, NULL, 0, 0, NULL);
-	if (server->listener == NULL) {
+	if (!server->listener) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
@@ -375,7 +396,7 @@ int xio_unbind(struct xio_server *server)
 	int retval = 0;
 	int found;
 
-	if (server == NULL)
+	if (!server)
 		return -1;
 
 	found = xio_idr_lookup_uobj(usr_idr, server);
@@ -395,5 +416,3 @@ int xio_unbind(struct xio_server *server)
 	return retval;
 }
 EXPORT_SYMBOL(xio_unbind);
-
-

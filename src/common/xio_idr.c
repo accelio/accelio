@@ -35,23 +35,25 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <libxio.h>
 #include <xio_os.h>
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_hash.h"
 #include <sys/hashtable.h>
 #include "xio_idr.h"
-#include <xio-advanced-env.h>
+#include <xio_env_adv.h>
 
 struct xio_idr_entry {
 	void					*key;
 	char					*name;
+
 	HT_ENTRY(xio_idr_entry, xio_key_int64)	idr_ht_entry;
 };
 
 struct xio_idr {
 	HT_HEAD(, xio_idr_entry, HASHTABLE_PRIME_MEDIUM) cache;
-	spinlock_t lock;
+	spinlock_t lock; /* idr lock */
 	int	   pad;
 };
 
@@ -69,7 +71,7 @@ int xio_idr_remove_uobj(struct xio_idr *idr, void *uobj)
 	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
 	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
-	if (idr_entry == NULL) {
+	if (!idr_entry) {
 		spin_unlock(&idr->lock);
 		return -1;
 	}
@@ -99,7 +101,7 @@ int xio_idr_lookup_uobj(struct xio_idr *idr, void *uobj)
 	HT_LOOKUP(&idr->cache, &key, idr_entry, idr_ht_entry);
 	spin_unlock(&idr->lock);
 
-	return (idr != NULL);
+	return idr_entry ? 1 : 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -110,30 +112,34 @@ int xio_idr_add_uobj(struct xio_idr *idr, void *uobj, const char *obj_name)
 	struct xio_idr_entry	*idr1_entry = NULL, *idr_entry;
 	struct xio_key_int64	key;
 	int			retval = -1;
+	char			*pname = NULL;
 
 	if (!idr || !uobj)
 		return -1;
 
 	idr_entry = (struct xio_idr_entry *)
 			kcalloc(1, sizeof(*idr_entry), GFP_KERNEL);
-	if (idr_entry == NULL)
+	if (!idr_entry)
 		return -1;
+
+	pname = kstrdup(obj_name, GFP_KERNEL);
 
 	spin_lock(&idr->lock);
 	key.id = uint64_from_ptr(uobj);
 	HT_LOOKUP(&idr->cache, &key, idr1_entry, idr_ht_entry);
-	if (idr1_entry != NULL)
+	if (idr1_entry)
 		goto exit;
 
 	idr_entry->key = uobj;
-	idr_entry->name = kstrdup(obj_name, GFP_KERNEL);
+	idr_entry->name = pname;
 	HT_INSERT(&idr->cache, &key, idr_entry, idr_ht_entry);
 	retval = 0;
 exit:
 	spin_unlock(&idr->lock);
-	if (retval)
+	if (retval) {
+		kfree(pname);
 		kfree(idr_entry);
-
+	}
 	return retval;
 }
 
@@ -145,7 +151,7 @@ struct xio_idr *xio_idr_create(void)
 	struct xio_idr *idr;
 
 	idr = (struct xio_idr *)kcalloc(1, sizeof(*idr), GFP_KERNEL);
-	if (idr == NULL)
+	if (!idr)
 		return NULL;
 
 	HT_INIT(&idr->cache, xio_int64_hash, xio_int64_cmp, xio_int64_cp);
@@ -160,12 +166,14 @@ struct xio_idr *xio_idr_create(void)
 void xio_idr_destroy(struct xio_idr *idr)
 {
 	struct xio_idr_entry *idr_entry = NULL;
+
 	if (!idr)
 		return;
 
 	HT_FOREACH_SAFE(idr_entry, &idr->cache, idr_ht_entry) {
 		HT_REMOVE(&idr->cache, idr_entry, xio_idr_entry, idr_ht_entry);
-		ERROR_LOG("user object leaked: %p, type:struct %s\n", idr_entry->key, idr_entry->name);
+		ERROR_LOG("user object leaked: %p, type:struct %s\n",
+			  idr_entry->key, idr_entry->name);
 		kfree(idr_entry->name);
 		kfree(idr_entry);
 	}

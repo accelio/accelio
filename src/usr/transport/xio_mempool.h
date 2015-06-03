@@ -49,6 +49,5 @@
  */
 struct xio_mempool *xio_mempool_create_prv(int nodeid, uint32_t flags);
 
-
 #endif
 

@@ -74,6 +74,7 @@ unsigned long long timespec_to_usecs(struct timespec *time_spec)
 static inline unsigned long long get_cpu_usecs(void)
 {
 	struct timespec ts = current_kernel_time();
+
 	return  timespec_to_usecs(&ts);
 }
 

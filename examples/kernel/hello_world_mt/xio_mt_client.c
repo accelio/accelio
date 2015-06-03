@@ -267,6 +267,7 @@ static int xio_client_thread(void *data)
 	struct thread_data		*tdata;
 	struct session_data		*sdata;
 	struct xio_connection		*connection;
+	struct xio_context_params	ctx_params;
 	struct xio_connection_params	cparams;
 	struct xio_context		*ctx;
 	int				cpu;
@@ -289,6 +290,7 @@ static int xio_client_thread(void *data)
 		char msg[128];
 		struct xio_msg *req = &tdata->req[i];
 		struct xio_vmsg *out = &req->out;
+
 		sprintf(msg,
 			"hello world header request [cpu(%d) port(%d)-req(%d)]",
 			cpu, tdata->port, i);
@@ -304,7 +306,11 @@ static int xio_client_thread(void *data)
 	}
 
 	/* create thread context for the client */
-	ctx = xio_context_create(XIO_LOOP_GIVEN_THREAD, NULL, current, 0, cpu);
+	memset(&ctx_params, 0, sizeof(ctx_params));
+	ctx_params.flags = XIO_LOOP_GIVEN_THREAD;
+	ctx_params.worker = current;
+
+	ctx = xio_context_create(&ctx_params, 0, -1);
 	if (!ctx) {
 		pr_err("context open failed\n");
 		goto cleanup1;
@@ -382,7 +388,6 @@ static void free_tdata(struct session_data *sdata)
 	}
 }
 
-
 static int init_threads(struct session_data *sdata)
 {
 	char name[32];
@@ -392,6 +397,7 @@ static int init_threads(struct session_data *sdata)
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		struct thread_data *tdata;
+
 		cpu = (i + 1)  % online;
 		sdata->on_cpu[i] = cpu;
 		tdata = vzalloc_node(sizeof(*tdata) * QUEUE_DEPTH,
@@ -460,7 +466,7 @@ static int xio_client_main(void *data)
 
 	sdata = kzalloc(sizeof(*sdata), GFP_KERNEL);
 	if (!sdata) {
-		pr_err("session_data allocation failed\n");
+		/*pr_err("session_data allocation failed\n");*/
 		ret = -ENOMEM;
 		goto cleanup0;
 	}
@@ -631,7 +637,6 @@ static struct attribute_group default_attr_group = {
 };
 
 static struct kobject *sysfs_kobj;
-
 
 static void destroy_sysfs_files(void)
 {

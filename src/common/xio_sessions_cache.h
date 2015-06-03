@@ -38,7 +38,6 @@
 #ifndef XIO_SESSIONS_CACHE_H
 #define XIO_SESSIONS_CACHE_H
 
-
 /*---------------------------------------------------------------------------*/
 /* forward declarations			                                     */
 /*---------------------------------------------------------------------------*/
@@ -54,7 +53,6 @@ int xio_sessions_cache_add(struct xio_session *session, uint32_t *session_id);
 int xio_sessions_cache_remove(uint32_t session_id);
 
 struct xio_session *xio_sessions_cache_lookup(uint32_t session_id);
-
 
 #endif /*XIO_SESSIONS_CACHE_H */
 

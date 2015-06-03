@@ -3,14 +3,17 @@
 libtoolize  --force --copy --quiet  \
 && aclocal -I m4 \
 && automake --gnu --add-missing \
-&& autoconf 
+&& autoconf
 
 subdirlist=("src/kernel/xio"				\
-	    "src/kernel/rdma"				\
-	    "src/kernel/tcp"				\
+	    "src/kernel/transport/rdma"			\
+	    "src/kernel/transport/tcp"			\
 	    "examples/kernel/hello_world"		\
 	    "examples/kernel/hello_world_mt"		\
-	    "tests/kernel/hello_test")
+	    "tests/kernel/hello_test"                   \
+	    "tests/kernel/hello_test_lat"               \
+	    "tests/kernel/hello_test_ow"               \
+	    "tests/kernel/direct_rdma_test")
 
 for subdir in ${!subdirlist[*]} ; do
 	#printf "	%s\n" "${subdirlist[$subdir]}"
@@ -20,4 +23,3 @@ for subdir in ${!subdirlist[*]} ; do
 		popd > /dev/null
 	fi
 done
-

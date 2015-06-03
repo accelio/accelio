@@ -76,7 +76,7 @@ struct xio_test_config {
 /*---------------------------------------------------------------------------*/
 static struct msg_pool		*pool;
 static struct xio_context	*ctx;
-static struct xio_buf		*xbuf;
+static struct xio_reg_mem	reg_mem;
 static struct msg_params	msg_params;
 
 
@@ -173,7 +173,7 @@ static int on_request(struct xio_session *session, struct xio_msg *req,
 	rsp->request		= req;
 
 	/* fill response */
-	msg_write(&msg_params, rsp,
+	msg_build_out_sgl(&msg_params, rsp,
 		  test_config.hdr_len,
 		  1, test_config.data_len);
 
@@ -235,11 +235,11 @@ int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
 
 	vmsg_sglist_set_nents(&msg->in, 1);
-	if (xbuf == NULL)
-		xbuf = xio_alloc(XIO_READ_BUF_LEN);
+	if (reg_mem.addr == NULL)
+		xio_mem_alloc(XIO_READ_BUF_LEN, &reg_mem);
 
-	sglist[0].iov_base = xbuf->addr;
-	sglist[0].mr =	xbuf->mr;
+	sglist[0].iov_base = reg_mem.addr;
+	sglist[0].mr =	reg_mem.mr;
 	sglist[0].iov_len = XIO_READ_BUF_LEN;
 
 	return 0;
@@ -408,7 +408,7 @@ int main(int argc, char *argv[])
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
-	xbuf = NULL;
+	memset(&reg_mem, 0, sizeof reg_mem);
 	print_test_config(&test_config);
 
 	set_cpu_affinity(test_config.cpu);
@@ -452,10 +452,8 @@ int main(int argc, char *argv[])
 		msg_pool_free(pool);
 	pool = NULL;
 
-	if (xbuf) {
-		xio_free(&xbuf);
-		xbuf = NULL;
-	}
+	if (reg_mem.addr)
+		xio_mem_free(&reg_mem);
 
 	xio_context_destroy(ctx);
 

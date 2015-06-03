@@ -38,14 +38,12 @@
 #ifndef XIO_OBSERVER_H
 #define XIO_OBSERVER_H
 
-
 /*---------------------------------------------------------------------------*/
 /* typedefs								     */
 /*---------------------------------------------------------------------------*/
 typedef int (*notify_fn_t)(void *observer_impl,
 			   void *observable_impl,
 			   int event, void *event_data);
-
 
 /*---------------------------------------------------------------------------*/
 /* xio_observer								     */
@@ -77,6 +75,7 @@ struct xio_observable {
 	struct list_head	observers_list;
 	struct xio_observer_node *observer_node; /* for one observer */
 };
+
 #define XIO_OBSERVABLE_INIT(name, obj) \
 	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); \
 	  (name)->observer_node = NULL; }
@@ -121,7 +120,6 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 /*---------------------------------------------------------------------------*/
 void xio_observable_unreg_all_observers(struct xio_observable *observable);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_observable_is_empty						     */
 /*---------------------------------------------------------------------------*/
@@ -129,6 +127,5 @@ static inline int xio_observable_is_empty(struct xio_observable *observable)
 {
 	return list_empty(&observable->observers_list);
 }
-
 
 #endif /* XIO_OBSERVER_H */

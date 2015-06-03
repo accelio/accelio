@@ -38,6 +38,10 @@
 #ifndef XIO_COMMON_H
 #define XIO_COMMON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -79,19 +83,18 @@ void xio_set_error(int errnum);
 enum xio_msg_flags_ex {
 	/* [below 1<<10 - reserved for application usage] */
 	/* [above 1<<10 - reserved for library usage] */
-	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = (1 << 10), /**< immediate receipt  */
-	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = (1 << 11), /**< read receipt first */
-	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = (1 << 12), /**< read receipt last  */
+	XIO_MSG_FLAG_EX_IMM_READ_RECEIPT  = BIT(10), /**< immediate receipt  */
+	XIO_MSG_FLAG_EX_RECEIPT_FIRST	  = BIT(11), /**< read receipt first */
+	XIO_MSG_FLAG_EX_RECEIPT_LAST	  = BIT(12), /**< read receipt last  */
 };
 
 #define xio_clear_ex_flags(flag) \
-	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
-			XIO_MSG_FLAG_EX_RECEIPT_LAST | \
+	((*(flag)) &= ~(XIO_MSG_FLAG_EX_RECEIPT_FIRST | \
+			XIO_MSG_FLAG_EX_RECEIPT_LAST  | \
 			XIO_MSG_FLAG_EX_IMM_READ_RECEIPT))
 
-
 #define xio_app_receipt_request(rq) \
-	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST| \
+	((rq)->flags & (XIO_MSG_FLAG_EX_RECEIPT_FIRST | \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST))
 
 #define xio_app_receipt_first_request(rq) \
@@ -102,20 +105,19 @@ enum xio_msg_flags_ex {
 	(((rq)->flags & XIO_MSG_FLAG_EX_RECEIPT_LAST) == \
 			XIO_MSG_FLAG_EX_RECEIPT_LAST)
 
-
 /**
  *  TLV types
  */
 #define XIO_NOP				1
 
-#define XIO_CREDIT			(1 << 6)	/*  0x40  */
-#define XIO_NEXUS_SETUP			(1 << 7)	/*  0x80  */
-#define XIO_SESSION_SETUP		(1 << 8)	/*  0x100 */
-#define XIO_CONNECTION_HELLO		(1 << 9)	/*  0x200 */
-#define XIO_FIN				(1 << 10)	/*  0x400 */
-#define XIO_CANCEL			(1 << 11)	/*  0x800 */
-#define XIO_ACK				(1 << 12)
-
+#define XIO_CREDIT			BIT(6)	/*  0x40  */
+#define XIO_NEXUS_SETUP			BIT(7)	/*  0x80  */
+#define XIO_SESSION_SETUP		BIT(8)	/*  0x100 */
+#define XIO_CONNECTION_HELLO		BIT(9)	/*  0x200 */
+#define XIO_FIN				BIT(10)	/*  0x400 */
+#define XIO_CANCEL			BIT(11)	/*  0x800 */
+#define XIO_ACK				BIT(12)	/*  0x1000 */
+#define XIO_RDMA_READ			BIT(13)
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
@@ -133,11 +135,12 @@ enum xio_msg_flags_ex {
 #define XIO_CONNECTION_HELLO_REQ (XIO_CONNECTION_HELLO | XIO_REQUEST)
 #define XIO_CONNECTION_HELLO_RSP (XIO_CONNECTION_HELLO | XIO_RESPONSE)
 #define XIO_ACK_REQ		(XIO_ACK | XIO_REQUEST)
-
+#define XIO_RDMA_READ_ACK	(XIO_RDMA_READ | XIO_RESPONSE)
 
 #define IS_REQUEST(type)		((type) & XIO_REQUEST)
 #define IS_RESPONSE(type)		((type) & XIO_RESPONSE)
 #define IS_NOP(type)			((type) & XIO_NOP)
+#define IS_RDMA_RD_ACK(type)		((type) & XIO_RDMA_READ)
 #define IS_MESSAGE(type)		((type) & XIO_MESSAGE)
 #define IS_SESSION_SETUP(type)		((type) & XIO_SESSION_SETUP)
 #define IS_NEXUS_SETUP(type)		((type) & XIO_NEXUS_SETUP)
@@ -147,7 +150,6 @@ enum xio_msg_flags_ex {
 #define IS_CONNECTION_HELLO(type)	((type) & XIO_CONNECTION_HELLO)
 #define	IS_APPLICATION_MSG(type) \
 		  (IS_MESSAGE(type) || IS_ONE_WAY(type))
-
 
 /**
  *  TLV magic
@@ -171,6 +173,10 @@ enum xio_msg_flags_ex {
 
 #define test_flag(flag, addr)   (((*addr) & (flag)) == (flag))
 
+/* header flags */
+#define XIO_HEADER_FLAG_NONE			(0)
+#define XIO_HEADER_FLAG_PEER_WRITE_RSP		BIT(0)
+
 /*---------------------------------------------------------------------------*/
 /* structures								     */
 /*---------------------------------------------------------------------------*/
@@ -179,19 +185,15 @@ struct xio_options {
 	int			max_out_iovsz;
 	int			reconnect;
 	/* transport options needed globally */
-	int			max_inline_hdr;
-	int			max_inline_data;
+	int			max_inline_xio_hdr;
+	int			max_inline_xio_data;
 	int			enable_flow_control;
 	int			snd_queue_depth_msgs;
 	int			rcv_queue_depth_msgs;
 	uint64_t		snd_queue_depth_bytes;
 	uint64_t		rcv_queue_depth_bytes;
-};
-
-struct xio_sge {
-	uint64_t		addr;		/* virtual address */
-	uint32_t		length;		/* length	   */
-	uint32_t		stag;		/* rkey		   */
+	int			xfer_buf_align;
+	int			inline_xio_data_align;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -203,6 +205,7 @@ PACKED_MEMORY(struct xio_tlv {
 	uint64_t		len;
 });
 
+#ifdef XIO_SESSION_DEBUG
 PACKED_MEMORY(struct xio_session_hdr {
 	uint32_t		dest_session_id;
 	uint32_t		flags;
@@ -213,11 +216,22 @@ PACKED_MEMORY(struct xio_session_hdr {
 	uint16_t		pad[3];
 	uint32_t		receipt_result;
 	uint64_t		credits_bytes;
-#ifdef XIO_SESSION_DEBUG
 	uint64_t		connection;
 	uint64_t		session;
-#endif
 });
+#else
+PACKED_MEMORY(struct xio_session_hdr {
+	uint32_t		dest_session_id;
+	uint32_t		flags;
+	uint64_t		serial_num;
+	uint16_t		sn;		/* serial number	*/
+	uint16_t		ack_sn;		/* ack serial number	*/
+	uint16_t		credits_msgs;
+	uint16_t		pad[3];
+	uint32_t		receipt_result;
+	uint64_t		credits_bytes;
+});
+#endif
 
 /* setup flags */
 #define XIO_CID			1
@@ -229,7 +243,6 @@ PACKED_MEMORY(struct xio_nexus_setup_req {
 	uint16_t		flags;
 	uint32_t		cid;
 });
-
 
 PACKED_MEMORY(struct xio_nexus_setup_rsp {
 	uint32_t		cid;
@@ -257,6 +270,8 @@ enum xio_wc_op {
 	XIO_WC_OP_UNKNOWN,
 	XIO_WC_OP_RECV,
 	XIO_WC_OP_SEND,
+	XIO_WC_OP_RDMA_READ,
+	XIO_WC_OP_RDMA_WRITE,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -282,7 +297,7 @@ int		xio_uri_get_portal(const char *uri, char *portal,
 int		xio_uri_get_resource(const char *uri, char *resource,
 				     int resource_len);
 
-const char		*xio_uri_get_resource_ptr(const char *uri);
+const char	*xio_uri_get_resource_ptr(const char *uri);
 
 int		xio_uri_to_ss(const char *uri, struct sockaddr_storage *ss);
 
@@ -307,10 +322,15 @@ unsigned int	xio_get_nodeid(unsigned int cpu_id);
 
 void		xio_msg_dump(struct xio_msg *xio_msg);
 
+const char	*xio_proto_str(enum xio_proto proto);
+
 /*---------------------------------------------------------------------------*/
 /* xio_options.c							     */
 /*---------------------------------------------------------------------------*/
 struct xio_options *xio_get_options(void);
 
-#endif /*XIO_COMMON_H */
+#ifdef __cplusplus
+}
+#endif
 
+#endif /*XIO_COMMON_H */

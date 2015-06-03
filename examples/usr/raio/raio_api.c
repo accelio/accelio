@@ -63,6 +63,7 @@
 #define USECS_IN_SEC		1000000
 #define NSECS_IN_USEC		1000
 #define NSECS_IN_SEC		1000000000
+#define POLLING_TIME_USEC	70
 
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
@@ -446,7 +447,7 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 
 
 	/* create thread context for the client */
-	session_data->ctx = xio_context_create(NULL, 0, -1);
+	session_data->ctx = xio_context_create(NULL, POLLING_TIME_USEC, -1);
 
 	/* create url to connect to */
 	sprintf(url, "%s://%s:%d",
@@ -840,9 +841,9 @@ __RAIO_PUBLIC int raio_submit(raio_context_t ctx,
 	return nr;
 }
 
-/*
+
 #define POLL_COMPLETIONS 1
-*/
+
 /*---------------------------------------------------------------------------*/
 /* raio_getevents							     */
 /*---------------------------------------------------------------------------*/
@@ -854,7 +855,7 @@ __RAIO_PUBLIC int raio_getevents(raio_context_t ctx, long min_nr, long nr,
 	struct raio_io_u		*io_u;
 	struct timespec			start;
 	int				i, r;
-	int				have_timeout = 0;
+	int				have_timeout = 0, timeout;
 	int				actual_nr;
 
 	session_data = ctx->session_data;
@@ -883,9 +884,16 @@ restart:
 	    (ctx->io_u_completed_nr == 0))  {
 #ifdef POLL_COMPLETIONS
 		session_data->min_nr = 0;
-		xio_poll_completions(session_data->conn,
-				     (min_nr ? min_nr : 1),
-				     nr , NULL);
+		timeout = session_data->npending > 1 ? 10 : 0;
+		for (i = 0; i < 15 || !ctx->io_u_completed_nr; i++) {
+			xio_context_poll_completions(session_data->ctx, timeout);
+			if (ctx->io_u_completed_nr == session_data->npending)
+				break;
+		}
+		if (!ctx->io_u_completed_nr)
+			xio_context_poll_wait(session_data->ctx, 0);
+		if (session_data->disconnected)
+			return -ECONNRESET;
 #else
 		session_data->min_nr  = (min_nr ? min_nr : 1);
 		xio_context_run_loop(session_data->ctx, XIO_INFINITE);
@@ -963,12 +971,15 @@ __RAIO_PUBLIC int raio_release(raio_context_t ctx, long nr,
 __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 			      size_t len, raio_mr_t *mr)
 {
+	struct xio_reg_mem reg_mem;
+
 	*mr = (raio_mr_t)malloc(sizeof(struct raio_mr));
 	if (*mr == NULL) {
 		printf("libraio: malloc failed. %m\n");
 		return -1;
 	}
-	(*mr)->omr = xio_reg_mr(buf, len);
+	xio_mem_register(buf, len, &reg_mem);
+	(*mr)->omr = reg_mem.mr;
 	if ((*mr)->omr == NULL) {
 		printf("libraio: failed to register mr. %m\n");
 		free(*mr);
@@ -983,8 +994,11 @@ __RAIO_PUBLIC int raio_reg_mr(raio_context_t ctx, void *buf,
 /*---------------------------------------------------------------------------*/
 __RAIO_PUBLIC int raio_dereg_mr(raio_context_t ctx, raio_mr_t mr)
 {
-	int retval = xio_dereg_mr(&mr->omr);
+	struct xio_reg_mem	reg_mem;
+	int			retval;
 
+	reg_mem.mr = mr->omr;
+	retval = xio_mem_dereg(&reg_mem);
 	if (retval == -1)
 		printf("libraio: failed to deregister mr. %m\n");
 	free(mr);

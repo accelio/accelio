@@ -38,6 +38,8 @@
 #ifndef MSG_API_H
 #define MSG_API_H
 
+#include <linux/version.h>
+
 #include "libxio.h"
 
 struct msg_params {
@@ -62,7 +64,6 @@ struct msg_pool {
 	uint32_t				free;
 };
 
-
 /*---------------------------------------------------------------------------*/
 /* msg_api_init								     */
 /*---------------------------------------------------------------------------*/
@@ -82,12 +83,12 @@ struct xio_msg *msg_alloc(size_t out_hdrlen, size_t out_datalen,
 			  size_t in_hdrlen, size_t in_datalen);
 
 /*---------------------------------------------------------------------------*/
-/* msg_write								     */
+/* msg_build_out_sgl							     */
 /*---------------------------------------------------------------------------*/
-void msg_write(struct msg_params *msg_params,
-	       struct xio_msg *msg,
-	       size_t hdrlen,
-	       size_t data_iovlen, size_t datalen);
+void msg_build_out_sgl(struct msg_params *msg_params,
+		       struct xio_msg *msg,
+		       size_t hdrlen,
+		       size_t data_iovlen, size_t datalen);
 
 /*---------------------------------------------------------------------------*/
 /* msg_pool_alloc							     */
@@ -99,19 +100,15 @@ struct msg_pool *msg_pool_alloc(int max, int in_iovsz, int out_iovsz);
 /*---------------------------------------------------------------------------*/
 struct xio_msg *msg_pool_get(struct msg_pool *pool);
 
-
 /*---------------------------------------------------------------------------*/
 /* msg_pool_put								     */
 /*---------------------------------------------------------------------------*/
 void msg_pool_put(struct msg_pool *pool, struct xio_msg *msg);
 
-
 /*---------------------------------------------------------------------------*/
 /* msg_pool_free							     */
 /*---------------------------------------------------------------------------*/
 void msg_pool_free(struct msg_pool *pool);
-
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
 /**

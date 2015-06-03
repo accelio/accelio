@@ -52,6 +52,7 @@
 #include "xio_task.h"
 #include "xio_rdma_utils.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_context.h"
 #include "xio_rdma_transport.h"
@@ -227,4 +228,20 @@ void xio_validate_ulimit_memlock(void)
 			 "setting is on unlimited (current is %ld)\n",
 			 mlock_limit.rlim_cur);
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_mr_lookup							     */
+/*---------------------------------------------------------------------------*/
+struct ibv_mr *xio_rdma_mr_lookup(const struct xio_mr *tmr,
+				  const struct xio_device *dev)
+{
+	struct xio_mr_elem *tmr_elem;
+	const struct list_head *dm_list = &tmr->dm_list;
+
+	list_for_each_entry(tmr_elem, dm_list, dm_list_entry) {
+		if (dev == tmr_elem->dev)
+			return tmr_elem->mr;
+	}
+	return NULL;
 }

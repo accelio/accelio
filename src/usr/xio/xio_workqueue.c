@@ -35,12 +35,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include <libxio.h>
 #include <xio_os.h>
+#include <xio_env_adv.h>
 
 #include "xio_log.h"
 #include "xio_common.h"
 #include "xio_observer.h"
 #include "xio_ev_data.h"
+#include "xio_objpool.h"
 #include "xio_workqueue.h"
 #include "xio_timers_list.h"
 #include "xio_context.h"
@@ -57,7 +60,8 @@ struct xio_workqueue {
 	struct xio_context		*ctx;
 	struct xio_timers_list		timers_list;
 	int				timer_fd;
-	int				pipe_fd[2];
+	socket_t			pipe_fd[2];
+
 	volatile uint32_t		flags;
 	uint64_t			deleted_works[MAX_DELETED_WORKS];
 	uint32_t			deleted_works_nr;
@@ -91,7 +95,7 @@ static void set_normalized_timespec(struct timespec *ts,
 		--sec;
 	}
 	ts->tv_sec = sec;
-	ts->tv_nsec = nsec;
+	ts->tv_nsec = (long)nsec;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -102,7 +106,6 @@ static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 	struct itimerspec new_t = { {0, 0}, {0, 0} };
 	int		  err;
 	int64_t		  ns_to_expire;
-
 
 	if (work_queue->flags & XIO_WORKQUEUE_IN_POLL)
 		return 0;
@@ -122,14 +125,12 @@ static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 		set_normalized_timespec(&new_t.it_value,
 					0, ns_to_expire);
 	}
-
 	/* rearm the timer */
-	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
+	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
 	if (err < 0) {
 		ERROR_LOG("timerfd_settime failed. %m\n");
 		return -1;
 	}
-
 	work_queue->flags |= XIO_WORKQUEUE_TIMER_ARMED;
 
 	return 0;
@@ -146,7 +147,7 @@ static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 	if (!(work_queue->flags & XIO_WORKQUEUE_TIMER_ARMED))
 		return;
 
-	err = timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
+	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
 	if (err < 0)
 		ERROR_LOG("timerfd_settime failed. %m\n");
 
@@ -163,9 +164,9 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 	ssize_t			s;
 
 	/* consume the timer data in fd */
-	s = read(work_queue->timer_fd, &exp, sizeof(exp));
+	s = xio_read(work_queue->timer_fd, &exp, sizeof(exp));
 	if (s < 0) {
-		if (errno != EAGAIN)
+		if (xio_get_last_socket_error() != XIO_EAGAIN)
 			ERROR_LOG("failed to read from timerfd, %m\n");
 		return;
 	}
@@ -173,7 +174,6 @@ static void xio_delayed_action_handler(int fd, int events, void *user_context)
 		ERROR_LOG("failed to read from timerfd, %m\n");
 		return;
 	}
-
 
 	work_queue->flags |= XIO_WORKQUEUE_IN_POLL;
 	xio_timers_list_expire(&work_queue->timers_list);
@@ -194,12 +194,11 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 	xio_work_handle_t	*work;
 	unsigned int		i, found = 0;
 
-
 	/* drain the pipe data */
 	while (1) {
-		s = read(work_queue->pipe_fd[0], &exp, sizeof(exp));
+		s = xio_read(work_queue->pipe_fd[0], &exp, sizeof(exp));
 		if (s < 0) {
-			if (errno != EAGAIN)
+			if (xio_get_last_socket_error() != XIO_EAGAIN)
 				ERROR_LOG("failed to read from pipe, %m\n");
 			work_queue->deleted_works_nr = 0;
 			return;
@@ -226,10 +225,14 @@ static void xio_work_action_handler(int fd, int events, void *user_context)
 			continue;
 		}
 
-		if (work->flags & XIO_WORK_PENDING) {
-			work->flags	&= ~XIO_WORK_PENDING;
+		if (test_bits(XIO_WORK_PENDING, &work->flags)) {
+			clr_bits(XIO_WORK_PENDING, &work->flags);
 
+			set_bits(XIO_WORK_IN_HANDLER, &work->flags);
 			work->function(work->data);
+			clr_bits(XIO_WORK_IN_HANDLER, &work->flags);
+			if (work->destructor)
+				work->destructor(work->destructor_data);
 		}
 	}
 }
@@ -243,7 +246,7 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	int			retval;
 
 	work_queue = (struct xio_workqueue *)ucalloc(1, sizeof(*work_queue));
-	if (work_queue == NULL) {
+	if (!work_queue) {
 		ERROR_LOG("ucalloc failed. %m\n");
 		return NULL;
 	}
@@ -251,13 +254,14 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	xio_timers_list_init(&work_queue->timers_list);
 	work_queue->ctx = ctx;
 
-	work_queue->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	work_queue->timer_fd = xio_timerfd_create();
 	if (work_queue->timer_fd < 0) {
 		ERROR_LOG("timerfd_create failed. %m\n");
 		goto exit;
 	}
 
-	retval = pipe2(work_queue->pipe_fd, O_NONBLOCK);
+	retval = xio_pipe(work_queue->pipe_fd, 0);
+
 	if (retval < 0) {
 		ERROR_LOG("pipe failed. %m\n");
 		goto exit1;
@@ -290,10 +294,10 @@ struct xio_workqueue *xio_workqueue_create(struct xio_context *ctx)
 	return work_queue;
 
 exit2:
-	close(work_queue->pipe_fd[0]);
-	close(work_queue->pipe_fd[1]);
+	xio_closesocket(work_queue->pipe_fd[0]);
+	xio_closesocket(work_queue->pipe_fd[1]);
 exit1:
-	close(work_queue->timer_fd);
+	xio_closesocket(work_queue->timer_fd);
 exit:
 	ufree(work_queue);
 	return NULL;
@@ -322,9 +326,9 @@ int xio_workqueue_destroy(struct xio_workqueue *work_queue)
 
 	xio_timers_list_close(&work_queue->timers_list);
 
-	close(work_queue->pipe_fd[0]);
-	close(work_queue->pipe_fd[1]);
-	close(work_queue->timer_fd);
+	xio_closesocket(work_queue->pipe_fd[0]);
+	xio_closesocket(work_queue->pipe_fd[1]);
+	xio_closesocket(work_queue->timer_fd);
 	ufree(work_queue);
 
 	return retval;
@@ -426,12 +430,12 @@ int xio_workqueue_add_work(struct xio_workqueue *work_queue,
 	work->data	= data;
 	work->flags	|= XIO_WORK_PENDING;
 
-	s = write(work_queue->pipe_fd[1], &exp, sizeof(exp));
+	s = xio_write(work_queue->pipe_fd[1], &exp, sizeof(exp));
 	if (s < 0) {
 		ERROR_LOG("failed to write to pipe, %m\n");
 		return -1;
 	}
-	if (s != sizeof(uint64_t)) {
+	if (s != sizeof(exp)) {
 		ERROR_LOG("failed to write to pipe, %m\n");
 		return -1;
 	}
@@ -458,5 +462,28 @@ int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 		return 0;
 	}
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_set_work_destructor					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_set_work_destructor(struct xio_workqueue *work_queue,
+				      void *data,
+				      void (*destructor)(void *data),
+				      xio_work_handle_t *work)
+{
+	work->destructor	= destructor;
+	work->destructor_data	= data;
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_is_work_in_hanlder					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_is_work_in_handler(struct xio_workqueue *work_queue,
+				     xio_work_handle_t *work)
+{
+	return test_bits(XIO_WORK_IN_HANDLER, &work->flags);
 }
 

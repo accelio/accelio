@@ -68,7 +68,6 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
 int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
 				   xio_delayed_work_handle_t *work);
 
-
 /*---------------------------------------------------------------------------*/
 /* xio_workqueue_add_work						     */
 /*---------------------------------------------------------------------------*/
@@ -82,6 +81,20 @@ int xio_workqueue_add_work(struct xio_workqueue *work_queue,
 /*---------------------------------------------------------------------------*/
 int xio_workqueue_del_work(struct xio_workqueue *work_queue,
 			   xio_work_handle_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_set_work_destructor					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_set_work_destructor(struct xio_workqueue *work_queue,
+				     void *data,
+				     void (*destructor)(void *data),
+				     xio_work_handle_t *work);
+
+/*---------------------------------------------------------------------------*/
+/* xio_workqueue_is_work_in_handler					     */
+/*---------------------------------------------------------------------------*/
+int xio_workqueue_is_work_in_handler(struct xio_workqueue *work_queue,
+				     xio_work_handle_t *work);
 
 #endif /* XIO_WORKQUEUE_H */
 

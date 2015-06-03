@@ -12,4 +12,4 @@ fi
 server_ip=$1
 port=$2
 
-modprobe xio_client.ko ip=${server_ip} port=${port}
+modprobe xio_client_example ip=${server_ip} port=${port}
