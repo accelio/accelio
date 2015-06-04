@@ -2634,6 +2634,9 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 	connection->peer_credits_bytes = session->peer_rcv_queue_depth_bytes;
 	connection->credits_bytes = 0;
 
+	/* from now - no need to disable */
+	connection->disable_notify = 0;
+
 	/* delayed disconnect request should be done now */
 	if (connection->state == XIO_CONNECTION_STATE_INIT &&
 	    connection->disconnecting) {
@@ -2673,6 +2676,9 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 	/* delayed disconnect request should be done now */
 	DEBUG_LOG("recv hello request. session:%p, connection:%p\n",
 		  connection->session, connection);
+
+	/* from now - no need to disable */
+	connection->disable_notify = 0;
 
 	/* temporarily set the state to init to delay disconnection */
 	connection->state = XIO_CONNECTION_STATE_INIT;
