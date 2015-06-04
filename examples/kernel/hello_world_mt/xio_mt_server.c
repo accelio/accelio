@@ -781,10 +781,10 @@ ssize_t stop_store(struct kobject *kobj,
 }
 
 static struct kobj_attribute add_url_attribute =
-	__ATTR(add_url, 0666, add_url_show, add_url_store);
+	__ATTR(add_url, 0664, add_url_show, add_url_store);
 
 static struct kobj_attribute stop_attribute =
-	__ATTR(stop, 0666, stop_show, stop_store);
+	__ATTR(stop, 0664, stop_show, stop_store);
 
 static struct attribute *default_attrs[] = {
 	&add_url_attribute.attr,

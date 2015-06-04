@@ -185,14 +185,14 @@ static void process_response(struct xio_msg *rsp)
 		uint64_t delta = get_cpu_usecs() - start_time;
 		uint64_t pps = (cnt * USECS_IN_SEC) / delta;
 
-		double txbw = (1.0 * pps * txlen / ONE_MB);
-		double rxbw = (1.0 * pps * rxlen / ONE_MB);
-		double lat = (1000000.0 / pps);
+		uint64_t txbw = pps * txlen / ONE_MB;
+		uint64_t rxbw = pps * rxlen / ONE_MB;
+		uint64_t lat = 1000000 / pps;
 
-		pr_info("transactions per second: %llu, lat: %d us, " \
-			"bandwidth: TX %d MB/s, RX: %d MB/s, length: " \
+		pr_info("transactions per second: %llu, lat: %llu us, " \
+			"bandwidth: TX %llu MB/s, RX: %llu MB/s, length: " \
 			"TX: %zd B, RX: %zd B\n",
-		       pps, (int)lat, (int)txbw, (int)rxbw,
+		       pps, lat, txbw, rxbw,
 		       txlen, rxlen);
 		get_time(timeb, 40);
 

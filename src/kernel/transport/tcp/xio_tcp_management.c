@@ -147,7 +147,11 @@ void xio_tcp_restore_callbacks(struct xio_socket *socket)
 }
 
 void xio_tcp_set_callbacks(struct socket *sock,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+			   void (*sk_data_ready)(struct sock *sk),
+#else
 			   void (*sk_data_ready)(struct sock *sk, int bytes),
+#endif
 			   void	(*sk_state_change)(struct sock *sk),
 			   void	(*sk_write_space)(struct sock *sk),
 			   void *user_data)
@@ -715,9 +719,15 @@ void xio_tcp_consume_data_rx(void *xio_tcp_hndl)
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_data_ready_cb(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_data_ready_cb(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_transport *tcp_hndl;
 	int is_ctl = 0;
 
@@ -741,7 +751,11 @@ void xio_tcp_data_ready_cb(struct sock *sk, int bytes)
 
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 void xio_tcp_write_space_cb(struct sock *sk)
@@ -1063,13 +1077,8 @@ void xio_tcp_handle_pending_conn(void *user_data)
 		struct msghdr msg;
 		struct kvec vec;
 
-		msg.msg_control = NULL;
-		msg.msg_controllen = 0;
+		memset(&msg, 0, sizeof(msg));
 		msg.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT;
-		msg.msg_iov = NULL;
-		msg.msg_iovlen = 0;
-		msg.msg_name = NULL;
-		msg.msg_namelen = 0;
 		vec.iov_base = buf;
 		vec.iov_len = pending_conn->waiting_for_bytes;
 		retval = kernel_recvmsg(pending_conn->sock, &msg, &vec, 1,
@@ -1246,9 +1255,15 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_pending_conn_ev_handler					     */
 /*---------------------------------------------------------------------------*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_pending_conn_ev_handler(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_pending_conn_ev_handler(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_pending_conn *pending_conn;
 
 	read_lock(&sk->sk_callback_lock);
@@ -1271,7 +1286,11 @@ void xio_tcp_pending_conn_ev_handler(struct sock *sk, int bytes)
 
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1372,9 +1391,15 @@ void xio_tcp_accept_connections(void *user_data)
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_listener_ev_handler						     */
 /*---------------------------------------------------------------------------*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_listener_ev_handler(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_listener_ev_handler(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_transport *tcp_hndl;
 
 	DEBUG_LOG("listen data ready sk %p\n", sk);
@@ -1400,7 +1425,11 @@ void xio_tcp_listener_ev_handler(struct sock *sk, int bytes)
 	}
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1862,8 +1891,8 @@ static void xio_tcp_rxd_init(struct xio_tcp_work_req *rxd,
 	rxd->msg.msg_flags = MSG_DONTWAIT;
 	rxd->msg.msg_name = NULL;
 	rxd->msg.msg_namelen = 0;
-	rxd->msg.msg_iov = NULL;
-	rxd->msg.msg_iovlen = 0;
+	MSGHDR_IOV(&rxd->msg) = NULL;
+	MSGHDR_IOVLEN(&rxd->msg) = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1885,8 +1914,8 @@ static void xio_tcp_txd_init(struct xio_tcp_work_req *txd,
 	txd->msg.msg_flags = MSG_DONTWAIT | MSG_NOSIGNAL;
 	txd->msg.msg_name = NULL;
 	txd->msg.msg_namelen = 0;
-	txd->msg.msg_iov = NULL;
-	txd->msg.msg_iovlen = 0;
+	MSGHDR_IOV(&txd->msg) = NULL;
+	MSGHDR_IOVLEN(&txd->msg) = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2052,7 +2081,7 @@ static int xio_tcp_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 
 	XIO_TO_TCP_TASK(task, tcp_task);
-	
+
 	/* Phantom tasks have no buffer */
 	if (tcp_task->buf) {
 		if (tcp_slab->count)
