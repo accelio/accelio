@@ -1108,6 +1108,11 @@ enum xio_optname {
 	XIO_OPTNAME_LOG_LEVEL,		  /**< set/get logging level          */
 	XIO_OPTNAME_MEM_ALLOCATOR,        /**< set customed allocators hooks  */
 
+	/**< enables/disables connection's keep alive. type: int	      */
+	XIO_OPTNAME_ENABLE_KEEPALIVE,
+	/**< configure keep alive variables. type: struct xio_option_keepalive*/
+	XIO_OPTNAME_CONFIG_KEEPALIVE,
+
 	/* XIO_OPTLEVEL_ACCELIO/RDMA/TCP */
 	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
 	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
@@ -1254,6 +1259,26 @@ struct xio_mem_allocator {
 	 *  @return pointer to block or NULL if allocate fails
 	 */
 	void   (*numa_free)(void *ptr, void *user_context);
+};
+
+/**
+ *  @struct xio_options_keepalive
+ *  @brief user provided values for connection's keepalive
+ * Use xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_CONFIG_KEEPALIVE,
+ *		   &ka, sizeof(ka)))
+ */
+struct xio_options_keepalive {
+	/**< the number of unacknowledged probes to send before considering  */
+	/**< the connection dead and notifying the application layer	     */
+	int	probes;
+
+	/**<  the heartbeat interval in seconds between two initial	     */
+	/**<  keepalive probes.						     */
+	int	time;
+
+	/**< the interval in seconds between subsequential keepalive probes, */
+	/**< regardless of what the connection has exchanged in the meantime */
+	int	intvl;
 };
 
 #define XIO_MAX_SLABS_NR  6

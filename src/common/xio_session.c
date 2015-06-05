@@ -1139,6 +1139,12 @@ int xio_on_new_message(struct xio_session *s,
 		retval = xio_on_connection_hello_rsp_recv(connection, task);
 		xmit = 1;
 		break;
+	case XIO_CONNECTION_KA_REQ:
+		retval = xio_on_connection_ka_req_recv(connection, task);
+		break;
+	case XIO_CONNECTION_KA_RSP:
+		retval = xio_on_connection_ka_rsp_recv(connection, task);
+		break;
 	default:
 		retval = -1;
 		break;
@@ -1203,6 +1209,13 @@ int xio_on_send_completion(struct xio_session *session,
 		retval = xio_on_connection_hello_rsp_send_comp(connection,
 							       task);
 		xmit = 1;
+		break;
+	case XIO_CONNECTION_KA_REQ:
+		retval = 0;
+		break;
+	case XIO_CONNECTION_KA_RSP:
+		retval = xio_on_connection_ka_rsp_send_comp(connection,
+							    task);
 		break;
 	default:
 		break;
@@ -1503,7 +1516,7 @@ void xio_session_post_destroy(void *_session)
 		xio_ctx_del_work(session->teardown_work_ctx,
 				 &session->teardown_work);
 	}
-		
+
 	if (!list_empty(&session->connections_list)) {
 		xio_set_error(EBUSY);
 		ERROR_LOG("xio_session_destroy failed: " \

@@ -1356,6 +1356,9 @@ static void xio_connection_post_close(void *_connection)
 	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->fin_timeout_work);
 
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->ka.timer);
+
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
 	xio_ctx_del_work(connection->ctx, &connection->teardown_work);
@@ -2142,7 +2145,7 @@ int xio_connection_destroy(struct xio_connection *connection)
 	found = xio_idr_lookup_uobj(usr_idr, connection);
 	if (found) {
 		if (!list_empty(&connection->io_tasks_list))
-			ERROR_LOG("tasks still pending.connection:%p\n",
+			ERROR_LOG("tasks still pending. connection:%p\n",
 				  connection);
 		xio_idr_remove_uobj(usr_idr, connection);
 	} else {
@@ -2186,6 +2189,8 @@ int xio_connection_destroy(struct xio_connection *connection)
 				 &connection->fin_delayed_work);
 	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->fin_timeout_work);
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->ka.timer);
 
 	kref_put(&connection->kref, xio_connection_post_destroy);
 
@@ -2657,6 +2662,9 @@ int xio_on_connection_hello_rsp_recv(struct xio_connection *connection,
 		xio_connection_set_state(
 				connection,
 				XIO_CONNECTION_STATE_ONLINE);
+
+		xio_connection_keepalive_start(connection);
+
 		xio_ctx_add_work(
 				connection->ctx,
 				connection,
@@ -2699,6 +2707,8 @@ int xio_on_connection_hello_req_recv(struct xio_connection *connection,
 
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
+
+		xio_connection_keepalive_start(connection);
 	}
 	xio_connection_send_hello_rsp(connection, task);
 
@@ -2841,3 +2851,195 @@ int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
 	return -1;
 }
 EXPORT_SYMBOL(xio_connection_ioctl);
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_send_ka_req						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_send_ka_req(struct xio_connection *connection)
+{
+	struct xio_msg *msg;
+	int		retval;
+
+	DEBUG_LOG("send keepalive request. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
+
+	msg->type		= (enum xio_msg_type)XIO_CONNECTION_KA_REQ;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
+
+	/* we don't want to send all queued messages yet - send directly */
+	retval = xio_connection_send(connection, msg);
+	if (retval == -EAGAIN)
+		retval = 0;
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_send_ka_rsp						     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_send_ka_rsp(struct xio_connection *connection,
+			       struct xio_task *task)
+{
+	struct xio_msg	*msg;
+	int		retval;
+
+	DEBUG_LOG("send keepalive response. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
+
+	msg->type		= (enum xio_msg_type)XIO_CONNECTION_KA_RSP;
+	msg->request		= &task->imsg;
+	msg->in.header.iov_len	= 0;
+	msg->out.header.iov_len	= 0;
+	msg->in.data_tbl.nents	= 0;
+	msg->out.data_tbl.nents	= 0;
+
+	/* we don't want to send all queued messages yet - send directly */
+	retval = xio_connection_send(connection, msg);
+	if (retval == -EAGAIN)
+		retval = 0;
+
+	return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_ka_rsp_recv			                     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_ka_rsp_recv(struct xio_connection *connection,
+				  struct xio_task *task)
+{
+	int retval;
+
+	DEBUG_LOG("recv keepalive response. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->ka.timer);
+
+	connection->ka.probes = 0;
+
+	retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				1000 * g_options.ka.time, connection,
+				xio_connection_keepalive_start,
+				&connection->ka.timer);
+	if (retval != 0) {
+		ERROR_LOG("periodic keepalive failed - abort\n");
+		return -1;
+	}
+
+	xio_context_msg_pool_put(task->sender_task->omsg);
+	/* recycle the task */
+	xio_tasks_pool_put(task->sender_task);
+	task->sender_task = NULL;
+	xio_tasks_pool_put(task);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_ka_req_recv			                     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_ka_req_recv(struct xio_connection *connection,
+				  struct xio_task *task)
+{
+	/* delayed disconnect request should be done now */
+	DEBUG_LOG("recv keepalive request. session:%p, connection:%p\n",
+		  connection->session, connection);
+
+	xio_connection_send_ka_rsp(connection, task);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_connection_ka_rsp_send_comp					     */
+/*---------------------------------------------------------------------------*/
+int xio_on_connection_ka_rsp_send_comp(struct xio_connection *connection,
+					  struct xio_task *task)
+{
+	xio_context_msg_pool_put(task->omsg);
+	xio_tasks_pool_put(task);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_keepalive_intvl					     */
+/*---------------------------------------------------------------------------*/
+void xio_connection_keepalive_intvl(void *_connection)
+{
+	struct xio_connection *connection =
+					(struct xio_connection *)_connection;
+	int retval;
+
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->ka.timer);
+
+	if (++connection->ka.probes == g_options.ka.probes) {
+		ERROR_LOG("connection keepalive timeout. connection:%p probes:[%d]\n",
+			  connection, connection->ka.probes);
+		connection->ka.probes = 0;
+
+		retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				1000 * g_options.ka.time, connection,
+				xio_connection_keepalive_start,
+				&connection->ka.timer);
+		if (retval != 0) {
+			ERROR_LOG("periodic keepalive failed - abort\n");
+			return;
+		}
+		/* notify the application of connection error */
+		xio_session_notify_connection_error(
+				connection->session, connection, XIO_E_TIMEOUT);
+		return;
+	}
+	WARN_LOG("connection keepalive timeout. connection:%p probes:[%d]\n",
+		  connection, connection->ka.probes);
+
+	retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				1000 * g_options.ka.intvl, connection,
+				xio_connection_keepalive_intvl,
+				&connection->ka.timer);
+	if (retval != 0) {
+		ERROR_LOG("keepalive timeout failed - abort\n");
+		return;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_keepalive_start					     */
+/*---------------------------------------------------------------------------*/
+void xio_connection_keepalive_start(void *_connection)
+{
+	struct xio_connection *connection =
+					(struct xio_connection *)_connection;
+	int retval;
+
+	xio_ctx_del_delayed_work(connection->ctx,
+				 &connection->ka.timer);
+
+	if (!g_options.enable_keepalive)
+		return;
+
+	xio_connection_send_ka_req(connection);
+
+	retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				1000 * g_options.ka.intvl, connection,
+				xio_connection_keepalive_intvl,
+				&connection->ka.timer);
+	if (retval != 0) {
+		ERROR_LOG("keepalive timeout failed - abort\n");
+		return;
+	}
+}
+

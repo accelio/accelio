@@ -170,6 +170,8 @@ static int xio_on_new_message(struct xio_server *server,
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
 
+		xio_connection_keepalive_start(connection);
+
 		task->session		= session;
 		task->connection	= connection;
 	} else if (tlv_type == XIO_CONNECTION_HELLO_REQ) {
@@ -227,6 +229,8 @@ static int xio_on_new_message(struct xio_server *server,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		xio_connection_set_state(connection,
 					 XIO_CONNECTION_STATE_ONLINE);
+
+		xio_connection_keepalive_start(connection);
 
 		xio_idr_add_uobj(usr_idr, connection, "xio_connection");
 	} else {

@@ -733,6 +733,7 @@ int xio_on_client_nexus_established(struct xio_session *session,
 		} else {
 			xio_connection_set_state(connection,
 						 XIO_CONNECTION_STATE_ONLINE);
+			xio_connection_keepalive_start(connection);
 			xio_connection_xmit_msgs(connection);
 		}
 		break;
