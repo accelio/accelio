@@ -215,12 +215,12 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.rcv_queue_depth_msgs = *((int *)optval);
 		return 0;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
-		if (*((int32_t *)optval) < 1)
+		if (*((uint64_t *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
-		if (*((int32_t *)optval) < 1)
+		if (*((uint64_t *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
