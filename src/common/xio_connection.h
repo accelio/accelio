@@ -66,7 +66,7 @@ struct xio_transition {
 struct xio_ka {
 	xio_delayed_work_handle_t	timer;
 	int				probes;
-	int				pad;
+	int				req_sent;
 };
 
 struct xio_connection {

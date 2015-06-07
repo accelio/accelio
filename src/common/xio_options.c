@@ -59,7 +59,7 @@
 #define XIO_OPTVAL_DEF_ENABLE_KEEPALIVE			1
 #define XIO_OPTVAL_DEF_KEEPALIVE_PROBES			3
 #define XIO_OPTVAL_DEF_KEEPALIVE_INTVL			20
-#define XIO_OPTVAL_DEF_KEEPALIVE_TIME			180
+#define XIO_OPTVAL_DEF_KEEPALIVE_TIME			60
 
 /* xio options */
 struct xio_options			g_options = {

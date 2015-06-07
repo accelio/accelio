@@ -4700,7 +4700,7 @@ static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 /* xio_rdma_send_cancel							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
-				uint16_t tlv_type,
+				uint32_t tlv_type,
 				struct xio_rdma_cancel_hdr *cancel_hdr,
 				void *ulp_msg, size_t ulp_msg_sz)
 {

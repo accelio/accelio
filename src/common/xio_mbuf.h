@@ -218,7 +218,7 @@ static inline int xio_mbuf_read_next_tlv(struct xio_mbuf *mbuf)
 /*---------------------------------------------------------------------------*/
 /* xio_mbuf_write_tlv							     */
 /*---------------------------------------------------------------------------*/
-static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint16_t type,
+static inline int xio_mbuf_write_tlv(struct xio_mbuf *mbuf, uint32_t type,
 				     uint16_t len)
 {
 	int retval;

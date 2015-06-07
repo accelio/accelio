@@ -68,12 +68,11 @@ struct xio_task {
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
 	uint64_t		stag;		/* session unique tag */
+	uint32_t                tlv_type;
 	uint16_t                is_control;
-	uint16_t                tlv_type;
 	uint16_t                omsg_flags;
 	uint16_t                imsg_flags;
 	uint16_t                last_in_rxq;
-	uint16_t                pad;
 	uint32_t                ltid;           /* local task id        */
 	uint32_t                rtid;           /* remote task id       */
 	uint32_t                magic;

@@ -2801,7 +2801,7 @@ cleanup:
 /* xio_tcp_send_cancel							     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
-			       uint16_t tlv_type,
+			       uint32_t tlv_type,
 			       struct  xio_tcp_cancel_hdr *cancel_hdr,
 			       void *ulp_msg, size_t ulp_msg_sz)
 {
