@@ -3116,6 +3116,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 		}
 		rdma_task->req_in_num_sge = rdma_task->read_mem_desc.nents;
 	}
+	/*
 	if (rdma_task->req_in_num_sge > rdma_hndl->peer_max_out_iovsz) {
 		ERROR_LOG("request in iovlen %d is bigger then peer " \
 			  "max out iovlen %d\n",
@@ -3123,6 +3124,7 @@ static int xio_rdma_prep_req_in_data(struct xio_rdma_transport *rdma_hndl,
 			   rdma_hndl->peer_max_out_iovsz);
 		goto cleanup;
 	}
+	*/
 	return 0;
 
 cleanup:

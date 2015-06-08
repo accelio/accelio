@@ -2443,6 +2443,7 @@ static int xio_rdma_prep_req_in_data(
 		}
 		rdma_task->read_num_reg_mem = nents;
 	}
+	/*
 	if (rdma_task->read_num_reg_mem > rdma_hndl->peer_max_out_iovsz) {
 		ERROR_LOG("request in iovlen %d is bigger then peer " \
 			  "max out iovlen %d\n",
@@ -2450,6 +2451,7 @@ static int xio_rdma_prep_req_in_data(
 			  rdma_hndl->peer_max_out_iovsz);
 		goto cleanup;
 	}
+	*/
 
 	return 0;
 
