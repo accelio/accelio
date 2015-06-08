@@ -3461,6 +3461,11 @@ static void xio_rdma_set_pools_cls(
 /*---------------------------------------------------------------------------*/
 void xio_rdma_transport_constructor(void)
 {
+	/* this must be before calling setenv as libibverbs may crash
+	 * see libibverbs/src/device.c clone_env
+	 */
+	xio_device_list_check();
+
 	/* Mellanox OFED's User Manual */
 	setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
 	setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
@@ -3474,8 +3479,6 @@ void xio_rdma_transport_constructor(void)
 	*/
 	if (0)
 		xio_rdma_enable_fork_support();
-
-	xio_device_list_check();
 
 	spin_lock_init(&dev_list_lock);
 }
