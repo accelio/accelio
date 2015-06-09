@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
+/* Copyright (c) 2013 Mellanox Technologies®. All rights reserved.
  *
  * This software is available to you under a choice of one of two licenses.
  * You may choose to be licensed under the terms of the GNU General Public
@@ -48,13 +47,11 @@
 #include "raio_handlers.h"
 #include <arpa/inet.h>
 
-
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
 #define MAX_THREADS		6
 #define POLLING_TIME_USEC	70
-
 
 #ifndef TAILQ_FOREACH_SAFE
 #define	TAILQ_FOREACH_SAFE(var, head, field, tvar)			\
@@ -83,42 +80,48 @@ struct raio_thread_data {
 	struct raio_server_data		*server_data;
 	char				portal[64];
 	int				affinity;
-	int				pad;
+	int				id;
 	struct xio_msg			rsp;
 	struct xio_context		*ctx;
-};
 
-struct raio_portal_data  {
-	struct	raio_thread_data	*tdata;
-	void				*dd_data;
+	SLIST_HEAD(, raio_connection_data)	conns_list;
 };
-struct raio_server_data;
 
 struct  raio_connection_data {
 	struct xio_connection			*connection;
 	int					disconnected;
 	int					pad;
-	TAILQ_ENTRY(raio_connection_data)	conns_list_entry;
+
+	void					*dd_data;
+
+	struct raio_thread_data			*tdata;
+	struct raio_session_data		*sdata;
+
+	/* for thread  */
+	SLIST_ENTRY(raio_connection_data)	thr_conns_list_entry;
+
+	/* for session  */
+	SLIST_ENTRY(raio_connection_data)	ses_conns_list_entry;
 };
 
 struct raio_session_data {
 	struct	xio_session			*session;
-	void					*dd_data;
-	struct raio_portal_data			portal_data[MAX_THREADS];
+	struct  xio_connection			*fe_conn;
 
-	TAILQ_HEAD(, raio_connection_data)	conns_list;
-	TAILQ_ENTRY(raio_session_data)		sessions_list_entry;
+	void					*dd_data;
+	struct raio_server_data			*server_data;
+
+	SLIST_HEAD(, raio_connection_data)	conns_list;
+	SLIST_ENTRY(raio_session_data)		sessions_list_entry;
 };
 
 /* server private data */
 struct raio_server_data {
 	struct xio_context			*ctx;
-	int					last_used;
-	int					last_reaped;
+	int					tot_sessions;
 	int					finite_run;
-	int					pad;
 
-	TAILQ_HEAD(, raio_session_data)		sessions_list;
+	SLIST_HEAD(, raio_session_data)		sessions_list;
 
 	pthread_t				thread_id[MAX_THREADS];
 	struct raio_thread_data			tdata[MAX_THREADS];
@@ -139,18 +142,14 @@ static struct portals_vec *portals_get(struct raio_server_data *server_data,
 	/* fill portals array and return it. */
 	int			i, j;
 	struct portals_vec *portals =
-			      (struct portals_vec *)calloc(1, sizeof(*portals));
-	if (server_data->last_reaped != -1) {
-		server_data->last_used = server_data->last_reaped;
-		server_data->last_reaped = -1;
-	}
-	for (i = 0; i < MAX_THREADS; i++) {
-		j = (server_data->last_used + i)%MAX_THREADS;
+		(struct portals_vec *)calloc(1, sizeof(*portals));
 
+	for (i = 0; i < MAX_THREADS; i++) {
+		j = (server_data->tot_sessions + i) % MAX_THREADS;
 		portals->vec[i] = strdup(server_data->tdata[j].portal);
 		portals->vec_len++;
 	}
-	server_data->last_used = (server_data->last_used + 1)%MAX_THREADS;
+	server_data->tot_sessions++;
 
 	return portals;
 }
@@ -161,6 +160,7 @@ static struct portals_vec *portals_get(struct raio_server_data *server_data,
 static void portals_free(struct portals_vec *portals)
 {
 	int			i;
+
 	for (i = 0; i < portals->vec_len; i++)
 		free((char *)(portals->vec[i]));
 
@@ -174,27 +174,14 @@ static int on_response_comp(struct xio_session *session,
 			    struct xio_msg *rsp,
 			    void *cb_user_context)
 {
-	struct raio_thread_data *tdata =
-				     (struct raio_thread_data *)cb_user_context;
-	struct raio_session_data	*session_data, *tmp_session_data;
-	int				i = 0;
+	struct raio_connection_data	*cdata =
+		(struct raio_connection_data *)cb_user_context;
 
-	TAILQ_FOREACH_SAFE(session_data, &tdata->server_data->sessions_list,
-			   sessions_list_entry, tmp_session_data) {
-		if (session_data->session == session) {
-			for (i = 0; i < MAX_THREADS; i++) {
-				if (session_data->portal_data[i].tdata ==
-				    tdata) {
-					/* process request */
-					raio_handler_on_rsp_comp(
-					  session_data->dd_data,
-					  session_data->portal_data[i].dd_data,
-					  rsp);
-					return 0;
-				}
-			}
-		}
-	}
+	raio_handler_on_rsp_comp(
+			cdata->sdata->dd_data,
+			cdata->dd_data,
+			rsp);
+
 	return 0;
 }
 
@@ -205,8 +192,9 @@ static void raio_session_disconnect(struct raio_session_data *session_data)
 {
 	struct raio_connection_data	*connection_entry,
 					*tmp_connection_entry;
-	TAILQ_FOREACH_SAFE(connection_entry, &session_data->conns_list,
-			   conns_list_entry,
+
+	SLIST_FOREACH_SAFE(connection_entry, &session_data->conns_list,
+			   ses_conns_list_entry,
 			   tmp_connection_entry) {
 		if (!connection_entry->disconnected) {
 			connection_entry->disconnected = 1;
@@ -221,33 +209,17 @@ static void raio_session_disconnect(struct raio_session_data *session_data)
 static int on_request(struct xio_session *session, struct xio_msg *req,
 		      int last_in_rxq, void *cb_user_context)
 {
-	struct raio_thread_data *tdata =
-				    (struct raio_thread_data *)cb_user_context;
-	struct raio_session_data	*session_data, *tmp_session_data;
-	int				i, disconnect = 0;
+	struct raio_connection_data	*cdata =
+		(struct raio_connection_data *)cb_user_context;
+	int				disconnect;
 
-	TAILQ_FOREACH_SAFE(session_data, &tdata->server_data->sessions_list,
-			   sessions_list_entry, tmp_session_data) {
-		if (session_data->session == session) {
-			for (i = 0; i < MAX_THREADS; i++) {
-				if (session_data->portal_data[i].tdata ==
-				    tdata) {
-					/* process request */
-					disconnect = raio_handler_on_req(
-					  session_data->dd_data,
-					  session_data->portal_data[i].dd_data,
-					  last_in_rxq,
-					  req);
-					if (disconnect)
-						raio_session_disconnect(
-								session_data);
-					return 0;
-				}
-			}
-		}
-	}
-	fprintf(stdout, "session not found\n");
-
+	disconnect = raio_handler_on_req(
+			cdata->sdata->dd_data,
+			cdata->dd_data,
+			last_in_rxq,
+			req);
+	if (disconnect)
+		raio_session_disconnect(cdata->sdata);
 
 	return 0;
 }
@@ -262,6 +234,7 @@ static struct xio_session_ops  portal_server_ops = {
 	.on_msg				=  on_request,
 	.on_msg_error			=  NULL
 };
+
 /*---------------------------------------------------------------------------*/
 /* worker thread callback						     */
 /*---------------------------------------------------------------------------*/
@@ -287,7 +260,7 @@ static void *portal_server_cb(void *data)
 	/* bind a listener server to a portal/url */
 	server = xio_bind(tdata->ctx, &portal_server_ops, tdata->portal,
 			  NULL, 0, tdata);
-	if (server == NULL) {
+	if (!server) {
 		fprintf(stderr, "failed to bind server\n");
 		goto cleanup;
 	}
@@ -313,26 +286,35 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int on_new_connection(struct xio_session *session,
 			     struct xio_connection *connection,
-			     void *cb_user_context)
+			     struct raio_session_data *session_entry,
+			     struct raio_thread_data *tdata)
 {
-	struct raio_server_data *server_data =
-				     (struct raio_server_data *)cb_user_context;
-	struct raio_session_data	*session_entry;
 	struct raio_connection_data	*connection_entry;
+	struct xio_connection_attr	attr;
 
-	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
-		      sessions_list_entry) {
-		if (session_entry->session == session) {
-			connection_entry = (struct raio_connection_data *)
-					   calloc(1, sizeof(*connection_entry));
-			if (connection_entry == NULL)
-				return -1;
-			connection_entry->connection = connection;
-			TAILQ_INSERT_HEAD(&session_entry->conns_list,
-					  connection_entry, conns_list_entry);
-			break;
-		}
-	}
+	connection_entry = (struct raio_connection_data *)
+				calloc(1, sizeof(*connection_entry));
+	if (!connection_entry)
+		return -1;
+	connection_entry->connection = connection;
+	connection_entry->sdata	     = session_entry;
+	connection_entry->tdata	     = tdata;
+
+	connection_entry->dd_data =
+		raio_handler_get_portal_data(
+				session_entry->dd_data,
+				tdata->id);
+
+	attr.user_context = connection_entry;
+	xio_modify_connection(connection, &attr,
+			      XIO_CONNECTION_ATTR_USER_CTX);
+	SLIST_INSERT_HEAD(&tdata->conns_list,
+			  connection_entry,
+			  thr_conns_list_entry);
+
+	SLIST_INSERT_HEAD(&session_entry->conns_list,
+			  connection_entry,
+			  ses_conns_list_entry);
 	return 0;
 }
 
@@ -343,40 +325,24 @@ static int on_connection_teardown(struct xio_session *session,
 				  struct xio_connection *connection,
 				  void *cb_user_context)
 {
-	struct raio_server_data		*server_data =
-				(struct raio_server_data *)cb_user_context;
-	struct raio_session_data	*session_entry;
-	struct raio_connection_data	*connection_entry,
-					*tmp_connection_entry;
-	int				found = 0;
+	struct raio_connection_data	*cdata =
+		(struct raio_connection_data *)cb_user_context;
 
-	TAILQ_FOREACH(session_entry, &server_data->sessions_list,
-		      sessions_list_entry) {
-		if (session_entry->session == session) {
-			TAILQ_FOREACH_SAFE(
-					connection_entry,
-					&session_entry->conns_list,
-					conns_list_entry,
-					tmp_connection_entry) {
-				if (connection_entry->connection ==
-						connection) {
-					TAILQ_REMOVE(&session_entry->conns_list,
-						     connection_entry,
-						     conns_list_entry);
-					free(connection_entry);
-					found = 1;
-					break;
-				}
-			}
-			break;
-		}
-	}
-	if (found)
-		xio_connection_destroy(connection);
+	SLIST_REMOVE(&cdata->tdata->conns_list,
+		     cdata,
+		     raio_connection_data,
+		     thr_conns_list_entry);
+	SLIST_REMOVE(&cdata->sdata->conns_list,
+		     cdata,
+		     raio_connection_data,
+		     ses_conns_list_entry);
+
+	raio_handler_free_portal_data(cdata->dd_data);
+	free(cdata);
+	xio_connection_destroy(connection);
 
 	return 0;
 }
-
 
 /*---------------------------------------------------------------------------*/
 /* on_session_event							     */
@@ -385,53 +351,50 @@ static int on_session_event(struct xio_session *session,
 			    struct xio_session_event_data *event_data,
 			    void *cb_user_context)
 {
-	struct raio_session_data *session_data, *tmp_session_data;
-	struct raio_server_data	 *server_data =
-				(struct raio_server_data *)cb_user_context;
-	int			 i;
-
-
+	struct raio_session_data *session_data =
+				(struct raio_session_data *)cb_user_context;
+	struct raio_server_data	*server_data = session_data->server_data;
+	struct raio_thread_data	*tdata;
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
-		on_new_connection(session, event_data->conn, cb_user_context);
+		tdata =
+		  (struct raio_thread_data *)event_data->conn_user_context;
+		if (session_data->fe_conn)
+			on_new_connection(session, event_data->conn,
+					  session_data, tdata);
+		else
+			session_data->fe_conn = event_data->conn;
 		break;
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
-		TAILQ_FOREACH_SAFE(session_data, &server_data->sessions_list,
-				   sessions_list_entry, tmp_session_data) {
-			if (session_data->session == session) {
-				for (i = 0; i < MAX_THREADS; i++) {
-					if (session_data->portal_data[i].tdata) {
-						raio_handler_free_portal_data(
-					   session_data->portal_data[i].dd_data);
-					   session_data->portal_data[i].tdata =
-						   NULL;
-					   server_data->last_reaped = i;
-					   break;
-					}
-				}
-				raio_handler_free_session_data(
-						session_data->dd_data);
-				TAILQ_REMOVE(&server_data->sessions_list,
-					     session_data,
-					     sessions_list_entry);
-				free(session_data);
-				break;
-			}
-		}
+		raio_handler_free_session_data(
+				session_data->dd_data);
+		SLIST_REMOVE(&server_data->sessions_list,
+			     session_data,
+			     raio_session_data,
+			     sessions_list_entry);
+		free(session_data);
+
 		xio_session_destroy(session);
+
 		if (server_data->finite_run) {
+			int i;
+
 			for (i = 0; i < MAX_THREADS; i++)
-				xio_context_stop_loop(server_data->tdata[i].ctx);
+				xio_context_stop_loop(
+						server_data->tdata[i].ctx);
 			xio_context_stop_loop(server_data->ctx);
 		}
 		break;
 	case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
-		on_connection_teardown(session, event_data->conn,
-				       cb_user_context);
+		if (session_data->fe_conn != event_data->conn)
+			on_connection_teardown(session, event_data->conn,
+					       event_data->conn_user_context);
+		else
+			xio_connection_destroy(session_data->fe_conn);
 		break;
 	default:
 		printf("unexpected session event: session:%p, %s. reason: %s\n",
@@ -455,24 +418,30 @@ static int on_new_session(struct xio_session *session,
 	struct raio_server_data *server_data = (struct raio_server_data *)
 								cb_user_context;
 	struct raio_session_data *session_data;
-	int i;
+	struct xio_session_attr	attr;
+	int			i;
 
 	portals = portals_get(server_data, req->uri, req->private_data);
 
-	/* alloc and  and initialize */
+	/* alloc and initialize */
 	session_data = (struct raio_session_data *)
 				calloc(1, sizeof(*session_data));
 	session_data->session = session;
+	session_data->server_data = server_data;
 	session_data->dd_data = raio_handler_init_session_data(MAX_THREADS);
+
 	for (i = 0; i < MAX_THREADS; i++) {
-		session_data->portal_data[i].tdata = &server_data->tdata[i];
-		session_data->portal_data[i].dd_data =
-			raio_handler_init_portal_data(
-				session_data->dd_data,
-				i,
-				session_data->portal_data[i].tdata->ctx);
+		raio_handler_init_portal_data(
+			session_data->dd_data,
+			server_data->tdata[i].id,
+			server_data->tdata[i].ctx);
 	}
-	TAILQ_INSERT_TAIL(&server_data->sessions_list,
+
+	attr.user_context = session_data;
+	xio_modify_session(session, &attr,
+			   XIO_SESSION_ATTR_USER_CTX);
+
+	SLIST_INSERT_HEAD(&server_data->sessions_list,
 			  session_data, sessions_list_entry);
 
 	/* automatic accept the request */
@@ -497,7 +466,8 @@ static struct xio_session_ops  server_ops = {
 /*---------------------------------------------------------------------------*/
 /* usage                                                                     */
 /*---------------------------------------------------------------------------*/
-static void usage(const char *app) {
+static void usage(const char *app)
+{
 	printf("Usage:\n");
 	printf("\t%s [OPTIONS] - raio file server\n", basename((char *)app));
 	printf("options:\n");
@@ -510,7 +480,8 @@ static void usage(const char *app) {
 	exit(0);
 }
 
-static void free_cmdline_params(void) {
+static void free_cmdline_params(void)
+{
 	if (server_addr) {
 		free(server_addr);
 		server_addr = NULL;
@@ -524,7 +495,8 @@ static void free_cmdline_params(void) {
 /*---------------------------------------------------------------------------*/
 /* parse_cmdline                                                             */
 /*---------------------------------------------------------------------------*/
-int parse_cmdline(int argc, char **argv) {
+int parse_cmdline(int argc, char **argv)
+{
 	static struct option const long_options[] = {
 		{ .name = "addr", .has_arg = 1, .val = 'a'},
 		{ .name = "port", .has_arg = 1, .val = 'p'},
@@ -554,27 +526,27 @@ int parse_cmdline(int argc, char **argv) {
 
 		switch (c) {
 		case 'a':
-			if (server_addr == NULL)
+			if (!server_addr)
 				server_addr = strdup(optarg);
-			if (server_addr == NULL)
+			if (!server_addr)
 				goto cleanup;
 			break;
 		case 'p':
 			server_port =
-				(uint16_t) strtol(optarg, NULL, 0);
+				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'c':
 			cpumask = strtoll(optarg, NULL, 16);
 			break;
 		case 't':
-			if (transport == NULL)
+			if (!transport)
 				transport = strdup(optarg);
-			if (transport == NULL)
+			if (!transport)
 				goto cleanup;
 			break;
 		case 'f':
 			finite_run =
-				(uint16_t) strtol(optarg, NULL, 0);
+				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -582,7 +554,7 @@ int parse_cmdline(int argc, char **argv) {
 			break;
 		default:
 			fprintf(stderr, "\nError:\n\tInvalid param: %s\n",
-				argv[optind-1]);
+				argv[optind - 1]);
 			goto cleanup;
 			break;
 		}
@@ -619,13 +591,13 @@ int main(int argc, char *argv[])
 	uint64_t		cpu_mask;
 
 	parse_cmdline(argc, argv);
-	if ((server_addr == NULL) || (server_port == 0)) {
+	if (!server_addr || server_port == 0) {
 		fprintf(stderr, "Error:\n\tno server address and/or port\n");
 		usage(argv[0]);
 	}
-	if (transport == NULL)
+	if (!transport) {
 		transport = strdup("rdma");
-	else if (strcmp(transport, "rdma") && strcmp(transport, "tcp")) {
+	} else if (strcmp(transport, "rdma") && strcmp(transport, "tcp")) {
 		fprintf(stderr, "Error:\n\tinvalid transport name: %s\n",
 			transport);
 		usage(argv[0]);
@@ -654,9 +626,8 @@ int main(int argc, char *argv[])
 	cpu_mask = cpumask;
 
 	memset(&server_data, 0, sizeof(server_data));
-	server_data.last_reaped = -1;
 	server_data.finite_run = finite_run;
-	TAILQ_INIT(&server_data.sessions_list);
+	SLIST_INIT(&server_data.sessions_list);
 
 	/* create thread context for the client */
 	server_data.ctx	= xio_context_create(NULL, 0, curr_cpu);
@@ -667,7 +638,7 @@ int main(int argc, char *argv[])
 	/* bind a listener server to a portal/url */
 	server = xio_bind(server_data.ctx, &server_ops,
 			  url, NULL, 0, &server_data);
-	if (server == NULL) {
+	if (!server) {
 		fprintf(stderr, "failed to bind server\n");
 		goto cleanup;
 	}
@@ -675,14 +646,17 @@ int main(int argc, char *argv[])
 	/* spawn portals */
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
+		server_data.tdata[i].id = i;
 		if (cpu_mask) {
 			int cpu = ffsll(cpu_mask) - 1;
+
 			server_data.tdata[i].affinity = cpu;
 			cpu_mask &= ~(1ULL << cpu);
 			if (!cpu_mask)
 				cpu_mask = cpumask;
 		} else {
-			server_data.tdata[i].affinity = (curr_cpu + i)%max_cpus;
+			server_data.tdata[i].affinity =
+					(curr_cpu + i) % max_cpus;
 		}
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
