@@ -2156,7 +2156,7 @@ static void xio_tcp_initial_pool_get_params(
 {
 	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
-	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 10 * NUM_CONN_SETUP_TASKS;
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
@@ -2389,7 +2389,7 @@ static void xio_tcp_primary_pool_get_params(
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = max((g_poptions->snd_queue_depth_msgs +
-		       g_poptions->rcv_queue_depth_msgs) * 40, 1024);
+		       g_poptions->rcv_queue_depth_msgs), *start_nr);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);

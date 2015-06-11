@@ -268,11 +268,15 @@ struct xio_context_params {
 	*/
 	struct task_struct	*worker;
 
-	void			*user_context;  /**< private user context to */
-						/**< pass to connection      */
-						/**< oriented callbacks      */
-	int			prealloc_pools; /**< pre allocate  rdma only */
-						/**< internal pools	     */
+	/**< private user data passed saved on context can be queried/modified */
+	/**< via xio_query_context/xio_modify_context			       */
+	void			*user_context;
+
+	/**< preallocate and registers rdma inline buffers for send/recv	*/
+	int			prealloc_xio_inline_bufs;
+
+	/**< number of connections that this context will handle		*/
+	int			max_conns_per_ctx;
 };
 
 /**

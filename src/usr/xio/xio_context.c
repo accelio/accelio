@@ -129,8 +129,13 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 
 	if (ctx_params) {
 		ctx->user_context = ctx_params->user_context;
-		ctx->prealloc_pools = !!ctx_params->prealloc_pools;
+		ctx->prealloc_xio_inline_bufs =
+				!!ctx_params->prealloc_xio_inline_bufs;
+		ctx->max_conns_per_ctx =
+				max(ctx_params->max_conns_per_ctx , 2);
 	}
+	if (!ctx->max_conns_per_ctx)
+		ctx->max_conns_per_ctx = 100;
 
 	XIO_OBSERVABLE_INIT(&ctx->observable, ctx);
 	INIT_LIST_HEAD(&ctx->ctx_list);
@@ -154,7 +159,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 
 	/* initialize rdma pools only */
 	transport = xio_get_transport("rdma");
-	if (transport && ctx->prealloc_pools) {
+	if (transport && ctx->prealloc_xio_inline_bufs) {
 		int retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
 					         XIO_CONTEXT_POOL_CLASS_INITIAL);
 		if (retval) {
@@ -727,7 +732,8 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				  (int *)&params.pool_dd_data_sz,
 				  (int *)&params.slab_dd_data_sz,
 				  (int *)&params.task_dd_data_sz);
-	if (ctx->prealloc_pools) {
+	params.max_nr = params.max_nr * ctx->max_conns_per_ctx;
+	if (ctx->prealloc_xio_inline_bufs) {
 		params.start_nr = params.max_nr;
 		params.alloc_nr = 0;
 	}
