@@ -48,6 +48,7 @@ struct backingstore_template {
 	void (*bs_exit)(struct raio_bs *dev);
 	int (*bs_cmd_submit)(struct raio_bs *dev, struct raio_io_cmd *cmd);
 	void (*bs_set_last_in_batch)(struct raio_bs *dev);
+	void (*bs_poll)(struct raio_bs *dev);
 
 	SLIST_ENTRY(backingstore_template)   backingstore_siblings;
 };
@@ -91,6 +92,11 @@ int raio_bs_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd);
 /* raio_bs_set_last_in_batch						     */
 /*---------------------------------------------------------------------------*/
 void  raio_bs_set_last_in_batch(struct raio_bs *dev);
+
+/*---------------------------------------------------------------------------*/
+/* raio_bs_poll								     */
+/*---------------------------------------------------------------------------*/
+void raio_bs_poll(struct raio_bs *dev);
 
 /*---------------------------------------------------------------------------*/
 /* register_backingstore_template					     */

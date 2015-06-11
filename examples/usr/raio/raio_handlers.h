@@ -81,4 +81,9 @@ void	raio_handler_on_rsp_comp(void *prv_session_data,
 				 void *prv_portal_data,
 				 struct xio_msg *rsp);
 
+/*---------------------------------------------------------------------------*/
+/* rai_handler_bs_poll				                             */
+/*---------------------------------------------------------------------------*/
+void	raio_handler_bs_poll(void *prv_session_data,
+			    void *prv_portal_data);
 #endif

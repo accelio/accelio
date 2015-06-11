@@ -843,6 +843,20 @@ static int raio_handle_destroy_comp(void *prv_session_data,
 }
 
 /*---------------------------------------------------------------------------*/
+/* raio_handler_bs_poll				                             */
+/*---------------------------------------------------------------------------*/
+void raio_handler_bs_poll(void *prv_session_data,
+			void *prv_portal_data)
+{
+	struct raio_io_portal_data	*pd =
+				(struct raio_io_portal_data *)prv_portal_data;
+	struct raio_bs			*bs_dev;
+
+	TAILQ_FOREACH(bs_dev, &pd->dev_list, list)
+		raio_bs_poll(bs_dev);
+}
+
+/*---------------------------------------------------------------------------*/
 /* raio_handler_on_req				                             */
 /*---------------------------------------------------------------------------*/
 int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,

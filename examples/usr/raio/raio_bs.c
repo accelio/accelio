@@ -178,3 +178,12 @@ void raio_bs_set_last_in_batch(struct raio_bs *dev)
 		dev->bst->bs_set_last_in_batch(dev);
 }
 
+/*---------------------------------------------------------------------------*/
+/* raio_bs_poll								     */
+/*---------------------------------------------------------------------------*/
+void raio_bs_poll(struct raio_bs *dev)
+{
+	if (dev->bst->bs_poll)
+		dev->bst->bs_poll(dev);
+}
+

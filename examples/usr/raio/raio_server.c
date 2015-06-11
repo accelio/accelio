@@ -85,6 +85,9 @@ struct raio_thread_data {
 	struct xio_context		*ctx;
 
 	SLIST_HEAD(, raio_connection_data)	conns_list;
+
+	int				disconnected;
+	int				pad;
 };
 
 struct  raio_connection_data {
@@ -120,6 +123,8 @@ struct raio_server_data {
 	struct xio_context			*ctx;
 	int					tot_sessions;
 	int					finite_run;
+	int					extra_perf;
+	int					pad;
 
 	SLIST_HEAD(, raio_session_data)		sessions_list;
 
@@ -132,6 +137,7 @@ static char		*transport;
 static int		finite_run;
 static uint16_t		server_port;
 static uint64_t		cpumask;
+static int		extra_perf;
 
 /*---------------------------------------------------------------------------*/
 /* portals_get								     */
@@ -244,6 +250,10 @@ static void *portal_server_cb(void *data)
 	cpu_set_t		cpuset;
 	pthread_t		thread;
 	struct xio_server	*server;
+	unsigned int polling_tmo = POLLING_TIME_USEC;
+
+	if (tdata->server_data->extra_perf)
+		polling_tmo = 0;
 
 	/* set affinity to thread */
 	thread = pthread_self();
@@ -254,7 +264,7 @@ static void *portal_server_cb(void *data)
 	pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
 
 	/* create thread context for the client */
-	tdata->ctx = xio_context_create(NULL, POLLING_TIME_USEC,
+	tdata->ctx = xio_context_create(NULL, polling_tmo,
 					tdata->affinity);
 
 	/* bind a listener server to a portal/url */
@@ -265,8 +275,26 @@ static void *portal_server_cb(void *data)
 		goto cleanup;
 	}
 
-	/* the default xio supplied main loop */
-	xio_context_run_loop(tdata->ctx, XIO_INFINITE);
+	if (tdata->server_data->extra_perf) {
+		struct raio_connection_data *cdata;
+		unsigned int i = 0;
+
+		while (!tdata->disconnected) {
+			xio_context_poll_completions(tdata->ctx, 0);
+			SLIST_FOREACH(cdata, &tdata->conns_list,
+					thr_conns_list_entry) {
+				raio_handler_bs_poll(
+					cdata->sdata->dd_data,
+					cdata->dd_data);
+			}
+
+			if (++i % 500 == 0)
+				xio_context_poll_wait(tdata->ctx, 0);
+		}
+	} else {
+		/* the default xio supplied main loop */
+		xio_context_run_loop(tdata->ctx, XIO_INFINITE);
+	}
 
 	/* normal exit phase */
 	fprintf(stdout, "exit signaled\n");
@@ -383,9 +411,11 @@ static int on_session_event(struct xio_session *session,
 		if (server_data->finite_run) {
 			int i;
 
-			for (i = 0; i < MAX_THREADS; i++)
+			for (i = 0; i < MAX_THREADS; i++) {
 				xio_context_stop_loop(
 						server_data->tdata[i].ctx);
+				server_data->tdata[i].disconnected = 1;
+			}
 			xio_context_stop_loop(server_data->ctx);
 		}
 		break;
@@ -476,6 +506,8 @@ static void usage(const char *app)
 	printf("\t--cpumask, -c <cpumask>: cpumask\n");
 	printf("\t--finite, -f           : finite run (default: infinite)\n");
 	printf("\t--transport, -t <name> : rdma,tcp (default: rdma)\n");
+	printf("\t--extra-perf, -e       : extra performance at expence\n");
+	printf("\t                         of CPU usage (default: false)\n");
 	printf("\t--help, -h             : print this message and exit\n");
 	exit(0);
 }
@@ -503,10 +535,11 @@ int parse_cmdline(int argc, char **argv)
 		{ .name = "cpumask", .has_arg = 1, .val = 'c'},
 		{ .name = "transport", .has_arg = 1, .val = 't'},
 		{ .name = "finite", .has_arg = 1, .val = 'f'},
+		{ .name = "extra-perf", .has_arg = 1, .val = 'e'},
 		{ .name = "help", .has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
-	static char *short_options = "a:p:c:t:f:h";
+	static char *short_options = "a:p:c:t:f:h:e:";
 	int c;
 
 	server_addr = NULL;
@@ -514,6 +547,7 @@ int parse_cmdline(int argc, char **argv)
 	server_port = 0;
 	cpumask = 0;
 	finite_run = 0;
+	extra_perf = 0;
 
 	optind = 0;
 	opterr = 0;
@@ -547,6 +581,10 @@ int parse_cmdline(int argc, char **argv)
 		case 'f':
 			finite_run =
 				(uint16_t)strtol(optarg, NULL, 0);
+			break;
+		case 'e':
+			extra_perf =
+				(uint16_t) strtol(optarg, NULL, 0);
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -627,6 +665,7 @@ int main(int argc, char *argv[])
 
 	memset(&server_data, 0, sizeof(server_data));
 	server_data.finite_run = finite_run;
+	server_data.extra_perf = extra_perf;
 	SLIST_INIT(&server_data.sessions_list);
 
 	/* create thread context for the client */

@@ -423,7 +423,8 @@ static struct backingstore_template raio_aio_bst = {
 	.bs_open		= raio_bs_aio_open,
 	.bs_close		= raio_bs_aio_close,
 	.bs_cmd_submit		= raio_bs_aio_cmd_submit,
-	.bs_set_last_in_batch	= raio_bs_aio_set_last_in_batch
+	.bs_set_last_in_batch	= raio_bs_aio_set_last_in_batch,
+	.bs_poll		= raio_bs_aio_process_events
 };
 
 /*
