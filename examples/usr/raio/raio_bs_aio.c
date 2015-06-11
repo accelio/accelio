@@ -230,13 +230,14 @@ static void raio_aio_get_events(struct raio_bs_aio_info *info)
 {
 	unsigned int	i;
 	int		ret;
-	uint32_t	nevents = ARRAY_SIZE(info->io_evts);
+	uint32_t	nevents;
 
 	while (info->npending) {
 retry_getevts:
+		nevents = ARRAY_SIZE(info->io_evts);
 		ret = io_getevents(info->ctx, 0, nevents, info->io_evts, NULL);
 		if (ret == 0)
-			return;
+			break;
 		if (ret > 0) {
 			nevents = ret;
 			info->npending -= nevents;
