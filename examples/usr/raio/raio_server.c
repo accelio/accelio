@@ -365,7 +365,6 @@ static int on_connection_teardown(struct xio_session *session,
 		     raio_connection_data,
 		     ses_conns_list_entry);
 
-	raio_handler_free_portal_data(cdata->dd_data);
 	free(cdata);
 	xio_connection_destroy(connection);
 
@@ -383,6 +382,7 @@ static int on_session_event(struct xio_session *session,
 				(struct raio_session_data *)cb_user_context;
 	struct raio_server_data	*server_data = session_data->server_data;
 	struct raio_thread_data	*tdata;
+	int			i;
 
 	switch (event_data->event) {
 	case XIO_SESSION_NEW_CONNECTION_EVENT:
@@ -401,6 +401,13 @@ static int on_session_event(struct xio_session *session,
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
 	case XIO_SESSION_TEARDOWN_EVENT:
+		for (i = 0; i < MAX_THREADS; i++) {
+			void *pd = raio_handler_get_portal_data(
+					session_data->dd_data,
+					server_data->tdata[i].id);
+			raio_handler_free_portal_data(pd);
+		}
+
 		raio_handler_free_session_data(
 				session_data->dd_data);
 		SLIST_REMOVE(&server_data->sessions_list,
@@ -412,8 +419,6 @@ static int on_session_event(struct xio_session *session,
 		xio_session_destroy(session);
 
 		if (server_data->finite_run) {
-			int i;
-
 			for (i = 0; i < MAX_THREADS; i++) {
 				xio_context_stop_loop(
 						server_data->tdata[i].ctx);
