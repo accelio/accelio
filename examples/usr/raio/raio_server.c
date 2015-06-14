@@ -394,6 +394,9 @@ static int on_session_event(struct xio_session *session,
 		else
 			session_data->fe_conn = event_data->conn;
 		break;
+	case XIO_SESSION_CONNECTION_ERROR_EVENT:
+		xio_disconnect(event_data->conn);
+		break;
 	case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT:
 	case XIO_SESSION_CONNECTION_CLOSED_EVENT:
 		break;
