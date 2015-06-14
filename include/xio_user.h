@@ -505,7 +505,7 @@ enum xio_mempool_flag {
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
 /**
- * add a slab to current set (setup only)
+ * add a slab to current set (setup only). This method is not thread safe.
  *
  * @param[in] mpool	  the memory pool
  * @param[in] size	  slab memory size
@@ -533,7 +533,7 @@ int xio_mempool_add_slab(struct xio_mempool *mpool,
 void xio_mempool_destroy(struct xio_mempool *mpool);
 
 /**
- * allocate memory buffer from memory pool
+ * allocate memory buffer from memory pool. This method is thread safe
  *
  * @param[in] mpool	  the memory pool
  * @param[in] length	  buffer size to allocate
@@ -546,7 +546,7 @@ int xio_mempool_alloc(struct xio_mempool *mpool,
 		      size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * free memory buffer back to memory pool
+ * free memory buffer back to memory pool. This method is thread safe.
  *
  * @param[in] reg_mem	  registered memory data structure
  *
