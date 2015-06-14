@@ -159,7 +159,7 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 			break;
 	}
 	nsuccess = io_submit(info->ctx, nsubmit, info->piocb_arr);
-	if (nsuccess < 0) {
+	if (unlikely(nsuccess < 0)) {
 		if (nsuccess == -EAGAIN) {
 			fprintf(stderr, "delayed submit %d\n", nsubmit);
 			nsuccess = 0; /* leave the dev pending with all cmds */
@@ -194,14 +194,15 @@ static int raio_aio_submit_dev_batch(struct raio_bs_aio_info *info)
 static void raio_aio_complete_one(struct io_event *ep)
 {
 	struct raio_io_cmd *cmd = (struct raio_io_cmd *)ep->data;
-	const char *op = (cmd->op == RAIO_CMD_PREAD) ? "read" : "write";
 
-	if (ep->res2 != 0)
+	if (unlikely(ep->res2 != 0)) {
+		const char *op = (cmd->op == RAIO_CMD_PREAD) ? "read" : "write";
 		fprintf(stderr, "aio %s:err %lu", op, ep->res2);
+	}
 
 	cmd->res  = ep->res;
 	cmd->res2 = ep->res2;
-	if (ep->res != cmd->bcount) {
+	if (unlikely(ep->res != cmd->bcount)) {
 		if (((long)ep->res) < 0) {
 			fprintf(stderr, "completion error: %s - ",
 				strerror(-ep->res));
@@ -219,7 +220,7 @@ static void raio_aio_complete_one(struct io_event *ep)
 		}
 	}
 
-	if (cmd->comp_cb)
+	if (likely(cmd->comp_cb))
 		cmd->comp_cb(cmd);
 }
 
@@ -266,7 +267,7 @@ static void raio_aio_get_completions(int fd, int events, void *data)
 
 retry_read:
 	ret = eventfd_read(info->evt_fd, &val);
-	if (ret < 0) {
+	if (unlikely(ret < 0)) {
 		fprintf(stderr, "failed to read AIO completions, %m\n");
 		if (errno == EAGAIN || errno == EINTR)
 			goto retry_read;

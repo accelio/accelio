@@ -54,6 +54,16 @@ static SLIST_HEAD(, backingstore_template) bst_list =
 /*---------------------------------------------------------------------------*/
 int register_backingstore_template(struct backingstore_template *bst)
 {
+	if (!bst->bs_open ||
+		!bst->bs_close ||
+		!bst->bs_init ||
+		!bst->bs_exit ||
+		!bst->bs_cmd_submit ||
+		!bst->bs_poll) {
+		fprintf(stderr, "Unable to register backingstore %s: Not all methods defined\n", bst->bs_name);
+		return -1;
+	}
+
 	SLIST_INSERT_HEAD(&bst_list, bst, backingstore_siblings);
 
 	return 0;
@@ -130,8 +140,7 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 void raio_bs_exit(struct raio_bs *dev)
 {
-	if (dev->bst->bs_exit)
-		dev->bst->bs_exit(dev);
+	dev->bst->bs_exit(dev);
 	free(dev);
 }
 
@@ -140,13 +149,10 @@ void raio_bs_exit(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 int raio_bs_open(struct raio_bs *dev, int fd)
 {
-	if (dev->bst->bs_open) {
-		int retval = dev->bst->bs_open(dev, fd);
-		if (retval == 0)
-			dev->fd = fd;
-		return retval;
-	}
-	return 0;
+	int retval = dev->bst->bs_open(dev, fd);
+	if (retval == 0)
+		dev->fd = fd;
+	return retval;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -154,8 +160,7 @@ int raio_bs_open(struct raio_bs *dev, int fd)
 /*---------------------------------------------------------------------------*/
 void raio_bs_close(struct raio_bs *dev)
 {
-	if (dev->bst->bs_close)
-		dev->bst->bs_close(dev);
+	dev->bst->bs_close(dev);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -163,10 +168,7 @@ void raio_bs_close(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 int raio_bs_cmd_submit(struct raio_bs *dev, struct raio_io_cmd *cmd)
 {
-	if (dev->bst->bs_cmd_submit)
-		return dev->bst->bs_cmd_submit(dev, cmd);
-
-	return 0;
+	return dev->bst->bs_cmd_submit(dev, cmd);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -183,7 +185,6 @@ void raio_bs_set_last_in_batch(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 void raio_bs_poll(struct raio_bs *dev)
 {
-	if (dev->bst->bs_poll)
-		dev->bst->bs_poll(dev);
+	dev->bst->bs_poll(dev);
 }
 

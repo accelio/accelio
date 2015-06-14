@@ -695,7 +695,7 @@ static int raio_handle_submit(void *prv_session_data,
 	struct xio_msg			*rsp;
 
 	io_u = TAILQ_FIRST(&pd->io_u_free_list);
-	if (!io_u) {
+	if (unlikely(!io_u)) {
 		printf("io_u_free_list empty\n");
 		errno = ENOSR;
 		return -1;
@@ -705,7 +705,7 @@ static int raio_handle_submit(void *prv_session_data,
 	msg_reset(io_u->rsp);
 	pd->io_u_free_nr--;
 
-	if (msg_sz != cmd->data_len) {
+	if (unlikely(msg_sz != cmd->data_len)) {
 		retval = EINVAL;
 		printf("io submit request rejected\n");
 
@@ -731,7 +731,7 @@ static int raio_handle_submit(void *prv_session_data,
 		io_u->iocmd.mr		= sglist[0].mr;
 	}
 	bs_dev = raio_lookup_bs_dev(io_u->iocmd.fd, pd);
-	if (!bs_dev) {
+	if (unlikely(!bs_dev)) {
 		printf("Ambiguous device file descriptor %d\n", io_u->iocmd.fd);
 		retval = ENODEV;
 		goto reject;
@@ -750,7 +750,7 @@ static int raio_handle_submit(void *prv_session_data,
 
 	/* issues request to bs */
 	retval = -raio_bs_cmd_submit(bs_dev, &io_u->iocmd);
-	if (retval)
+	if (unlikely(retval))
 		goto reject;
 
 	if (last_in_batch) {
@@ -868,7 +868,7 @@ int raio_handler_on_req(void *prv_session_data, void *prv_portal_data,
 	struct raio_command	cmd;
 	int			disconnect = 0;
 
-	if (!buffer) {
+	if (unlikely(!buffer)) {
 		raio_reject_request(prv_session_data,
 				    prv_portal_data,
 				    &cmd, NULL,
