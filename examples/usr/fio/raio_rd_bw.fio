@@ -3,7 +3,7 @@
 group_reporting
 thread
 ioengine=./.libs/libraio_fio.so
-rw=read
+rw=randread
 bs=1K
 loops=2
 direct=1

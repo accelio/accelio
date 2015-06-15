@@ -667,6 +667,16 @@ int main(int argc, char *argv[])
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,
+		    &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_XFER_BUF_ALIGN,
+		    &opt, sizeof(int));
+
 	curr_cpu = sched_getcpu();
 	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	cpu_mask = cpumask;

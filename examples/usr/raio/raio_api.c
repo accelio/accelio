@@ -436,6 +436,16 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
 		    &opt, sizeof(int));
 
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,
+		    &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_XFER_BUF_ALIGN,
+		    &opt, sizeof(int));
+
 
 	session_data = (struct raio_session_data *)
 				calloc(1, sizeof(*session_data));
