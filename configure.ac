@@ -147,6 +147,23 @@ if test "$enable_extra_checks" != "no"; then
 fi
 
 ##########################################################################
+# statistics counters emission support
+##########################################################################
+# usage: ./configure --enable-stat-counters=yes
+#
+AC_MSG_CHECKING([enable statistic counters emission via netlink socket])
+AC_ARG_ENABLE([stat_counters],
+	      [AS_HELP_STRING([--enable-stat-counters],
+			      [enable statistics counters via netlink - default yes])],
+			      [enable_statistics_counters="$enableval"],
+			      [enable_statistics_counters=yes])
+AC_MSG_RESULT([$enable_statistics_counters])
+
+if test "$enable_statistics_counters" != "no"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_STAT_COUNTERS"
+fi
+
+##########################################################################
 # raio compilation support
 ##########################################################################
 # usage: ./configure --disable-raio-build

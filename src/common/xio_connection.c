@@ -946,13 +946,15 @@ int xio_send_request(struct xio_connection *connection,
 		     struct xio_msg *msg)
 {
 	struct xio_msg_list	reqs_msgq;
-	struct xio_statistics	*stats;
 	struct xio_msg		*pmsg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
+#ifdef XIO_CFLAG_STAT_COUNTERS
+	struct xio_statistics	*stats;
+#endif
 #ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
@@ -976,7 +978,9 @@ int xio_send_request(struct xio_connection *connection,
 	}
 
 	pmsg = msg;
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	stats = &connection->ctx->stats;
+#endif
 	while (pmsg) {
 		if (unlikely(connection->tx_queued_msgs >
 		    connection->session->snd_queue_depth_msgs)) {
@@ -1018,10 +1022,11 @@ int xio_send_request(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
-
+#ifdef XIO_CFLAG_STAT_COUNTERS
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES, tx_bytes);
+#endif
 
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = XIO_MSG_TYPE_REQ;
@@ -1059,13 +1064,15 @@ int xio_send_response(struct xio_msg *msg)
 {
 	struct xio_task		*task;
 	struct xio_connection	*connection = NULL;
-	struct xio_statistics	*stats;
 	struct xio_vmsg		*vmsg;
 	struct xio_msg		*pmsg = msg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	size_t			bytes;
 	int			retval = 0;
+#ifdef XIO_CFLAG_STAT_COUNTERS
+	struct xio_statistics	*stats;
+#endif
 #ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
@@ -1073,7 +1080,9 @@ int xio_send_response(struct xio_msg *msg)
 	while (pmsg) {
 		task	   = container_of(pmsg->request, struct xio_task, imsg);
 		connection = task->connection;
+#ifdef XIO_CFLAG_STAT_COUNTERS
 		stats	   = &connection->ctx->stats;
+#endif
 		vmsg	   = &pmsg->out;
 
 		if (task->imsg.sn != pmsg->request->sn) {
@@ -1111,11 +1120,11 @@ int xio_send_response(struct xio_msg *msg)
 			pmsg = pmsg->next;
 			continue;
 		}
-
+#ifdef XIO_CFLAG_STAT_COUNTERS
 		/* Server latency */
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
 			     get_cycles() - task->imsg.timestamp);
-
+#endif
 #ifdef XIO_CFLAG_EXTRA_CHECKS
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
@@ -1125,6 +1134,8 @@ int xio_send_response(struct xio_msg *msg)
 			goto send;
 		}
 #endif
+
+#ifdef XIO_CFLAG_STAT_COUNTERS
 		sgtbl		= xio_sg_table_get(vmsg);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
 					xio_sg_table_ops_get(vmsg->sgl_type);
@@ -1133,7 +1144,7 @@ int xio_send_response(struct xio_msg *msg)
 
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES, bytes);
-
+#endif
 		pmsg->flags |= XIO_MSG_FLAG_EX_RECEIPT_LAST;
 		if ((pmsg->request->flags &
 		     XIO_MSG_FLAG_REQUEST_READ_RECEIPT) &&
@@ -1216,13 +1227,15 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			      enum xio_msg_type msg_type)
 {
 	struct xio_msg_list	reqs_msgq;
-	struct xio_statistics	*stats = &connection->ctx->stats;
 	struct xio_msg		*pmsg = msg;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
 	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
+#ifdef XIO_CFLAG_STAT_COUNTERS
+	struct xio_statistics	*stats = &connection->ctx->stats;
+#endif
 #ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
@@ -1274,11 +1287,11 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
-
+#ifdef XIO_CFLAG_STAT_COUNTERS
 		pmsg->timestamp = get_cycles();
 		xio_stat_inc(stats, XIO_STAT_TX_MSG);
 		xio_stat_add(stats, XIO_STAT_TX_BYTES, tx_bytes);
-
+#endif
 		pmsg->sn = xio_session_get_sn(connection->session);
 		pmsg->type = msg_type;
 

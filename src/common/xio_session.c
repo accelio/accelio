@@ -448,6 +448,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 {
 	struct xio_session_hdr	hdr;
 	struct xio_msg		*msg = &task->imsg;
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	struct xio_statistics *stats = &connection->ctx->stats;
 	struct xio_vmsg *vmsg = &msg->in;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -456,6 +457,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	sgtbl		= xio_sg_table_get(&msg->in);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
 				xio_sg_table_ops_get(msg->in.sgl_type);
+#endif
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
@@ -506,11 +508,12 @@ static int xio_on_req_recv(struct xio_connection *connection,
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT)
 		xio_task_addref(task);
 
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	msg->timestamp = get_cycles();
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
 	xio_stat_add(stats, XIO_STAT_RX_BYTES,
 		     vmsg->header.iov_len + tbl_length(sgtbl_ops, sgtbl));
-
+#endif
 	if (test_bits(XIO_MSG_FLAG_EX_IMM_READ_RECEIPT, &hdr.flags)) {
 		xio_task_addref(task);
 		/* send receipt before calling the callback */
@@ -553,8 +556,10 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 	struct xio_msg		*msg = &task->imsg;
 	struct xio_msg		*omsg;
 	struct xio_task		*sender_task = task->sender_task;
-	struct xio_statistics	*stats = &connection->ctx->stats;
 	int			standalone_receipt = 0;
+#ifdef XIO_CFLAG_STAT_COUNTERS
+	struct xio_statistics	*stats = &connection->ctx->stats;
+#endif
 
 	if ((connection->state != XIO_CONNECTION_STATE_ONLINE) &&
 	    (connection->state != XIO_CONNECTION_STATE_FIN_WAIT_1)) {
@@ -610,9 +615,11 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 
 	omsg		= sender_task->omsg;
 
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG);
+#endif
 	omsg->next	= NULL;
 
 	xio_clear_ex_flags(&omsg->flags);
@@ -701,6 +708,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			}
 		}
 		if (xio_app_receipt_last_request(&hdr)) {
+#ifdef XIO_CFLAG_STAT_COUNTERS
 			struct xio_vmsg *vmsg = &msg->in;
 			struct xio_sg_table_ops	*sgtbl_ops;
 			void			*sgtbl;
@@ -708,11 +716,10 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			sgtbl		= xio_sg_table_get(&msg->in);
 			sgtbl_ops	= (struct xio_sg_table_ops *)
 					xio_sg_table_ops_get(msg->in.sgl_type);
-
 			xio_stat_add(stats, XIO_STAT_RX_BYTES,
 				     vmsg->header.iov_len +
 				     tbl_length(sgtbl_ops, sgtbl));
-
+#endif
 			omsg->request	= msg;
 			if (task->status) {
 				xio_session_notify_msg_error(
@@ -817,7 +824,9 @@ static int xio_on_ow_req_send_comp(
 		struct xio_connection *connection,
 		struct xio_task *task)
 {
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	struct xio_statistics	*stats = &connection->ctx->stats;
+#endif
 	struct xio_msg		*omsg = task->omsg;
 
 	if (connection->is_flushed) {
@@ -829,12 +838,13 @@ static int xio_on_ow_req_send_comp(
 	    task->omsg_flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT ||
 	    task->omsg->flags & XIO_MSG_FLAG_EX_IMM_READ_RECEIPT)
 		return 0;
+#ifdef XIO_CFLAG_STAT_COUNTERS
 	xio_stat_add(stats, XIO_STAT_DELAY,
 		     get_cycles() - omsg->timestamp);
 	xio_stat_inc(stats, XIO_STAT_RX_MSG); /* need to replace with
 					       * TX_COMP
 					       */
-
+#endif
 	xio_connection_remove_in_flight(connection, omsg);
 	omsg->flags = task->omsg_flags;
 	xio_clear_ex_flags(&omsg->flags);
