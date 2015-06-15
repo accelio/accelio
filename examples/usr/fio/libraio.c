@@ -284,6 +284,71 @@ bad_host:
 }
 
 
+static int raio_open_flags(struct thread_data *td, struct fio_file *f, int *_flags)
+{
+	int flags = 0;
+
+	*_flags = -1;
+
+	if (td_trim(td) && f->filetype != FIO_TYPE_BD) {
+		log_err("libraio: trim only applies to block device\n");
+		return 1;
+	}
+
+	if (!strcmp(f->file_name, "-")) {
+		if (td_rw(td)) {
+			log_err("libraio: can't read/write to stdin/out\n");
+			return 1;
+		}
+
+		/*
+		 * move output logging to stderr, if we are writing to stdout
+		 */
+		if (td_write(td))
+			f_out = stderr;
+	}
+
+	if (td_trim(td))
+		goto skip_flags;
+	if (td->o.odirect)
+		flags |= OS_O_DIRECT;
+	if (td->o.oatomic) {
+		if (!FIO_O_ATOMIC) {
+			td_verror(td, EINVAL, "OS does not support atomic IO");
+			return 1;
+		}
+		flags |= OS_O_DIRECT | FIO_O_ATOMIC;
+	}
+	if (td->o.sync_io)
+		flags |= O_SYNC;
+	if (td->o.create_on_open)
+		flags |= O_CREAT;
+skip_flags:
+	if (f->filetype != FIO_TYPE_FILE)
+		flags |= FIO_O_NOATIME;
+
+	if (td_write(td)) {
+		if (!read_only)
+			flags |= O_RDWR;
+
+		if (f->filetype == FIO_TYPE_FILE)
+			flags |= O_CREAT;
+
+	} else if (td_read(td)) {
+		if (f->filetype == FIO_TYPE_CHAR && !read_only)
+			flags |= O_RDWR;
+		else
+			flags |= O_RDONLY;
+
+	} else { //td trim
+		flags |= O_RDWR;
+	}
+
+	*_flags = flags;
+
+	return 0;
+}
+
 static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 {
 	int			ret;
@@ -295,6 +360,7 @@ static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 
 	dprint(FD_FILE, "fd open %s\n", f->file_name);
 
+	/*
 	if (td_read(td)) {
 		flags |= O_RDONLY|O_LARGEFILE|O_NONBLOCK|O_ASYNC;
 	} else if (td_write(td)) {
@@ -305,6 +371,13 @@ static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 	}
 	if (td->o.odirect)
 		flags |= O_DIRECT;
+	*/
+
+	if (raio_open_flags(td,f, &flags)) {
+		log_err("libraio:  file flags for open failed %s\n",
+			f->file_name);
+		return 1;
+	}
 
 	ret = parse_file_name(f->file_name, path, host, &port);
 	if (ret != 0) {
