@@ -132,18 +132,18 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 ##########################################################################
 # performance compilation support
 ##########################################################################
-# usage: ./configure --enable-performance=yes
+# usage: ./configure --disable-extra-checks=yes
 #
-AC_MSG_CHECKING([suppress extra checks to achieve performance - dangerous])
-AC_ARG_ENABLE([performance],
-	      [AS_HELP_STRING([--enable-performance],
-			      [enable extra optimized code for performance])],
-			       [enable_performance="$enableval"],
-			       [enable_performance=no])
-AC_MSG_RESULT([$enable_performance])
+AC_MSG_CHECKING([perform extra checks for messages but reduces performance - use carefully])
+AC_ARG_ENABLE([extra_checks],
+	      [AS_HELP_STRING([--enable-extra-checks],
+			      [enable extra checks for messages validity - default yes])],
+			       [enable_extra_checks="$enableval"],
+			       [enable_extra_checks=yes])
+AC_MSG_RESULT([$enable_extra_checks])
 
-if test "$enable_performance" = "yes"; then
-	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_PERFORMANCE"
+if test "$enable_extra_checks" != "no"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_EXTRA_CHECKS"
 fi
 
 ##########################################################################

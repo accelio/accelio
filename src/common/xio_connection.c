@@ -953,7 +953,7 @@ int xio_send_request(struct xio_connection *connection,
 	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
 
@@ -986,7 +986,7 @@ int xio_send_request(struct xio_connection *connection,
 			retval = -1;
 			goto send;
 		}
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 		valid = xio_session_is_valid_in_req(connection->session, pmsg);
 		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
@@ -1066,7 +1066,7 @@ int xio_send_response(struct xio_msg *msg)
 	void			*sgtbl;
 	size_t			bytes;
 	int			retval = 0;
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
 
@@ -1116,7 +1116,7 @@ int xio_send_response(struct xio_msg *msg)
 		xio_stat_add(stats, XIO_STAT_APPDELAY,
 			     get_cycles() - task->imsg.timestamp);
 
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (!valid) {
 			xio_set_error(EINVAL);
@@ -1223,7 +1223,7 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 	size_t			tx_bytes;
 	int			nr = -1;
 	int			retval = 0;
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
 #endif
 
@@ -1250,7 +1250,7 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			goto send;
 		}
 
-#ifndef XIO_CFLAG_PERFORMANCE
+#ifdef XIO_CFLAG_EXTRA_CHECKS
 		valid = xio_session_is_valid_out_msg(connection->session, pmsg);
 		if (unlikely(!valid)) {
 			xio_set_error(EINVAL);
