@@ -8,7 +8,7 @@ else
 endif
 
 AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include		\
-	    -I$(top_srcdir)/examples/usr/raio/usr/libraio @AM_CFLAGS@
+	    -I$(top_srcdir)/examples/raio/usr/libraio @AM_CFLAGS@
 AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lpthread -laio \
 	     -L$(top_builddir)/src/usr/
 
@@ -25,7 +25,7 @@ bin_PROGRAMS = raio_client 			\
 libraio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
-libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/usr/libraio/libraio.h
+libraio_include_HEADERS = $(top_srcdir)/examples/raio/usr/libraio/libraio.h
 
 
 libraio_common_headers   =  ./usr/libraio/raio_msg_pool.h		\
@@ -61,8 +61,8 @@ raio_client_DEPENDENCIES = libraio.la
 
 # the additional libraries needed to link raio_server
 #raio_server_LDADD = libraio.a $(AM_LDFLAGS)
-raio_client_LDADD = -lraio -L$(top_builddir)/examples/usr/raio/usr/libraio $(AM_LDFLAGS)
-raio_server_LDADD = -lraio -L$(top_builddir)/examples/usr/raio/usr/libraio $(AM_LDFLAGS)
+raio_client_LDADD = -lraio -L$(top_builddir)/examples/raio/usr/libraio $(AM_LDFLAGS)
+raio_server_LDADD = -lraio -L$(top_builddir)/examples/raio/usr/libraio $(AM_LDFLAGS)
 
 EXTRA_DIST =
 
