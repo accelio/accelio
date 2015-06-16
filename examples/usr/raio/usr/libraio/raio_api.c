@@ -68,13 +68,18 @@
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
 
+#ifndef likely
+#define likely(x)		__builtin_expect(!!(x), 1)
+#endif
+#ifndef unlikely
+#define unlikely(x)		__builtin_expect(!!(x), 0)
+#endif
+
 #ifdef VISIBILITY
 #define __RAIO_PUBLIC __attribute__((visibility("default")))
 #else
 #define __RAIO_PUBLIC
 #endif
-
-
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
