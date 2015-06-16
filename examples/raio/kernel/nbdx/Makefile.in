@@ -1,0 +1,60 @@
+# Makefile.in for kernel module
+
+SHELL = /bin/sh
+INSTALL = @INSTALL@
+mkdir_p = mkdir -p
+VERSION = @PACKAGE_VERSION@
+
+DISTFILES = Makefile.in configure.ac configure install-sh \
+	libxio.h 	\
+	raio_kutils.h 	\
+	raio_kbuffer.h 	\
+	raio_kutils.c	\
+	nbdx_configfs.c	\
+	nbdx_mq.c	\
+	nbdx_main.c
+
+nbdxmoduledir = @kmoduledir@/nbdx
+nbdxmodule := nbdx.ko
+nbdxsrc := ./
+nbdxadm := nbdxadm
+xiodir = @xiodir@
+
+all: all-spec
+
+install: all
+	$(mkdir_p) $(DESTDIR)$(nbdxmoduledir)
+	$(INSTALL) -m 644 $(nbdxsrc)/$(nbdxmodule) $(DESTDIR)$(nbdxmoduledir)/$(nbdxmodule)
+	-/sbin/depmod -a
+	-\cp $(nbdxadm)/nbdxadm /usr/local/bin/
+
+uninstall:
+	rm -f $(DESTDIR)$(nbdxmoduledir)/$(nbdxmodule)
+	-/sbin/depmod -a
+	-rm -f /usr/local/bin/nbdxadm
+
+clean:
+	$(MAKE) -C @kernelbuild@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=@XIOSYMS@ @KERNELMAKE_PARAMS@ clean
+
+distclean: clean
+	rm -f Makefile configure config.status
+	rm -f config.h config.log config.status config.cache
+	rm -rf .tmp_versions autom4te.cache
+
+maintainer-clean: distclean
+
+distdir: $(DISTFILES)
+	cp -p $(DISTFILES) $(distdir)
+
+ccflags-y += -I$(xiodir)/include
+
+obj-m := nbdx_core.o
+
+nbdx_core-objs := 	\
+	raio_kutils.o 	\
+	nbdx_configfs.o	\
+	nbdx_mq.o	\
+	nbdx_main.o
+
+all-spec:
+	$(MAKE) -C @kernelbuild@ SUBDIRS=`pwd` KBUILD_EXTRA_SYMBOLS=@XIOSYMS@ @KERNELMAKE_PARAMS@ modules
