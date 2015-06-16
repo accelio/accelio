@@ -410,7 +410,10 @@ static struct xio_mem_block *xio_mem_slab_resize(struct xio_mem_slab *slab,
 
 	/* first block given to allocator */
 	if (alloc) {
-		pblock = block + 1;
+		if (nr_blocks == 1)
+			pblock = NULL;
+		else
+			pblock = block + 1;
 		block->next = NULL;
 		/* ref count 1, not claimed by MP */
 		block->refcnt_claim = 2;
