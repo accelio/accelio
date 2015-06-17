@@ -41,13 +41,13 @@
 int nbdx_rq_map_sg(struct request *rq, struct xio_vmsg *vmsg,
 		    unsigned long long *len)
 {
-	if (vmsg->data_tbl.orig_nents < rq->nr_phys_segments) {
+	if (unlikely(vmsg->data_tbl.orig_nents < rq->nr_phys_segments)) {
 		pr_err("unsupported sg table size\n");
 		return -ENOMEM;
 	}
 	sg_init_table(vmsg->data_tbl.sgl, rq->nr_phys_segments);
 	vmsg->data_tbl.nents = blk_rq_map_sg(rq->q, rq, vmsg->data_tbl.sgl);
-	if (vmsg->data_tbl.nents <= 0) {
+	if (unlikely(vmsg->data_tbl.nents <= 0)) {
 		pr_err("mapped %d sg nents\n", vmsg->data_tbl.nents);
 		return -EINVAL;
 	}
@@ -57,10 +57,10 @@ int nbdx_rq_map_sg(struct request *rq, struct xio_vmsg *vmsg,
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0)
 static struct blk_mq_hw_ctx *nbdx_alloc_hctx(struct blk_mq_reg *reg,
 					     unsigned int hctx_index)
 {
-
 	int b_size = DIV_ROUND_UP(reg->nr_hw_queues, nr_online_nodes);
 	int tip = (reg->nr_hw_queues % nr_online_nodes);
 	int node = 0, i, n;
@@ -106,6 +106,7 @@ static void nbdx_free_hctx(struct blk_mq_hw_ctx *hctx, unsigned int hctx_index)
 
 	kfree(hctx);
 }
+#endif
 
 static int nbdx_request(struct request *req, struct nbdx_queue *xq)
 {
@@ -114,17 +115,13 @@ static int nbdx_request(struct request *req, struct nbdx_queue *xq)
 	unsigned long len  = blk_rq_cur_bytes(req);
 	int write = rq_data_dir(req) == WRITE;
 	int err;
+	void* buffer = bio_data(req->bio);
 
 	pr_debug("%s called\n", __func__);
 
 	xdev = req->rq_disk->private_data;
 
-	if (!req->buffer) {
-		pr_err("%s: req->buffer is NULL\n", __func__);
-		return 0;
-	}
-
-	err = nbdx_transfer(xdev, req->buffer, start, len, write, req, xq);
+	err = nbdx_transfer(xdev, buffer, start, len, write, req, xq);
 	if (unlikely(err))
 		pr_err("transfer failed for req %p\n", req);
 
@@ -132,22 +129,35 @@ static int nbdx_request(struct request *req, struct nbdx_queue *xq)
 
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+static int nbdx_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
+#elif LINUX_VERSION_CODE == KERNEL_VERSION(3, 18, 0)
+static int nbdx_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *rq, bool last)
+#else
 static int nbdx_queue_rq(struct blk_mq_hw_ctx *hctx, struct request *rq)
+#endif
 {
 	struct nbdx_queue *nbdx_q;
 	int err;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+	struct request *rq = bd->rq;
+#endif
 
 	pr_debug("%s called\n", __func__);
 
 	nbdx_q = hctx->driver_data;
 	err = nbdx_request(rq, nbdx_q);
 
-	if (err) {
+	if (unlikely(err)) {
 		rq->errors = -EIO;
 		return BLK_MQ_RQ_QUEUE_ERROR;
-	} else {
-		return BLK_MQ_RQ_QUEUE_OK;
 	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+	blk_mq_start_request(rq);
+#endif
+
+	return BLK_MQ_RQ_QUEUE_OK;
 }
 
 static int nbdx_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
@@ -172,16 +182,21 @@ static struct blk_mq_ops nbdx_mq_ops = {
 	.queue_rq       = nbdx_queue_rq,
 	.map_queue      = blk_mq_map_queue,
 	.init_hctx	= nbdx_init_hctx,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0)
 	.alloc_hctx	= nbdx_alloc_hctx,
 	.free_hctx	= nbdx_free_hctx,
+#endif
 };
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0)
 static struct blk_mq_reg nbdx_mq_reg = {
 	.ops		= &nbdx_mq_ops,
 	.cmd_size	= sizeof(struct raio_io_u),
 	.flags		= BLK_MQ_F_SHOULD_MERGE,
 	.numa_node	= NUMA_NO_NODE,
+	.queue_depth	= NBDX_QUEUE_DEPTH,
 };
+#endif
 
 int nbdx_setup_queues(struct nbdx_file *xdev)
 {
@@ -246,18 +261,36 @@ int nbdx_register_block_device(struct nbdx_file *nbdx_file)
 {
 	sector_t size = nbdx_file->stbuf.st_size;
 	int page_size = PAGE_SIZE;
+	int err = 0;
 
 	pr_debug("%s called\n", __func__);
 
-	nbdx_mq_reg.queue_depth = NBDX_QUEUE_DEPTH;
-	nbdx_mq_reg.nr_hw_queues = submit_queues;
 	nbdx_file->major = nbdx_major;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0)
+	nbdx_mq_reg.nr_hw_queues = submit_queues;
+
 	nbdx_file->queue = blk_mq_init_queue(&nbdx_mq_reg, nbdx_file);
+#else
+	nbdx_file->tag_set.ops = &nbdx_mq_ops;
+	nbdx_file->tag_set.nr_hw_queues = submit_queues;
+	nbdx_file->tag_set.queue_depth = NBDX_QUEUE_DEPTH;
+	nbdx_file->tag_set.numa_node = NUMA_NO_NODE;
+	nbdx_file->tag_set.cmd_size	= sizeof(struct raio_io_u);
+	nbdx_file->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
+	nbdx_file->tag_set.driver_data = nbdx_file;
+
+	err = blk_mq_alloc_tag_set(&nbdx_file->tag_set);
+	if (err)
+		goto out;
+
+	nbdx_file->queue = blk_mq_init_queue(&nbdx_file->tag_set);
+#endif
 	if (IS_ERR(nbdx_file->queue)) {
 		pr_err("%s: Failed to allocate blk queue ret=%ld\n",
 		       __func__, PTR_ERR(nbdx_file->queue));
-		return PTR_ERR(nbdx_file->queue);
+		err = PTR_ERR(nbdx_file->queue);
+		goto blk_mq_init;
 	}
 
 	nbdx_file->queue->queuedata = nbdx_file;
@@ -266,9 +299,9 @@ int nbdx_register_block_device(struct nbdx_file *nbdx_file)
 
 	nbdx_file->disk = alloc_disk_node(1, NUMA_NO_NODE);
 	if (!nbdx_file->disk) {
-		blk_cleanup_queue(nbdx_file->queue);
 		pr_err("%s: Failed to allocate disk node\n", __func__);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto alloc_disk;
 	}
 
 	nbdx_file->disk->major = nbdx_file->major;
@@ -284,13 +317,24 @@ int nbdx_register_block_device(struct nbdx_file *nbdx_file)
 	set_capacity(nbdx_file->disk, size);
 	sscanf(nbdx_file->dev_name, "%s", nbdx_file->disk->disk_name);
 	add_disk(nbdx_file->disk);
+	goto out;
 
-	return 0;
+alloc_disk:
+	blk_cleanup_queue(nbdx_file->queue);
+blk_mq_init:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+	blk_mq_free_tag_set(&nbdx_file->tag_set);
+#endif
+out:
+	return err;
 }
 
 void nbdx_unregister_block_device(struct nbdx_file *nbdx_file)
 {
 	del_gendisk(nbdx_file->disk);
 	blk_cleanup_queue(nbdx_file->queue);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+	blk_mq_free_tag_set(&nbdx_file->tag_set);
+#endif
 	put_disk(nbdx_file->disk);
 }

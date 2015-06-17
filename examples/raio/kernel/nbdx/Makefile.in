@@ -48,9 +48,9 @@ distdir: $(DISTFILES)
 
 ccflags-y += -I$(xiodir)/include
 
-obj-m := nbdx_core.o
+obj-m := nbdx.o
 
-nbdx_core-objs := 	\
+nbdx-objs := 	\
 	raio_kutils.o 	\
 	nbdx_configfs.o	\
 	nbdx_mq.o	\

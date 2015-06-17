@@ -500,7 +500,7 @@ static int nbdx_open_remote_device(struct nbdx_session *nbdx_session,
 	cpu = get_cpu();
 	nbdx_conn = nbdx_session->nbdx_conns[cpu];
 	msg_reset(&nbdx_conn->req);
-	pack_open_command(nbdx_file->file_name, O_RDWR,
+	pack_open_command(nbdx_file->file_name, O_RDWR|O_DIRECT,
 			  nbdx_conn->req.out.header.iov_base,
 			  &nbdx_conn->req.out.header.iov_len);
 
@@ -831,6 +831,7 @@ void nbdx_session_destroy(struct nbdx_session *nbdx_session)
 static int __init nbdx_init_module(void)
 {
 	int size_iov = MAX_SGL_LEN;
+	int opt;
 
 	if (nbdx_create_configfs_files())
 		return 1;
@@ -844,6 +845,22 @@ static int __init nbdx_init_module(void)
 		    XIO_OPTNAME_MAX_IN_IOVLEN, &size_iov, sizeof(int));
 	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
 		    XIO_OPTNAME_MAX_OUT_IOVLEN, &size_iov, sizeof(int));
+
+	opt = 2048;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		    XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS, &opt, sizeof(int));
+
+	opt = 2048;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		    XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS, &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		    XIO_OPTNAME_INLINE_XIO_DATA_ALIGN, &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		    XIO_OPTNAME_XFER_BUF_ALIGN, &opt, sizeof(int));
 
 	nbdx_major = register_blkdev(0, "nbdx");
 	if (nbdx_major < 0)
