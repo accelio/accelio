@@ -16,21 +16,34 @@ NBDX translates IO operations to libaio submit operations to the remote device.
 
 Prior to installing the nbdx package, the following prerequisites are required:
 
-- Accelio
-    1.1 version and above
-
 - Kernel
     3.13.1 and above
 
 3. Building and installation
 ============================
 
-Install nbdx by following steps:
+Install accelio userspace modules by following steps:
 
+  - cd to accelio root directory
+    $cd <accelio_root>
   - auto-generate (autoconf)
     $ ./autogen.sh
   - configure build
-    $ ./configure
+    $ ./configure --prefix=/opt/xio
+  - compile
+    $ make
+  - install
+    $ sudo make install
+
+
+Install accelio kernel modules by following steps:
+
+  - cd to accelio root directory
+    $cd <accelio_root>
+  - auto-generate (autoconf)
+    $ ./autogen.sh
+  - configure build
+    $ ./configure --enable-kernel-modules --prefix=/opt/xio
   - compile
     $ make
   - install
@@ -39,15 +52,16 @@ Install nbdx by following steps:
 4. HOWTO
 ========
 
-The following example creates block device vs. remote nbdx server using Accelio
+The following example creates block device vs. remote raio server using Accelio
 transport services.
 
-	1. nbdx server steps:
+	1. raio server steps:
 		- create a file that would be exposed as a block device to nbdx client
 		  at <device_path>
-		- run ./nbdx_server <server_ip> <port>
+		- run taskset -c <cpu> /opt/xio/bin/raio_server <server_ip> <port> cpusmask>
 
 	2. nbdx client steps:
+		$ mount -t configfs none /sys/kernel/config
 		$ modprobe nbdx
 		$ nbdxadm -o create_host -i <host_id> -p <server_ip:port>
 		$ nbdxadm -o create_device -i <host_id> -d <device_id> -f <file_path>
