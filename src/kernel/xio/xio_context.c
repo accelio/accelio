@@ -95,11 +95,21 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int cpu_hint)
 {
 	struct xio_context		*ctx;
-	struct xio_loop_ops		*loop_ops = ctx_params->loop_ops;
-	struct task_struct		*worker = ctx_params->worker;
+	struct xio_loop_ops		*loop_ops;
+	struct task_struct		*worker;
 	struct xio_transport		*transport;
-	int				flags = ctx_params->flags;
-	int				cpu;
+	int				flags, cpu;
+
+	if (!ctx_params) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("ctx_params is NULL\n");
+		goto cleanup0;
+
+	}
+
+	loop_ops = ctx_params->loop_ops;
+	worker = ctx_params->worker;
+	flags = ctx_params->flags;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
 		xio_set_error(EINVAL);
