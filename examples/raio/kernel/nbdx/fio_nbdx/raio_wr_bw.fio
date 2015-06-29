@@ -18,7 +18,7 @@ size=512M
 ;iodepth_batch_complete=0
 ;numa_cpu_nodes=0
 ;numa_mem_policy=bind:0
-;gtod_reduce=1
+gtod_reduce=1
 filename=/dev/nbdx0
 [file1]
 cpus_allowed=12
