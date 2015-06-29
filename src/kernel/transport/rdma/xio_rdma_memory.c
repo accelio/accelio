@@ -818,7 +818,7 @@ static int xio_fast_reg_mr(struct fast_reg_descriptor *fdesc,
 					       IB_ACCESS_REMOTE_READ);
 
 	ret = ib_post_send(rdma_hndl->qp, wr, &bad_wr);
-	if (ret) {
+	if (unlikely(ret)) {
 		ERROR_LOG("fast registration failed, ret:%d\n", ret);
 		return ret;
 	}
@@ -909,7 +909,7 @@ static int xio_reg_rdma_mem_frwr(struct xio_rdma_transport *rdma_hndl,
 					   fdesc->data_frpl,
 					   &offset, &data_size);
 
-	if (page_list_len * PAGE_SIZE < data_size) {
+	if (unlikely(page_list_len * PAGE_SIZE < data_size)) {
 		ERROR_LOG("fast reg page_list too short to hold this SG\n");
 		err = -EINVAL;
 		goto err_reg;
@@ -989,7 +989,7 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 	case XIO_SGL_TYPE_IOV:
 	case XIO_SGL_TYPE_IOV_PTR:
 		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
-		if (vmsg->data_tbl.nents) {
+		if (unlikely(vmsg->data_tbl.nents)) {
 			*nents = 0;
 			return -EINVAL;
 		}
@@ -1003,7 +1003,7 @@ int xio_vmsg_to_tx_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 	}
 
 	/* TODO: validate vmsg sgl */
-	if (vmsg->data_tbl.nents > XIO_MAX_IOV) {
+	if (unlikely(vmsg->data_tbl.nents > XIO_MAX_IOV)) {
 		WARN_LOG("scatterlist too long %u\n", vmsg->data_tbl.nents);
 		*nents = 0;
 		return -EINVAL;
@@ -1034,7 +1034,7 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 	case XIO_SGL_TYPE_IOV:
 	case XIO_SGL_TYPE_IOV_PTR:
 		WARN_LOG("wrong vmsg type %d\n", vmsg->sgl_type);
-		if (vmsg->data_tbl.nents) {
+		if (unlikely(vmsg->data_tbl.nents)) {
 			*nents = 0;
 			return -EINVAL;
 		}
@@ -1049,7 +1049,7 @@ int xio_vmsg_to_sgt(struct xio_vmsg *vmsg, struct sg_table *sgt, int *nents)
 	}
 
 	/* TODO: validate vmsg sgl */
-	if (vmsg->data_tbl.nents > XIO_MAX_IOV) {
+	if (unlikely(vmsg->data_tbl.nents > XIO_MAX_IOV)) {
 		WARN_LOG("scatterlist too long %u\n", vmsg->data_tbl.nents);
 		*nents = 0;
 		return -EINVAL;
