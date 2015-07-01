@@ -1338,6 +1338,11 @@ EXPORT_SYMBOL(xio_send_msg);
 int xio_send_rdma(struct xio_connection *connection,
 		  struct xio_msg *msg)
 {
+	if (unlikely(connection->nexus->transport_hndl->proto != XIO_PROTO_RDMA)) {
+		xio_set_error(XIO_E_NOT_SUPPORTED);
+		ERROR_LOG("using xio_send_rdma over TCP transport");
+		return -1;
+	}
 	return xio_send_typed_msg(connection, msg, XIO_MSG_TYPE_RDMA);
 }
 EXPORT_SYMBOL(xio_send_rdma);

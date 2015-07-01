@@ -84,6 +84,12 @@ static int publish_our_buffer(struct xio_session *session, struct xio_msg *req)
 	rsp->request = req;
 	pmsg = &rsp->out;
 
+	/* usually accelio batches on_msg_send_complete callbacks in batches
+	 * of 16 to maximize performance. In case server will send just
+	 * several responses and wants to receive the callback immidiately
+	 * this flag must be on */
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
+
 	rdma_test_buf.addr = (uint64_t)rdma_reg_mem.addr;
 	rdma_test_buf.length = rdma_reg_mem.length;
 	rdma_test_buf.rkey = xio_lookup_rkey_by_response(&rdma_reg_mem, rsp);
