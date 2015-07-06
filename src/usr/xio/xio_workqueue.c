@@ -127,7 +127,7 @@ static int xio_workqueue_rearm(struct xio_workqueue *work_queue)
 	}
 	/* rearm the timer */
 	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
-	if (err < 0) {
+	if (unlikely(err < 0)) {
 		ERROR_LOG("timerfd_settime failed. %m\n");
 		return -1;
 	}
@@ -148,7 +148,7 @@ static void xio_workqueue_disarm(struct xio_workqueue *work_queue)
 		return;
 
 	err = xio_timerfd_settime(work_queue->timer_fd, 0, &new_t, NULL);
-	if (err < 0)
+	if (unlikely(err < 0))
 		ERROR_LOG("timerfd_settime failed. %m\n");
 
 	work_queue->flags &= ~XIO_WORKQUEUE_TIMER_ARMED;
@@ -371,7 +371,7 @@ int xio_workqueue_add_delayed_work(struct xio_workqueue *work_queue,
 	/* if the recently add timer is now the first in list, rearm */
 		/* rearm the timer */
 	retval = xio_workqueue_rearm(work_queue);
-	if (retval)
+	if (unlikely(retval))
 		ERROR_LOG("xio_workqueue_rearm failed. %m\n");
 
 unlock:
@@ -408,7 +408,7 @@ int xio_workqueue_del_delayed_work(struct xio_workqueue *work_queue,
 	}
 	/* rearm the timer */
 	retval = xio_workqueue_rearm(work_queue);
-	if (retval)
+	if (unlikely(retval))
 		ERROR_LOG("xio_workqueue_rearm failed. %m\n");
 unlock:
 	xio_timers_list_unlock(&work_queue->timers_list);

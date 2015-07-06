@@ -520,7 +520,7 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr	req_hdr;
 
-	if (!IS_REQUEST(task->tlv_type)) {
+	if (unlikely(!IS_REQUEST(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -741,7 +741,7 @@ static int xio_tcp_prep_req_out_data(
 						tcp_hndl->tcp_mempool,
 						sge_length(sgtbl_ops, sg),
 						&tcp_task->write_reg_mem[i]);
-				if (retval) {
+				if (unlikely(retval)) {
 					tcp_task->write_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG("mempool is empty " \
@@ -1296,7 +1296,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 						sge_length(sgtbl_ops, sg),
 						&tcp_task->read_reg_mem[i]);
 
-				if (retval) {
+				if (unlikely(retval)) {
 					tcp_task->read_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG(
@@ -1396,14 +1396,14 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 
 	/* prepare buffer for response  */
 	retval = xio_tcp_prep_req_in_data(tcp_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("tcp_prep_req_in_data failed\n");
 		return -1;
 	}
 
 	/* prepare the out message  */
 	retval = xio_tcp_prep_req_out_data(tcp_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("tcp_prep_req_out_data failed\n");
 		return -1;
 	}
@@ -1520,7 +1520,7 @@ static int xio_tcp_prep_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 
-	if (!IS_RESPONSE(task->tlv_type)) {
+	if (unlikely(!IS_RESPONSE(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -1597,7 +1597,7 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 					tcp_hndl->tcp_mempool,
 					sge_length(sgtbl_ops, sg),
 					&tcp_task->write_reg_mem[i]);
-			if (retval) {
+			if (unlikely(retval)) {
 				tcp_task->write_num_reg_mem = i;
 				xio_set_error(ENOMEM);
 				ERROR_LOG("mempool is empty for %zd bytes\n",
@@ -1835,7 +1835,7 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 	req_hdr->flags    = tmp_req_hdr->flags;
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, req_hdr_len);
 
-	if (req_hdr->req_hdr_len != sizeof(struct xio_tcp_req_hdr)) {
+	if (unlikely(req_hdr->req_hdr_len != sizeof(struct xio_tcp_req_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d  expected:%zd\n",
 		req_hdr->req_hdr_len, sizeof(struct xio_tcp_req_hdr));
@@ -1909,7 +1909,7 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	rsp_hdr->flags    = tmp_rsp_hdr->flags;
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, rsp_hdr_len);
 
-	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_tcp_rsp_hdr)) {
+	if (unlikely(rsp_hdr->rsp_hdr_len != sizeof(struct xio_tcp_rsp_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d expected:%zd\n",
 		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_tcp_rsp_hdr));
@@ -2395,7 +2395,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		/* handle RDMA READ equivalent. */
 		TRACE_LOG("tcp read header\n");
 		retval = xio_tcp_rd_req_header(tcp_hndl, task);
-		if (retval) {
+		if (unlikely(retval)) {
 			ERROR_LOG("tcp read header failed\n");
 			goto cleanup;
 		}
@@ -3431,7 +3431,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				else
 					ERROR_LOG("unknown message type:0x%x\n",
 						  task->tlv_type);
-				if (retval < 0) {
+				if (unlikely(retval < 0)) {
 					ERROR_LOG("error reading header\n");
 					return retval;
 				}
@@ -3454,7 +3454,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		return 0;
 
 	retval = tcp_hndl->sock.ops->rx_data_handler(tcp_hndl, batch_nr);
-	if (retval < 0)
+	if (unlikely(retval < 0))
 		return retval;
 	count = retval;
 

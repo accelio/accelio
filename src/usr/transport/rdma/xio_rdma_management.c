@@ -308,7 +308,7 @@ static int xio_cq_modify(struct xio_cq *tcq, int cq_count, int cq_pariod)
 
 	retval = ibv_modify_cq(tcq->cq, &cq_attr,
 			       IBV_CQ_MODERATION);
-	if (retval)
+	if (unlikely(retval))
 		ERROR_LOG("ibv_modify_cq failed. (errno=%d %m)\n", errno);
 
 	return retval;
@@ -1895,7 +1895,7 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 					 RDMA_OPTION_ID_TOS,
 					 &rdma_hndl->trans_attr.tos,
 					 sizeof(rdma_hndl->trans_attr.tos));
-		if (retval) {
+		if (unlikely(retval)) {
 			xio_set_error(errno);
 			ERROR_LOG("set TOS option failed. %m\n");
 		}
@@ -1938,7 +1938,7 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 		return;
 	}
 	retval = xio_qp_create(rdma_hndl);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("internal logic error in create_endpoint\n");
 		goto notify_err0;
 	}
@@ -2042,7 +2042,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	child_hndl->base.proto = XIO_PROTO_RDMA;
 
 	retval = xio_qp_create(child_hndl);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("failed to create qp\n");
 		xio_rdma_reject((struct xio_transport_base *)child_hndl);
 		goto notify_err3;
@@ -2164,7 +2164,7 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl,
 	int			retval;
 
 	retval = rdma_disconnect(rdma_hndl->cm_id);
-	if (retval) {
+	if (unlikely(retval)) {
 		ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 			  rdma_hndl);
 		return -1;
@@ -3176,7 +3176,7 @@ static int xio_rdma_transport_modify(struct xio_transport_base *trans_hndl,
 		ret = rdma_set_option(rdma_hndl->cm_id, RDMA_OPTION_ID,
 				      RDMA_OPTION_ID_TOS,
 				      &attr->tos, sizeof(attr->tos));
-		if (ret) {
+		if (unlikely(ret)) {
 			ERROR_LOG("set TOS option failed. %m\n");
 			xio_set_error(errno);
 			return -1;
