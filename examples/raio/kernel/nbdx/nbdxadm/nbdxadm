@@ -14,6 +14,16 @@ CONFIGFS = '/sys/kernel/config'
 NBDX_CONFIGFS = os.path.join(CONFIGFS, 'nbdx')
 
 
+def is_configfs_mounted():
+    found = False
+    for l in open('/proc/mounts').readlines():
+        dev, path, fs, opts, freq, passno = l.split()
+        if fs == 'configfs' and path == '/sys/kernel/config':
+            found = True
+            break
+
+    return found
+
 def get_host_devices(host, parser):
     devices = []
     for section in parser.sections():
@@ -260,6 +270,15 @@ def main():
 
     if args:
         print 'error: invalid input,  check -h or --help'
+        sys.exit(1)
+
+    if not os.path.isdir(CONFIGFS):
+        print "can't continue operation, check if configfs module is loaded"
+        sys.exit(1)
+
+    if not is_configfs_mounted():
+        print "can't continue operation, please mount configfs i.e.:"
+        print "\tmount -t configfs none /sys/kernel/config"
         sys.exit(1)
 
     if not opts.operation:
