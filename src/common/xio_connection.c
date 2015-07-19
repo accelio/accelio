@@ -1515,8 +1515,14 @@ int xio_release_msg(struct xio_msg *msg)
 	struct xio_msg		*pmsg = msg;
 
 	while (pmsg) {
+		if (unlikely(pmsg->type != XIO_ONE_WAY_REQ)) {
+			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
+				  pmsg->type);
+			xio_set_error(EINVAL);
+			return -1;
+		}
 		task = container_of(pmsg, struct xio_task, imsg);
-		if (task->tlv_type != XIO_ONE_WAY_REQ) {
+		if (unlikely(task->tlv_type != XIO_ONE_WAY_REQ)) {
 			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 				  task->tlv_type);
 			xio_set_error(EINVAL);
