@@ -292,11 +292,26 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	 * so we use only one cq for RX and TX
 	 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
 	tcq->cq = ib_create_cq(dev->ib_dev,
 			       xio_cq_data_callback,
 			       xio_cq_event_callback,
 			       (void *)tcq,
 			       alloc_sz, cpu);
+#else
+	{
+		struct ib_cq_init_attr ia = {
+			.cqe             = alloc_sz,
+			.comp_vector     = cpu,
+		};
+
+		tcq->cq = ib_create_cq(dev->ib_dev,
+				       xio_cq_data_callback,
+				       xio_cq_event_callback,
+				       (void *)tcq,
+				       &ia);
+	}
+#endif
 	if (IS_ERR(tcq->cq)) {
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
 		goto cleanup2;

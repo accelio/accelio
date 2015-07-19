@@ -39,6 +39,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
 #include <asm/atomic.h>
