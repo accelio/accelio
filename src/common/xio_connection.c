@@ -533,6 +533,8 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
+		if (!IS_APPLICATION_MSG(pmsg->type))
+			continue;
 		xio_session_notify_msg_error(connection, pmsg,
 					     status,
 					     XIO_MSG_DIRECTION_OUT);
