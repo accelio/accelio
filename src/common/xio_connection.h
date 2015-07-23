@@ -102,7 +102,7 @@ struct xio_connection {
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
 	uint16_t			cd_bit;  /*close disconnect bit */
-	uint16_t			pad;
+	uint16_t			fin_request_flushed;
 
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;

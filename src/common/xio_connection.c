@@ -533,8 +533,17 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
-		if (!IS_APPLICATION_MSG(pmsg->type))
+		if (!IS_APPLICATION_MSG(pmsg->type)) {
+			if (pmsg->type == XIO_FIN_REQ) {
+				connection->fin_request_flushed = 1;
+				/* since fin req was not really sent, need to
+				 * "undo" the kref updates done in
+				 * xio_send_fin_req() */
+				kref_put(&connection->kref, xio_connection_post_destroy);
+				kref_put(&connection->kref, xio_connection_post_destroy);
+			}
 			continue;
+		}
 		xio_session_notify_msg_error(connection, pmsg,
 					     status,
 					     XIO_MSG_DIRECTION_OUT);
@@ -2553,6 +2562,9 @@ int xio_on_fin_req_recv(struct xio_connection *connection,
 	}
 	/* flush all pending requests */
 	xio_connection_notify_req_msgs_flush(connection, XIO_E_MSG_FLUSHED);
+	/*fin req was flushed. need to send it again */
+	if (connection->fin_request_flushed)
+		xio_send_fin_req(connection);
 
 	if (transition->send_flags & SEND_ACK)
 		xio_send_fin_ack(connection, task);
