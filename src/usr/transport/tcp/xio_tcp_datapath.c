@@ -897,6 +897,8 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
 			  removed, task->tlv_type);
 
+    tcp_hndl->tx_comp_cnt = 0;
+
 	/* No need - using flush_tx work*/
 	/*if (tcp_hndl->tx_ready_tasks_num)
 		xio_tcp_xmit(tcp_hndl);
@@ -945,7 +947,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	unsigned int		iov_len;
 	uint64_t		bytes_sent;
 
-	if (tcp_hndl->tx_ready_tasks_num == 0)
+	if (tcp_hndl->tx_ready_tasks_num == 0 ||
+	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX)
 		return 0;
 
 	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
@@ -957,7 +960,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 				tasks_list_entry);
 
 	/* if "ready to send queue" is not empty */
-	while (tcp_hndl->tx_ready_tasks_num) {
+	while (likely(tcp_hndl->tx_ready_tasks_num &&
+		      tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX)) {
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
@@ -1206,8 +1210,6 @@ handle_completions:
 			ERROR_LOG("xio_ctx_add_work failed.\n");
 			return retval2;
 		}
-
-		tcp_hndl->tx_comp_cnt = 0;
 	}
 
 	xio_context_disable_event(&tcp_hndl->flush_tx_event);

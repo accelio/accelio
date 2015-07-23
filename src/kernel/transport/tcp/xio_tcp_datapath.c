@@ -817,6 +817,7 @@ void xio_tcp_tx_completion_handler(void *xio_task)
 			break;
 		}
 	}
+	tcp_hndl->tx_comp_cnt = 0;
 
 	if (!found && removed)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
@@ -865,7 +866,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	unsigned int		iov_len;
 	uint64_t		bytes_sent;
 
-	if (tcp_hndl->tx_ready_tasks_num == 0)
+	if (tcp_hndl->tx_ready_tasks_num == 0 ||
+	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX)
 		return 0;
 
 	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
@@ -877,7 +879,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 				tasks_list_entry);
 
 	/* if "ready to send queue" is not empty */
-	while (tcp_hndl->tx_ready_tasks_num) {
+	while (likely(tcp_hndl->tx_ready_tasks_num &&
+		      tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX)) {
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
@@ -1100,7 +1103,6 @@ handle_completions:
 		tcp_task = task_success->dd_data;
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_task->comp_event);
-		tcp_hndl->tx_comp_cnt = 0;
 	}
 
 	return retval < 0 ? retval : 0;
