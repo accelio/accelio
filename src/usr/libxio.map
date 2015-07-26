@@ -27,6 +27,7 @@ XIO_1.0 {
 		xio_context_create;
 		xio_context_destroy;
 		xio_context_add_ev_handler;
+		xio_context_modify_ev_handler;
 		xio_context_del_ev_handler;
 		xio_context_run_loop;
 		xio_context_stop_loop;

@@ -315,6 +315,19 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 			       int fd, int events,
 			       xio_ev_handler_t handler,
 			       void *data);
+/**
+ * change the event event associated with the target file descriptor fd.
+ *
+ * @param[in] ctx	The xio context handle
+ * @param[in] fd	the file descriptor
+ * @param[in] events	the event signaled as defined in
+ *			enum xio_ev_loop_events
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events);
 
 /**
  * removes external fd from internal dispatcher
