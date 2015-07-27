@@ -1104,6 +1104,8 @@ int xio_send_response(struct xio_msg *msg)
 			retval = -1;
 			goto send;
 		}
+		/* set type for notification */
+		pmsg->type = XIO_MSG_TYPE_RSP;
 		if (unlikely(
 		      connection->disconnecting ||
 		      (connection->state != XIO_CONNECTION_STATE_ONLINE &&
@@ -1162,9 +1164,6 @@ int xio_send_response(struct xio_msg *msg)
 		    (task->state == XIO_TASK_STATE_DELIVERED))
 			pmsg->flags |= XIO_MSG_FLAG_EX_RECEIPT_FIRST;
 		task->state = XIO_TASK_STATE_READ;
-
-		pmsg->type = XIO_MSG_TYPE_RSP;
-
 		if (connection->enable_flow_control) {
 			vmsg		= &pmsg->request->in;
 			sgtbl		= xio_sg_table_get(vmsg);
