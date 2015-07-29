@@ -254,6 +254,8 @@ static int xio_server_main(void *data)
 	struct xio_context_params ctx_params;
 	struct xio_context	*ctx;
 	int			i;
+	struct xio_vmsg *omsg;
+	void *buf;
 
 	atomic_add(2, &module_state);
 
@@ -278,14 +280,21 @@ static int xio_server_main(void *data)
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
-		server_data->rsp[i].out.header.iov_base =
-			kstrdup("hello world header response", GFP_KERNEL);
-		server_data->rsp[i].out.header.iov_len =
-			strlen(server_data->rsp[i].out.header.iov_base) + 1;
-		server_data->rsp[i].out.sgl_type = XIO_SGL_TYPE_SCATTERLIST;
-		server_data->rsp[i].out.data_tbl.orig_nents = 0;
-		server_data->rsp[i].out.data_tbl.nents = 0;
-		server_data->rsp[i].out.data_tbl.sgl = NULL;
+		xio_reinit_msg(&server_data->rsp[i]);
+		omsg = &server_data->rsp[i].out;
+
+		/* header */
+		buf = kstrdup("hello world header rsp 1", GFP_KERNEL);
+		server_data->rsp[i].out.header.iov_base = buf;
+		server_data->rsp[i].out.header.iov_len = strlen(buf) + 1;
+		/* iovec[0]*/
+		sg_alloc_table(&omsg->data_tbl, 64, GFP_KERNEL);
+		/* currently only one entry */
+		xio_init_vmsg(omsg, 1);     /* one entry (max_nents) */
+		buf = kstrdup("hello world iovec rsp", GFP_KERNEL);
+		sg_init_one(omsg->data_tbl.sgl, buf, strlen(buf) + 1);
+		/* orig_nents is 64 */
+		vmsg_sglist_set_nents(omsg, 1);
 	}
 
 	/* create url to connect to */
@@ -308,8 +317,12 @@ static int xio_server_main(void *data)
 	}
 
 	/* free the message */
-	for (i = 0; i < QUEUE_DEPTH; i++)
+	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(server_data->rsp[i].out.header.iov_base);
+		/* Currently need to release only one entry */
+		kfree(sg_virt(server_data->rsp[i].out.data_tbl.sgl));
+		xio_fini_vmsg(&server_data->rsp[i].out);
+	}
 
 	/* free the context */
 	xio_context_destroy(ctx);
