@@ -1429,6 +1429,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
+	/* do not batch in tcp since tcp stack has its own considerations */
+	/*
 	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
 	    task->is_control) {
 		must_send = 1;
@@ -1436,6 +1438,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
+	*/
+	must_send = 1;
 
 	if (must_send) {
 		retval = xio_tcp_xmit(tcp_hndl);
@@ -1782,6 +1786,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
+	/* do not batch in tcp since tcp stack has its own considerations */
+	/*
 	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
 	    task->is_control) {
 		must_send = 1;
@@ -1789,6 +1795,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
+	*/
+	must_send = 1;
 
 	if (must_send) {
 		retval = xio_tcp_xmit(tcp_hndl);
