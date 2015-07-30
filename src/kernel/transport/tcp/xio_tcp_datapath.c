@@ -817,11 +817,14 @@ void xio_tcp_tx_completion_handler(void *xio_task)
 			break;
 		}
 	}
-	tcp_hndl->tx_comp_cnt = 0;
-
 	if (!found && removed)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
 			  removed, task->tlv_type);
+
+	tcp_hndl->tx_comp_cnt = 0;
+
+	if (tcp_hndl->tx_ready_tasks_num)
+		xio_tcp_xmit(tcp_hndl);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3124,6 +3127,17 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 	if (recvmsg_retval > 0)
 		*resched = 1;
 
+	if (tcp_hndl->tx_ready_tasks_num) {
+		retval = xio_tcp_xmit(tcp_hndl);
+		if (retval < 0) {
+			if (xio_errno() != XIO_EAGAIN) {
+				ERROR_LOG("xio_tcp_xmit failed\n");
+				return -1;
+			}
+			return ret_count;
+		}
+	}
+
 	return ret_count;
 }
 
@@ -3283,7 +3297,22 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 	*resched = tmp_resched;
 	retval = tcp_hndl->socket.ops->rx_data_handler(tcp_hndl, batch_nr,
 						       resched);
-	return retval;
+	if (unlikely(retval < 0))
+		return retval;
+	count = retval;
+
+	if (tcp_hndl->tx_ready_tasks_num) {
+		retval = xio_tcp_xmit(tcp_hndl);
+		if (retval < 0) {
+			if (xio_errno() != XIO_EAGAIN) {
+				ERROR_LOG("xio_tcp_xmit failed\n");
+				return -1;
+			}
+			return count;
+		}
+	}
+
+	return count;
 }
 
 /*---------------------------------------------------------------------------*/

@@ -897,12 +897,11 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
 			  removed, task->tlv_type);
 
-    tcp_hndl->tx_comp_cnt = 0;
+	tcp_hndl->tx_comp_cnt = 0;
 
-	/* No need - using flush_tx work*/
-	/*if (tcp_hndl->tx_ready_tasks_num)
+	if (tcp_hndl->tx_ready_tasks_num)
 		xio_tcp_xmit(tcp_hndl);
-	*/
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3307,8 +3306,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 						tasks_list_entry);
 	}
 
-	/* No need - using flush_tx work */
-	/*if (tcp_hndl->tx_ready_tasks_num) {
+	if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != XIO_EAGAIN) {
@@ -3318,7 +3316,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return ret_count;
 		}
 	}
-	*/
 
 	return ret_count;
 }
@@ -3468,8 +3465,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		return retval;
 	count = retval;
 
-	/* No need - using flush_tx work*/
-	/*if (tcp_hndl->tx_ready_tasks_num) {
+	if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != XIO_EAGAIN) {
@@ -3479,7 +3475,6 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return count;
 		}
 	}
-	*/
 
 	return count;
 }
