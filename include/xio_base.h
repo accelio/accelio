@@ -1151,7 +1151,7 @@ enum xio_optname {
 	XIO_OPTNAME_MEM_ALLOCATOR,
 	/**< enables/disables connection's keep alive. type: int	      */
 	XIO_OPTNAME_ENABLE_KEEPALIVE,
-	/**< configure keep alive variables. type: struct xio_option_keepalive*/
+	/**< configure keep alive variables.type: struct xio_options_keepalive*/
 	XIO_OPTNAME_CONFIG_KEEPALIVE,
 
 	/* XIO_OPTLEVEL_ACCELIO/RDMA/TCP */
