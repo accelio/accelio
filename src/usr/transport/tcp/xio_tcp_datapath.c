@@ -844,22 +844,6 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_disconnect_helper						     */
-/*---------------------------------------------------------------------------*/
-void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
-{
-	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
-						xio_tcp_hndl;
-
-	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
-		return;
-
-	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
-
-	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_tcp_tx_comp_handler						     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_tx_completion_handler(void *xio_task)
@@ -902,6 +886,37 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 	if (tcp_hndl->tx_ready_tasks_num)
 		xio_tcp_xmit(tcp_hndl);
 
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_disconnect_helper						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
+						xio_tcp_hndl;
+
+	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
+		return;
+
+	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
+
+	/* flush all tasks in completion */
+        if (!list_empty(&tcp_hndl->in_flight_list)) {
+		struct xio_task *task = NULL;
+
+		task = list_last_entry(&tcp_hndl->in_flight_list,
+				       struct xio_task,
+				       tasks_list_entry);
+		if (task) {
+		    XIO_TO_TCP_TASK(task, tcp_task);
+
+		    xio_ctx_add_work(tcp_hndl->base.ctx, task,
+				     xio_tcp_tx_completion_handler,
+				     &tcp_task->comp_work);
+		}
+	}
+	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1449,6 +1464,17 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+						  task,
+						  xio_tcp_tx_completion_handler,
+						  &tcp_task->comp_work);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_work failed.\n");
+				return retval;
+			}
+		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
@@ -1808,6 +1834,17 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 				return -1;
 			}
 			retval = 0;
+		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+						  task,
+						  xio_tcp_tx_completion_handler,
+						  &tcp_task->comp_work);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_work failed.\n");
+				return retval;
+			}
 		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,

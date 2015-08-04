@@ -645,6 +645,20 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 
 	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 
+	/* flush all tasks in completion */
+        if (!list_empty(&tcp_hndl->in_flight_list)) {
+		struct xio_task *task = NULL;
+
+		task = list_last_entry(&tcp_hndl->in_flight_list,
+				       struct xio_task,
+				       tasks_list_entry);
+		if (task) {
+		    XIO_TO_TCP_TASK(task, tcp_task);
+
+		    xio_context_add_event(tcp_hndl->base.ctx,
+					  &tcp_task->comp_event);
+	    }
+	}
 	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 

@@ -1339,6 +1339,15 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 			}
 			retval = 0;
 		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_context_add_event(tcp_hndl->base.ctx,
+						       &tcp_task->comp_event);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_event failed.\n");
+				return retval;
+			}
+		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
@@ -1651,6 +1660,15 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 				return -1;
 			}
 			retval = 0;
+		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_context_add_event(tcp_hndl->base.ctx,
+						       &tcp_task->comp_event);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_event failed.\n");
+				return retval;
+			}
 		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
