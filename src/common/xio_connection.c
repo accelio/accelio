@@ -123,6 +123,7 @@ static struct xio_transition xio_transition_table[][2] = {
 static void xio_connection_post_destroy(struct kref *kref);
 static void xio_connection_teardown_handler(void *connection_);
 static void xio_connection_keepalive_time(void *_connection);
+static void xio_close_time_wait(void *data);
 
 struct xio_managed_rkey {
 	struct list_head	list_entry;
@@ -1775,15 +1776,27 @@ static void xio_pre_disconnect(void *conn)
 	if (connection->state != XIO_CONNECTION_STATE_ONLINE)
 		return;
 
-	connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
-
 	kref_get(&connection->kref);  /* for time wait */
-	xio_send_fin_req(connection);
 
-	if (!connection->disable_notify) {
-		connection->close_reason = XIO_E_SESSION_CLOSED;
-		xio_session_notify_connection_closed(connection->session,
-						     connection);
+	/* on keep alive timeout, assume fin is also timeout and bypass  */
+	if (!connection->ka.timedout) {
+		connection->state = XIO_CONNECTION_STATE_FIN_WAIT_1;
+
+		xio_send_fin_req(connection);
+
+		if (!connection->disable_notify) {
+			connection->close_reason = XIO_E_SESSION_CLOSED;
+			xio_session_notify_connection_closed(
+					connection->session, connection);
+		}
+	} else {
+		if (!connection->disable_notify) {
+			connection->close_reason = XIO_E_TIMEOUT;
+			xio_session_notify_connection_closed(
+					connection->session, connection);
+		}
+		connection->state = XIO_CONNECTION_STATE_TIME_WAIT;
+		xio_close_time_wait(connection);
 	}
 }
 
@@ -2406,6 +2419,8 @@ static void xio_close_time_wait(void *data)
 
 	if (connection->session->state == XIO_SESSION_STATE_REJECTED)
 		connection->close_reason = XIO_E_SESSION_REJECTED;
+	else if (connection->ka.timedout)
+		connection->close_reason = XIO_E_TIMEOUT;
 	else
 		connection->close_reason = XIO_E_SESSION_CLOSED;
 
@@ -2970,6 +2985,7 @@ int xio_on_connection_ka_rsp_recv(struct xio_connection *connection,
 
 	connection->ka.probes = 0;
 	connection->ka.req_sent = 0;
+	connection->ka.timedout = 0;
 
 	retval = xio_ctx_add_delayed_work(
 				connection->ctx,
@@ -2999,6 +3015,8 @@ int xio_on_connection_ka_req_recv(struct xio_connection *connection,
 	/* delayed disconnect request should be done now */
 	DEBUG_LOG("recv keepalive request. session:%p, connection:%p\n",
 		  connection->session, connection);
+
+	connection->ka.timedout = 0;
 
 	/* optimization: reschedule local timer if request received */
 	if (g_options.enable_keepalive && !connection->ka.probes &&
@@ -3047,6 +3065,8 @@ void xio_connection_keepalive_intvl(void *_connection)
 	xio_ctx_del_delayed_work(connection->ctx,
 				 &connection->ka.timer);
 
+	connection->ka.timedout = 1;
+
 	if (++connection->ka.probes == g_options.ka.probes) {
 		ERROR_LOG("connection keepalive timeout. connection:%p probes:[%d]\n",
 			  connection, connection->ka.probes);
@@ -3065,6 +3085,8 @@ void xio_connection_keepalive_intvl(void *_connection)
 		/* notify the application of connection error */
 		xio_session_notify_connection_error(
 				connection->session, connection, XIO_E_TIMEOUT);
+		if (!connection->disconnecting)
+			xio_disconnect(connection);
 		return;
 	}
 	WARN_LOG("connection keepalive timeout. connection:%p probes:[%d]\n",
