@@ -473,7 +473,7 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	switch (tcp_hndl->state) {
 	case XIO_TRANSPORT_STATE_INIT:
-		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
+		DEBUG_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
 			  tcp_hndl);
 		/*fallthrough*/
 	case XIO_TRANSPORT_STATE_LISTEN:
@@ -1217,7 +1217,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	if (sa_len == -1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
-		return -1;
+		goto exit1;
 	}
 	tcp_hndl->base.is_client = 0;
 
@@ -1229,7 +1229,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		xio_set_error(xio_get_last_socket_error());
 		ERROR_LOG("tcp bind failed. (errno=%d %m)\n",
 			  xio_get_last_socket_error());
-		goto exit;
+		goto exit1;
 	}
 
 	tcp_hndl->is_listen = 1;
@@ -1240,7 +1240,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		xio_set_error(xio_get_last_socket_error());
 		ERROR_LOG("tcp listen failed. (errno=%d %m)\n",
 			  xio_get_last_socket_error());
-		goto exit;
+		goto exit1;
 	}
 
 	/* add to epoll */
@@ -1250,6 +1250,10 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 			XIO_POLLIN,
 			xio_tcp_listener_ev_handler,
 			tcp_hndl);
+	if (retval) {
+		ERROR_LOG("xio_context_add_ev_handler failed.\n");
+		goto exit1;
+	}
 
 	retval  = getsockname(tcp_hndl->sock.cfd,
 			      (struct sockaddr *)&sa.sa_stor,
@@ -1282,6 +1286,8 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 
 	return 0;
 
+exit1:
+	tcp_hndl->sock.ops->del_ev_handlers = NULL;
 exit:
 	return -1;
 }
@@ -1623,14 +1629,14 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 	if (rsa_len == (socklen_t)-1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
-		return -1;
+		goto exit1;
 	}
 	/* allocate memory for portal_uri */
 	tcp_hndl->base.portal_uri = strdup(portal_uri);
 	if (!tcp_hndl->base.portal_uri) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("strdup failed. %m\n");
-		return -1;
+		goto exit1;
 	}
 	tcp_hndl->base.is_client = 1;
 
@@ -1667,7 +1673,8 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 
 exit:
 	ufree(tcp_hndl->base.portal_uri);
-
+exit1:
+	tcp_hndl->sock.ops->del_ev_handlers = NULL;
 	return -1;
 }
 
