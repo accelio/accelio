@@ -90,8 +90,8 @@ static struct dentry *xio_tcp_root;
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 struct xio_transport			xio_tcp_transport;
-struct xio_tcp_socket_ops		single_sock_ops;
-struct xio_tcp_socket_ops		dual_sock_ops;
+static struct xio_tcp_socket_ops	single_sock_ops;
+static struct xio_tcp_socket_ops	dual_sock_ops;
 struct xio_options                     *g_poptions;
 
 /* tcp options */
@@ -1001,8 +1001,8 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* create tcp socket */
 	if (create_socket) {
-		tcp_hndl->socket.ops = tcp_options.tcp_dual_sock ?
-					&dual_sock_ops : &single_sock_ops;
+		memcpy(tcp_hndl->socket.ops, (tcp_options.tcp_dual_sock ?
+		       &dual_sock_ops : &single_sock_ops), sizeof(*tcp_hndl->socket.ops));
 		if (tcp_hndl->socket.ops->open(&tcp_hndl->socket))
 			goto cleanup;
 	}
@@ -1199,11 +1199,13 @@ single_sock:
 	if (is_single) {
 		child_hndl->socket.ctl.ksock = ctl_sock;
 		child_hndl->socket.data.ksock = ctl_sock;
-		child_hndl->socket.ops = &single_sock_ops;
+		memcpy(child_hndl->socket.ops, &single_sock_ops,
+		       sizeof(*child_hndl->socket.ops));
 	} else {
 		child_hndl->socket.ctl.ksock = ctl_sock;
 		child_hndl->socket.data.ksock = data_sock;
-		child_hndl->socket.ops = &dual_sock_ops;
+		memcpy(child_hndl->socket.ops, &dual_sock_ops,
+		       sizeof(*child_hndl->socket.ops));
 
 		child_hndl->tmp_rx_buf = kzalloc(TMP_RX_BUF_SIZE, GFP_KERNEL);
 		if (!child_hndl->tmp_rx_buf) {
@@ -2650,7 +2652,7 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
-struct xio_tcp_socket_ops single_sock_ops = {
+static struct xio_tcp_socket_ops single_sock_ops = {
 	.open			= xio_tcp_single_sock_create,
 	.add_ev_handlers	= xio_tcp_single_sock_add_ev_handlers,
 	.del_ev_handlers	= xio_tcp_single_sock_del_ev_handlers,
@@ -2664,7 +2666,7 @@ struct xio_tcp_socket_ops single_sock_ops = {
 	.close			= xio_tcp_single_sock_close,
 };
 
-struct xio_tcp_socket_ops dual_sock_ops = {
+static struct xio_tcp_socket_ops dual_sock_ops = {
 	.open			= xio_tcp_dual_sock_create,
 	.add_ev_handlers	= xio_tcp_dual_sock_add_ev_handlers,
 	.del_ev_handlers	= xio_tcp_dual_sock_del_ev_handlers,

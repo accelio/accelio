@@ -39,6 +39,7 @@
 #define XIO_TCP_TRANSPORT_H_
 
 struct xio_tcp_transport;
+struct xio_tcp_socket;
 
 /*---------------------------------------------------------------------------*/
 /* externals								     */
@@ -261,15 +262,6 @@ struct xio_tcp_pending_conn {
 	struct list_head		conns_list_entry;
 };
 
-struct xio_tcp_socket {
-	int				cfd;
-	int				dfd;
-	uint16_t			port_cfd;
-	uint16_t			port_dfd;
-	int				pad;
-	struct xio_tcp_socket_ops	*ops;
-};
-
 struct xio_tcp_socket_ops {
 	int (*open)(struct xio_tcp_socket *sock);
 	int (*add_ev_handlers)(struct xio_tcp_transport *tcp_hndl);
@@ -286,6 +278,15 @@ struct xio_tcp_socket_ops {
 			       int batch_nr);
 	int (*shutdown)(struct xio_tcp_socket *sock);
 	int (*close)(struct xio_tcp_socket *sock);
+};
+
+struct xio_tcp_socket {
+	int				cfd;
+	int				dfd;
+	uint16_t			port_cfd;
+	uint16_t			port_dfd;
+	int				pad;
+	struct xio_tcp_socket_ops	ops[1];
 };
 
 struct xio_tcp_transport {

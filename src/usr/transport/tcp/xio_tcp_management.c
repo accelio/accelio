@@ -74,9 +74,9 @@
 static spinlock_t			mngmt_lock;
 static thread_once_t			ctor_key_once = THREAD_ONCE_INIT;
 static thread_once_t			dtor_key_once = THREAD_ONCE_INIT;
+static struct xio_tcp_socket_ops	single_sock_ops;
+static struct xio_tcp_socket_ops	dual_sock_ops;
 extern struct xio_transport		xio_tcp_transport;
-extern struct xio_tcp_socket_ops	single_sock_ops;
-extern struct xio_tcp_socket_ops	dual_sock_ops;
 
 static int				cdl_fd = -1;
 
@@ -847,8 +847,10 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* create tcp socket */
 	if (create_socket) {
-		tcp_hndl->sock.ops = tcp_options.tcp_dual_sock ?
-					&dual_sock_ops : &single_sock_ops;
+		memcpy(tcp_hndl->sock.ops,
+		       (tcp_options.tcp_dual_sock ?
+			&dual_sock_ops : &single_sock_ops),
+		       sizeof(*tcp_hndl->sock.ops));
 		if (tcp_hndl->sock.ops->open(&tcp_hndl->sock))
 			goto cleanup;
 	}
@@ -1053,12 +1055,14 @@ single_sock:
 	if (is_single) {
 		child_hndl->sock.cfd = fd;
 		child_hndl->sock.dfd = fd;
-		child_hndl->sock.ops = &single_sock_ops;
+		memcpy(child_hndl->sock.ops, &single_sock_ops,
+		       sizeof(*child_hndl->sock.ops));
 
 	} else {
 		child_hndl->sock.cfd = cfd;
 		child_hndl->sock.dfd = dfd;
-		child_hndl->sock.ops = &dual_sock_ops;
+		memcpy(child_hndl->sock.ops, &dual_sock_ops,
+		       sizeof(*child_hndl->sock.ops));
 
 		child_hndl->tmp_rx_buf = ucalloc(1, TMP_RX_BUF_SIZE);
 		if (!child_hndl->tmp_rx_buf) {
@@ -2556,7 +2560,6 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
-struct xio_tcp_socket_ops single_sock_ops;
 /*---------------------------------------------------------------------------*/
 static void init_single_sock_ops(void)
 {
@@ -2573,7 +2576,6 @@ static void init_single_sock_ops(void)
 	single_sock_ops.close = xio_tcp_single_sock_close;
 };
 
-struct xio_tcp_socket_ops dual_sock_ops;
 /*---------------------------------------------------------------------------*/
 static void init_dual_sock_ops(void)
 {

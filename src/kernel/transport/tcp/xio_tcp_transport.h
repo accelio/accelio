@@ -40,6 +40,8 @@
 
 #include <linux/version.h>
 
+struct xio_tcp_socket;
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -318,14 +320,6 @@ struct xio_socket {
 #define XIO_SOCK_ESTABLISH_CTL	1
 #define XIO_SOCK_ESTABLISH_DATA	BIT(1)
 
-struct xio_tcp_socket {
-	struct xio_socket		ctl;
-	struct xio_socket		data;
-	uint64_t			establish_states;
-	struct xio_tcp_socket_ops	*ops;
-	struct xio_ev_data		accept_event_data;
-};
-
 struct xio_tcp_socket_ops {
 	int (*open)(struct xio_tcp_socket *sock);
 	int (*add_ev_handlers)(struct xio_tcp_transport *tcp_hndl);
@@ -343,6 +337,15 @@ struct xio_tcp_socket_ops {
 	int (*shutdown)(struct xio_tcp_socket *sock);
 	int (*close)(struct xio_tcp_socket *sock);
 };
+
+struct xio_tcp_socket {
+	struct xio_socket		ctl;
+	struct xio_socket		data;
+	uint64_t			establish_states;
+	struct xio_tcp_socket_ops	ops[1];
+	struct xio_ev_data		accept_event_data;
+};
+
 
 struct xio_tcp_transport {
 	struct xio_transport_base	base;
