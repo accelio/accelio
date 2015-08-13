@@ -1311,6 +1311,7 @@ void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 	unsigned long		timeout;
 	unsigned long		start_time;
 	struct ib_wc		*wc;
+	struct xio_rdma_task	*rdma_task;
 
 	timeout = usecs_to_jiffies(timeout_us);
 
@@ -1321,16 +1322,19 @@ void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 		if (likely(retval > 0)) {
 			wc = &tcq->wc_array[retval - 1];
 			for (i = retval - 1; i >= 0; i--) {
-				if (wc->opcode == IB_WC_RECV &&
+				if (((wc->opcode == IB_WC_RECV || wc->opcode == IB_WC_RDMA_READ)) &&
 				    wc->status == IB_WC_SUCCESS) {
 					task = (struct xio_task *)
 						ptr_from_int64(wc->wr_id);
-					tlv_type = xio_mbuf_read_type(
+					rdma_task = (struct xio_rdma_task *)task->dd_data;
+					if (!rdma_task->phantom_idx) {
+						tlv_type = xio_mbuf_read_type(
 								&task->mbuf);
-					if (IS_APPLICATION_MSG(
+						if (IS_APPLICATION_MSG(
 							task->tlv_type)) {
-						last_in_rxq = i;
-						break;
+							last_in_rxq = i;
+							break;
+						}
 					}
 				}
 				wc--;
@@ -1380,6 +1384,7 @@ static int xio_cq_event_handler(struct xio_cq *tcq)
 	int		retval, tlv_type;
 	int		i, last_in_rxq = -1;
 	struct ib_wc	*wc;
+	struct xio_rdma_task *rdma_task;
 
 	start_time = jiffies;
 
@@ -1398,14 +1403,17 @@ retry:
 
 		wc = &tcq->wc_array[polled - 1];
 		for (i = polled - 1; i >= 0; i--) {
-			if (wc->opcode == IB_WC_RECV &&
-			    wc->status == IB_WC_SUCCESS) {
+			if ((wc->opcode == IB_WC_RECV || wc->opcode == IB_WC_RDMA_READ) &&
+			     wc->status == IB_WC_SUCCESS) {
 				task = (struct xio_task *)
 					ptr_from_int64(wc->wr_id);
-				tlv_type = xio_mbuf_read_type(&task->mbuf);
-				if (IS_APPLICATION_MSG(tlv_type)) {
-					last_in_rxq = i;
-					break;
+				rdma_task = (struct xio_rdma_task *)task->dd_data;
+				if (!rdma_task->phantom_idx) {
+					tlv_type = xio_mbuf_read_type(&task->mbuf);
+					if (IS_APPLICATION_MSG(tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
 				}
 			}
 			wc--;

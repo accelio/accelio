@@ -1151,6 +1151,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	cycles_t	start_time = 0;
 	struct ibv_wc	*wc;
 	struct xio_task *task;
+	struct xio_rdma_task    *rdma_task;
 
 	for (;;) {
 		if (wclen > tcq->wc_array_len)
@@ -1194,14 +1195,17 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 
 		wc = &tcq->wc_array[err - 1];
 		for (i = err - 1; i >= 0; i--) {
-			if (wc->opcode == IBV_WC_RECV &&
-			    wc->status == IBV_WC_SUCCESS) {
+			if (wc->status == IBV_WC_SUCCESS &&
+				(wc->opcode == IBV_WC_RECV || wc->opcode == IBV_WC_RDMA_READ)) {
 				task = (struct xio_task *)
 					ptr_from_int64(wc->wr_id);
-				tlv_type = xio_mbuf_read_type(&task->mbuf);
-				if (IS_APPLICATION_MSG(tlv_type)) {
-					last_in_rxq = i;
-					break;
+				rdma_task = (struct xio_rdma_task *)task->dd_data;
+				if (!rdma_task->phantom_idx) {
+					tlv_type = xio_mbuf_read_type(&task->mbuf);
+					if (IS_APPLICATION_MSG(tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
 				}
 			}
 			wc--;
