@@ -70,7 +70,7 @@
 #define SUPPORTED_PORTALS   5
 #define NBDX_SECT_SIZE	    512
 #define NBDX_SECT_SHIFT	    ilog2(NBDX_SECT_SIZE)
-#define NBDX_QUEUE_DEPTH    256
+#define NBDX_QUEUE_DEPTH    64
 
 enum nbdx_dev_state {
 	DEVICE_INITIALIZING,
