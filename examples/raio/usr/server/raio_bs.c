@@ -39,8 +39,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "libraio.h"
 #include "raio_bs.h"
+#include "raio_msg_pool.h"
 
 /*---------------------------------------------------------------------------*/
 /* globals								     */
@@ -126,12 +126,13 @@ struct raio_bs *raio_bs_init(void *ctx, const char *name)
 	if (dev->bst->bs_init) {
 		int retval = dev->bst->bs_init(dev);
 		if (retval != 0)
-			goto cleanup;
+			goto cleanup1;
 	}
 	return dev;
 
-cleanup:
+cleanup1:
 	free(dev);
+cleanup:
 	return NULL;
 }
 
@@ -147,11 +148,32 @@ void raio_bs_exit(struct raio_bs *dev)
 /*---------------------------------------------------------------------------*/
 /* raio_bs_open								     */
 /*---------------------------------------------------------------------------*/
-int raio_bs_open(struct raio_bs *dev, int fd)
+int raio_bs_open(struct raio_bs *dev, int fd, int io_u_free_nr)
 {
+	struct xio_iovec_ex		*sglist;
+	int j;
 	int retval = dev->bst->bs_open(dev, fd);
-	if (retval == 0)
+	if (retval == 0) {
 		dev->fd = fd;
+		dev->io_u_free_nr = io_u_free_nr;
+		dev->io_us_free = (struct raio_io_u *)calloc(io_u_free_nr,
+						 sizeof(struct raio_io_u));
+		dev->rsp_pool = msg_pool_create(RAIO_CMD_HDR_SZ, MAXBLOCKSIZE,
+						io_u_free_nr);
+		TAILQ_INIT(&dev->io_u_free_list);
+
+		/* register each io_u in the free list */
+		for (j = 0; j < dev->io_u_free_nr; j++) {
+			dev->io_us_free[j].bs_dev = dev;
+			dev->io_us_free[j].rsp = msg_pool_get(dev->rsp_pool);
+			sglist = vmsg_sglist(&dev->io_us_free[j].rsp->out);
+			dev->io_us_free[j].buf = sglist[0].iov_base;
+			TAILQ_INSERT_TAIL(&dev->io_u_free_list,
+					  &dev->io_us_free[j],
+					  io_u_list);
+		}
+	}
+
 	return retval;
 }
 
@@ -160,6 +182,19 @@ int raio_bs_open(struct raio_bs *dev, int fd)
 /*---------------------------------------------------------------------------*/
 void raio_bs_close(struct raio_bs *dev)
 {
+	int j;
+
+	for (j = 0; j < dev->io_u_free_nr; j++) {
+		TAILQ_REMOVE(&dev->io_u_free_list,
+			     &dev->io_us_free[j],
+			     io_u_list);
+		msg_pool_put(dev->rsp_pool, dev->io_us_free[j].rsp);
+		dev->io_us_free[j].buf = NULL;
+	}
+	dev->io_u_free_nr = 0;
+	free(dev->io_us_free);
+	msg_pool_delete(dev->rsp_pool);
+
 	dev->bst->bs_close(dev);
 }
 

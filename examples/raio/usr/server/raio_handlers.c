@@ -59,10 +59,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros				                             */
 /*---------------------------------------------------------------------------*/
-#define MAXBLOCKSIZE		(128 * 1024)
 #define EXTRA_MSGS		512
-
-#define RAIO_CMD_HDR_SZ		512
 #define RAIO_CMDS_POOL_SZ	128
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -75,28 +72,13 @@
 /*---------------------------------------------------------------------------*/
 /* data structures				                             */
 /*---------------------------------------------------------------------------*/
-struct raio_io_u {
-	struct raio_event		ev_data;
-	struct xio_msg			*rsp;
-	void				*buf;
-	struct raio_io_cmd		iocmd;
-
-	TAILQ_ENTRY(raio_io_u)		io_u_list;
-};
-
 struct raio_io_portal_data {
 	TAILQ_HEAD(, raio_bs)		dev_list;
 	int				ndevs;
 	int				iodepth;
-	int				io_nr;
 	int				io_u_free_nr;
-	struct raio_io_u		*io_us_free;
-
-	TAILQ_HEAD(, raio_io_u)		io_u_free_list;
-	struct msg_pool			*rsp_pool; /* for submits */
-
+	int				pad;
 	struct msg_pool			*cmds_rsp_pool; /* control messages */
-
 	struct xio_context		*ctx;
 };
 
@@ -198,11 +180,10 @@ void raio_handler_free_portal_data(void *prv_portal_data)
 
 	TAILQ_FOREACH_SAFE(bs_dev, &pd->dev_list, list, tmp) {
 		TAILQ_REMOVE(&pd->dev_list, bs_dev, list);
-		if (!bs_dev->is_null) {
+		if (!bs_dev->is_null)
 			close(bs_dev->fd);
-			raio_bs_close(bs_dev);
-			raio_bs_exit(bs_dev);
-		}
+		raio_bs_close(bs_dev);
+		raio_bs_exit(bs_dev);
 	}
 }
 
@@ -264,7 +245,7 @@ static int raio_handle_open(void *prv_session_data,
 			bs_dev->is_null = 0;
 		}
 
-		errno = -raio_bs_open(bs_dev, fd);
+		errno = -raio_bs_open(bs_dev, fd, cpd->io_u_free_nr);
 		if (errno)
 			break;
 
@@ -354,10 +335,8 @@ static int raio_handle_close(void *prv_session_data,
 		cpd = &sd->pd[i];
 		bs_dev = raio_lookup_bs_dev(fd, cpd);
 		TAILQ_REMOVE(&cpd->dev_list, bs_dev, list);
-		if (!bs_dev->is_null) {
-			raio_bs_close(bs_dev);
-			raio_bs_exit(bs_dev);
-		}
+		raio_bs_close(bs_dev);
+		raio_bs_exit(bs_dev);
 	}
 
 reject:
@@ -467,14 +446,13 @@ static int raio_handle_setup(void *prv_session_data,
 			     char *cmd_data,
 			     struct xio_msg *req)
 {
-	int				i, j, err = 0;
+	int				i, err = 0;
 	uint32_t			iodepth;
 	struct raio_io_session_data	*sd =
 				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data	*pd =
 				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_io_portal_data	*cpd;
-	struct xio_iovec_ex		*sglist;
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
@@ -494,21 +472,6 @@ static int raio_handle_setup(void *prv_session_data,
 		/* divide remote iodepth between server resources */
 		cpd->iodepth = (iodepth / sd->portals_nr) + 1;
 		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
-		cpd->io_us_free = (struct raio_io_u *)calloc(cpd->io_u_free_nr,
-					 sizeof(struct raio_io_u));
-		cpd->rsp_pool = msg_pool_create(RAIO_CMD_HDR_SZ, MAXBLOCKSIZE,
-						cpd->io_u_free_nr);
-		TAILQ_INIT(&cpd->io_u_free_list);
-
-		/* register each io_u in the free list */
-		for (j = 0; j < cpd->io_u_free_nr; j++) {
-			cpd->io_us_free[j].rsp = msg_pool_get(cpd->rsp_pool);
-			sglist = vmsg_sglist(&cpd->io_us_free[j].rsp->out);
-			cpd->io_us_free[j].buf = sglist[0].iov_base;
-			TAILQ_INSERT_TAIL(&cpd->io_u_free_list,
-					  &cpd->io_us_free[j],
-					  io_u_list);
-		}
 	}
 
 reject:
@@ -694,26 +657,33 @@ static int raio_handle_submit(void *prv_session_data,
 	char				*rsp_hdr;
 	struct xio_msg			*rsp;
 
-	io_u = TAILQ_FIRST(&pd->io_u_free_list);
+	if (unlikely(msg_sz != cmd->data_len)) {
+		retval = EINVAL;
+		printf("io submit request rejected\n");
+		goto reject;
+	}
+
+	unpack_iocb(&iocb,
+	unpack_u32(&is_last_in_batch,
+		   cmd_data));
+
+	bs_dev = raio_lookup_bs_dev(iocb.raio_fildes, pd);
+	if (unlikely(!bs_dev)) {
+		printf("Ambiguous device file descriptor %d\n", iocb.raio_fildes);
+		retval = ENODEV;
+		goto reject;
+	}
+
+	io_u = TAILQ_FIRST(&bs_dev->io_u_free_list);
 	if (unlikely(!io_u)) {
 		printf("io_u_free_list empty\n");
 		errno = ENOSR;
 		return -1;
 	}
 
-	TAILQ_REMOVE(&pd->io_u_free_list, io_u, io_u_list);
+	TAILQ_REMOVE(&bs_dev->io_u_free_list, io_u, io_u_list);
 	msg_reset(io_u->rsp);
-	pd->io_u_free_nr--;
-
-	if (unlikely(msg_sz != cmd->data_len)) {
-		retval = EINVAL;
-		printf("io submit request rejected\n");
-
-		goto reject;
-	}
-	unpack_iocb(&iocb,
-	unpack_u32(&is_last_in_batch,
-		   cmd_data));
+	bs_dev->io_u_free_nr--;
 
 	io_u->iocmd.fd			= iocb.raio_fildes;
 	io_u->iocmd.op			= iocb.raio_lio_opcode;
@@ -730,12 +700,7 @@ static int raio_handle_submit(void *prv_session_data,
 		io_u->iocmd.buf		= sglist[0].iov_base;
 		io_u->iocmd.mr		= sglist[0].mr;
 	}
-	bs_dev = raio_lookup_bs_dev(io_u->iocmd.fd, pd);
-	if (unlikely(!bs_dev)) {
-		printf("Ambiguous device file descriptor %d\n", io_u->iocmd.fd);
-		retval = ENODEV;
-		goto reject;
-	}
+
 	io_u->iocmd.fsize		= bs_dev->stbuf.st_size;
 	io_u->iocmd.offset		= iocb.u.c.offset;
 	io_u->iocmd.is_last_in_batch    = is_last_in_batch;
@@ -751,7 +716,7 @@ static int raio_handle_submit(void *prv_session_data,
 	/* issues request to bs */
 	retval = -raio_bs_cmd_submit(bs_dev, &io_u->iocmd);
 	if (unlikely(retval))
-		goto reject;
+		goto reject1;
 
 	if (last_in_batch) {
 		TAILQ_FOREACH(bs_dev, &pd->dev_list, list) {
@@ -760,12 +725,12 @@ static int raio_handle_submit(void *prv_session_data,
 	}
 
 	return 0;
+reject1:
+	TAILQ_INSERT_TAIL(&bs_dev->io_u_free_list, io_u, io_u_list);
+	bs_dev->io_u_free_nr++;
 reject:
 	rsp	= msg_pool_get(pd->cmds_rsp_pool);
 	rsp_hdr = (char *)rsp->out.header.iov_base;
-
-	TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
-	pd->io_u_free_nr++;
 	msg_reset(rsp);
 
 	ans.command	= RAIO_CMD_IO_SUBMIT;
@@ -799,44 +764,20 @@ static int raio_handle_submit_comp(void *prv_session_data,
 				(struct raio_io_portal_data *)prv_portal_data;
 	struct raio_io_u	*io_u = (struct raio_io_u *)rsp->user_context;
 	struct xio_iovec_ex		*sglist;
+	struct raio_bs			*bs_dev;
 
 	if (io_u) {
 		sglist = vmsg_sglist(&rsp->out);
 		sglist[0].iov_base = io_u->buf;
-		TAILQ_INSERT_TAIL(&pd->io_u_free_list, io_u, io_u_list);
-		pd->io_u_free_nr++;
+		bs_dev = io_u->bs_dev;
+		if (unlikely(!bs_dev)) {
+			printf("No device for fd %d io_u %p\n", io_u->iocmd.fd, io_u);
+			return ENODEV;
+		}
+		TAILQ_INSERT_TAIL(&bs_dev->io_u_free_list, io_u, io_u_list);
+		bs_dev->io_u_free_nr++;
 	} else {
 		msg_pool_put(pd->cmds_rsp_pool, rsp);
-	}
-
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*/
-/* raio_handle_destroy_comp				                     */
-/*---------------------------------------------------------------------------*/
-static int raio_handle_destroy_comp(void *prv_session_data,
-				   void *prv_portal_data,
-				   struct xio_msg *rsp)
-{
-	struct raio_io_session_data	*sd =
-				(struct raio_io_session_data *)prv_session_data;
-	struct raio_io_portal_data	*cpd;
-	int				i, j;
-
-	for (i = 0; i < sd->portals_nr; i++) {
-		cpd = &sd->pd[i];
-		/* unregister each io_u in the free list */
-		for (j = 0; j < cpd->io_u_free_nr; j++) {
-			TAILQ_REMOVE(&cpd->io_u_free_list,
-				     &cpd->io_us_free[j],
-				     io_u_list);
-			msg_pool_put(cpd->rsp_pool, cpd->io_us_free[j].rsp);
-			cpd->io_us_free[j].buf = NULL;
-		}
-		cpd->io_u_free_nr = 0;
-		free(cpd->io_us_free);
-		msg_pool_delete(cpd->rsp_pool);
 	}
 
 	return 0;
@@ -956,11 +897,6 @@ void raio_handler_on_rsp_comp(void *prv_session_data,
 					rsp);
 		break;
 	case RAIO_CMD_IO_DESTROY:
-		raio_handle_destroy_comp(prv_session_data,
-					 prv_portal_data,
-					 rsp);
-		msg_pool_put(pd->cmds_rsp_pool, rsp);
-		break;
 	case RAIO_CMD_CLOSE:
 	case RAIO_CMD_UNKNOWN:
 	case RAIO_CMD_OPEN:

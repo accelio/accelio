@@ -4,8 +4,13 @@
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <stdint.h>
+#include "libraio.h"
+
+#define MAXBLOCKSIZE		(128 * 1024)
+#define RAIO_CMD_HDR_SZ		512
 
 struct raio_io_cmd;
+struct raio_io_u;
 struct raio_bs;
 
 /*---------------------------------------------------------------------------*/
@@ -35,6 +40,15 @@ struct raio_io_cmd {
 	TAILQ_ENTRY(raio_io_cmd)	raio_list;
 };
 
+struct raio_io_u {
+	struct raio_event		ev_data;
+	struct xio_msg			*rsp;
+	void				*buf;
+	struct raio_bs 			*bs_dev;
+	struct raio_io_cmd		iocmd;
+
+	TAILQ_ENTRY(raio_io_u)		io_u_list;
+};
 
 /*---------------------------------------------------------------------------*/
 /* structs								     */
@@ -61,6 +75,11 @@ struct raio_bs {
 	struct backingstore_template	*bst;
 	void				*dd;
 	TAILQ_ENTRY(raio_bs)		list;
+	int				pad;
+	int				io_u_free_nr;
+	struct raio_io_u		*io_us_free;
+	TAILQ_HEAD(, raio_io_u)		io_u_free_list;
+	struct msg_pool			*rsp_pool; /* for submits */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -76,7 +95,7 @@ void raio_bs_exit(struct raio_bs *dev);
 /*---------------------------------------------------------------------------*/
 /* raio_bs_open								     */
 /*---------------------------------------------------------------------------*/
-int raio_bs_open(struct raio_bs *dev, int fd);
+int raio_bs_open(struct raio_bs *dev, int fd, int io_u_free_nr);
 
 /*---------------------------------------------------------------------------*/
 /* raio_bs_close							     */
