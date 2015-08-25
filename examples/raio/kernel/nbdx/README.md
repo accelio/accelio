@@ -43,7 +43,7 @@ Install accelio kernel modules by following steps:
   - auto-generate (autoconf)
     $ ./autogen.sh
   - configure build
-    $ ./configure --enable-kernel-modules --prefix=/opt/xio
+    $ ./configure --enable-kernel-module --prefix=/opt/xio
   - compile
     $ make
   - install
