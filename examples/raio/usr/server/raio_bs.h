@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "libraio.h"
 
-#define MAXBLOCKSIZE		(128 * 1024)
+#define MAXBLOCKSIZE		(512 * 1024)
 #define RAIO_CMD_HDR_SZ		512
 
 struct raio_io_cmd;
