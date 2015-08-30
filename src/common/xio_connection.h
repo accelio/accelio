@@ -101,6 +101,8 @@ struct xio_connection {
 	uint16_t			disconnecting;
 	uint16_t			restarted;
 
+	uint64_t			latest_delivered;
+
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
 	uint16_t			cd_bit;  /*close disconnect bit */

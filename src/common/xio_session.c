@@ -527,11 +527,15 @@ static int xio_on_req_recv(struct xio_connection *connection,
 					     XIO_MSG_DIRECTION_IN);
 		task->status = 0;
 	} else {
-		/*if (connection->ses_ops.on_msg) */
+		/* check for repeated msgs */
+		/* repeated msgs will not be delivered to the application since they were already delivered */
+		if (connection->latest_delivered < msg->sn || connection->latest_delivered == 0){
 			connection->ses_ops.on_msg(
 					connection->session, msg,
 					task->last_in_rxq,
 					connection->cb_user_context);
+			connection->latest_delivered = msg->sn;
+		}
 	}
 
 	if (hdr.flags & XIO_MSG_FLAG_REQUEST_READ_RECEIPT) {

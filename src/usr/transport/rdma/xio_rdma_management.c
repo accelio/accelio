@@ -1722,7 +1722,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	if (!rdma_hndl)
+	if (!rdma_hndl || !rdma_hndl->tcq)
 		return 0;
 
 	max_sge = min(rdma_hndl->max_sge, max_iovsz);
