@@ -3085,7 +3085,7 @@ void xio_connection_keepalive_intvl(void *_connection)
 		/* notify the application of connection error */
 		xio_session_notify_connection_error(
 				connection->session, connection, XIO_E_TIMEOUT);
-		if (!connection->disconnecting)
+		if ((!connection->disconnecting) && (!g_options.reconnect))
 			xio_disconnect(connection);
 		return;
 	}
