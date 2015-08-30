@@ -59,7 +59,7 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros				                             */
 /*---------------------------------------------------------------------------*/
-#define EXTRA_MSGS		512
+#define EXTRA_MSGS		64
 #define RAIO_CMDS_POOL_SZ	128
 
 #ifndef TAILQ_FOREACH_SAFE
