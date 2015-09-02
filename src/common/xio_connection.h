@@ -63,12 +63,23 @@ struct xio_transition {
 	int				send_flags;
 };
 
+struct xio_ka {
+	xio_delayed_work_handle_t	timer;
+	int				probes;
+	int				req_sent;
+	int				timedout;
+	int				pad;
+};
+
 struct xio_connection {
+	struct xio_ka			ka;
 	struct xio_nexus		*nexus;
 	struct xio_session		*session;
 	struct xio_context		*ctx;	/* connection context */
+	struct xio_session_ops		ses_ops;
+
 	/* server's session may have multiple connections each has
-	 * private data assignd by bind
+	 * private data assigned by bind
 	 */
 	uint16_t			enable_flow_control;
 	uint16_t			req_sn;
@@ -90,10 +101,12 @@ struct xio_connection {
 	uint16_t			disconnecting;
 	uint16_t			restarted;
 
+	uint64_t			latest_delivered;
+
 	uint16_t			is_flushed;
 	uint16_t			send_req_toggle;
 	uint16_t			cd_bit;  /*close disconnect bit */
-	uint16_t			pad;
+	uint16_t			fin_request_flushed;
 
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
@@ -116,7 +129,6 @@ struct xio_connection {
 	struct list_head		pre_send_list;
 	struct list_head		connections_list_entry;
 	struct list_head		ctx_list_entry;
-	struct xio_session_ops		ses_ops;
 	void				*cb_user_context;
 
 	size_t				tx_bytes;
@@ -253,5 +265,16 @@ const struct xio_transport_base *xio_req_to_transport_base(
 
 int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
 			 void *optval, int *optlen);
+
+int xio_on_connection_ka_req_recv(struct xio_connection *connection,
+				  struct xio_task *task);
+
+int xio_on_connection_ka_rsp_send_comp(struct xio_connection *connection,
+				       struct xio_task *task);
+
+int xio_on_connection_ka_rsp_recv(struct xio_connection *connection,
+				  struct xio_task *task);
+
+void xio_connection_keepalive_start(void *_connection);
 
 #endif /*XIO_CONNECTION_H */

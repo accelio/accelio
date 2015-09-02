@@ -1,0 +1,313 @@
+#!/usr/bin/python
+
+__author__ = "Max Gurtovoy"
+__version__ = '1.0'
+
+import optparse
+import sys
+import os
+import ConfigParser
+
+CONFIGDIR = '/etc/nbdx'
+CONFIGFILE = os.path.join(CONFIGDIR, 'nbdx.ini')
+CONFIGFS = '/sys/kernel/config'
+NBDX_CONFIGFS = os.path.join(CONFIGFS, 'nbdx')
+
+
+def is_configfs_mounted():
+    found = False
+    for l in open('/proc/mounts').readlines():
+        dev, path, fs, opts, freq, passno = l.split()
+        if fs == 'configfs' and path == '/sys/kernel/config':
+            found = True
+            break
+
+    return found
+
+def get_host_devices(host, parser):
+    devices = []
+    for section in parser.sections():
+        if parser.has_option(section, 'host'):
+            if parser.get(section, 'host') == host:
+                devices.append(section)
+    return devices
+
+def createDevice(parser, opts):
+    if opts.device_id is None:
+        print "Missing host id"
+        return 1
+    nbdxdevice = 'nbdx%d' % opts.device_id
+    if opts.host_id is None:
+        print "Missing host id"
+        return 1
+    nbdxhost = 'nbdxhost%d' % opts.host_id
+    if opts.file_path is None:
+        print "Missing file path"
+        return 1
+
+    if not parser.has_section(nbdxhost):
+        print 'host id %d is not configured' % opts.host_id
+        return 1
+
+    if parser.has_section(nbdxdevice):
+        print 'device id %d is already configured' % opts.device_id
+        return 1
+
+    host_path = os.path.join(NBDX_CONFIGFS, nbdxhost)
+    device_path = os.path.join(host_path, nbdxdevice)
+    os.makedirs(device_path)
+    try:
+        with open(os.path.join(device_path, 'device'), 'w') as device_file:
+            device_file.write(opts.file_path)
+    except IOError, e:
+        print 'failed to create device: %s' % e
+        os.rmdir(device_path)
+        return 1
+
+    parser.add_section(nbdxdevice)
+    parser.set(nbdxdevice, 'host', nbdxhost)
+    parser.set(nbdxdevice, 'file', opts.file_path)
+
+    return 0
+
+def deleteDevice(parser, opts):
+    if opts.device_id is None:
+        print "Missing device id"
+        return 1
+
+    nbdxdevice = 'nbdx%d' % opts.device_id
+    if not parser.has_section(nbdxdevice):
+        print 'device id %d is not configured' % opts.device_id
+        return 1
+    else:
+        nbdxhost = parser.get(nbdxdevice, 'host')
+        host_path = os.path.join(NBDX_CONFIGFS, nbdxhost)
+        device_path = os.path.join(host_path, nbdxdevice)
+        os.rmdir(device_path)
+        parser.remove_section(nbdxdevice)
+
+    return 0
+
+def createHost(parser, opts):
+    if opts.host_id is None:
+        print "Missing host id"
+        return 1
+    nbdxhost = 'nbdxhost%d' % opts.host_id
+    if opts.portal is None:
+        print 'Missing portal'
+        return 1
+
+    if parser.has_section(nbdxhost):
+        print 'host id %d is already configured' % opts.host_id
+        return 1
+
+    for section in parser.sections():
+        if parser.has_option(section, 'portal'):
+            if opts.portal == parser.get(section, 'portal'):
+                print 'Portal %s already exists' % opts.portal
+                return 1
+
+    host_path = os.path.join(NBDX_CONFIGFS, nbdxhost)
+    os.makedirs(host_path)
+    try:
+        with open(os.path.join(host_path, 'portal'), 'w') as portal_file:
+            portal_file.write(opts.portal)
+    except IOError, e:
+        print 'failed to create host: %s' % e
+        os.rmdir(host_path)
+        return 1
+
+    parser.add_section(nbdxhost)
+    parser.set(nbdxhost, 'portal', opts.portal)
+
+    return 0
+
+def deleteHost(parser, opts):
+    rc = 0
+    if opts.host_id is None:
+        print "Missing host id"
+        return 1
+
+    nbdxhost = 'nbdxhost%d' % opts.host_id
+    if not parser.has_section(nbdxhost):
+        print 'host id %d is not configured' % opts.host_id
+        return 1
+
+    devices = get_host_devices(nbdxhost, parser)
+    for device in devices:
+        opts.device_id = int(device.strip('nbdx'))
+        c_rc = deleteDevice(parser, opts)
+        if c_rc:
+            print 'failed to delete %s' % device
+            rc = c_rc or rc
+    if not rc:
+        host_path = os.path.join(NBDX_CONFIGFS, nbdxhost)
+        os.rmdir(host_path)
+        parser.remove_section(nbdxhost)
+    else:
+        print 'failed to delete host %d' % opts.host_id
+
+    return rc
+
+def showHost(parser, opts):
+    if opts.host_id is None:
+        print "Missing host id"
+        return 1
+
+    nbdxhost = 'nbdxhost%d' % opts.host_id
+    if not parser.has_section(nbdxhost):
+        print 'host id %d is not configured' % opts.host_id
+        return 1
+    print 'HOST: %s, PORTAL: %s' % (nbdxhost, parser.get(nbdxhost, 'portal'))
+    return 0
+
+def showHostDevices(parser, opts):
+    if opts.host_id is None:
+        print "Missing host id"
+        return 1
+
+    nbdxhost = 'nbdxhost%d' % opts.host_id
+    if not parser.has_section(nbdxhost):
+        print 'host id %d is not configured' % opts.host_id
+        return 1
+    devices = []
+    for section in parser.sections():
+        if parser.has_option(section, 'host'):
+            if nbdxhost == parser.get(section, 'host'):
+                devices.append(section)
+    print 'HOST: %s, PORTAL: %s, DEVICES: %s' % (nbdxhost,
+                                                 parser.get(nbdxhost, 'portal'),
+                                                 ', '.join(devices))
+    return 0
+
+def showAllHosts(parser, opts):
+    for section in parser.sections():
+        if parser.has_option(section, 'portal'):
+            opts.host_id = int(section.strip('nbdxhost'))
+            showHost(parser, opts)
+    return 0
+
+def showDevice(parser, opts):
+    if opts.device_id is None:
+        print "Missing device id"
+        return 1
+
+    nbdxdevice = 'nbdx%d' % opts.device_id
+    if not parser.has_section(nbdxdevice):
+        print 'device id %d is not configured' % opts.device_id
+        return 1
+    print 'DEVICE: %s, FILE: %s, HOST: %s, PORTAL: %s' % (nbdxdevice,
+                                                          parser.get(nbdxdevice, 'file'),
+                                                          parser.get(nbdxdevice, 'host'),
+                                                          parser.get(parser.get(nbdxdevice, 'host'), 'portal'))
+    return 0
+
+def showAllDevices(parser, opts):
+    for section in parser.sections():
+        if parser.has_option(section, 'file'):
+            opts.device_id = int(section.strip('nbdx'))
+            showDevice(parser, opts)
+    return 0
+
+RUN_OPERATION = {'create_host'       : createHost,
+                 'delete_host'       : deleteHost,
+                 'show_host'         : showHost,
+                 'show_host_devices' : showHostDevices,
+                 'show_all_hosts'    : showAllHosts,
+                 'create_device'     : createDevice,
+                 'delete_device'     : deleteDevice,
+                 'show_device'       : showDevice,
+                 'show_all_devices'  : showAllDevices,
+                 }
+
+def main():
+
+    supported_operations = ["create_host",
+                            "delete_host",
+                            "show_host",
+                            "show_host_devices",
+                            "show_all_hosts",
+                            "create_device",
+                            "delete_device",
+                            "show_device",
+                            "show_all_devices"]
+
+    create_host_usage = "\nnbdxadm -o create_host -i <host_id> -p <ip:port>\n"
+    delete_host_usage = "nbdxadm -o delete_host -i <host_id>\n"
+    show_host_usage = "nbdxadm -o show_host -i <host_id>\n"
+    show_host_devices_usage = "nbdxadm -o show_host_devices -i <host_id>\n"
+    show_all_hosts_usage = "nbdxadm -o show_all_hosts\n"
+    create_device_usage = "nbdxadm -o create_device -i <host_id> -d <device_id> -f <file_path>\n"
+    delete_device_usage = "nbdxadm -o delete_device -d <device_id>\n"
+    show_device_usage = "nbdxadm -o show_device -d <device_id>\n"
+    show_all_devices_usage = "nbdxadm -o show_all_devices"
+    usage = (create_host_usage + delete_host_usage + show_host_usage + show_host_devices_usage +
+             show_all_hosts_usage + create_device_usage + delete_device_usage +
+             show_device_usage + show_all_devices_usage)
+    parser = optparse.OptionParser(usage=usage)
+    parser.add_option('-o', '--op',
+                      choices=supported_operations,
+                      help="[%s]" % '|'.join(supported_operations),
+                      dest="operation")
+    parser.add_option('-p', '--portal',
+                      type=str,
+                      help="portal to create",
+                      dest="portal")
+    parser.add_option('-i', '--hid',
+                      type=int,
+                      help="host id",
+                      dest="host_id")
+    parser.add_option('-d', '--dev_id',
+                      type=int,
+                      help="device id",
+                      dest="device_id")
+    parser.add_option('-f', '--file_path',
+                      type=str,
+                      help="file path",
+                      dest="file_path")
+
+    (opts, args) = parser.parse_args()
+
+    if args:
+        print 'error: invalid input,  check -h or --help'
+        sys.exit(1)
+
+    if not os.path.isdir(CONFIGFS):
+        print "can't continue operation, check if configfs module is loaded"
+        sys.exit(1)
+
+    if not is_configfs_mounted():
+        print "can't continue operation, please mount configfs i.e.:"
+        print "\tmount -t configfs none /sys/kernel/config"
+        sys.exit(1)
+
+    if not opts.operation:
+        print "Missing operation."
+        sys.exit(1)
+
+    if not os.path.isdir(NBDX_CONFIGFS):
+        print "can't continue operation, check if nbdx module is loaded"
+        sys.exit(1)
+
+    conf_parser = ConfigParser.ConfigParser()
+    if not os.path.isdir(CONFIGDIR):
+        os.makedirs(CONFIGDIR)
+    conf_parser.read(CONFIGFILE)
+    if conf_parser.sections() and not os.listdir(NBDX_CONFIGFS):
+        conf_parser = ConfigParser.ConfigParser()
+        with open(CONFIGFILE, 'w') as nbdx_conf_file:
+            conf_parser.write(nbdx_conf_file)
+
+    rc = RUN_OPERATION[opts.operation](conf_parser, opts)
+    if rc:
+        print "Invalid %s operation" % opts.operation
+        sys.exit(1)
+
+    with open(CONFIGFILE, 'w') as nbdx_conf_file:
+        conf_parser.write(nbdx_conf_file)
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

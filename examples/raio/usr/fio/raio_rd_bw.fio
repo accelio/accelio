@@ -3,11 +3,12 @@
 group_reporting
 thread
 ioengine=./.libs/libraio_fio.so
-rw=read
+rw=randread
 bs=1K
 loops=2
 direct=1
 iodepth=50
+gtod_reduce=1
 ;filename=/192.168.1.66/1234/dev/null
 ;filename=/192.168.1.66/1234/dev/ram0
 

@@ -56,6 +56,10 @@
 #define XIO_OPTVAL_DEF_MAX_INLINE_XIO_DATA		(8 * 1024)
 #define XIO_OPTVAL_DEF_XFER_BUF_ALIGN			(64)
 #define XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN		(0)
+#define XIO_OPTVAL_DEF_ENABLE_KEEPALIVE			1
+#define XIO_OPTVAL_DEF_KEEPALIVE_PROBES			3
+#define XIO_OPTVAL_DEF_KEEPALIVE_INTVL			20
+#define XIO_OPTVAL_DEF_KEEPALIVE_TIME			60
 
 /* xio options */
 struct xio_options			g_options = {
@@ -70,7 +74,13 @@ struct xio_options			g_options = {
 	XIO_OPTVAL_DEF_SND_QUEUE_DEPTH_BYTES,	/*snd_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_RCV_QUEUE_DEPTH_BYTES,	/*rcv_queue_depth_bytes*/
 	XIO_OPTVAL_DEF_XFER_BUF_ALIGN,		/* xfer_buf_align */
-	XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN	/* inline_xio_data_align */
+	XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN,	/* inline_xio_data_align */
+	XIO_OPTVAL_DEF_ENABLE_KEEPALIVE,
+	{
+		XIO_OPTVAL_DEF_KEEPALIVE_PROBES,
+		XIO_OPTVAL_DEF_KEEPALIVE_TIME,
+		XIO_OPTVAL_DEF_KEEPALIVE_INTVL
+	}
 };
 
 /*---------------------------------------------------------------------------*/
@@ -205,12 +215,12 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		g_options.rcv_queue_depth_msgs = *((int *)optval);
 		return 0;
 	case XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES:
-		if (*((int32_t *)optval) < 1)
+		if (*((uint64_t *)optval) < 1)
 			break;
 		g_options.snd_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
 	case XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES:
-		if (*((int32_t *)optval) < 1)
+		if (*((uint64_t *)optval) < 1)
 			break;
 		g_options.rcv_queue_depth_bytes = *((uint64_t *)optval);
 		return 0;
@@ -252,6 +262,18 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		}
 		g_options.inline_xio_data_align = tmp;
 		return 0;
+	case XIO_OPTNAME_ENABLE_KEEPALIVE:
+		g_options.enable_keepalive = *((int *)optval);
+		return 0;
+	case XIO_OPTNAME_CONFIG_KEEPALIVE:
+		if (optlen == sizeof(struct xio_options_keepalive)) {
+			memcpy(&g_options.ka, optval, optlen);
+			return 0;
+		} else {
+			xio_set_error(EINVAL);
+			return -1;
+		}
+		break;
 	default:
 		break;
 	}
@@ -319,6 +341,18 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		*optlen = sizeof(int);
 		 *((int *)optval) = g_options.xfer_buf_align;
 		 return 0;
+	case XIO_OPTNAME_ENABLE_KEEPALIVE:
+		*optlen = sizeof(int);
+		*((int *)optval) = g_options.enable_keepalive;
+		return 0;
+	case XIO_OPTNAME_CONFIG_KEEPALIVE:
+		if (*optlen == sizeof(struct xio_options_keepalive)) {
+			memcpy(optval, &g_options.ka, *optlen);
+			return 0;
+		} else {
+			xio_set_error(EINVAL);
+			return -1;
+		}
 	default:
 		break;
 	}

@@ -80,7 +80,7 @@ static const char *xio_gen_status_str(enum xio_status ev)
 	case XIO_E_BIND_FAILED:
 		return  "Bind failed";
 	case XIO_E_TIMEOUT:
-		return  "Session timeout";
+		return  "Timeout";
 	case XIO_E_IN_PORGRESS:
 		return  "Operation now in progress";
 	case XIO_E_INVALID_VERSION:

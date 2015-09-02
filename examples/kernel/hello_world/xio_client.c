@@ -39,6 +39,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37)
 #include <asm/atomic.h>
@@ -87,19 +88,37 @@ atomic_t module_state;
 static void process_response(struct xio_msg *rsp)
 {
 	static uint64_t cnt;
+	struct scatterlist      *sgl = rsp->in.data_tbl.sgl;
+	struct xio_vmsg *omsg;
+	char *str;
+	int len, i;
+	char tmp;
+
 
 	if (++cnt == HW_PRINT_COUNTER) {
-		((char *)(rsp->in.header.iov_base))[rsp->in.header.iov_len] = 0;
 		pr_info("message: [%llu] - %s\n", (rsp->request->sn + 1),
 			(char *)rsp->in.header.iov_base);
+		omsg = &rsp->in;
+		for (i = 0; i < vmsg_sglist_nents(omsg); i++) {
+			str = (char *)sg_virt(sgl);
+			len = sgl->length;
+			if (str) {
+				if (((unsigned)len) > 64)
+					len = 64;
+				tmp = str[len];
+				str[len] = '\0';
+				pr_info("message data: [%llu][%d][%d] - %s\n",
+					 (rsp->request->sn + 1), i, len, str);
+				str[len] = tmp;
+			}
+			sgl = sg_next(sgl);
+		}
 		cnt = 0;
 	}
 
 	/* Client didn't allocate this memory */
 	rsp->in.header.iov_base = NULL;
 	rsp->in.header.iov_len  = 0;
-	/* Client didn't allocate in data table to reset it */
-	memset(&rsp->in.data_tbl, 0, sizeof(rsp->in.data_tbl));
 }
 
 /*---------------------------------------------------------------------------*/
@@ -256,26 +275,28 @@ static int xio_client_main(void *data)
 
 	/* create "hello world" message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
-		struct xio_vmsg *omsg;
+		struct xio_vmsg *omsg, *imsg;
 		void *buf;
 
 		omsg = &session_data->req[i].out;
-
-		memset(&session_data->req[i], 0, sizeof(session_data->req[i]));
+		xio_reinit_msg(&session_data->req[i]);
 
 		/* header */
 		buf = kstrdup("hello world header request", GFP_KERNEL);
 		session_data->req[i].out.header.iov_base = buf;
 		session_data->req[i].out.header.iov_len = strlen(buf) + 1;
 		/* iovec[0]*/
-		omsg->sgl_type = XIO_SGL_TYPE_SCATTERLIST;
 		sg_alloc_table(&omsg->data_tbl, SG_TBL_LEN, GFP_KERNEL);
 
 		/* currently only one entry */
+		xio_init_vmsg(omsg, 1);     /* one entry (max_nents) */
 		buf = kstrdup("hello world iovec request", GFP_KERNEL);
 		sg_init_one(omsg->data_tbl.sgl, buf, strlen(buf) + 1);
-		/* orig_nents is XIO_IOVLEN */
-		omsg->data_tbl.nents = 1;
+		/* orig_nents is 1 */
+		vmsg_sglist_set_nents(omsg,1);
+
+		imsg = &session_data->req[i].in;
+		xio_init_vmsg(imsg, 4);  /* one entry (max_nents) */
 	}
 
 	/* send first message */
@@ -298,7 +319,8 @@ static int xio_client_main(void *data)
 		kfree(session_data->req[i].out.header.iov_base);
 		/* Currently need to release only one entry */
 		kfree(sg_virt(session_data->req[i].out.data_tbl.sgl));
-		sg_free_table(&session_data->req[i].out.data_tbl);
+		xio_fini_vmsg(&session_data->req[i].out);
+		xio_fini_vmsg(&session_data->req[i].in);
 	}
 
 	/* free the context */

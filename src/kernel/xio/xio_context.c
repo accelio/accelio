@@ -95,11 +95,21 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				       int cpu_hint)
 {
 	struct xio_context		*ctx;
-	struct xio_loop_ops		*loop_ops = ctx_params->loop_ops;
-	struct task_struct		*worker = ctx_params->worker;
+	struct xio_loop_ops		*loop_ops;
+	struct task_struct		*worker;
 	struct xio_transport		*transport;
-	int				flags = ctx_params->flags;
-	int				cpu;
+	int				flags, cpu;
+
+	if (!ctx_params) {
+		xio_set_error(EINVAL);
+		ERROR_LOG("ctx_params is NULL\n");
+		goto cleanup0;
+
+	}
+
+	loop_ops = ctx_params->loop_ops;
+	worker = ctx_params->worker;
+	flags = ctx_params->flags;
 
 	if (cpu_hint > 0 && cpu_hint >= num_online_cpus()) {
 		xio_set_error(EINVAL);
@@ -141,7 +151,14 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	ctx->cpuid  = cpu_hint;
 	ctx->nodeid = cpu_to_node(cpu_hint);
 	ctx->polling_timeout = polling_timeout;
-	ctx->prealloc_pools = !!ctx_params->prealloc_pools;
+	ctx->prealloc_xio_inline_bufs =
+		!!ctx_params->prealloc_xio_inline_bufs;
+
+	if (!ctx_params->max_conns_per_ctx)
+		ctx->max_conns_per_ctx = 100;
+	else
+		ctx->max_conns_per_ctx =
+			max(ctx_params->max_conns_per_ctx , 2);
 
 	ctx->workqueue = xio_workqueue_create(ctx);
 	if (!ctx->workqueue) {
@@ -191,7 +208,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 
 	/* initialize rdma pools only */
 	transport = xio_get_transport("rdma");
-	if (transport && ctx->prealloc_pools) {
+	if (transport && ctx->prealloc_xio_inline_bufs) {
 		int retval = xio_ctx_pool_create(ctx, XIO_PROTO_RDMA,
 					         XIO_CONTEXT_POOL_CLASS_INITIAL);
 		if (retval) {
@@ -701,7 +718,7 @@ int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 				  (int *)&params.pool_dd_data_sz,
 				  (int *)&params.slab_dd_data_sz,
 				  (int *)&params.task_dd_data_sz);
-	if (ctx->prealloc_pools) {
+	if (ctx->prealloc_xio_inline_bufs) {
 		params.start_nr = params.max_nr;
 		params.alloc_nr = 0;
 	}

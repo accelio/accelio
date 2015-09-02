@@ -520,7 +520,7 @@ static int xio_tcp_prep_req_header(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_req_hdr	req_hdr;
 
-	if (!IS_REQUEST(task->tlv_type)) {
+	if (unlikely(!IS_REQUEST(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -741,7 +741,7 @@ static int xio_tcp_prep_req_out_data(
 						tcp_hndl->tcp_mempool,
 						sge_length(sgtbl_ops, sg),
 						&tcp_task->write_reg_mem[i]);
-				if (retval) {
+				if (unlikely(retval)) {
 					tcp_task->write_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG("mempool is empty " \
@@ -844,22 +844,6 @@ static int xio_tcp_on_req_send_comp(struct xio_tcp_transport *tcp_hndl,
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_tcp_disconnect_helper						     */
-/*---------------------------------------------------------------------------*/
-void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
-{
-	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
-						xio_tcp_hndl;
-
-	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
-		return;
-
-	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
-
-	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_tcp_tx_comp_handler						     */
 /*---------------------------------------------------------------------------*/
 static void xio_tcp_tx_completion_handler(void *xio_task)
@@ -897,10 +881,42 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 		ERROR_LOG("not found but removed %d type:0x%x\n",
 			  removed, task->tlv_type);
 
-	/* No need - using flush_tx work*/
-	/*if (tcp_hndl->tx_ready_tasks_num)
+	tcp_hndl->tx_comp_cnt = 0;
+
+	if (tcp_hndl->tx_ready_tasks_num)
 		xio_tcp_xmit(tcp_hndl);
-	*/
+
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_tcp_disconnect_helper						     */
+/*---------------------------------------------------------------------------*/
+void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
+{
+	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
+						xio_tcp_hndl;
+
+	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
+		return;
+
+	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
+
+	/* flush all tasks in completion */
+        if (!list_empty(&tcp_hndl->in_flight_list)) {
+		struct xio_task *task = NULL;
+
+		task = list_last_entry(&tcp_hndl->in_flight_list,
+				       struct xio_task,
+				       tasks_list_entry);
+		if (task) {
+		    XIO_TO_TCP_TASK(task, tcp_task);
+
+		    xio_ctx_add_work(tcp_hndl->base.ctx, task,
+				     xio_tcp_tx_completion_handler,
+				     &tcp_task->comp_work);
+		}
+	}
+	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -945,7 +961,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	unsigned int		iov_len;
 	uint64_t		bytes_sent;
 
-	if (tcp_hndl->tx_ready_tasks_num == 0)
+	if (tcp_hndl->tx_ready_tasks_num == 0 ||
+	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX)
 		return 0;
 
 	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
@@ -957,7 +974,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 				tasks_list_entry);
 
 	/* if "ready to send queue" is not empty */
-	while (tcp_hndl->tx_ready_tasks_num) {
+	while (likely(tcp_hndl->tx_ready_tasks_num &&
+		      tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX)) {
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
@@ -1206,8 +1224,6 @@ handle_completions:
 			ERROR_LOG("xio_ctx_add_work failed.\n");
 			return retval2;
 		}
-
-		tcp_hndl->tx_comp_cnt = 0;
 	}
 
 	xio_context_disable_event(&tcp_hndl->flush_tx_event);
@@ -1296,7 +1312,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 						sge_length(sgtbl_ops, sg),
 						&tcp_task->read_reg_mem[i]);
 
-				if (retval) {
+				if (unlikely(retval)) {
 					tcp_task->read_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG(
@@ -1396,14 +1412,14 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 
 	/* prepare buffer for response  */
 	retval = xio_tcp_prep_req_in_data(tcp_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("tcp_prep_req_in_data failed\n");
 		return -1;
 	}
 
 	/* prepare the out message  */
 	retval = xio_tcp_prep_req_out_data(tcp_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("tcp_prep_req_out_data failed\n");
 		return -1;
 	}
@@ -1427,6 +1443,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
+	/* do not batch in tcp since tcp stack has its own considerations */
+	/*
 	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
 	    task->is_control) {
 		must_send = 1;
@@ -1434,6 +1452,8 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
+	*/
+	must_send = 1;
 
 	if (must_send) {
 		retval = xio_tcp_xmit(tcp_hndl);
@@ -1443,6 +1463,17 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 				return -1;
 			}
 			retval = 0;
+		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+						  task,
+						  xio_tcp_tx_completion_handler,
+						  &tcp_task->comp_work);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_work failed.\n");
+				return retval;
+			}
 		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
@@ -1520,7 +1551,7 @@ static int xio_tcp_prep_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	XIO_TO_TCP_TASK(task, tcp_task);
 	struct xio_tcp_rsp_hdr	rsp_hdr;
 
-	if (!IS_RESPONSE(task->tlv_type)) {
+	if (unlikely(!IS_RESPONSE(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -1597,7 +1628,7 @@ int xio_tcp_prep_rsp_wr_data(struct xio_tcp_transport *tcp_hndl,
 					tcp_hndl->tcp_mempool,
 					sge_length(sgtbl_ops, sg),
 					&tcp_task->write_reg_mem[i]);
-			if (retval) {
+			if (unlikely(retval)) {
 				tcp_task->write_num_reg_mem = i;
 				xio_set_error(ENOMEM);
 				ERROR_LOG("mempool is empty for %zd bytes\n",
@@ -1780,6 +1811,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	tcp_hndl->tx_ready_tasks_num++;
 
 	/* transmit only if  available */
+	/* do not batch in tcp since tcp stack has its own considerations */
+	/*
 	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
 	    task->is_control) {
 		must_send = 1;
@@ -1787,6 +1820,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
 			must_send = 1;
 	}
+	*/
+	must_send = 1;
 
 	if (must_send) {
 		retval = xio_tcp_xmit(tcp_hndl);
@@ -1799,6 +1834,17 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 				return -1;
 			}
 			retval = 0;
+		}
+		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
+		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
+			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
+						  task,
+						  xio_tcp_tx_completion_handler,
+						  &tcp_task->comp_work);
+			if (retval) {
+				ERROR_LOG("xio_ctx_add_work failed.\n");
+				return retval;
+			}
 		}
 	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
@@ -1835,7 +1881,7 @@ static int xio_tcp_read_req_header(struct xio_tcp_transport *tcp_hndl,
 	req_hdr->flags    = tmp_req_hdr->flags;
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, req_hdr_len);
 
-	if (req_hdr->req_hdr_len != sizeof(struct xio_tcp_req_hdr)) {
+	if (unlikely(req_hdr->req_hdr_len != sizeof(struct xio_tcp_req_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d  expected:%zd\n",
 		req_hdr->req_hdr_len, sizeof(struct xio_tcp_req_hdr));
@@ -1909,7 +1955,7 @@ static int xio_tcp_read_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	rsp_hdr->flags    = tmp_rsp_hdr->flags;
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, rsp_hdr_len);
 
-	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_tcp_rsp_hdr)) {
+	if (unlikely(rsp_hdr->rsp_hdr_len != sizeof(struct xio_tcp_rsp_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d expected:%zd\n",
 		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_tcp_rsp_hdr));
@@ -2395,7 +2441,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		/* handle RDMA READ equivalent. */
 		TRACE_LOG("tcp read header\n");
 		retval = xio_tcp_rd_req_header(tcp_hndl, task);
-		if (retval) {
+		if (unlikely(retval)) {
 			ERROR_LOG("tcp read header failed\n");
 			goto cleanup;
 		}
@@ -2986,7 +3032,7 @@ cleanup:
 /* xio_tcp_send_cancel							     */
 /*---------------------------------------------------------------------------*/
 static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
-			       uint16_t tlv_type,
+			       uint32_t tlv_type,
 			       struct  xio_tcp_cancel_hdr *cancel_hdr,
 			       void *ulp_msg, size_t ulp_msg_sz)
 {
@@ -3297,8 +3343,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 						tasks_list_entry);
 	}
 
-	/* No need - using flush_tx work */
-	/*if (tcp_hndl->tx_ready_tasks_num) {
+	if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != XIO_EAGAIN) {
@@ -3308,7 +3353,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return ret_count;
 		}
 	}
-	*/
 
 	return ret_count;
 }
@@ -3431,7 +3475,7 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				else
 					ERROR_LOG("unknown message type:0x%x\n",
 						  task->tlv_type);
-				if (retval < 0) {
+				if (unlikely(retval < 0)) {
 					ERROR_LOG("error reading header\n");
 					return retval;
 				}
@@ -3454,12 +3498,11 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		return 0;
 
 	retval = tcp_hndl->sock.ops->rx_data_handler(tcp_hndl, batch_nr);
-	if (retval < 0)
+	if (unlikely(retval < 0))
 		return retval;
 	count = retval;
 
-	/* No need - using flush_tx work*/
-	/*if (tcp_hndl->tx_ready_tasks_num) {
+	if (tcp_hndl->tx_ready_tasks_num) {
 		retval = xio_tcp_xmit(tcp_hndl);
 		if (retval < 0) {
 			if (xio_errno() != XIO_EAGAIN) {
@@ -3469,7 +3512,6 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 			return count;
 		}
 	}
-	*/
 
 	return count;
 }

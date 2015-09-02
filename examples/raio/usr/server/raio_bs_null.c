@@ -85,6 +85,28 @@ static inline void raio_bs_null_set_last_in_batch(struct raio_bs *dev)
 {
 }
 
+/*---------------------------------------------------------------------------*/
+/* raio_bs_null_poll							     */
+/*---------------------------------------------------------------------------*/
+static inline void raio_bs_null_poll(struct raio_bs *dev)
+{
+}
+
+
+/*---------------------------------------------------------------------------*/
+/* raio_bs_null_exit                                                           */
+/*---------------------------------------------------------------------------*/
+static void raio_bs_null_exit(struct raio_bs *dev)
+{
+}
+
+/*---------------------------------------------------------------------------*/
+/* raio_bs_null_init                                                           */
+/*---------------------------------------------------------------------------*/
+static int raio_bs_null_init(struct raio_bs *dev)
+{
+	return 0;
+}
 
 /*---------------------------------------------------------------------------*/
 /* raio_null_bst							     */
@@ -92,10 +114,13 @@ static inline void raio_bs_null_set_last_in_batch(struct raio_bs *dev)
 static struct backingstore_template raio_null_bst = {
 	.bs_name		= "null",
 	.bs_datasize		= 0,
+	.bs_init		= raio_bs_null_init,
+	.bs_exit		= raio_bs_null_exit,
 	.bs_open		= raio_bs_null_open,
 	.bs_close		= raio_bs_null_close,
 	.bs_cmd_submit		= raio_bs_null_cmd_submit,
-	.bs_set_last_in_batch	= raio_bs_null_set_last_in_batch
+	.bs_set_last_in_batch	= raio_bs_null_set_last_in_batch,
+	.bs_poll		= raio_bs_null_poll
 };
 
 /*---------------------------------------------------------------------------*/

@@ -74,9 +74,9 @@
 static spinlock_t			mngmt_lock;
 static thread_once_t			ctor_key_once = THREAD_ONCE_INIT;
 static thread_once_t			dtor_key_once = THREAD_ONCE_INIT;
+static struct xio_tcp_socket_ops	single_sock_ops;
+static struct xio_tcp_socket_ops	dual_sock_ops;
 extern struct xio_transport		xio_tcp_transport;
-extern struct xio_tcp_socket_ops	single_sock_ops;
-extern struct xio_tcp_socket_ops	dual_sock_ops;
 
 static int				cdl_fd = -1;
 
@@ -473,7 +473,7 @@ static int xio_tcp_context_shutdown(struct xio_transport_base *trans_hndl,
 
 	switch (tcp_hndl->state) {
 	case XIO_TRANSPORT_STATE_INIT:
-		ERROR_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
+		DEBUG_LOG("shutting context while tcp_hndl=%p state is INIT?\n",
 			  tcp_hndl);
 		/*fallthrough*/
 	case XIO_TRANSPORT_STATE_LISTEN:
@@ -847,8 +847,10 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* create tcp socket */
 	if (create_socket) {
-		tcp_hndl->sock.ops = tcp_options.tcp_dual_sock ?
-					&dual_sock_ops : &single_sock_ops;
+		memcpy(tcp_hndl->sock.ops,
+		       (tcp_options.tcp_dual_sock ?
+			&dual_sock_ops : &single_sock_ops),
+		       sizeof(*tcp_hndl->sock.ops));
 		if (tcp_hndl->sock.ops->open(&tcp_hndl->sock))
 			goto cleanup;
 	}
@@ -1053,12 +1055,14 @@ single_sock:
 	if (is_single) {
 		child_hndl->sock.cfd = fd;
 		child_hndl->sock.dfd = fd;
-		child_hndl->sock.ops = &single_sock_ops;
+		memcpy(child_hndl->sock.ops, &single_sock_ops,
+		       sizeof(*child_hndl->sock.ops));
 
 	} else {
 		child_hndl->sock.cfd = cfd;
 		child_hndl->sock.dfd = dfd;
-		child_hndl->sock.ops = &dual_sock_ops;
+		memcpy(child_hndl->sock.ops, &dual_sock_ops,
+		       sizeof(*child_hndl->sock.ops));
 
 		child_hndl->tmp_rx_buf = ucalloc(1, TMP_RX_BUF_SIZE);
 		if (!child_hndl->tmp_rx_buf) {
@@ -1213,7 +1217,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	if (sa_len == -1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
-		return -1;
+		goto exit1;
 	}
 	tcp_hndl->base.is_client = 0;
 
@@ -1225,7 +1229,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		xio_set_error(xio_get_last_socket_error());
 		ERROR_LOG("tcp bind failed. (errno=%d %m)\n",
 			  xio_get_last_socket_error());
-		goto exit;
+		goto exit1;
 	}
 
 	tcp_hndl->is_listen = 1;
@@ -1236,7 +1240,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 		xio_set_error(xio_get_last_socket_error());
 		ERROR_LOG("tcp listen failed. (errno=%d %m)\n",
 			  xio_get_last_socket_error());
-		goto exit;
+		goto exit1;
 	}
 
 	/* add to epoll */
@@ -1246,6 +1250,10 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 			XIO_POLLIN,
 			xio_tcp_listener_ev_handler,
 			tcp_hndl);
+	if (retval) {
+		ERROR_LOG("xio_context_add_ev_handler failed.\n");
+		goto exit1;
+	}
 
 	retval  = getsockname(tcp_hndl->sock.cfd,
 			      (struct sockaddr *)&sa.sa_stor,
@@ -1278,6 +1286,8 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 
 	return 0;
 
+exit1:
+	tcp_hndl->sock.ops->del_ev_handlers = NULL;
 exit:
 	return -1;
 }
@@ -1619,14 +1629,14 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 	if (rsa_len == (socklen_t)-1) {
 		xio_set_error(XIO_E_ADDR_ERROR);
 		ERROR_LOG("address [%s] resolving failed\n", portal_uri);
-		return -1;
+		goto exit1;
 	}
 	/* allocate memory for portal_uri */
 	tcp_hndl->base.portal_uri = strdup(portal_uri);
 	if (!tcp_hndl->base.portal_uri) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("strdup failed. %m\n");
-		return -1;
+		goto exit1;
 	}
 	tcp_hndl->base.is_client = 1;
 
@@ -1663,7 +1673,8 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 
 exit:
 	ufree(tcp_hndl->base.portal_uri);
-
+exit1:
+	tcp_hndl->sock.ops->del_ev_handlers = NULL;
 	return -1;
 }
 
@@ -2047,9 +2058,11 @@ static void xio_tcp_initial_pool_get_params(
 		int *start_nr, int *max_nr, int *alloc_nr,
 		int *pool_dd_sz, int *slab_dd_sz, int *task_dd_sz)
 {
+
 	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
-	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 10 * NUM_CONN_SETUP_TASKS;
+
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
 	*task_dd_sz = sizeof(struct xio_tcp_task) + 3 * sizeof(struct iovec);
@@ -2278,10 +2291,11 @@ static void xio_tcp_primary_pool_get_params(
 	int  max_iovsz = max(tcp_options.max_out_iovsz,
 				    tcp_options.max_in_iovsz) + 1;
 
+	/* per transport */
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = max((g_options.snd_queue_depth_msgs +
-		       g_options.rcv_queue_depth_msgs) * 40, 1024);
+		       g_options.rcv_queue_depth_msgs), *start_nr);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
@@ -2553,7 +2567,6 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
-struct xio_tcp_socket_ops single_sock_ops;
 /*---------------------------------------------------------------------------*/
 static void init_single_sock_ops(void)
 {
@@ -2570,7 +2583,6 @@ static void init_single_sock_ops(void)
 	single_sock_ops.close = xio_tcp_single_sock_close;
 };
 
-struct xio_tcp_socket_ops dual_sock_ops;
 /*---------------------------------------------------------------------------*/
 static void init_dual_sock_ops(void)
 {

@@ -39,6 +39,7 @@
 #include "xio_msg.h"
 
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 
 #ifndef roundup
 # define roundup(x, y)  ((((x) + ((y) - 1)) / (y)) * (y))

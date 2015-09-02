@@ -292,11 +292,26 @@ static struct xio_cq *xio_cq_get(struct xio_device *dev,
 	 * so we use only one cq for RX and TX
 	 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
 	tcq->cq = ib_create_cq(dev->ib_dev,
 			       xio_cq_data_callback,
 			       xio_cq_event_callback,
 			       (void *)tcq,
 			       alloc_sz, cpu);
+#else
+	{
+		struct ib_cq_init_attr ia = {
+			.cqe             = alloc_sz,
+			.comp_vector     = cpu,
+		};
+
+		tcq->cq = ib_create_cq(dev->ib_dev,
+				       xio_cq_data_callback,
+				       xio_cq_event_callback,
+				       (void *)tcq,
+				       &ia);
+	}
+#endif
 	if (IS_ERR(tcq->cq)) {
 		ERROR_LOG("ib_create_cq err(%ld)\n", PTR_ERR(tcq->cq));
 		goto cleanup2;
@@ -1262,7 +1277,7 @@ static void xio_rdma_initial_pool_get_params(
 {
 	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
-	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 10 * NUM_CONN_SETUP_TASKS;
 
 	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
@@ -1704,16 +1719,22 @@ static void xio_rdma_primary_pool_get_params(
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
 			     rdma_options.max_in_iovsz) + 1;
 	int  max_sge;
+	int queued_nr;
+
 
 	if (rdma_hndl)
 		max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	else
 		max_sge = min(XIO_DEV_ATTR_MAX_SGE, max_iovsz);
 
+	queued_nr = g_poptions->snd_queue_depth_msgs +
+		    g_poptions->rcv_queue_depth_msgs +
+		    MAX_CQE_PER_QP; /* for ibv_post_recv */
+
+
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = max((g_poptions->snd_queue_depth_msgs +
-		       g_poptions->rcv_queue_depth_msgs) * 100, 1024);
+	*max_nr =  max(queued_nr, *start_nr);
 
 	*pool_dd_sz = sizeof(struct xio_rdma_tasks_pool);
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);

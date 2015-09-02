@@ -52,6 +52,11 @@ void	*raio_handler_init_portal_data(void *prv_session_data,
 				       int portal_nr, void *loop);
 
 /*---------------------------------------------------------------------------*/
+/* raio_handler_get_portal_data						     */
+/*---------------------------------------------------------------------------*/
+void *raio_handler_get_portal_data(void *prv_session_data, int portal_nr);
+
+/*---------------------------------------------------------------------------*/
 /* raio_handler_free_session_data				             */
 /*---------------------------------------------------------------------------*/
 void	raio_handler_free_session_data(void *prv_session_data);
@@ -76,4 +81,9 @@ void	raio_handler_on_rsp_comp(void *prv_session_data,
 				 void *prv_portal_data,
 				 struct xio_msg *rsp);
 
+/*---------------------------------------------------------------------------*/
+/* rai_handler_bs_poll				                             */
+/*---------------------------------------------------------------------------*/
+void	raio_handler_bs_poll(void *prv_session_data,
+			    void *prv_portal_data);
 #endif

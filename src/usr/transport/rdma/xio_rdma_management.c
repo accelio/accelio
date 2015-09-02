@@ -308,7 +308,7 @@ static int xio_cq_modify(struct xio_cq *tcq, int cq_count, int cq_pariod)
 
 	retval = ibv_modify_cq(tcq->cq, &cq_attr,
 			       IBV_CQ_MODERATION);
-	if (retval)
+	if (unlikely(retval))
 		ERROR_LOG("ibv_modify_cq failed. (errno=%d %m)\n", errno);
 
 	return retval;
@@ -1406,7 +1406,7 @@ static void xio_rdma_initial_pool_get_params(
 {
 	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
-	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 10 * NUM_CONN_SETUP_TASKS;
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
@@ -1722,7 +1722,7 @@ static int xio_rdma_primary_pool_slab_init_task(
 
 	XIO_TO_RDMA_TASK(task, rdma_task);
 
-	if (!rdma_hndl)
+	if (!rdma_hndl || !rdma_hndl->tcq)
 		return 0;
 
 	max_sge = min(rdma_hndl->max_sge, max_iovsz);
@@ -1778,16 +1778,20 @@ static void xio_rdma_primary_pool_get_params(
 	int  max_iovsz = max(rdma_options.max_out_iovsz,
 			     rdma_options.max_in_iovsz) + 1;
 	int  max_sge;
+	int queued_nr;
 
 	if (rdma_hndl)
 		max_sge = min(rdma_hndl->max_sge, max_iovsz);
 	else
 		max_sge = min(XIO_DEV_ATTR_MAX_SGE, max_iovsz);
 
+	queued_nr = g_options.snd_queue_depth_msgs +
+		    g_options.rcv_queue_depth_msgs +
+		    MAX_CQE_PER_QP; /* for ibv_post_recv */
+
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
-	*max_nr = max((g_options.snd_queue_depth_msgs +
-		       g_options.rcv_queue_depth_msgs) * 100, 1024);
+	*max_nr =  max(queued_nr, *start_nr);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_rdma_tasks_slab);
@@ -1891,7 +1895,7 @@ static void on_cm_addr_resolved(struct rdma_cm_event *ev,
 					 RDMA_OPTION_ID_TOS,
 					 &rdma_hndl->trans_attr.tos,
 					 sizeof(rdma_hndl->trans_attr.tos));
-		if (retval) {
+		if (unlikely(retval)) {
 			xio_set_error(errno);
 			ERROR_LOG("set TOS option failed. %m\n");
 		}
@@ -1934,7 +1938,7 @@ static void on_cm_route_resolved(struct rdma_cm_event *ev,
 		return;
 	}
 	retval = xio_qp_create(rdma_hndl);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("internal logic error in create_endpoint\n");
 		goto notify_err0;
 	}
@@ -2038,7 +2042,7 @@ static void  on_cm_connect_request(struct rdma_cm_event *ev,
 	child_hndl->base.proto = XIO_PROTO_RDMA;
 
 	retval = xio_qp_create(child_hndl);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("failed to create qp\n");
 		xio_rdma_reject((struct xio_transport_base *)child_hndl);
 		goto notify_err3;
@@ -2160,7 +2164,7 @@ int xio_rdma_disconnect(struct xio_rdma_transport *rdma_hndl,
 	int			retval;
 
 	retval = rdma_disconnect(rdma_hndl->cm_id);
-	if (retval) {
+	if (unlikely(retval)) {
 		ERROR_LOG("rdma_hndl:%p rdma_disconnect failed, %m\n",
 			  rdma_hndl);
 		return -1;
@@ -3172,7 +3176,7 @@ static int xio_rdma_transport_modify(struct xio_transport_base *trans_hndl,
 		ret = rdma_set_option(rdma_hndl->cm_id, RDMA_OPTION_ID,
 				      RDMA_OPTION_ID_TOS,
 				      &attr->tos, sizeof(attr->tos));
-		if (ret) {
+		if (unlikely(ret)) {
 			ERROR_LOG("set TOS option failed. %m\n");
 			xio_set_error(errno);
 			return -1;
@@ -3461,6 +3465,11 @@ static void xio_rdma_set_pools_cls(
 /*---------------------------------------------------------------------------*/
 void xio_rdma_transport_constructor(void)
 {
+	/* this must be before calling setenv as libibverbs may crash
+	 * see libibverbs/src/device.c clone_env
+	 */
+	xio_device_list_check();
+
 	/* Mellanox OFED's User Manual */
 	setenv("RDMAV_HUGEPAGES_SAFE", "1", 0);
 	setenv("MLX_QP_ALLOC_TYPE", "PREFER_CONTIG", 0);
@@ -3474,8 +3483,6 @@ void xio_rdma_transport_constructor(void)
 	*/
 	if (0)
 		xio_rdma_enable_fork_support();
-
-	xio_device_list_check();
 
 	spin_lock_init(&dev_list_lock);
 }

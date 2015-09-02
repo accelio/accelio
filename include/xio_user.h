@@ -240,12 +240,15 @@ static inline void xio_reinit_msg(struct xio_msg *msg)
  * @brief context creation parameters structure
  */
 struct xio_context_params {
-	void			*user_context;  /**< private user context to */
-						/**< pass to connection      */
-						/**< oriented callbacks      */
-	int			prealloc_pools; /**< pre allocate  rdma only */
-						/**< internal pools	     */
-	int			reserved;	/**< reserved for future use */
+	/**< private user data passed saved on context can be queried/modified */
+	/**< via xio_query_context/xio_modify_context			       */
+	void			*user_context;
+
+	/**< preallocate and registers rdma inline buffers for send/recv	*/
+	int			prealloc_xio_inline_bufs;
+
+	/**< number of connections that this context will handle		*/
+	int			max_conns_per_ctx;
 };
 
 /**
@@ -312,6 +315,19 @@ int xio_context_add_ev_handler(struct xio_context *ctx,
 			       int fd, int events,
 			       xio_ev_handler_t handler,
 			       void *data);
+/**
+ * change the event event associated with the target file descriptor fd.
+ *
+ * @param[in] ctx	The xio context handle
+ * @param[in] fd	the file descriptor
+ * @param[in] events	the event signaled as defined in
+ *			enum xio_ev_loop_events
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_context_modify_ev_handler(struct xio_context *ctx,
+				  int fd, int events);
 
 /**
  * removes external fd from internal dispatcher
@@ -502,7 +518,7 @@ enum xio_mempool_flag {
 struct xio_mempool *xio_mempool_create(int nodeid, uint32_t flags);
 
 /**
- * add a slab to current set (setup only)
+ * add a slab to current set (setup only). This method is not thread safe.
  *
  * @param[in] mpool	  the memory pool
  * @param[in] size	  slab memory size
@@ -530,7 +546,7 @@ int xio_mempool_add_slab(struct xio_mempool *mpool,
 void xio_mempool_destroy(struct xio_mempool *mpool);
 
 /**
- * allocate memory buffer from memory pool
+ * allocate memory buffer from memory pool. This method is thread safe
  *
  * @param[in] mpool	  the memory pool
  * @param[in] length	  buffer size to allocate
@@ -543,7 +559,7 @@ int xio_mempool_alloc(struct xio_mempool *mpool,
 		      size_t length, struct xio_reg_mem *reg_mem);
 
 /**
- * free memory buffer back to memory pool
+ * free memory buffer back to memory pool. This method is thread safe.
  *
  * @param[in] reg_mem	  registered memory data structure
  *

@@ -117,7 +117,8 @@ enum xio_msg_flags_ex {
 #define XIO_FIN				BIT(10)	/*  0x400 */
 #define XIO_CANCEL			BIT(11)	/*  0x800 */
 #define XIO_ACK				BIT(12)	/*  0x1000 */
-#define XIO_RDMA_READ			BIT(13)
+#define XIO_RDMA_READ			BIT(13) /*  0x2000 */
+#define XIO_CONNECTION_KA		BIT(14)	/*  0x4000 */
 
 #define XIO_MSG_REQ		XIO_MSG_TYPE_REQ
 #define XIO_MSG_RSP		XIO_MSG_TYPE_RSP
@@ -134,6 +135,8 @@ enum xio_msg_flags_ex {
 #define XIO_CANCEL_RSP		(XIO_CANCEL | XIO_RESPONSE)
 #define XIO_CONNECTION_HELLO_REQ (XIO_CONNECTION_HELLO | XIO_REQUEST)
 #define XIO_CONNECTION_HELLO_RSP (XIO_CONNECTION_HELLO | XIO_RESPONSE)
+#define XIO_CONNECTION_KA_REQ (XIO_CONNECTION_KA | XIO_REQUEST)
+#define XIO_CONNECTION_KA_RSP (XIO_CONNECTION_KA | XIO_RESPONSE)
 #define XIO_ACK_REQ		(XIO_ACK | XIO_REQUEST)
 #define XIO_RDMA_READ_ACK	(XIO_RDMA_READ | XIO_RESPONSE)
 
@@ -194,6 +197,9 @@ struct xio_options {
 	uint64_t		rcv_queue_depth_bytes;
 	int			xfer_buf_align;
 	int			inline_xio_data_align;
+	int			enable_keepalive;
+
+	struct xio_options_keepalive ka;
 };
 
 /*---------------------------------------------------------------------------*/

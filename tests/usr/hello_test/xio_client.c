@@ -726,7 +726,6 @@ int main(int argc, char *argv[])
 	struct test_params		test_params;
 	struct xio_session_params	params;
 	struct xio_connection_params	cparams;
-	int				reconnect;
 	int				error;
 	int				retval;
 	static int			chain_messages = CHAIN_MESSAGES;
@@ -745,11 +744,6 @@ int main(int argc, char *argv[])
 	memset(&cparams, 0, sizeof(cparams));
 	test_params.stat.first_time = 1;
 	test_params.finite_run = test_config.finite_run;
-
-	/* enable reconnect */
-	reconnect = 1;
-	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_RECONNECT,
-			&reconnect, sizeof(reconnect));
 
 	/* set accelio max message vector used */
 	xio_set_opt(NULL,

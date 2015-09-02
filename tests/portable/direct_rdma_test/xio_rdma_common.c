@@ -84,6 +84,12 @@ static int publish_our_buffer(struct xio_session *session, struct xio_msg *req)
 	rsp->request = req;
 	pmsg = &rsp->out;
 
+	/* usually accelio batches on_msg_send_complete callbacks in batches
+	 * of 16 to maximize performance. In case server will send just
+	 * several responses and wants to receive the callback immidiately
+	 * this flag must be on */
+	rsp->flags = XIO_MSG_FLAG_IMM_SEND_COMP;
+
 	rdma_test_buf.addr = (uint64_t)rdma_reg_mem.addr;
 	rdma_test_buf.length = rdma_reg_mem.length;
 	rdma_test_buf.rkey = xio_lookup_rkey_by_response(&rdma_reg_mem, rsp);
@@ -179,6 +185,14 @@ static int on_msg_error(struct xio_session *session,
 	return 0;
 }
 
+static void test_teardown(void)
+{
+	xio_unregister_remote_key(test_rkey);
+	pr_info("Calling xio_disconnect\n");
+	xio_disconnect(test_params.connection);
+	pr_info("Back from xio_disconnect\n");
+}
+
 static char test_buf[RDMA_BUF_SIZE];
 static void verify_read_buffer(void)
 {
@@ -189,10 +203,6 @@ static void verify_read_buffer(void)
 	else
 		pr_info("RDMA test failed (wrong data read from remote)!\n");
 
-	xio_unregister_remote_key(test_rkey);
-	pr_info("Calling xio_disconnect\n");
-	xio_disconnect(test_params.connection);
-	pr_info("Back from xio_disconnect\n");
 }
 
 static int on_rdma_direct_complete(struct xio_session *session,
@@ -204,7 +214,9 @@ static int on_rdma_direct_complete(struct xio_session *session,
 		test_rdma_read_from_remote_buffer();
 		test_stage++;
 	} else {
+		pr_info("RDMA read done!\n");
 		verify_read_buffer();
+		test_teardown();
 	}
 
 	msg_pool_put(test_params.pool, msg);
@@ -233,7 +245,7 @@ void init_xio_rdma_common_test(void)
 	int res;
 
 	enum xio_log_level xio_log_level = XIO_LOG_LEVEL_TRACE;
-
+if(0)
 	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_LOG_LEVEL,
 		    &xio_log_level, sizeof(xio_log_level));
 

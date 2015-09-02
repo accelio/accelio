@@ -353,7 +353,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 			prev_rdma_task->txd.send_wr.send_flags |=
 				IBV_SEND_SIGNALED;
 		retval = xio_post_send(rdma_hndl, first_wr, req_nr);
-		if (retval != 0) {
+		if (unlikely(retval != 0)) {
 			ERROR_LOG("xio_post_send failed\n");
 			return -1;
 		}
@@ -416,7 +416,7 @@ static int xio_xmit_rdma_rd_(struct xio_rdma_transport *rdma_hndl,
 		(*rdma_rd_in_flight) += num_reqs;
 		/* submit the chain of rdma-rd requests, start from the first */
 		err = xio_post_send(rdma_hndl, first_wr, num_reqs);
-		if (err)
+		if (unlikely(err))
 			ERROR_LOG("xio_post_send failed\n");
 
 		/* ToDo: error handling */
@@ -1151,6 +1151,7 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 	cycles_t	start_time = 0;
 	struct ibv_wc	*wc;
 	struct xio_task *task;
+	struct xio_rdma_task    *rdma_task;
 
 	for (;;) {
 		if (wclen > tcq->wc_array_len)
@@ -1194,14 +1195,17 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 
 		wc = &tcq->wc_array[err - 1];
 		for (i = err - 1; i >= 0; i--) {
-			if (wc->opcode == IBV_WC_RECV &&
-			    wc->status == IBV_WC_SUCCESS) {
+			if (wc->status == IBV_WC_SUCCESS &&
+				(wc->opcode == IBV_WC_RECV || wc->opcode == IBV_WC_RDMA_READ)) {
 				task = (struct xio_task *)
 					ptr_from_int64(wc->wr_id);
-				tlv_type = xio_mbuf_read_type(&task->mbuf);
-				if (IS_APPLICATION_MSG(tlv_type)) {
-					last_in_rxq = i;
-					break;
+				rdma_task = (struct xio_rdma_task *)task->dd_data;
+				if (!rdma_task->phantom_idx) {
+					tlv_type = xio_mbuf_read_type(&task->mbuf);
+					if (IS_APPLICATION_MSG(tlv_type)) {
+						last_in_rxq = i;
+						break;
+					}
 				}
 			}
 			wc--;
@@ -1572,7 +1576,7 @@ static int xio_rdma_read_req_header(struct xio_rdma_transport *rdma_hndl,
 	req_hdr->flags    = tmp_req_hdr->flags;
 	UNPACK_SVAL(tmp_req_hdr, req_hdr, req_hdr_len);
 
-	if (req_hdr->req_hdr_len != sizeof(struct xio_rdma_req_hdr)) {
+	if (unlikely(req_hdr->req_hdr_len != sizeof(struct xio_rdma_req_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d  expected:%zd\n",
 		req_hdr->req_hdr_len, sizeof(struct xio_rdma_req_hdr));
@@ -1739,7 +1743,7 @@ static int xio_rdma_read_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	rsp_hdr->flags    = tmp_rsp_hdr->flags;
 	UNPACK_SVAL(tmp_rsp_hdr, rsp_hdr, rsp_hdr_len);
 
-	if (rsp_hdr->rsp_hdr_len != sizeof(struct xio_rdma_rsp_hdr)) {
+	if (unlikely(rsp_hdr->rsp_hdr_len != sizeof(struct xio_rdma_rsp_hdr))) {
 		ERROR_LOG(
 		"header length's read failed. arrived:%d expected:%zd\n",
 		  rsp_hdr->rsp_hdr_len, sizeof(struct xio_rdma_rsp_hdr));
@@ -1809,7 +1813,7 @@ static int xio_rdma_prep_req_header(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_req_hdr	req_hdr;
 
-	if (!IS_REQUEST(task->tlv_type)) {
+	if (unlikely(!IS_REQUEST(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -1872,7 +1876,7 @@ static int xio_rdma_prep_rsp_header(struct xio_rdma_transport *rdma_hndl,
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	struct xio_rdma_rsp_hdr	rsp_hdr;
 
-	if (!IS_RESPONSE(task->tlv_type)) {
+	if (unlikely(!IS_RESPONSE(task->tlv_type))) {
 		ERROR_LOG("unknown message type\n");
 		return -1;
 	}
@@ -1943,7 +1947,7 @@ static int xio_rdma_write_send_data(struct xio_task *task)
 		sge = &rdma_task->txd.sge[1];
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			xmr = (struct xio_mr *)sge_mr(sgtbl_ops, sg);
-			if (!xmr) {
+			if (unlikely(!xmr)) {
 				ERROR_LOG("failed to find mr on iov\n");
 				goto cleanup;
 			}
@@ -1951,7 +1955,7 @@ static int xio_rdma_write_send_data(struct xio_task *task)
 			/* get the corresponding key of the
 			 * outgoing adapter */
 			mr = xio_rdma_mr_lookup(xmr, dev);
-			if (!mr) {
+			if (unlikely(!mr)) {
 				ERROR_LOG("failed to find memory " \
 						"handle\n");
 				goto cleanup;
@@ -2135,7 +2139,7 @@ static int xio_rdma_prep_rsp_out_data(
 						rdma_hndl->rdma_mempool,
 						sge_length(sgtbl_ops, sg),
 						write_reg_mem);
-					if (retval) {
+					if (unlikely(retval)) {
 						rdma_task->write_num_reg_mem
 									= i;
 						xio_set_error(ENOMEM);
@@ -2164,7 +2168,7 @@ static int xio_rdma_prep_rsp_out_data(
 					rdma_hndl, task,
 					ulp_hdr_len, 0, 0, XIO_E_SUCCESS);
 
-			if (retval) {
+			if (unlikely(retval)) {
 				ERROR_LOG("Failed to write header\n");
 				goto cleanup1;
 			}
@@ -2262,13 +2266,13 @@ static int xio_rdma_prep_req_out_data(
 				rdma_hndl, task,
 				ulp_hdr_len, ulp_pad_len, ulp_imm_len,
 				XIO_E_SUCCESS);
-		if (retval)
+		if (unlikely(retval))
 			return -1;
 
 		/* if there is data, set it to buffer or directly to the sge */
 		if (ulp_imm_len) {
 			retval = xio_rdma_write_send_data(task);
-			if (retval)
+			if (unlikely(retval))
 				return -1;
 		}
 	} else {
@@ -2303,7 +2307,7 @@ static int xio_rdma_prep_req_out_data(
 						rdma_hndl->rdma_mempool,
 						sge_length(sgtbl_ops, sg),
 						&rdma_task->write_reg_mem[i]);
-				if (retval) {
+				if (unlikely(retval)) {
 					rdma_task->write_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG(
@@ -2328,7 +2332,7 @@ static int xio_rdma_prep_req_out_data(
 				rdma_hndl, task,
 				ulp_hdr_len, 0, 0, XIO_E_SUCCESS);
 
-		if (retval) {
+		if (unlikely(retval)) {
 			ERROR_LOG("Failed to write header\n");
 			goto cleanup;
 		}
@@ -2429,7 +2433,7 @@ static int xio_rdma_prep_req_in_data(
 						sge_length(sgtbl_ops, sg),
 						&rdma_task->read_reg_mem[i]);
 
-				if (retval) {
+				if (unlikely(retval)) {
 					rdma_task->read_num_reg_mem = i;
 					xio_set_error(ENOMEM);
 					ERROR_LOG(
@@ -2443,6 +2447,7 @@ static int xio_rdma_prep_req_in_data(
 		}
 		rdma_task->read_num_reg_mem = nents;
 	}
+	/*
 	if (rdma_task->read_num_reg_mem > rdma_hndl->peer_max_out_iovsz) {
 		ERROR_LOG("request in iovlen %d is bigger then peer " \
 			  "max out iovlen %d\n",
@@ -2450,6 +2455,7 @@ static int xio_rdma_prep_req_in_data(
 			  rdma_hndl->peer_max_out_iovsz);
 		goto cleanup;
 	}
+	*/
 
 	return 0;
 
@@ -2622,13 +2628,13 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 
 	/* prepare buffer for RDMA response  */
 	retval = xio_rdma_prep_req_in_data(rdma_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("rdma_prep_req_in_data failed\n");
 		return -1;
 	}
 	/* prepare the out message  */
 	retval = xio_rdma_prep_req_out_data(rdma_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("rdma_prep_req_out_data failed\n");
 		return -1;
 	}
@@ -2650,7 +2656,7 @@ static int xio_rdma_send_req(struct xio_rdma_transport *rdma_hndl,
 	sge_len = sge->length;
 
 	/* validate header */
-	if (XIO_TLV_LEN + payload != sge_len) {
+	if (unlikely(XIO_TLV_LEN + payload != sge_len)) {
 		ERROR_LOG("header validation failed\n");
 		return -1;
 	}
@@ -2711,7 +2717,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 
 	/* prepare the out message  */
 	retval = xio_rdma_prep_rsp_out_data(rdma_hndl, task);
-	if (retval != 0) {
+	if (unlikely(retval != 0)) {
 		ERROR_LOG("rdma_prep_rsp_out_data failed\n");
 		goto cleanup;
 	}
@@ -2730,7 +2736,7 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	sge_len = sge->length;
 
 	/* validate header */
-	if (XIO_TLV_LEN + payload != sge_len) {
+	if (unlikely(XIO_TLV_LEN + payload != sge_len)) {
 		ERROR_LOG("header validation failed\n");
 		goto cleanup;
 	}
@@ -3190,7 +3196,7 @@ static int xio_prep_rdma_op(
 		/* take new task */
 		tmp_task = xio_tasks_pool_get(rdma_hndl->phantom_tasks_pool,
 					      rdma_hndl);
-		if (!tmp_task) {
+		if (unlikely(!tmp_task)) {
 			ERROR_LOG("phantom tasks pool is empty\n");
 			return -1;
 		}
@@ -3238,7 +3244,7 @@ static int xio_prep_rdma_op(
 				tmp_task = xio_tasks_pool_get(
 						rdma_hndl->phantom_tasks_pool,
 						rdma_hndl);
-				if (!tmp_task) {
+				if (unlikely(!tmp_task)) {
 					ERROR_LOG(
 					      "phantom tasks pool is empty\n");
 					goto cleanup;
@@ -3302,7 +3308,7 @@ static int xio_prep_rdma_op(
 					tmp_task = xio_tasks_pool_get(
 						rdma_hndl->phantom_tasks_pool,
 						rdma_hndl);
-					if (!tmp_task) {
+					if (unlikely(!tmp_task)) {
 						ERROR_LOG(
 						      "phantom tasks pool is empty\n");
 						goto cleanup;
@@ -3367,7 +3373,7 @@ static int xio_prep_rdma_op(
 					xio_tasks_pool_get(
 						rdma_hndl->phantom_tasks_pool,
 						rdma_hndl);
-				if (!tmp_task) {
+				if (unlikely(!tmp_task)) {
 					ERROR_LOG(
 					       "phantom tasks pool is empty\n");
 					goto cleanup;
@@ -3497,7 +3503,7 @@ static int xio_rdma_perform_direct_rdma(struct xio_rdma_transport *rdma_hndl,
 				  rdma_hndl->max_sge,
 				  0,
 				  &rdma_hndl->tx_ready_list, tasks_used);
-	if (retval) {
+	if (unlikely(retval)) {
 		ERROR_LOG("failed to allocate tasks\n");
 		task->status = XIO_E_NO_BUFS;
 		return -1;
@@ -3645,7 +3651,7 @@ static int xio_sched_rdma_rd(struct xio_rdma_transport *rdma_hndl,
 					rdma_task->req_out_sge[i].length,
 					&rdma_task->read_reg_mem[i]);
 
-			if (retval) {
+			if (unlikely(retval)) {
 				rdma_task->read_num_reg_mem = i;
 				ERROR_LOG("mempool is empty for %zd bytes\n",
 					  rdma_task->read_reg_mem[i].length);
@@ -3792,7 +3798,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 					rdma_hndl->rdma_mempool,
 					sge_length(sgtbl_ops, sg),
 					&rdma_task->write_reg_mem[i]);
-			if (retval) {
+			if (unlikely(retval)) {
 				rdma_task->write_num_reg_mem = i;
 				xio_set_error(ENOMEM);
 				ERROR_LOG("mempool is empty for %zd bytes\n",
@@ -4127,7 +4133,7 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 
 	rdma_hndl->peer_rkey_tbl = (struct xio_rkey_tbl *)
 				       calloc(msg->rkey_tbl_size, sizeof(*tbl));
-	if (!rdma_hndl->peer_rkey_tbl) {
+	if (unlikely(!rdma_hndl->peer_rkey_tbl)) {
 		ERROR_LOG("calloc failed. (errno=%m)\n");
 		xio_strerror(ENOMEM);
 		msg->rkey_tbl_size = -1;
@@ -4613,7 +4619,7 @@ static int xio_rdma_on_recv_nop(struct xio_rdma_transport *rdma_hndl,
 /* xio_rdma_send_cancel							     */
 /*---------------------------------------------------------------------------*/
 static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
-				uint16_t tlv_type,
+				uint32_t tlv_type,
 				struct  xio_rdma_cancel_hdr *cancel_hdr,
 				void *ulp_msg, size_t ulp_msg_sz)
 {

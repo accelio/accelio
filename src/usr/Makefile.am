@@ -36,8 +36,17 @@ else
 endif
 
 install-exec-hook:
-	echo "$(libdir)" > /etc/ld.so.conf.d/libxio.conf
-	/sbin/ldconfig
+	@runner=`whoami` ; \
+        if test $$runner != "root" ; \
+	then \
+		echo "You are not root. run the following manualy:"; \
+		echo "echo \"$(libdir)\" > /etc/ld.so.conf.d/libxio.conf"; \
+		echo "/sbin/ldconfig"; \
+	else \
+		echo "You are root" ; \
+		echo "$(libdir)" > /etc/ld.so.conf.d/libxio.conf ; \
+		/sbin/ldconfig; \
+	fi
 
 ###############################################################################
 # THE LIBRARIES TO BUILD

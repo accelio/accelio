@@ -104,7 +104,7 @@ struct xio_context {
 
 	uint32_t			is_running:1;
 	uint32_t			defered_destroy:1;
-	uint32_t			prealloc_pools:1;
+	uint32_t			prealloc_xio_inline_bufs:1;
 	uint32_t			resereved:29;
 
 	struct xio_statistics		stats;
@@ -116,6 +116,9 @@ struct xio_context {
 	struct xio_observable		observable;
 	void				*netlink_sock;
 	xio_work_handle_t               destroy_ctx_work;
+
+	int				max_conns_per_ctx;
+	int				pad;
 };
 
 /*---------------------------------------------------------------------------*/

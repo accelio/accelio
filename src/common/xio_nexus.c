@@ -1994,10 +1994,8 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		retval = nexus->transport->connect(nexus->transport_hndl,
 						  portal_uri,
 						  out_if);
-		if (retval != 0) {
-			ERROR_LOG("transport connect failed\n");
+		if (retval != 0)
 			goto cleanup3;
-		}
 		nexus->state = XIO_NEXUS_STATE_CONNECTING;
 		break;
 	case XIO_NEXUS_STATE_CONNECTED:

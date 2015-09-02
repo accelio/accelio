@@ -52,9 +52,6 @@ AC_CHECK_HEADERS([event2/event.h],
 
 AM_CONDITIONAL(HAVE_INFINIBAND_VERBS, test "x$mypj_found_verbs_headers" = "xyes")
 
-AS_IF([test "x$mypj_found_verbs_headers" != "xyes"],
-      [AC_MSG_WARN([Unable to find the infiniband header files,
-				rdma transport will not be available.])])
 AS_IF([test "x$mypj_found_numa_headers" != "xyes"],
       [AC_MSG_ERROR([Unable to find the numactl-devel header files])])
 # Checks for typedefs, structures, and compiler characteristics.
@@ -65,6 +62,7 @@ AC_CHECK_LIB(numa, numa_available)
 #
 # Check for Contiguous Pages support
 #
+if test "$enable_rdma" = "yes"; then
 AC_CHECK_DECLS(IBV_EXP_ACCESS_ALLOCATE_MR,
               [AC_DEFINE([HAVE_MPAGES_EXP], 1, [Contiguous pages support, experimental]) havempages="yes"],
               [],
@@ -77,6 +75,7 @@ AC_CHECK_DECLS(IBV_DEVICE_MR_ALLOCATE,
 
 AS_IF([test "x$havempages" != "xyes"],
         [AC_MSG_WARN([Contiguous pages not supported.])])
+fi
 
 ##########################################################################
 # perf support
@@ -132,18 +131,35 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 ##########################################################################
 # performance compilation support
 ##########################################################################
-# usage: ./configure --enable-performance=yes
+# usage: ./configure --disable-extra-checks=yes
 #
-AC_MSG_CHECKING([suppress extra checks to achieve performance - dangerous])
-AC_ARG_ENABLE([performance],
-	      [AS_HELP_STRING([--enable-performance],
-			      [enable extra optimized code for performance])],
-			       [enable_performance="$enableval"],
-			       [enable_performance=no])
-AC_MSG_RESULT([$enable_performance])
+AC_MSG_CHECKING([perform extra checks for messages but reduces performance - use carefully])
+AC_ARG_ENABLE([extra_checks],
+	      [AS_HELP_STRING([--enable-extra-checks],
+			      [enable extra checks for messages validity - default yes])],
+			       [enable_extra_checks="$enableval"],
+			       [enable_extra_checks=yes])
+AC_MSG_RESULT([$enable_extra_checks])
 
-if test "$enable_performance" = "yes"; then
-	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_PERFORMANCE"
+if test "$enable_extra_checks" != "no"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_EXTRA_CHECKS"
+fi
+
+##########################################################################
+# statistics counters emission support
+##########################################################################
+# usage: ./configure --enable-stat-counters=yes
+#
+AC_MSG_CHECKING([enable statistic counters emission via netlink socket])
+AC_ARG_ENABLE([stat_counters],
+	      [AS_HELP_STRING([--enable-stat-counters],
+			      [enable statistics counters via netlink - default yes])],
+			      [enable_statistics_counters="$enableval"],
+			      [enable_statistics_counters=yes])
+AC_MSG_RESULT([$enable_statistics_counters])
+
+if test "$enable_statistics_counters" != "no"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_CFLAG_STAT_COUNTERS"
 fi
 
 ##########################################################################
@@ -198,6 +214,7 @@ if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([src/kernel/transport/tcp])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world])
 	AC_CONFIG_SUBDIRS([examples/kernel/hello_world_mt])
+	AC_CONFIG_SUBDIRS([examples/raio/kernel/nbdx])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_lat])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_ow])
@@ -214,9 +231,9 @@ if test "$mypj_found_event_headers" == "yes"; then
 	subdirs2="$subdirs2 examples/usr/hello_world_libevent";
 fi
 if test "$enable_raio_build" != "no"; then
-	subdirs2="$subdirs2 examples/usr/raio";
+	subdirs2="$subdirs2 examples/raio";
 if test "$enable_fio_build" != "no"; then
-	subdirs2="$subdirs2 examples/usr/fio";
+	subdirs2="$subdirs2 examples/raio/usr/fio";
 fi
 fi
 	subdirs2="$subdirs2 tests/usr/common";
@@ -281,9 +298,9 @@ AC_CONFIG_FILES([examples/usr/hello_world_daemon/Makefile])
 if test "$mypj_found_event_headers" == "yes"; then
 	AC_CONFIG_FILES([examples/usr/hello_world_libevent/Makefile])
 fi
-AC_CONFIG_FILES([examples/usr/raio/Makefile])
+AC_CONFIG_FILES([examples/raio/Makefile])
 if test "$enable_fio_build" != "no"; then
-AC_CONFIG_FILES([examples/usr/fio/Makefile])
+AC_CONFIG_FILES([examples/raio/usr/fio/Makefile])
 fi
 AC_CONFIG_FILES([tests/usr/common/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test/Makefile])

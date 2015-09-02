@@ -68,12 +68,11 @@ struct xio_task {
 	enum xio_task_state	state;		/* task state enum	*/
 	struct kref		kref;
 	uint64_t		stag;		/* session unique tag */
+	uint32_t                tlv_type;
 	uint16_t                is_control;
-	uint16_t                tlv_type;
 	uint16_t                omsg_flags;
 	uint16_t                imsg_flags;
 	uint16_t                last_in_rxq;
-	uint16_t                pad;
 	uint32_t                ltid;           /* local task id        */
 	uint32_t                rtid;           /* remote task id       */
 	uint32_t                magic;
@@ -274,11 +273,12 @@ static inline struct xio_task *xio_tasks_pool_get(
 				     tasks_list_entry);
 
 	if (unlikely(!t || list_is_last(&t->tasks_list_entry, &q->stack))) {
-		if (q->curr_used == q->params.max_nr)
-			return NULL;
+		if (q->curr_used == q->params.max_nr - 1)
+			goto pool_exhausted;
+
 		xio_tasks_pool_alloc_slab(q, context);
 		if (unlikely(list_empty(&q->stack)))
-			return NULL;
+			goto pool_exhausted;
 		t = list_last_entry(&q->stack, struct xio_task,
 				    tasks_list_entry);
 	} else {
@@ -300,6 +300,12 @@ static inline struct xio_task *xio_tasks_pool_get(
 		q->params.pool_hooks.task_post_get(context, t);
 
 	return t;
+
+pool_exhausted:
+	ERROR_LOG("%s - pool exhausted. used:%d max_nr:%d\n",
+		  q->params.pool_name,
+		  q->curr_used , q->params.max_nr);
+	return NULL;
 }
 
 /*---------------------------------------------------------------------------*/

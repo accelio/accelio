@@ -201,7 +201,7 @@ static int xio_dereg_mr(struct xio_mr *tmr)
 		list_for_each_entry_safe(tmr_elem, tmp_tmr_elem, &tmr->dm_list,
 					 dm_list_entry) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
-			if (retval != 0) {
+			if (unlikely(retval != 0)) {
 				xio_set_error(errno);
 				ERROR_LOG("ibv_dereg_mr failed, %m\n");
 			}
@@ -240,7 +240,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 	TRACE_LOG("before ibv_reg_mr\n");
 	mr = ibv_xio_reg_mr(&reg_mr_in);
 	TRACE_LOG("after ibv_reg_mr\n");
-	if (!mr) {
+	if (unlikely(!mr)) {
 		xio_set_error(errno);
 		if (!alloc_mr)
 			ERROR_LOG("ibv_reg_mr failed, %m. " \
@@ -251,7 +251,7 @@ static struct xio_mr_elem *xio_reg_mr_ex_dev(struct xio_device *dev,
 		return NULL;
 	}
 	mr_elem = (struct xio_mr_elem *)ucalloc(1, sizeof(*mr_elem));
-	if (!mr_elem)
+	if (unlikely(!mr_elem))
 		goto  cleanup;
 
 	mr_elem->dev = dev;
@@ -301,7 +301,7 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	spin_unlock(&dev_list_lock);
 
 	tmr = (struct xio_mr *)ucalloc(1, sizeof(*tmr));
-	if (!tmr) {
+	if (unlikely(!tmr)) {
 		xio_set_error(errno);
 		ERROR_LOG("malloc failed. (errno=%d %m)\n", errno);
 		goto cleanup2;
@@ -376,7 +376,7 @@ int xio_dereg_mr_by_dev(struct xio_device *dev)
 				 xm_list_entry) {
 		if (tmr_elem->mr) {
 			retval = ibv_dereg_mr(tmr_elem->mr);
-			if (retval != 0) {
+			if (unlikely(retval != 0)) {
 				xio_set_error(errno);
 				ERROR_LOG("ibv_dereg_mr failed, %m\n");
 			}
@@ -436,7 +436,7 @@ int xio_reg_mr_add_dev(struct xio_device *dev)
 		tmr_elem = xio_reg_mr_ex_dev(dev,
 					     &tmr->addr, tmr->length,
 					     tmr->access);
-		if (!tmr_elem) {
+		if (unlikely(!tmr_elem)) {
 			xio_set_error(errno);
 			ERROR_LOG("ibv_reg_mr failed, %m\n");
 			spin_unlock(&mr_list_lock);
@@ -545,13 +545,13 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 
 	real_size = ALIGN(length, page_size);
 	reg_mem->addr = umemalign(page_size, real_size);
-	if (!reg_mem->addr) {
+	if (unlikely(!reg_mem->addr)) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("memalign failed. sz:%zu\n", real_size);
 		goto cleanup;
 	}
 	reg_mem->mr = xio_reg_mr_ex(&reg_mem->addr, length, access);
-	if (!reg_mem->mr) {
+	if (unlikely(!reg_mem->mr)) {
 		ERROR_LOG("xio_reg_mr_ex failed. " \
 			  "addr:%p, length:%d, access:0x%x\n",
 			   reg_mem->addr, length, access);

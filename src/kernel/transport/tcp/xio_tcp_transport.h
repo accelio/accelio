@@ -38,6 +38,10 @@
 #ifndef XIO_TCP_TRANSPORT_H_
 #define XIO_TCP_TRANSPORT_H_
 
+#include <linux/version.h>
+
+struct xio_tcp_socket;
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -111,6 +115,14 @@ extern struct xio_options		*g_poptions;
 #define XIO_TO_TCP_HNDL(xt, th)				\
 		struct xio_tcp_transport *(th) =		\
 			(struct xio_tcp_transport *)(xt)->context
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
+	#define MSGHDR_IOV(mh) ((mh)->msg_iter.iov)
+	#define MSGHDR_IOVLEN(mh) (mh)->msg_iter.nr_segs
+#else
+	#define MSGHDR_IOV(mh) (mh)->msg_iov
+	#define MSGHDR_IOVLEN(mh) (mh)->msg_iovlen
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* enums								     */
@@ -296,21 +308,17 @@ struct xio_socket {
 	struct socket			*ksock;
 	uint16_t			port;
 	void (*orig_sk_state_change)(struct sock *sk);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	void (*orig_sk_data_ready)(struct sock *sk);
+#else
 	void (*orig_sk_data_ready)(struct sock *sk, int bytes);
+#endif
 	void (*orig_sk_write_space)(struct sock *sk);
 	struct xio_ev_data		conn_establish_event_data;
 };
 
 #define XIO_SOCK_ESTABLISH_CTL	1
 #define XIO_SOCK_ESTABLISH_DATA	BIT(1)
-
-struct xio_tcp_socket {
-	struct xio_socket		ctl;
-	struct xio_socket		data;
-	uint64_t			establish_states;
-	struct xio_tcp_socket_ops	*ops;
-	struct xio_ev_data		accept_event_data;
-};
 
 struct xio_tcp_socket_ops {
 	int (*open)(struct xio_tcp_socket *sock);
@@ -329,6 +337,15 @@ struct xio_tcp_socket_ops {
 	int (*shutdown)(struct xio_tcp_socket *sock);
 	int (*close)(struct xio_tcp_socket *sock);
 };
+
+struct xio_tcp_socket {
+	struct xio_socket		ctl;
+	struct xio_socket		data;
+	uint64_t			establish_states;
+	struct xio_tcp_socket_ops	ops[1];
+	struct xio_ev_data		accept_event_data;
+};
+
 
 struct xio_tcp_transport {
 	struct xio_transport_base	base;

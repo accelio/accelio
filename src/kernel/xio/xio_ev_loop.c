@@ -483,7 +483,7 @@ int priv_ev_loop_run(void *loop_hndl)
 
 	switch (loop->flags) {
 	case XIO_LOOP_GIVEN_THREAD:
-		if (loop->ctx->worker != (uint64_t)get_current()) {
+		if (unlikely(loop->ctx->worker != (uint64_t)get_current())) {
 			ERROR_LOG("worker kthread(%p) is not current(%p).\n",
 				  (void *)loop->ctx->worker, get_current());
 			goto cleanup0;

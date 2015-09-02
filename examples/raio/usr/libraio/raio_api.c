@@ -68,13 +68,18 @@
 #define uint64_from_ptr(p)	(uint64_t)(uintptr_t)(p)
 #define ptr_from_int64(p)	(void *)(unsigned long)(p)
 
+#ifndef likely
+#define likely(x)		__builtin_expect(!!(x), 1)
+#endif
+#ifndef unlikely
+#define unlikely(x)		__builtin_expect(!!(x), 0)
+#endif
+
 #ifdef VISIBILITY
 #define __RAIO_PUBLIC __attribute__((visibility("default")))
 #else
 #define __RAIO_PUBLIC
 #endif
-
-
 
 /*---------------------------------------------------------------------------*/
 /* structures								     */
@@ -133,6 +138,9 @@ struct raio_session_data {
 	raio_context_t			io_ctx;
 
 	LIST_ENTRY(raio_session_data)   rsd_siblings;
+
+	unsigned int			n_polls;
+	int				pad;
 };
 
 /*---------------------------------------------------------------------------*/
@@ -431,6 +439,16 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	opt = 2048;
 	xio_set_opt(NULL,
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
+		    &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,
+		    &opt, sizeof(int));
+
+	opt = 512;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_XFER_BUF_ALIGN,
 		    &opt, sizeof(int));
 
 
@@ -855,7 +873,7 @@ __RAIO_PUBLIC int raio_getevents(raio_context_t ctx, long min_nr, long nr,
 	struct raio_io_u		*io_u;
 	struct timespec			start;
 	int				i, r;
-	int				have_timeout = 0, timeout;
+	int				have_timeout = 0;
 	int				actual_nr;
 
 	session_data = ctx->session_data;
@@ -883,17 +901,19 @@ restart:
 	if ((ctx->io_u_completed_nr <  min_nr) ||
 	    (ctx->io_u_completed_nr == 0))  {
 #ifdef POLL_COMPLETIONS
-		session_data->min_nr = 0;
-		timeout = session_data->npending > 1 ? 10 : 0;
-		for (i = 0; i < 15 || !ctx->io_u_completed_nr; i++) {
-			xio_context_poll_completions(session_data->ctx, timeout);
-			if (ctx->io_u_completed_nr == session_data->npending)
+		while (unlikely(ctx->io_u_completed_nr < min_nr)) {
+			session_data->min_nr  = 0;
+			if (likely(++session_data->n_polls % 500 != 0))
+				xio_context_poll_completions(session_data->ctx, 0);
+			else
+				xio_context_poll_wait(session_data->ctx, 0);
+
+			if (unlikely(ctx->io_u_completed_nr == session_data->npending))
 				break;
+
+			if (unlikely(session_data->disconnected))
+				return -ECONNRESET;
 		}
-		if (!ctx->io_u_completed_nr)
-			xio_context_poll_wait(session_data->ctx, 0);
-		if (session_data->disconnected)
-			return -ECONNRESET;
 #else
 		session_data->min_nr  = (min_nr ? min_nr : 1);
 		xio_context_run_loop(session_data->ctx, XIO_INFINITE);

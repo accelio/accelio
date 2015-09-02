@@ -172,19 +172,53 @@ enum xio_msg_direction {
  * @brief message level specific flags
  */
 enum xio_msg_flags {
-	/**< request read receipt*/
+	/** request read receipt. If the user wants to know that the msg was
+	 * delivered to the recipient he can turn on this flag. Msg is
+	 * considered delivered after callback on_msg (in case msg was
+	 * delivered successfully)/on_msg_error (in case there was an error)
+	 * was called for this msg. This flag can be set for one way msg or
+	 * for request (but not for the response). In case of request: if the
+	 * responder sends the response immediately (from within the on_msg
+	 * callback), the receipt will be piggy backed on the response and the
+	 * requester will receive on_msg_delivered callback, immediately
+	 * followed by the on_msg callback. In case of one way msg or if the
+	 * responder needs to do some asynchronous work before sending a
+	 * response, a special inner msg will be sent to the requester
+	 * triggering on_msg_delivered callback.
+	 */
 	XIO_MSG_FLAG_REQUEST_READ_RECEIPT = (1 << 0),
 
-	/**< force peer to rdma write*/
+	/** force peer to rdma write. This flag should be enabled in case of
+	 * request-response flow, when the application wants to enforce the
+	 * response to be written using RDMA write (even if the response size
+	 * is smaller than 8k)
+	 */
 	XIO_MSG_FLAG_PEER_WRITE_RSP	  = (1 << 1),
 
-	/**< force peer to rdma read */
+	/** force peer to rdma read. This flag should be enabled when the
+	 * application wants to enforce the request/one way msg to be written
+	 * using RDMA READ (even if the request size is smaller than 8k).
+	 */
 	XIO_MSG_FLAG_PEER_READ_REQ	  = (1 << 2),
 
-	/**< request an immediate send completion   */
+	/** request an immediate send completion. Accelio batches cq signals
+	 * to optimize performance.  In order to decrease number of cq wake
+	 * ups, on_msg_send_complete callback is called in batches of 16.
+	 * Meaning that every 16th msg (or in case xio_connection was closed)
+	 * will trigger on_msg_send_complete callback for itself and for the
+	 * 15 msgs that preceded it. Meaning that if the user sent a number of
+	 * msgs that is not divided by 16 (for example 13), he will not
+	 * receive completion until 16 msgs will be sent or until the
+	 * connection is closed (which ever happens first). In order to
+	 * expedite signaling the user can enable this flag for the last msg
+	 */
 	XIO_MSG_FLAG_IMM_SEND_COMP	  = (1 << 3),
 
-	/**< last in batch	   */
+	/** last in batch. Typically, door bell to hardware indicating that
+	 * there are msgs to be sent is rang for every msg. In case the user
+	 * calls xio_send method several times in a row and wants to send the
+	 * msgs in batch, this flag should be enabled for the last msg
+	 */
 	XIO_MSG_FLAG_LAST_IN_BATCH	  = (1 << 4),
 
 	/* [1<<10 and above - reserved for library usage] */
@@ -1103,55 +1137,144 @@ enum xio_optlevel {
  */
 enum xio_optname {
 	/* XIO_OPTLEVEL_ACCELIO */
-	XIO_OPTNAME_DISABLE_HUGETBL = 0,  /**< disable huge pages allocations */
-	XIO_OPTNAME_LOG_FN,		  /**< set user log function	      */
-	XIO_OPTNAME_LOG_LEVEL,		  /**< set/get logging level          */
-	XIO_OPTNAME_MEM_ALLOCATOR,        /**< set customed allocators hooks  */
+	/** disable huge pages allocation. This flag is disabled by default.
+	 * Typically, accelio allocates memory in huge pages (usually 2M) and
+	 * not in regular pages (4k). This flag will cause accelio to allocate
+	 * memory in regular pages.
+	 */
+	XIO_OPTNAME_DISABLE_HUGETBL = 0,
+	/** set user log function					      */
+	XIO_OPTNAME_LOG_FN,
+	/** set/get logging level					      */
+	XIO_OPTNAME_LOG_LEVEL,
+	/** set customed allocators hooks				      */
+	XIO_OPTNAME_MEM_ALLOCATOR,
+	/**< enables/disables connection's keep alive. type: int	      */
+	XIO_OPTNAME_ENABLE_KEEPALIVE,
+	/**< configure keep alive variables.type: struct xio_options_keepalive*/
+	XIO_OPTNAME_CONFIG_KEEPALIVE,
 
 	/* XIO_OPTLEVEL_ACCELIO/RDMA/TCP */
-	XIO_OPTNAME_MAX_IN_IOVLEN = 100,  /**< set message's max in iovec     */
-	XIO_OPTNAME_MAX_OUT_IOVLEN,       /**< set message's max out iovec    */
-	XIO_OPTNAME_ENABLE_DMA_LATENCY,   /**< enables the dma latency	      */
-	XIO_OPTNAME_ENABLE_RECONNECT,	  /**< enables reconnection	      */
-	XIO_OPTNAME_ENABLE_FLOW_CONTROL,  /**< enables byte based flow control*/
-	XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS, /**< maximum tx queued msgs	      */
-	XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS, /**< maximum rx queued msgs	      */
-	XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES, /**< maximum tx queued bytes	      */
-	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES, /**< maximum rx queued bytes	      */
-	XIO_OPTNAME_CONFIG_MEMPOOL,	   /**< configure internal memory pool*/
+	/** message's max in iovec. This flag indicates what will be the max
+	 * in iovec for xio_msg. In case the in iovec size is smaller than the
+	 * default, it is best to configure it in order to save memory.
+	 */
+	XIO_OPTNAME_MAX_IN_IOVLEN = 100,
+	/** message's max out iovec. This flag indicates what will be the max
+	 * out iovec for xio_msg. It is best to configure it to the out iovec
+	 * size that the application uses in order to save memory.
+	 */
+	XIO_OPTNAME_MAX_OUT_IOVLEN,
+	/** enables the dma latency. Disables the CPU hybernation, triggering
+	 * a higher power consumption. Hybernating can also be prevented via a
+	 * system CPU policy. This is an override to it. This flag will be
+	 * deprecated soon
+	 */
+	XIO_OPTNAME_ENABLE_DMA_LATENCY,
+	/** enables reconnection. This flag is disabled by default and should
+	 * only be activated it when bonding is turned on. Otherwise, it will
+	 * not handle the failover in a timely fashion. (Will take a very long
+	 * or exponential time to disconnect).
+	 */
+	XIO_OPTNAME_ENABLE_RECONNECT,
+	/** enables byte based flow control. Application-driven flow control,
+	 * based on app releasing each message. Especially suitable for
+	 * one-way messages. Also works on the initiator side, if he doesn't
+	 * release messages, he will stop getting responses. When client sends
+	 * multiple msgs to server and it takes a lot of time for the server
+	 * to process them, it can cause the server side to run out of memory.
+	 * This case is more common in one way msgs. User can configure flow
+	 * control and the msgs will stay in queues on client side. Both sides
+	 * need to configure the queue depth to be the same.
+	 */
+	XIO_OPTNAME_ENABLE_FLOW_CONTROL,
+	/** maximum tx queued msgs. Default value is 1024                     */
+	XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
+	/** maximum rx queued msgs. Default value is 1024                     */
+	XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
+	/** maximum tx queued bytes. Default value is 64M		      */
+	XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES,
+	/** maximum rx queued bytes. Default value is 64M		      */
+	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
+	/** configure internal memory pool. In case the user wants to
+	 * configure accelio’s memory slab, he needs to pass this flag.
+	 */
+	XIO_OPTNAME_CONFIG_MEMPOOL,
 
-	XIO_OPTNAME_MAX_INLINE_XIO_HEADER, /**< set/get max inline XIO header */
-					   /**< size			      */
+	/** set/get max inline XIO header size. If the application sends small
+	 * header this flag can be configured in order to save memory. Default
+	 * value is 256
+	 */
+	XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
 
-	XIO_OPTNAME_MAX_INLINE_XIO_DATA,   /**< set/get max inline XIO data   */
-					   /**< size			      */
-
-	XIO_OPTNAME_XFER_BUF_ALIGN,     /**< set/get alignment of data buffer */
-					/**< address			      */
-	XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,  /**< set/get alignment of inline  */
-					    /**< xio data		      */
-					/**< buffer address		      */
+	/** set/get max inline XIO data size. This flag is used to set/get the
+	 * max inline xio data. If the application sends small data this flag
+	 * can be configured in order to save memory. Default value is 8k.
+	 */
+	XIO_OPTNAME_MAX_INLINE_XIO_DATA,
+	/** set/get alignment of data buffer address. Used to configure buffer
+	 * alignment inside accelio’s internal pool.
+	 */
+	XIO_OPTNAME_XFER_BUF_ALIGN,
+	/** set/get alignment of inline xio data buffer address		      */
+	XIO_OPTNAME_INLINE_XIO_DATA_ALIGN,
 
 	/* XIO_OPTLEVEL_RDMA/TCP */
-	XIO_OPTNAME_ENABLE_MEM_POOL = 200,/**< enables the internal	      */
-					  /**< transport memory pool	      */
+	/** enables the internal transport memory pool. This flag is enabled
+	 * by default. Accelio provides its own memory pool. In case the user
+	 * knows that when sending large data (via RDMA read/write) the memory
+	 * is always registered this pool can be disabled in order to save
+	 * memory. This requires the user to implement the "assign_in_buffer"
+	 * and take full ownership on memory registration.  In case the user
+	 * will send msg without filling “mr” error is expected.
+	 */
+	XIO_OPTNAME_ENABLE_MEM_POOL = 200,
 
 	/* XIO_OPTLEVEL_RDMA */
-	XIO_OPTNAME_RDMA_NUM_DEVICES = 300,    /**< number of RDMA capable    */
-					       /**< devices on the machine    */
-	XIO_OPTNAME_ENABLE_FORK_INIT,	       /**< Call ibv_fork_init()      */
-	XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA,    /**< Max number of data        */
-					       /**< (bytes) that can be       */
-					       /**< posted inline to the SQ   */
-					       /**< passed to ib(v)_create_qp */
+	/** number of RDMA-capable HCAs on the machine. Read only	      */
+	XIO_OPTNAME_RDMA_NUM_DEVICES = 300,
+	/** Call ibv_fork_init(). Forking with RDMA requires a special
+	 * synchronization. This is a wrapper over a correspondent ib verb, as
+	 * raw verbs are not accessible (calls ibv_fork_init()  )
+	 */
+	XIO_OPTNAME_ENABLE_FORK_INIT,
+	/** Max number of data (bytes) that can be posted inline to the SQ
+	 * passed to ib(v)_create_qp
+	 */
+	XIO_OPTNAME_QP_CAP_MAX_INLINE_DATA,
 
 	/* XIO_OPTLEVEL_TCP */
-	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400, /**< check tcp mr validity     */
-	XIO_OPTNAME_TCP_NO_DELAY,	       /**< turn-off Nagle algorithm  */
-	XIO_OPTNAME_TCP_SO_SNDBUF,	       /**< tcp socket send buffer    */
-	XIO_OPTNAME_TCP_SO_RCVBUF,	       /**< tcp socket receive buffer */
-	XIO_OPTNAME_TCP_DUAL_STREAM,	       /**< performance boost for the */
-					       /**< price of two fd resources */
+	/** check tcp mr validity. Disable sanity check for proper MRs in case
+	 * of TCP transport. In case this flag is enabled, a check is being
+	 * done whether the application provided MRs.  This flag should be
+	 * used only for the development stage: in case the user writes the
+	 * application above tcp and he want to make sure that it would work
+	 * on rdma as well he should enable this flag. For production, or in
+	 * case the development is done when rdma enabled the flag should be
+	 * disabled. This flag is disabled by default.
+	 */
+	XIO_OPTNAME_TCP_ENABLE_MR_CHECK = 400,
+	/** turn-off Nagle algorithm. In case this flag is enabled, tcp socket
+	 * that is created by accelio will have TCP_NODELAY flag. This will
+	 * turn off Nagle algorithm which collects small outgoing packets to
+	 * be sent all at once, thereby improving latency
+	 */
+	XIO_OPTNAME_TCP_NO_DELAY,
+	/** tcp socket send buffer. Sets maximum socket send buffer to this
+	 * value (SO_SNDBUF socket option).
+	 */
+	XIO_OPTNAME_TCP_SO_SNDBUF,
+	/** tcp socket receive buffer. Sets maximum socket receive buffer to
+	 * this value (SO_RCVUF socket option)
+	 */
+	XIO_OPTNAME_TCP_SO_RCVBUF,
+	/** performance boost for the price of two fd resources. The flag is
+	 * enabled by default. This flag allows to open 2 sockets for each
+	 * xio_connection. One is for internal accelio headers and the other
+	 * for data. This causes performance boost. The downside: for each
+	 * xio_connection 2 file descriptors are used.
+	 */
+	XIO_OPTNAME_TCP_DUAL_STREAM,
 };
 
 /**
@@ -1254,6 +1377,26 @@ struct xio_mem_allocator {
 	 *  @return pointer to block or NULL if allocate fails
 	 */
 	void   (*numa_free)(void *ptr, void *user_context);
+};
+
+/**
+ *  @struct xio_options_keepalive
+ *  @brief user provided values for connection's keepalive
+ * Use xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_CONFIG_KEEPALIVE,
+ *		   &ka, sizeof(ka)))
+ */
+struct xio_options_keepalive {
+	/**< the number of unacknowledged probes to send before considering  */
+	/**< the connection dead and notifying the application layer	     */
+	int	probes;
+
+	/**<  the heartbeat interval in seconds between two initial	     */
+	/**<  keepalive probes.						     */
+	int	time;
+
+	/**< the interval in seconds between subsequential keepalive probes, */
+	/**< regardless of what the connection has exchanged in the meantime */
+	int	intvl;
 };
 
 #define XIO_MAX_SLABS_NR  6

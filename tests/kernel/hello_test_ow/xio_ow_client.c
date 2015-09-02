@@ -215,11 +215,11 @@ static void process_message(struct test_params *test_params,
 		char	 timeb[40];
 		uint64_t delta = get_cpu_usecs() - test_params->stat.start_time;
 		uint64_t pps = (test_params->stat.cnt * USECS_IN_SEC) / delta;
-		double   txbw = (1.0 * pps * test_params->stat.txlen / ONE_MB);
+		uint64_t   txbw = (pps * test_params->stat.txlen / ONE_MB);
 
 		pr_info("transactions per second: %llu, bandwidth: " \
-		       "TX %d MB/s, length: TX: %zd B\n",
-		       pps, (int)txbw,
+		       "TX %llu MB/s, length: TX: %zd B\n",
+		       pps, txbw,
 		       test_params->stat.txlen);
 		get_time(timeb, 40);
 

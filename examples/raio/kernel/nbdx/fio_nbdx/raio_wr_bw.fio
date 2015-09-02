@@ -2,10 +2,12 @@
 [global]
 group_reporting
 thread
-ioengine=./.libs/libraio_fio.so
-rw=write
+ioengine=libaio
+rw=randwrite
 bs=1K
 loops=10
+time_based=1
+runtime=300
 direct=1
 ;invalidate=1
 iodepth=50
@@ -16,24 +18,22 @@ size=512M
 ;iodepth_batch_complete=0
 ;numa_cpu_nodes=0
 ;numa_mem_policy=bind:0
-;gtod_reduce=1
-;filename=/192.168.1.66/1234/dev/ram0
-filename=/192.168.1.66/1234/dev/null
-;filename=/192.168.1.66/1234/tmp/tmp.test
+gtod_reduce=1
+filename=/dev/nbdx0
 [file1]
-cpus_allowed=1
+cpus_allowed=12
 
 [file2]
-cpus_allowed=3
+cpus_allowed=13
 
 [file3]
-cpus_allowed=5
+cpus_allowed=14
 
 [file4]
-cpus_allowed=7
+cpus_allowed=15
 
 [file5]
-cpus_allowed=9
+cpus_allowed=16
 
 ;[file6]
-;cpus_allowed=11
+;cpus_allowed=17

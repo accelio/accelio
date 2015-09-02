@@ -7,7 +7,8 @@ else
     libxio_rdma_ldflags =
 endif
 
-AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include @AM_CFLAGS@
+AM_CFLAGS = -DPIC -fPIC -I$(top_srcdir)/include		\
+	    -I$(top_srcdir)/examples/raio/usr/libraio @AM_CFLAGS@
 AM_LDFLAGS = -lxio $(libxio_rdma_ldflags) -lpthread -laio \
 	     -L$(top_builddir)/src/usr/
 
@@ -24,35 +25,33 @@ bin_PROGRAMS = raio_client 			\
 libraio_includedir = $(includedir)/
 
 # the list of header files that belong to the library (to be installed later)
-libraio_include_HEADERS = $(top_srcdir)/examples/usr/raio/libraio.h
+libraio_include_HEADERS = $(top_srcdir)/examples/raio/usr/libraio/libraio.h
 
-libraio_headers   =  get_clock.h		\
-		     raio_msg_pool.h		\
-		     raio_bs.h			\
-		     raio_buffer.h		\
-		     raio_command.h		\
-		     raio_handlers.h		\
-		     raio_utils.h
 
-libraio_la_SOURCES = $(libraio_include_HEADERS) 	\
-		     $(libraio_headers)		      	\
-		     raio_msg_pool.c			\
-		     raio_utils.c			\
-		     raio_api.c
+libraio_common_headers   =  ./usr/libraio/raio_msg_pool.h		\
+		     	    ./usr/libraio/raio_buffer.h			\
+		     	    ./usr/libraio/raio_command.h		\
+		     	    ./usr/libraio/raio_utils.h
+
+libraio_la_SOURCES = $(libraio_include_HEADERS) 			\
+		     $(libraio_common_headers)		      		\
+		     ./usr/libraio/raio_msg_pool.c			\
+		     ./usr/libraio/raio_utils.c				\
+		     ./usr/libraio/raio_api.c
 
 libraio_la_LDFLAGS = -lxio $(libxio_rdma_ldflags) -laio -lrt -lpthread \
 		     -L$(top_builddir)/src/usr/
 
 # list of sources for the binary
-raio_server_SOURCES = raio_server.c		\
-		      raio_handlers.c		\
-		      raio_bs.c 		\
-		      raio_bs_null.c		\
-		      raio_bs_aio.c
+raio_server_SOURCES = ./usr/server/raio_server.c			\
+		      ./usr/server/raio_handlers.c			\
+		      ./usr/server/raio_bs.c 				\
+		      ./usr/server/raio_bs_null.c			\
+		      ./usr/server/raio_bs_aio.c
 raio_server_DEPENDENCIES = libraio.la
 
-raio_client_SOURCES = raio_client.c		\
-		      get_clock.c
+raio_client_SOURCES = ./usr/client/raio_client.c			\
+		      ./usr/client/get_clock.c
 raio_client_DEPENDENCIES = libraio.la
 
 
@@ -62,8 +61,8 @@ raio_client_DEPENDENCIES = libraio.la
 
 # the additional libraries needed to link raio_server
 #raio_server_LDADD = libraio.a $(AM_LDFLAGS)
-raio_client_LDADD = -lraio -L$(top_builddir)/examples/usr/raio/ $(AM_LDFLAGS)
-raio_server_LDADD = -lraio -L$(top_builddir)/examples/usr/raio/ $(AM_LDFLAGS)
+raio_client_LDADD = -lraio -L$(top_builddir)/examples/raio/usr/libraio $(AM_LDFLAGS)
+raio_server_LDADD = -lraio -L$(top_builddir)/examples/raio/usr/libraio $(AM_LDFLAGS)
 
 EXTRA_DIST =
 

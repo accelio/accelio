@@ -122,7 +122,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	if (req.uri_len) {
 		req.uri =
 		  (char *)kcalloc(req.uri_len, sizeof(char), GFP_KERNEL);
-		if (!req.uri) {
+		if (unlikely(!req.uri)) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("uri allocation failed. len:%d\n",
 				  req.uri_len);
@@ -136,7 +136,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	if (req.private_data_len) {
 		req.private_data = kcalloc(req.private_data_len,
 					   sizeof(uint8_t), GFP_KERNEL);
-		if (!req.private_data) {
+		if (unlikely(!req.private_data)) {
 			xio_set_error(ENOMEM);
 			ERROR_LOG("private data allocation failed. len:%d\n",
 				  req.private_data_len);
@@ -229,7 +229,7 @@ struct xio_msg *xio_session_write_accept_rsp(struct xio_session *session,
 	/* allocate message */
 	buf = (uint8_t *)kcalloc(SETUP_BUFFER_LEN + sizeof(struct xio_msg),
 		      sizeof(uint8_t), GFP_KERNEL);
-	if (!buf) {
+	if (unlikely(!buf)) {
 		ERROR_LOG("message allocation failed\n");
 		xio_set_error(ENOMEM);
 		return NULL;
@@ -470,7 +470,7 @@ int xio_redirect(struct xio_session *session,
 					   portals_array_len,
 					   NULL,
 					   0);
-	if (!msg) {
+	if (unlikely(!msg)) {
 		ERROR_LOG("setup request creation failed\n");
 		return -1;
 	}

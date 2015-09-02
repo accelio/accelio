@@ -90,8 +90,8 @@ static struct dentry *xio_tcp_root;
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 struct xio_transport			xio_tcp_transport;
-struct xio_tcp_socket_ops		single_sock_ops;
-struct xio_tcp_socket_ops		dual_sock_ops;
+static struct xio_tcp_socket_ops	single_sock_ops;
+static struct xio_tcp_socket_ops	dual_sock_ops;
 struct xio_options                     *g_poptions;
 
 /* tcp options */
@@ -147,7 +147,11 @@ void xio_tcp_restore_callbacks(struct xio_socket *socket)
 }
 
 void xio_tcp_set_callbacks(struct socket *sock,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+			   void (*sk_data_ready)(struct sock *sk),
+#else
 			   void (*sk_data_ready)(struct sock *sk, int bytes),
+#endif
 			   void	(*sk_state_change)(struct sock *sk),
 			   void	(*sk_write_space)(struct sock *sk),
 			   void *user_data)
@@ -641,6 +645,20 @@ void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 
 	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 
+	/* flush all tasks in completion */
+        if (!list_empty(&tcp_hndl->in_flight_list)) {
+		struct xio_task *task = NULL;
+
+		task = list_last_entry(&tcp_hndl->in_flight_list,
+				       struct xio_task,
+				       tasks_list_entry);
+		if (task) {
+		    XIO_TO_TCP_TASK(task, tcp_task);
+
+		    xio_context_add_event(tcp_hndl->base.ctx,
+					  &tcp_task->comp_event);
+	    }
+	}
 	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
 }
 
@@ -715,9 +733,15 @@ void xio_tcp_consume_data_rx(void *xio_tcp_hndl)
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_data_ready_cb(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_data_ready_cb(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_transport *tcp_hndl;
 	int is_ctl = 0;
 
@@ -741,7 +765,11 @@ void xio_tcp_data_ready_cb(struct sock *sk, int bytes)
 
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 void xio_tcp_write_space_cb(struct sock *sk)
@@ -973,8 +1001,8 @@ struct xio_tcp_transport *xio_tcp_transport_create(
 
 	/* create tcp socket */
 	if (create_socket) {
-		tcp_hndl->socket.ops = tcp_options.tcp_dual_sock ?
-					&dual_sock_ops : &single_sock_ops;
+		memcpy(tcp_hndl->socket.ops, (tcp_options.tcp_dual_sock ?
+		       &dual_sock_ops : &single_sock_ops), sizeof(*tcp_hndl->socket.ops));
 		if (tcp_hndl->socket.ops->open(&tcp_hndl->socket))
 			goto cleanup;
 	}
@@ -1063,13 +1091,8 @@ void xio_tcp_handle_pending_conn(void *user_data)
 		struct msghdr msg;
 		struct kvec vec;
 
-		msg.msg_control = NULL;
-		msg.msg_controllen = 0;
+		memset(&msg, 0, sizeof(msg));
 		msg.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT;
-		msg.msg_iov = NULL;
-		msg.msg_iovlen = 0;
-		msg.msg_name = NULL;
-		msg.msg_namelen = 0;
 		vec.iov_base = buf;
 		vec.iov_len = pending_conn->waiting_for_bytes;
 		retval = kernel_recvmsg(pending_conn->sock, &msg, &vec, 1,
@@ -1176,11 +1199,13 @@ single_sock:
 	if (is_single) {
 		child_hndl->socket.ctl.ksock = ctl_sock;
 		child_hndl->socket.data.ksock = ctl_sock;
-		child_hndl->socket.ops = &single_sock_ops;
+		memcpy(child_hndl->socket.ops, &single_sock_ops,
+		       sizeof(*child_hndl->socket.ops));
 	} else {
 		child_hndl->socket.ctl.ksock = ctl_sock;
 		child_hndl->socket.data.ksock = data_sock;
-		child_hndl->socket.ops = &dual_sock_ops;
+		memcpy(child_hndl->socket.ops, &dual_sock_ops,
+		       sizeof(*child_hndl->socket.ops));
 
 		child_hndl->tmp_rx_buf = kzalloc(TMP_RX_BUF_SIZE, GFP_KERNEL);
 		if (!child_hndl->tmp_rx_buf) {
@@ -1246,9 +1271,15 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_pending_conn_ev_handler					     */
 /*---------------------------------------------------------------------------*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_pending_conn_ev_handler(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_pending_conn_ev_handler(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_pending_conn *pending_conn;
 
 	read_lock(&sk->sk_callback_lock);
@@ -1271,7 +1302,11 @@ void xio_tcp_pending_conn_ev_handler(struct sock *sk, int bytes)
 
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1372,9 +1407,15 @@ void xio_tcp_accept_connections(void *user_data)
 /*---------------------------------------------------------------------------*/
 /* xio_tcp_listener_ev_handler						     */
 /*---------------------------------------------------------------------------*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+void xio_tcp_listener_ev_handler(struct sock *sk)
+{
+	void (*ready)(struct sock *sk);
+#else
 void xio_tcp_listener_ev_handler(struct sock *sk, int bytes)
 {
 	void (*ready)(struct sock *sk, int bytes);
+#endif
 	struct xio_tcp_transport *tcp_hndl;
 
 	DEBUG_LOG("listen data ready sk %p\n", sk);
@@ -1400,7 +1441,11 @@ void xio_tcp_listener_ev_handler(struct sock *sk, int bytes)
 	}
 out:
 	read_unlock(&sk->sk_callback_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ready(sk);
+#else
 	ready(sk, bytes);
+#endif
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1862,8 +1907,8 @@ static void xio_tcp_rxd_init(struct xio_tcp_work_req *rxd,
 	rxd->msg.msg_flags = MSG_DONTWAIT;
 	rxd->msg.msg_name = NULL;
 	rxd->msg.msg_namelen = 0;
-	rxd->msg.msg_iov = NULL;
-	rxd->msg.msg_iovlen = 0;
+	MSGHDR_IOV(&rxd->msg) = NULL;
+	MSGHDR_IOVLEN(&rxd->msg) = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1885,8 +1930,8 @@ static void xio_tcp_txd_init(struct xio_tcp_work_req *txd,
 	txd->msg.msg_flags = MSG_DONTWAIT | MSG_NOSIGNAL;
 	txd->msg.msg_name = NULL;
 	txd->msg.msg_namelen = 0;
-	txd->msg.msg_iov = NULL;
-	txd->msg.msg_iovlen = 0;
+	MSGHDR_IOV(&txd->msg) = NULL;
+	MSGHDR_IOVLEN(&txd->msg) = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2052,7 +2097,7 @@ static int xio_tcp_pool_slab_uninit_task(struct xio_transport_base *trans_hndl,
 		(struct xio_tcp_tasks_slab *)slab_dd_data;
 
 	XIO_TO_TCP_TASK(task, tcp_task);
-	
+
 	/* Phantom tasks have no buffer */
 	if (tcp_task->buf) {
 		if (tcp_slab->count)
@@ -2127,7 +2172,7 @@ static void xio_tcp_initial_pool_get_params(
 {
 	*start_nr = 10 * NUM_CONN_SETUP_TASKS;
 	*alloc_nr = 10 * NUM_CONN_SETUP_TASKS;
-	*max_nr = 100 * NUM_CONN_SETUP_TASKS;
+	*max_nr = 10 * NUM_CONN_SETUP_TASKS;
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
@@ -2360,7 +2405,7 @@ static void xio_tcp_primary_pool_get_params(
 	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr = max((g_poptions->snd_queue_depth_msgs +
-		       g_poptions->rcv_queue_depth_msgs) * 40, 1024);
+		       g_poptions->rcv_queue_depth_msgs), *start_nr);
 
 	*pool_dd_sz = 0;
 	*slab_dd_sz = sizeof(struct xio_tcp_tasks_slab);
@@ -2607,7 +2652,7 @@ static int xio_tcp_dup2(struct xio_transport_base *old_trans_hndl,
 	return 0;
 }
 
-struct xio_tcp_socket_ops single_sock_ops = {
+static struct xio_tcp_socket_ops single_sock_ops = {
 	.open			= xio_tcp_single_sock_create,
 	.add_ev_handlers	= xio_tcp_single_sock_add_ev_handlers,
 	.del_ev_handlers	= xio_tcp_single_sock_del_ev_handlers,
@@ -2621,7 +2666,7 @@ struct xio_tcp_socket_ops single_sock_ops = {
 	.close			= xio_tcp_single_sock_close,
 };
 
-struct xio_tcp_socket_ops dual_sock_ops = {
+static struct xio_tcp_socket_ops dual_sock_ops = {
 	.open			= xio_tcp_dual_sock_create,
 	.add_ev_handlers	= xio_tcp_dual_sock_add_ev_handlers,
 	.del_ev_handlers	= xio_tcp_dual_sock_del_ev_handlers,
