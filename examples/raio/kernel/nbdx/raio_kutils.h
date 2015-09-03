@@ -190,7 +190,7 @@ char *pack_iocb(struct raio_iocb *iocb, char *buffer);
 void pack_submit_command(struct raio_iocb *iocb, int is_last_in_batch,
 			 void *buf, size_t *len);
 
-void pack_setup_command(int maxevents, void *buf, size_t *len);
+void pack_setup_command(int queues, int qdepth, void *buf, size_t *len);
 
 static inline void raio_prep_pread(struct raio_iocb *iocb,
 		int fd, long long offset)

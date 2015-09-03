@@ -373,7 +373,7 @@ const char *nbdx_device_state_str(struct nbdx_file *dev)
 }
 
 static int nbdx_setup_remote_session(struct nbdx_session *nbdx_session,
-			    int maxevents)
+			    int queues)
 {
 
 	int retval, cpu;
@@ -383,7 +383,7 @@ static int nbdx_setup_remote_session(struct nbdx_session *nbdx_session,
 	nbdx_conn = nbdx_session->nbdx_conns[cpu];
 
 	msg_reset(&nbdx_conn->req);
-	pack_setup_command(maxevents,
+	pack_setup_command(queues, NBDX_QUEUE_DEPTH,
 			   nbdx_conn->req.out.header.iov_base,
 			   &nbdx_conn->req.out.header.iov_len);
 
@@ -792,7 +792,7 @@ int nbdx_session_create(const char *portal, struct nbdx_session *nbdx_session)
 	}
 
 	ret = nbdx_setup_remote_session(nbdx_session,
-			submit_queues * NBDX_QUEUE_DEPTH);
+			submit_queues);
 	if (ret) {
 		pr_err("failed to setup remote session %s ret=%d\n",
 				nbdx_session->portal, ret);

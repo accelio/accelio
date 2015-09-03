@@ -59,8 +59,8 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros				                             */
 /*---------------------------------------------------------------------------*/
-#define EXTRA_MSGS		64
 #define RAIO_CMDS_POOL_SZ	128
+#define DIV_ROUND_UP(n,d)	(((n) + (d) - 1) / (d))
 
 #ifndef TAILQ_FOREACH_SAFE
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
@@ -75,7 +75,7 @@
 struct raio_io_portal_data {
 	TAILQ_HEAD(, raio_bs)		dev_list;
 	int				ndevs;
-	int				iodepth;
+	int				max_queues;
 	int				io_u_free_nr;
 	int				pad;
 	struct msg_pool			*cmds_rsp_pool; /* control messages */
@@ -447,7 +447,8 @@ static int raio_handle_setup(void *prv_session_data,
 			     struct xio_msg *req)
 {
 	int				i, err = 0;
-	uint32_t			iodepth;
+	uint32_t			qdepth;
+	uint32_t			queues;
 	struct raio_io_session_data	*sd =
 				(struct raio_io_session_data *)prv_session_data;
 	struct raio_io_portal_data	*pd =
@@ -459,19 +460,26 @@ static int raio_handle_setup(void *prv_session_data,
 	rsp	= msg_pool_get(pd->cmds_rsp_pool);
 	rsp_hdr = (char *)rsp->out.header.iov_base;
 
-	if (sizeof(int) != cmd->data_len) {
+	if (2*sizeof(int) != cmd->data_len) {
 		err = EINVAL;
 		printf("io setup request rejected\n");
 		goto reject;
 	}
 
-	unpack_u32(&iodepth, cmd_data);
+	unpack_u32(&queues,
+	unpack_u32(&qdepth,
+		   cmd_data));
 
 	for (i = 0; i < sd->portals_nr; i++) {
 		cpd = &sd->pd[i];
-		/* divide remote iodepth between server resources */
-		cpd->iodepth = (iodepth / sd->portals_nr) + 1;
-		cpd->io_u_free_nr = cpd->iodepth + EXTRA_MSGS;
+		/* multiplex remote queues between server portals */
+		cpd->max_queues = DIV_ROUND_UP(queues,sd->portals_nr);
+		/*
+		 * need to multiply by factor 2 because the signal of the
+		 * response can arrive after receiving new requests from
+		 * the client.
+		 */
+		cpd->io_u_free_nr = 2 * cpd->max_queues * qdepth;
 	}
 
 reject:
