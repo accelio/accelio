@@ -962,10 +962,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	uint64_t		bytes_sent;
 
 	if (tcp_hndl->tx_ready_tasks_num == 0 ||
-	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX)
-		return 0;
-
-	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
+	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX ||
+	    tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		xio_set_error(XIO_EAGAIN);
 		return -1;
 	}
@@ -975,7 +973,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 
 	/* if "ready to send queue" is not empty */
 	while (likely(tcp_hndl->tx_ready_tasks_num &&
-		      tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX)) {
+		      (tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX))) {
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
@@ -1225,7 +1223,6 @@ handle_completions:
 			return retval2;
 		}
 	}
-
 	xio_context_disable_event(&tcp_hndl->flush_tx_event);
 
 	return retval < 0 ? retval : 0;
@@ -1407,7 +1404,6 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t			retval;
-	int			must_send = 0;
 	size_t			tlv_len;
 
 	/* prepare buffer for response  */
@@ -1442,42 +1438,15 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->tx_ready_tasks_num++;
 
-	/* transmit only if  available */
-	/* do not batch in tcp since tcp stack has its own considerations */
-	/*
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
-			must_send = 1;
-	}
-	*/
-	must_send = 1;
-
-	if (must_send) {
-		retval = xio_tcp_xmit(tcp_hndl);
-		if (retval) {
-			if (xio_errno() != XIO_EAGAIN) {
-				DEBUG_LOG("xio_tcp_xmit failed\n");
-				return -1;
-			}
-			retval = 0;
+	retval = xio_tcp_xmit(tcp_hndl);
+	if (retval) {
+		if (xio_errno() != XIO_EAGAIN) {
+			DEBUG_LOG("xio_tcp_xmit failed\n");
+			return -1;
 		}
-		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
-		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
-			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
-						  task,
-						  xio_tcp_tx_completion_handler,
-						  &tcp_task->comp_work);
-			if (retval) {
-				ERROR_LOG("xio_ctx_add_work failed.\n");
-				return retval;
-			}
-		}
-	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
+		retval = 0;
 	}
 
 	return retval;
@@ -1706,7 +1675,6 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_imm_len;
 	size_t			retval;
-	int			must_send = 0;
 	int			enforce_write_rsp;
 	int			tlv_len = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -1810,45 +1778,18 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->tx_ready_tasks_num++;
 
-	/* transmit only if  available */
-	/* do not batch in tcp since tcp stack has its own considerations */
-	/*
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
-			must_send = 1;
-	}
-	*/
-	must_send = 1;
-
-	if (must_send) {
-		retval = xio_tcp_xmit(tcp_hndl);
-		if (retval) {
-			/* no need xio_get_last_error here */
-			retval = xio_errno();
-			if (retval != XIO_EAGAIN) {
-				ERROR_LOG("xio_xmit_tcp failed. %s\n",
-					  xio_strerror(retval));
-				return -1;
-			}
-			retval = 0;
+	retval = xio_tcp_xmit(tcp_hndl);
+	if (retval) {
+		/* no need xio_get_last_error here */
+		retval = xio_errno();
+		if (retval != XIO_EAGAIN) {
+			ERROR_LOG("xio_xmit_tcp failed. %s\n",
+					xio_strerror(retval));
+			return -1;
 		}
-		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
-		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
-			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
-						  task,
-						  xio_tcp_tx_completion_handler,
-						  &tcp_task->comp_work);
-			if (retval) {
-				ERROR_LOG("xio_ctx_add_work failed.\n");
-				return retval;
-			}
-		}
-	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
+		retval = 0;
 	}
 
 	return retval;
