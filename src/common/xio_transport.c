@@ -55,14 +55,15 @@ static LIST_HEAD(transports_list);
 /*---------------------------------------------------------------------------*/
 int xio_reg_transport(struct xio_transport *transport)
 {
-	list_add(&transport->transports_list_entry, &transports_list);
+	if (transport)
+		list_add(&transport->transports_list_entry, &transports_list);
 
 	return 0;
 }
 EXPORT_SYMBOL(xio_reg_transport);
 
 /*---------------------------------------------------------------------------*/
-/* xio_unreg_transport						     */
+/* xio_unreg_transport							     */
 /*---------------------------------------------------------------------------*/
 void xio_unreg_transport(struct xio_transport *transport)
 {

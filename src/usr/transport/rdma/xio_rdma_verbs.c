@@ -467,7 +467,7 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 		return -1;
 	}
 	if (list_empty(&dev_list)) {
-		if (xio_register_transport() && list_empty(&dev_list))
+		if (!xio_register_transport() && list_empty(&dev_list))
 			return xio_mem_register_no_dev(addr, length, reg_mem);
 	}
 
@@ -520,7 +520,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 		return -1;
 	}
 	if (list_empty(&dev_list)) {
-		if (xio_register_transport() && list_empty(&dev_list))
+		if (!xio_register_transport() && list_empty(&dev_list))
 			return xio_mem_alloc_no_dev(length, reg_mem);
 	}
 

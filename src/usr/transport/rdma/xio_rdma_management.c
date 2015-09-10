@@ -3532,5 +3532,16 @@ struct xio_transport xio_rdma_transport = {
 /*---------------------------------------------------------------------------*/
 struct xio_transport *xio_rdma_get_transport_func_list(void)
 {
+	/* we wish to compile and link with rdma but
+	 * infiniband devices are not installed on the machines.
+	 * this case ignore rdma (only tcp is available for usage)
+	 */
+	if (access("/sys/class/infiniband", F_OK) != 0) {
+		DEBUG_LOG("/sys/class/infiniband does not exists." \
+			  "no capable device installed\n");
+		INIT_LIST_HEAD(&dev_list);
+		return NULL;
+	}
+
 	return &xio_rdma_transport;
 }

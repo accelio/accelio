@@ -84,6 +84,8 @@ static void xio_dtor(void)
 	size_t i;
 
 	for (i = 0; i < transport_tbl_sz; i++) {
+		if (transport_tbl[i] == NULL)
+			continue;
 		if (transport_tbl[i]->release)
 			transport_tbl[i]->release(transport_tbl[i]);
 
@@ -121,6 +123,8 @@ static void xio_ctor(void)
 	nexus_cache_construct();
 
 	for (i = 0; i < transport_tbl_sz; i++) {
+		if (transport_tbl[i] == NULL)
+			continue;
 		xio_reg_transport(transport_tbl[i]);
 
 		if (transport_tbl[i]->ctor)
