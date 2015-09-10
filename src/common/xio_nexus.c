@@ -947,6 +947,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
 	int				retval;
+	struct xio_task			*task;
 
 	transport_hndl  = nexus->transport_hndl;
 	proto		= transport_hndl->proto;
@@ -980,6 +981,10 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 				ctx->primary_tasks_pool[proto]->dd_data);
 
 	nexus->primary_tasks_pool = ctx->primary_tasks_pool[proto];
+
+	list_for_each_entry(task, &nexus->primary_tasks_pool->stack, tasks_list_entry) {
+		xio_task_reinit(nexus->transport_hndl, task);
+	}
 
 	return 0;
 }

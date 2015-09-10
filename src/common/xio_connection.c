@@ -773,6 +773,13 @@ static inline int xio_connection_xmit_inl(
 		int *retry_cnt)
 {
 	int retval = 0, rc = 0;
+	struct xio_task *t;
+	struct xio_tasks_pool *q;
+
+#ifdef __KERNEL__
+	preempt_disable();
+#endif
+
 	struct xio_msg *msg = xio_msg_list_first(msgq);
 
 	if (!msg) {
@@ -784,6 +791,9 @@ static inline int xio_connection_xmit_inl(
 	if (retval) {
 		if (retval == -EAGAIN) {
 			(*retry_cnt)++;
+#ifdef __KERNEL__
+			preempt_enable();
+#endif
 			return 1;
 		} else if (retval == -ENOMSG) {
 			/* message error was notified */
@@ -810,6 +820,17 @@ static inline int xio_connection_xmit_inl(
 					in_flight_msgq, msg,
 					pdata);
 		}
+	}
+#ifdef __KERNEL__
+	preempt_enable();
+#endif
+
+	q = connection->nexus->primary_tasks_pool;
+	t = list_first_entry_or_null(&q->stack, struct xio_task,
+			tasks_list_entry);
+	if (unlikely(!t || list_is_last(&t->tasks_list_entry, &q->stack))) {
+		if (q->curr_used != q->params.max_nr - 1)
+			xio_tasks_pool_alloc_slab(q, connection->nexus->transport_hndl);
 	}
 
 	return rc;

@@ -181,7 +181,9 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	q->curr_alloced += alloc_nr;
 
 	list_add_tail(&s->slabs_list_entry, &q->slabs_list);
+	preempt_disable();
 	list_splice_tail(&tmp_list, &q->stack);
+	preempt_enable();
 
 	if (q->params.pool_hooks.slab_post_create && context) {
 		retval = q->params.pool_hooks.slab_post_create(
