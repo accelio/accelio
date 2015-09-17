@@ -351,12 +351,13 @@ skip_flags:
 
 static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 {
-	int			ret;
+	int			ret = 0;
 	int			flags = 0;
 	struct sockaddr_in	servaddr;
 	char			path[256];
 	char			host[256];
 	uint32_t		port;
+	struct libraio_data	*ld = td->io_ops->data;
 
 	dprint(FD_FILE, "fd open %s\n", f->file_name);
 
@@ -391,28 +392,41 @@ static int fio_libraio_open(struct thread_data *td, struct fio_file *f)
 	servaddr.sin_addr.s_addr = inet_addr(host);
 	servaddr.sin_port = htons(port);
 
+	f->fd = raio_start(TRANSPORT_NAME, (struct sockaddr *)&servaddr,
+			sizeof(servaddr));
+	if (f->fd == -1) {
+		fprintf(stderr, "raio_start failed %s://%s:%d %m\n",
+			TRANSPORT_NAME, host, port);
+		return -1;
+	}
 
-	f->fd = raio_open(TRANSPORT_NAME,
-			  (struct sockaddr *)&servaddr, sizeof(servaddr),
-			  path, flags);
+	ret = raio_setup(f->fd, td->o.iodepth, &ld->raio_ctx);
+	if (ret == -1) {
+		fprintf(stderr, "raio_setup failed - fd:%d %m\n", f->fd);
+		goto stop;
+	}
+
+	ret = raio_open(f->fd, path, flags);
 
 	if (f->fd == -1 && errno == EINVAL &&
 	    ((flags & O_DIRECT) == O_DIRECT)) {
 		log_err("libraio open failed with o_direct- file:%s " \
 			"flags:%x %m\n", f->file_name, flags);
 		flags &= ~O_DIRECT;
-		f->fd = raio_open(TRANSPORT_NAME,
-				  (struct sockaddr *)&servaddr,
-				  sizeof(servaddr),
-				  path, flags);
+		f->fd = raio_open(f->fd, path, flags);
 	}
 	if (f->fd == -1) {
 		log_err("libraio open failed - file:%s " \
 			"flags:%x %m\n", f->file_name, flags);
-		return 1;
+		ret = 1;
+		goto stop;
 	}
 
 	return 0;
+
+stop:
+	raio_stop(f->fd);
+	return ret;
 }
 
 /*
@@ -435,11 +449,6 @@ static int fio_libraio_open_file(struct thread_data *td, struct fio_file *f)
 		return ret;
 	}
 
-	ret = raio_setup(f->fd, td->o.iodepth, &ld->raio_ctx);
-	if (ret) {
-		log_err("libraio: raio_setup failed. %m\n");
-		return 1;
-	}
 	ld->fd = f->fd;
 
 	return 0;
@@ -454,6 +463,7 @@ static int fio_libraio_close(struct thread_data *td, struct fio_file *f)
 	if (raio_close(f->fd) < 0)
 		ret = errno;
 
+	raio_stop(f->fd);
 	f->fd = -1;
 
 	return ret;
@@ -494,12 +504,15 @@ static int fio_libraio_close_file(struct thread_data *td, struct fio_file *f)
 static int fio_libraio_get_file_size(struct thread_data *td, struct fio_file *f)
 {
 	struct stat64		stbuf;
+	struct libraio_data	dummy_ld;
 	int			ret;
 
 	if (td_write(td)) {
 		f->real_file_size = -1;
 		return 0;
 	}
+
+	td->io_ops->data = &dummy_ld;
 
 	ret = fio_libraio_open(td, f);
 	if (ret != 0) {

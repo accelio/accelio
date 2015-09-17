@@ -73,7 +73,7 @@ void pack_open_command(const char *pathname, int flags,
 		       void *buf, size_t *len);
 void pack_close_command(int fd, void *buf, size_t *len);
 void pack_fstat_command(int fd, void *buf, size_t *len);
-void pack_setup_command(int fd, int maxevents,
+void pack_setup_command(int queues, int qdepth,
 			void *buf, size_t *len);
 void pack_destroy_command(void *buf, size_t *len);
 void pack_submit_command(struct raio_iocb *iocb, int is_last_in_batch,

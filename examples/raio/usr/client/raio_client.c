@@ -343,14 +343,25 @@ int main(int argc, char *argv[])
 		printf("open for write failed %m\n");
 #endif
 
-	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
-	fd = raio_open(transport, (struct sockaddr *)&servaddr, sizeof(servaddr),
-		       file_path, flags);
+	fd = raio_start(transport, (struct sockaddr *)&servaddr, sizeof(servaddr));
 	if (fd == -1) {
-		fprintf(stderr, "raio_open failed %s://%s:%d/%s flags:%x %m\n",
-			transport, server_addr, server_port,
-			file_path, flags);
+		fprintf(stderr, "raio_start failed %s://%s:%d %m\n",
+			transport, server_addr, server_port);
 		return -1;
+	}
+
+	retval = raio_setup(fd, IODEPTH, &io_ctx);
+	if (retval == -1) {
+		fprintf(stderr, "raio_setup failed - fd:%d %m\n", fd);
+		goto stop;
+	}
+
+	flags = O_RDONLY | O_LARGEFILE /*| O_DIRECT*/;
+	retval = raio_open(fd, file_path, flags);
+	if (retval == -1) {
+		fprintf(stderr, "raio_open failed %s flags:%x %m\n",
+			file_path, flags);
+		goto stop;
 	}
 
 	/* get the file size */
@@ -365,12 +376,6 @@ int main(int argc, char *argv[])
 	if (tot_num == 0) {
 		fprintf(stderr, "invalid file size %ld %d\n",
 			(unsigned long)stbuf.st_size, block_size);
-		goto close_file;
-	}
-
-	retval = raio_setup(fd, IODEPTH, &io_ctx);
-	if (retval == -1) {
-		fprintf(stderr, "raio_setup failed - fd:%d %m\n", fd);
 		goto close_file;
 	}
 
@@ -514,6 +519,9 @@ close_file:
 		fprintf(stderr, "raio_close failed - fd:%d %m\n", fd);
 		return -1;
 	}
+
+stop:
+	raio_stop(fd);
 	free_cmdline_params();
 
 	printf("good bye\n");

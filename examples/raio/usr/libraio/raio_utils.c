@@ -216,17 +216,18 @@ void pack_fstat_command(int fd, void *buf, size_t *len)
 /*---------------------------------------------------------------------------*/
 /* pack_setup_command				                             */
 /*---------------------------------------------------------------------------*/
-void pack_setup_command(int fd, int maxevents,
+void pack_setup_command(int queues, int qdepth,
 			void *buf, size_t *len)
 {
 	char		*buffer = (char *)buf;
-	unsigned int	overall_size = sizeof(maxevents);
+	unsigned int	overall_size = sizeof(queues) + sizeof(qdepth);
 	struct raio_command cmd = { RAIO_CMD_IO_SETUP, overall_size };
 
-	pack_u32((uint32_t *)&maxevents,
+	pack_u32((uint32_t *)&queues,
+	pack_u32((uint32_t *)&qdepth,
 	pack_u32(&cmd.data_len,
 	pack_u32(&cmd.command,
-		 buffer)));
+		 buffer))));
 
 	*len = sizeof(cmd) + overall_size;
 }

@@ -107,19 +107,38 @@ struct raio_event {
 };
 
 /**
- * raio_open - open file for io operations
+ * raio_start - start remote server for aio operations
  *
  * @addr: address to rcopy server
  * @addrlen: address length
+ *
+ * RETURNS: return the new file descriptor, or -1 if an error occurred (in
+ * which case, errno is set appropriately)
+ */
+int raio_start(const char *transport,
+	      const struct sockaddr *addr, socklen_t addrlen);
+
+/**
+ * raio_stop - stop and release resources for remote server
+ *
+ * @fd:	the file's file descriptor
+ *
+ * RETURNS: On success, zero is returned.  On error, -1 is returned, and errno
+ * is set appropriately.
+ */
+int raio_stop(int fd);
+
+/**
+ * raio_open - open file for io operations
+ *
+ * @fd:	the file's file descriptor
  * @pathname: fullpath to the file or device
  * @flags:    open flags - see "man 2 open"
  *
  * RETURNS: return the new file descriptor, or -1 if an error occurred (in
  * which case, errno is set appropriately)
  */
-int raio_open(const char *transport,
-	      const struct sockaddr *addr, socklen_t addrlen,
-	      const char *pathname, int flags);
+int raio_open(int fd, const char *pathname, int flags);
 
 /**
  * raio_fstat - get file status
@@ -146,15 +165,15 @@ int raio_close(int fd);
  * raio_setup - creates an asynchronous I/O context capable of receiving at
  * most maxevents
  *
- * @fd:		file descriptor to work on
- * @maxevents:	max events to receive
+ * @queues:	num queus
+ * @qdepth:	queue depth for each queue
  * @ctxp:	On successful creation of the RAIO context, *ctxp is filled
  *		in with the resulting  handle.
  *
  * RETURNS: On success, zero is returned.  On error, -1 is returned, and errno
  * is set appropriately.
  */
-int raio_setup(int fd, int maxevents, raio_context_t *ctxp);
+int raio_setup(int queues, int qdepth, raio_context_t *ctxp);
 
 /**
  * raio_destroy - destroys an asynchronous I/O context
