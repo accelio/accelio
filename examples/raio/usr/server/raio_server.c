@@ -50,7 +50,6 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
-#define MAX_THREADS		6
 #define POLLING_TIME_USEC	70
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -73,7 +72,7 @@
 struct portals_vec {
 	int				vec_len;
 	int				pad;
-	const char			*vec[MAX_THREADS];
+	const char			**vec;
 };
 
 struct raio_thread_data {
@@ -128,8 +127,8 @@ struct raio_server_data {
 
 	SLIST_HEAD(, raio_session_data)		sessions_list;
 
-	pthread_t				thread_id[MAX_THREADS];
-	struct raio_thread_data			tdata[MAX_THREADS];
+	pthread_t				*thread_id;
+	struct raio_thread_data			*tdata;
 };
 
 static char		*server_addr;
@@ -138,6 +137,7 @@ static int		finite_run;
 static uint16_t		server_port;
 static uint64_t		cpumask;
 static int		extra_perf;
+static int		MAX_THREADS;
 
 /*---------------------------------------------------------------------------*/
 /* portals_get								     */
@@ -149,6 +149,8 @@ static struct portals_vec *portals_get(struct raio_server_data *server_data,
 	int			i, j;
 	struct portals_vec *portals =
 		(struct portals_vec *)calloc(1, sizeof(*portals));
+
+	portals->vec = (const char **)calloc(MAX_THREADS, sizeof(char*));
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		j = (server_data->tot_sessions + i) % MAX_THREADS;
@@ -170,6 +172,7 @@ static void portals_free(struct portals_vec *portals)
 	for (i = 0; i < portals->vec_len; i++)
 		free((char *)(portals->vec[i]));
 
+	free(portals->vec);
 	free(portals);
 }
 
@@ -516,6 +519,7 @@ static void usage(const char *app)
 	printf("\t--transport, -t <name> : rdma,tcp (default: rdma)\n");
 	printf("\t--extra-perf, -e       : extra performance at expence\n");
 	printf("\t                         of CPU usage (default: false)\n");
+	printf("\t--threads, -n <num>    : number of threads (default: 6)\n");
 	printf("\t--help, -h             : print this message and exit\n");
 	exit(0);
 }
@@ -544,10 +548,11 @@ int parse_cmdline(int argc, char **argv)
 		{ .name = "transport", .has_arg = 1, .val = 't'},
 		{ .name = "finite", .has_arg = 1, .val = 'f'},
 		{ .name = "extra-perf", .has_arg = 1, .val = 'e'},
+		{ .name = "threads", .has_arg = 1, .val = 'n'},
 		{ .name = "help", .has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
-	static char *short_options = "a:p:c:t:f:h:e:";
+	static char *short_options = "a:p:c:t:f:h:e:n:";
 	int c;
 
 	server_addr = NULL;
@@ -556,6 +561,7 @@ int parse_cmdline(int argc, char **argv)
 	cpumask = 0;
 	finite_run = 0;
 	extra_perf = 0;
+	MAX_THREADS = 6;
 
 	optind = 0;
 	opterr = 0;
@@ -592,6 +598,10 @@ int parse_cmdline(int argc, char **argv)
 			break;
 		case 'e':
 			extra_perf =
+				(uint16_t) strtol(optarg, NULL, 0);
+			break;
+		case 'n':
+			MAX_THREADS =
 				(uint16_t) strtol(optarg, NULL, 0);
 			break;
 		case 'h':
@@ -700,6 +710,10 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
+	server_data.tdata = (struct raio_thread_data *)
+				calloc(MAX_THREADS, sizeof(struct raio_thread_data));
+	server_data.thread_id = (pthread_t *)
+				calloc(MAX_THREADS, sizeof(pthread_t));
 	/* spawn portals */
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
@@ -732,6 +746,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++)
 		pthread_join(server_data.thread_id[i], NULL);
 
+	free(server_data.thread_id);
+	free(server_data.tdata);
 	/* free the server */
 	xio_unbind(server);
 cleanup:
