@@ -862,6 +862,10 @@ static int __init nbdx_init_module(void)
 	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
 		    XIO_OPTNAME_XFER_BUF_ALIGN, &opt, sizeof(int));
 
+	opt = 0;
+	xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		    XIO_OPTNAME_ENABLE_KEEPALIVE, &opt, sizeof(int));
+
 	nbdx_major = register_blkdev(0, "nbdx");
 	if (nbdx_major < 0)
 		return nbdx_major;
