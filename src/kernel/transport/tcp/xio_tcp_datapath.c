@@ -2924,7 +2924,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 	int retval = 0, recvmsg_retval = 0;
 	struct xio_tcp_task *tcp_task, *next_tcp_task;
 	struct xio_task *task, *next_task;
-	unsigned int i;
+	unsigned int i, last_in_rxq;
 	int batch_count = 0, tmp_count = 0, ret_count = 0;
 	unsigned int iov_len;
 	uint64_t bytes_recv;
@@ -3026,9 +3026,21 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 		tcp_hndl->tmp_work.msg_len = 0;
 		tcp_hndl->tmp_work.tot_iov_byte_len = 0;
 
+                /* look for the maximum last in rxq index */
+                tmp_count = 0;
+                last_in_rxq = 0;
+                list_for_each_entry(task, &tcp_hndl->rx_list, tasks_list_entry) {
+                        if (IS_APPLICATION_MSG(task->tlv_type))
+                                last_in_rxq = (int)tmp_count;
+                        if (++tmp_count == (int)i)
+                                break;
+                }
+                tmp_count = 0;
+
 		task = list_first_entry(&tcp_hndl->rx_list, struct xio_task,
 					tasks_list_entry);
 		while (i--) {
+                        task->last_in_rxq = (ret_count == (int)last_in_rxq);
 			++ret_count;
 			tcp_task = task->dd_data;
 			switch (task->tlv_type) {
@@ -3039,9 +3051,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr,
 				xio_tcp_on_recv_cancel_rsp_data(tcp_hndl, task);
 				break;
 			default:
-				task->last_in_rxq =
-				    (IS_APPLICATION_MSG(task->tlv_type) &&
-				     (i == 0));
 				if (IS_REQUEST(task->tlv_type)) {
 					retval =
 					xio_tcp_on_recv_req_data(tcp_hndl,
