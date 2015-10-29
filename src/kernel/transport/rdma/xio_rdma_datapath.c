@@ -1330,8 +1330,7 @@ void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 					if (!rdma_task->phantom_idx) {
 						tlv_type = xio_mbuf_read_type(
 								&task->mbuf);
-						if (IS_APPLICATION_MSG(
-							task->tlv_type)) {
+						if (IS_APPLICATION_MSG(tlv_type)) {
 							last_in_rxq = i;
 							break;
 						}
