@@ -854,8 +854,10 @@ int xio_query_connection(struct xio_connection *conn,
 enum xio_connection_optname {
 	XIO_CONNECTION_FIONWRITE_BYTES,  /**< uint64_t: the number of bytes */
 		/**< in send queue */
-	XIO_CONNECTION_FIONWRITE_MSGS  /**< int: the number of msgs in */
+	XIO_CONNECTION_FIONWRITE_MSGS,  /**< int: the number of msgs in */
 		/**< send queue */
+	XIO_CONNECTION_LEADING_CONN /**< int: check if connection is leading: */
+		/**<1 for leading conn, 0 otherwise */
 };
 
 /**

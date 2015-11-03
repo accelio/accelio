@@ -123,6 +123,8 @@ struct xio_session {
 	int				disable_teardown;
 	struct xio_connection		*lead_connection;
 	struct xio_connection		*redir_connection;
+	/* server: represents the leading connection on server side */
+	struct xio_connection           *connection_srv_first;
 	struct xio_context		*teardown_work_ctx;
 	xio_work_handle_t		teardown_work;
 

@@ -1479,6 +1479,7 @@ struct xio_session *xio_session_create(struct xio_session_params *params)
 	session->rcv_queue_depth_msgs	= g_options.rcv_queue_depth_msgs;
 	session->snd_queue_depth_bytes	= g_options.snd_queue_depth_bytes;
 	session->rcv_queue_depth_bytes	= g_options.rcv_queue_depth_bytes;
+	session->connection_srv_first	= NULL;
 
 	memcpy(&session->ses_ops, params->ses_ops,
 	       sizeof(*params->ses_ops));

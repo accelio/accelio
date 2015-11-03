@@ -2924,6 +2924,12 @@ int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
 				connection->session->snd_queue_depth_msgs -
 				connection->tx_queued_msgs;
 		return 0;
+	case XIO_CONNECTION_LEADING_CONN:
+		*optlen = sizeof(int);
+		if (connection->session->connection_srv_first == connection)
+			*((int *)optval) = 1;
+		else
+			*((int *)optval) = 0;
 	default:
 		break;
 	}

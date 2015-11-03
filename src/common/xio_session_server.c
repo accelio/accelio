@@ -85,6 +85,7 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	task->connection = connection;
 	task->session = session;
 	connection->session->setup_req = msg;
+	connection->session->connection_srv_first = connection;
 
 	/* read the header */
 	ptr = (uint8_t *)msg->in.header.iov_base;
