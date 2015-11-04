@@ -2924,6 +2924,7 @@ int xio_connection_ioctl(struct xio_connection *connection, int con_optname,
 			*((int *)optval) = 1;
 		else
 			*((int *)optval) = 0;
+		return 0;
 	default:
 		break;
 	}
