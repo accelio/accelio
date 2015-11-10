@@ -2806,6 +2806,7 @@ static int xio_rdma_prep_rsp_out_data(
 		} else {
 			/* no data at all */
 			tbl_set_nents(sgtbl_ops, sgtbl, 0);
+			rdma_task->txd.nents = 1;
 		}
 	} else {
 		if (rdma_task->req_in_sge[0].addr &&
