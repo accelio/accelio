@@ -43,6 +43,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <sys/queue.h>
+#include "bitset.h"
 #include "libxio.h"
 #include "raio_handlers.h"
 #include <arpa/inet.h>
@@ -135,7 +136,7 @@ static char		*server_addr;
 static char		*transport;
 static int		finite_run;
 static uint16_t		server_port;
-static uint64_t		cpumask;
+static char		*cpumask;
 static int		extra_perf;
 static int		MAX_THREADS;
 
@@ -534,6 +535,11 @@ static void free_cmdline_params(void)
 		free(transport);
 		transport = NULL;
 	}
+	if (cpumask) {
+		free(cpumask);
+		cpumask = NULL;
+	}
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -558,7 +564,7 @@ int parse_cmdline(int argc, char **argv)
 	server_addr = NULL;
 	transport = NULL;
 	server_port = 0;
-	cpumask = 0;
+	cpumask = NULL;
 	finite_run = 0;
 	extra_perf = 0;
 	MAX_THREADS = 6;
@@ -584,7 +590,7 @@ int parse_cmdline(int argc, char **argv)
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'c':
-			cpumask = strtoll(optarg, NULL, 16);
+			cpumask = strdup(optarg);
 			break;
 		case 't':
 			if (!transport)
@@ -644,7 +650,7 @@ int main(int argc, char *argv[])
 	int			curr_cpu;
 	int			max_cpus;
 	int			opt;
-	uint64_t		cpu_mask;
+        bitset                  *b = NULL, *bdup = NULL;
 
 	parse_cmdline(argc, argv);
 	if (!server_addr || server_port == 0) {
@@ -692,11 +698,23 @@ int main(int argc, char *argv[])
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_KEEPALIVE,
 		    &opt, sizeof(int));
 
-	curr_cpu = sched_getcpu();
-	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	cpu_mask = cpumask;
-
 	memset(&server_data, 0, sizeof(server_data));
+
+        curr_cpu = sched_getcpu();
+	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+        if (cpumask) {
+                b = str_to_bitset(cpumask, NULL);
+                if (!b) {
+                        fprintf(stderr, "failed to parse cpumask\n");
+                        goto cleanup;
+                }
+                bdup = bitset_dup(b);
+                if (!bdup) {
+                        fprintf(stderr, "failed to duplicate bitset\n");
+                        goto cleanup;
+                }
+        }
 	server_data.finite_run = finite_run;
 	server_data.extra_perf = extra_perf;
 	SLIST_INIT(&server_data.sessions_list);
@@ -723,17 +741,18 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
 		server_data.tdata[i].id = i;
-		if (cpu_mask) {
-			int cpu = ffsll(cpu_mask) - 1;
+                if (b) {
+                        int cpu = bitset_firstset(b);
+                        server_data.tdata[i].affinity = cpu;
 
-			server_data.tdata[i].affinity = cpu;
-			cpu_mask &= ~(1ULL << cpu);
-			if (!cpu_mask)
-				cpu_mask = cpumask;
-		} else {
-			server_data.tdata[i].affinity =
-					(curr_cpu + i) % max_cpus;
-		}
+                        bitset_unset(b, cpu);
+
+                        if (bitset_isempty(b))
+                                bitset_copy(b, bdup);
+                } else {
+                        server_data.tdata[i].affinity =
+                                (curr_cpu + i) % max_cpus;
+                }
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
 		server_port++;
@@ -760,6 +779,14 @@ cleanup:
 	xio_context_destroy(server_data.ctx);
 
 	xio_shutdown();
+
+        if (b)
+                bitset_free(b);
+
+        if (bdup)
+                bitset_free(bdup);
+
+	free_cmdline_params();
 
 	return 0;
 }
