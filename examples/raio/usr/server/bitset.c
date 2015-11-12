@@ -358,31 +358,33 @@ static void hex2binary(char *hexstr, char *binstr)
 char *bitset_to_str(bitset *b)
 {
 	int			bytes;
-	unsigned int		pbit;
+	int		        pbit;
 	int                     bit;
 	char                    *str;
 	char                    *s;
 	unsigned char           val;
+	int                     found = 0;
 
-	if (b == NULL) {
+	if (!b)
 		return strdup("00");
-	}
 
 	/*
 	 * Find out how many bytes needed (rounded up)
 	 */
 	bytes = NUM_BYTES(b->bs_nbits);
 
-	str = (char *)malloc(bytes * 2 + 1);
-
+	str = (char *)calloc(bytes * 2 + 1, 1);
 	s = str;
+
 	for (pbit = (bytes << 3) - 1; pbit > 0; ) {
 		for (val = 0, bit = 3; bit >= 0; bit--, pbit--) {
-			if (pbit < b->bs_nbits && bitset_test(b, pbit)) {
+			if (pbit < (int)b->bs_nbits && bitset_test(b, pbit)) {
 				val |= (1 << bit);
+                                found = 1;
 			}
 		}
-		*s++ = tohex[val & 0x0f];
+		if (found)
+			*s++ = tohex[val & 0x0f];
 	}
 
 	if (b->bs_nbits == 0) {
@@ -420,7 +422,7 @@ bitset *str_to_bitset(char *str, char **end)
         if (len % 2) {
                 nbits = (len + 1) << 2;
                 bytes = NUM_BYTES(nbits);
-                pos = (bytes << 2) - 1;
+                pos = (bytes << 3) - 5;
         } else {
                 nbits = len << 2;
                 bytes = NUM_BYTES(nbits);
@@ -441,9 +443,9 @@ bitset *str_to_bitset(char *str, char **end)
 		}
 	}
 
-	if (end != NULL) {
-		*end = str;
-	}
+	if (end != NULL)
+                *end = str - 1;
+
 	return bp;
 }
 
