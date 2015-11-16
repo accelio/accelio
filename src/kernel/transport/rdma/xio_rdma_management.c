@@ -1044,6 +1044,9 @@ static int xio_rdma_initial_pool_post_create(
 			return -1;
 		}
 
+		/* set the lkey prior to receiving */
+		rdma_task->rxd.recv_wr.sg_list[0].lkey = rdma_hndl->dev->mr->lkey;
+
 		retval = xio_post_recv(rdma_hndl, task, 1);
 		if (retval)
 			ERROR_LOG("xio_post_recv failed\n");
