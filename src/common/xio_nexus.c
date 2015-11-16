@@ -982,6 +982,9 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 
 	nexus->primary_tasks_pool = ctx->primary_tasks_pool[proto];
 
+	/* set pool context as the nexus's transport handler */
+	nexus->primary_tasks_pool->params.pool_hooks.context = nexus->transport_hndl;
+
 	list_for_each_entry(task, &nexus->primary_tasks_pool->stack, tasks_list_entry) {
 		xio_task_reinit(nexus->transport_hndl, task);
 	}
