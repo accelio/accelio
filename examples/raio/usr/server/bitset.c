@@ -252,7 +252,7 @@ int bitset_compare(bitset *b1, bitset *b2)
  */
 void bitset_set(bitset *b, unsigned int bit)
 {
-	if (bit < 0 || bit >= b->bs_nbits)
+	if (bit >= b->bs_nbits)
 		return;
 
 	b->bs_bits[BIT_INDEX(bit)] |= (1 << BIT_IN_OBJ(bit));
@@ -260,7 +260,7 @@ void bitset_set(bitset *b, unsigned int bit)
 
 void bitset_unset(bitset *b, unsigned int bit)
 {
-	if (bit < 0 || bit >= b->bs_nbits)
+	if (bit >= b->bs_nbits)
 		return;
 
 	b->bs_bits[BIT_INDEX(bit)] &= ~(1 << BIT_IN_OBJ(bit));
@@ -270,7 +270,7 @@ unsigned int bitset_test(bitset *b, unsigned int bit)
 {
 	bits		mask = (1 << BIT_IN_OBJ(bit));
 
-	if (bit < 0 || bit >= b->bs_nbits)
+	if (bit >= b->bs_nbits)
 		return 0;
 
 	return (b->bs_bits[BIT_INDEX(bit)] & mask) == mask;

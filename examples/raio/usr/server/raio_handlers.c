@@ -117,8 +117,10 @@ void *raio_handler_init_session_data(int portals_nr)
 
 	sd->pd	=
 	      (struct raio_io_portal_data *)calloc(portals_nr, sizeof(*sd->pd));
-	if (!sd->pd)
+	if (!sd->pd){
+		free(sd);
 		return NULL;
+	}
 
 	sd->portals_nr	= portals_nr;
 
