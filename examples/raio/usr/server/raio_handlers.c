@@ -60,7 +60,9 @@
 /* preprocessor macros				                             */
 /*---------------------------------------------------------------------------*/
 #define RAIO_CMDS_POOL_SZ	128
+#define MIN_IODEPTH		256
 #define DIV_ROUND_UP(n,d)	(((n) + (d) - 1) / (d))
+#define max(a, b) 		(((a) < (b)) ? (b) : (a))
 
 #ifndef TAILQ_FOREACH_SAFE
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
@@ -479,7 +481,7 @@ static int raio_handle_setup(void *prv_session_data,
 		 * response can arrive after receiving new requests from
 		 * the client.
 		 */
-		cpd->io_u_free_nr = 2 * cpd->max_queues * qdepth;
+		cpd->io_u_free_nr = max(2 * cpd->max_queues * qdepth, MIN_IODEPTH);
 	}
 
 reject:
