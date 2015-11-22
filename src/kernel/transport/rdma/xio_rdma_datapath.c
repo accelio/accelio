@@ -4324,6 +4324,11 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 	list_move(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
+
+        /* set the lkey prior to sending */
+        rdma_task->txd.send_wr.sg_list[0].lkey = rdma_hndl->dev->mr->lkey;
+
+        /* send the setup request */
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
 
 	return 0;
