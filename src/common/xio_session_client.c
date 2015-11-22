@@ -516,10 +516,17 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state is now ONLINE. session:%p\n", session);
 		/* notify the upper layer */
-		if (session->ses_ops.on_session_established)
+		if (session->ses_ops.on_session_established) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 			session->ses_ops.on_session_established(
 					session, rsp,
 					session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+		}
 
 		kfree(rsp->private_data);
 		rsp->private_data = NULL;
@@ -690,10 +697,17 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			ev_data.conn =  session->lead_connection;
 			ev_data.conn_user_context =
 				session->lead_connection->cb_user_context;
-			if (session->ses_ops.on_session_event)
+			if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_unlock(session->lead_connection->ctx);
+#endif
 				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_lock(session->lead_connection->ctx);
+#endif
+			}
 		}
 
 		break;
@@ -712,10 +726,18 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			ev_data.conn =  session->redir_connection;
 			ev_data.conn_user_context =
 				session->redir_connection->cb_user_context;
-			if (session->ses_ops.on_session_event)
+			if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_unlock(session->redir_connection->ctx);
+#endif
 				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_lock(session->redir_connection->ctx);
+#endif
+			}
+
 		}
 		break;
 	case XIO_SESSION_STATE_ONLINE:

@@ -163,6 +163,23 @@ if test "$enable_statistics_counters" != "no"; then
 fi
 
 ##########################################################################
+# debug thread safety support
+##########################################################################
+# usage: ./configure --enable-debug-thread-safety=yes
+#
+AC_MSG_CHECKING([EXPIRIMENTAL: checks if the application is thread safe when it comes to accelio callbacks and methods])
+AC_ARG_ENABLE([debug-thread-safety],
+	      [AS_HELP_STRING([--enable-debug-thread-safety],
+			      [experimental:enable debug thread safety - default no])],
+			      [enable_debug_thread_safety="$enableval"],
+			      [enable_debug_thread_safety=no])
+AC_MSG_RESULT([$enable_debug_thread_safety])
+
+if test "$enable_debug_thread_safety" = "yes"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_THREAD_SAFE_DEBUG"
+fi
+
+##########################################################################
 # raio compilation support
 ##########################################################################
 # usage: ./configure --disable-raio-build

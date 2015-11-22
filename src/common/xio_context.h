@@ -42,6 +42,11 @@
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
 
 #define XIO_PROTO_LAST  2	/* from enum xio_proto */
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+#define BACKTRACE_BUFFER_SIZE 2048
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
@@ -78,6 +83,53 @@ struct xio_statistics {
 	char		*name[XIO_STAT_LAST];
 };
 
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+struct xio_context {
+	void				*ev_loop;
+	void				*mempool;
+	/* pools per transport */
+	struct xio_tasks_pool		*primary_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*primary_pool_ops[XIO_PROTO_LAST];
+
+	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
+	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
+
+	/* pool per connection */
+	struct xio_objpool		*msg_pool;
+
+	void				*poll_completions_ctx;
+	poll_completions_fn_t		poll_completions_fn;
+
+	int				cpuid;
+	int				nodeid;
+	int				polling_timeout;
+	unsigned int			flags;
+	uint64_t			worker;
+
+	int32_t				run_private;
+
+	uint32_t			is_running:1;
+	uint32_t			defered_destroy:1;
+	uint32_t			prealloc_xio_inline_bufs:1;
+	uint32_t			resereved:29;
+
+	struct xio_statistics		stats;
+	void				*user_context;
+	struct xio_workqueue		*workqueue;
+	struct list_head		ctx_list;  /* per context storage */
+
+	/* list of sessions using this connection */
+	struct xio_observable		observable;
+	void				*netlink_sock;
+	xio_work_handle_t               destroy_ctx_work;
+
+	int				max_conns_per_ctx;
+	int 			nptrs;
+	pthread_mutex_t dbg_thread_mutex;
+	void 			*buffer[BACKTRACE_BUFFER_SIZE];
+};
+#else
 struct xio_context {
 	void				*ev_loop;
 	void				*mempool;
@@ -120,6 +172,7 @@ struct xio_context {
 	int				max_conns_per_ctx;
 	int				pad;
 };
+#endif
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
@@ -290,6 +343,12 @@ static inline void xio_context_msg_pool_put(void *obj)
 /*---------------------------------------------------------------------------*/
 int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 		        enum xio_context_pool_class pool_cls);
+
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+int xio_ctx_debug_thread_lock(struct xio_context *ctx);
+int xio_ctx_debug_thread_unlock(struct xio_context *ctx);
+#endif
 
 #endif /*XIO_CONTEXT_H */
 

@@ -998,6 +998,9 @@ int xio_send_request(struct xio_connection *connection,
 		xio_set_error(XIO_ESHUTDOWN);
 		return -1;
 	}
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_lock(connection->ctx);
+#endif
 
 	if (msg->next) {
 		xio_msg_list_init(&reqs_msgq);
@@ -1077,8 +1080,15 @@ int xio_send_request(struct xio_connection *connection,
 send:
 	/* do not xmit until connection is assigned */
 	if (xio_is_connection_online(connection))
-		if (xio_connection_xmit(connection))
+		if (xio_connection_xmit(connection)) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 			return -1;
+		}
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 
 	return retval;
 }
@@ -1097,11 +1107,17 @@ int xio_send_response(struct xio_msg *msg)
 	void			*sgtbl;
 	size_t			bytes;
 	int			retval = 0;
+
 #ifdef XIO_CFLAG_STAT_COUNTERS
 	struct xio_statistics	*stats;
 #endif
 #ifdef XIO_CFLAG_EXTRA_CHECKS
 	int			valid;
+#endif
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+	task	   = container_of(pmsg->request, struct xio_task, imsg);
+	xio_ctx_debug_thread_lock(task->connection->ctx);
 #endif
 
 	while (pmsg) {
@@ -1118,6 +1134,7 @@ int xio_send_response(struct xio_msg *msg)
 				  task->imsg.sn, pmsg->request->sn);
 			xio_set_error(EINVAL);
 			retval = -1;
+
 			goto send;
 		}
 		/* set type for notification */
@@ -1132,6 +1149,7 @@ int xio_send_response(struct xio_msg *msg)
 			 */
 			xio_set_error(XIO_ESHUTDOWN);
 			xio_tasks_pool_put(task);
+
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_DISCARDED,
 						     XIO_MSG_DIRECTION_OUT);
@@ -1143,6 +1161,7 @@ int xio_send_response(struct xio_msg *msg)
 		    task->state != XIO_TASK_STATE_READ) {
 			ERROR_LOG("duplicate response send. request sn:%llu\n",
 				  task->imsg.sn);
+
 			xio_session_notify_msg_error(connection, pmsg,
 						     XIO_E_MSG_INVALID,
 						     XIO_MSG_DIRECTION_OUT);
@@ -1197,11 +1216,19 @@ int xio_send_response(struct xio_msg *msg)
 	}
 
 send:
+
 	/* do not xmit until connection is assigned */
 	if (connection && xio_is_connection_online(connection)) {
-		if (xio_connection_xmit(connection))
+		if (xio_connection_xmit(connection)) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 			return -1;
+		}
 	}
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 
 	return retval;
 }
@@ -1341,10 +1368,10 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 send:
 	/* do not xmit until connection is assigned */
 	if (xio_is_connection_online(connection)) {
-		if (xio_connection_xmit(connection))
+		if (xio_connection_xmit(connection)) {
 			return -1;
+		}
 	}
-
 	return retval;
 }
 
@@ -1354,7 +1381,15 @@ send:
 int xio_send_msg(struct xio_connection *connection,
 		 struct xio_msg *msg)
 {
-	return xio_send_typed_msg(connection, msg, XIO_ONE_WAY_REQ);
+	int retval;
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+	retval = xio_send_typed_msg(connection, msg, XIO_ONE_WAY_REQ);
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
+	return retval;
 }
 EXPORT_SYMBOL(xio_send_msg);
 
@@ -1364,12 +1399,23 @@ EXPORT_SYMBOL(xio_send_msg);
 int xio_send_rdma(struct xio_connection *connection,
 		  struct xio_msg *msg)
 {
+	int retval;
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_lock(connection->ctx);
+#endif
 	if (unlikely(connection->nexus->transport_hndl->proto != XIO_PROTO_RDMA)) {
 		xio_set_error(XIO_E_NOT_SUPPORTED);
 		ERROR_LOG("using xio_send_rdma over TCP transport");
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 		return -1;
 	}
-	return xio_send_typed_msg(connection, msg, XIO_MSG_TYPE_RDMA);
+	retval = xio_send_typed_msg(connection, msg, XIO_MSG_TYPE_RDMA);
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
+	return retval;
 }
 EXPORT_SYMBOL(xio_send_rdma);
 
@@ -1482,6 +1528,9 @@ int xio_release_response(struct xio_msg *msg)
 			return -1;
 		}
 		connection = task->connection;
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_lock(connection->ctx);
+#endif
 
 		if (connection->enable_flow_control) {
 			struct xio_vmsg		*vmsg;
@@ -1524,9 +1573,16 @@ int xio_release_response(struct xio_msg *msg)
 
 		pmsg = pmsg->next;
 	}
-	if (connection && xio_is_connection_online(connection))
+	if (connection && xio_is_connection_online(connection)) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 		return xio_connection_xmit(connection);
+	}
 
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(xio_release_response);
@@ -1539,12 +1595,21 @@ int xio_release_msg(struct xio_msg *msg)
 	struct xio_task		*task;
 	struct xio_connection	*connection = NULL;
 	struct xio_msg		*pmsg = msg;
+	int retval;
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+	task = container_of(pmsg, struct xio_task, imsg);
+	xio_ctx_debug_thread_lock(task->connection->ctx);
+#endif
 
 	while (pmsg) {
 		if (unlikely(pmsg->type != XIO_ONE_WAY_REQ)) {
 			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 				  pmsg->type);
 			xio_set_error(EINVAL);
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(task->connection->ctx);
+#endif
 			return -1;
 		}
 		task = container_of(pmsg, struct xio_task, imsg);
@@ -1552,6 +1617,9 @@ int xio_release_msg(struct xio_msg *msg)
 			ERROR_LOG("xio_release_msg failed. invalid type:0x%x\n",
 				  task->tlv_type);
 			xio_set_error(EINVAL);
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(task->connection->ctx);
+#endif
 			return -1;
 		}
 		connection = task->connection;
@@ -1587,8 +1655,17 @@ int xio_release_msg(struct xio_msg *msg)
 		pmsg = pmsg->next;
 	}
 
-	if (connection && xio_is_connection_online(connection))
-		return xio_connection_xmit(connection);
+	if (connection && xio_is_connection_online(connection)) {
+		retval = xio_connection_xmit(connection);
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
+		return retval;
+	}
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 
 	return 0;
 }
@@ -1829,6 +1906,7 @@ int xio_disconnect(struct xio_connection *connection)
 		ERROR_LOG("xio_disconnect failed 'Invalid argument'\n");
 		return -1;
 	}
+
 	DEBUG_LOG("xio_disconnect. session:%p connection:%p state:%s\n",
 		  connection->session, connection,
 		  xio_connection_state_str((enum xio_connection_state)
@@ -1839,6 +1917,7 @@ int xio_disconnect(struct xio_connection *connection)
 	    connection->disconnecting) {
 		/* delay the disconnection to when connection become online */
 		connection->disconnecting = 1;
+
 		return 0;
 	}
 	connection->disconnecting = 1;
@@ -1849,6 +1928,7 @@ int xio_disconnect(struct xio_connection *connection)
 			&connection->fin_work);
 	if (retval != 0) {
 		ERROR_LOG("xio_ctx_timer_add failed.\n");
+
 		return retval;
 	}
 
@@ -1866,6 +1946,10 @@ int xio_cancel_request(struct xio_connection *connection,
 	uint64_t	stag;
 	struct xio_session_cancel_hdr hdr;
 
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+
 	/* search the tx */
 	xio_msg_list_foreach_safe(pmsg, &connection->reqs_msgq,
 				  tmp_pmsg, pdata) {
@@ -1876,6 +1960,9 @@ int xio_cancel_request(struct xio_connection *connection,
 					    pmsg, pdata);
 			xio_session_notify_cancel(
 				connection, pmsg, XIO_E_MSG_CANCELED);
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 			return 0;
 		}
 	}
@@ -1889,6 +1976,9 @@ int xio_cancel_request(struct xio_connection *connection,
 
 	/* cancel request on tx */
 	xio_nexus_cancel_req(connection->nexus, req, stag, &hdr, sizeof(hdr));
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 
 	return 0;
 }
@@ -1942,6 +2032,9 @@ int xio_cancel(struct xio_msg *req, enum xio_status result)
 	}
 
 	task = container_of(req, struct xio_task, imsg);
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_lock(task->connection->ctx);
+#endif
 	xio_connection_send_cancel_response(task->connection, &task->imsg,
 					    task, result);
 	/* release the message */
@@ -1949,6 +2042,10 @@ int xio_cancel(struct xio_msg *req, enum xio_status result)
 		/* the rx task is returned back to pool */
 		xio_tasks_pool_put(task);
 	}
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+	xio_ctx_debug_thread_unlock(task->connection->ctx);
+#endif
 
 	return 0;
 }
@@ -2210,7 +2307,11 @@ int xio_connection_destroy(struct xio_connection *connection)
 		xio_set_error(EINVAL);
 		return -1;
 	}
-
+#ifdef XIO_THREAD_SAFE_DEBUG
+	if (connection != connection->session->lead_connection)
+		/*not locking for inner accelio lead connection */
+		xio_ctx_debug_thread_lock(connection->ctx);
+#endif
 	found = xio_idr_lookup_uobj(usr_idr, connection);
 	if (found) {
 		if (!list_empty(&connection->io_tasks_list))
@@ -2220,6 +2321,10 @@ int xio_connection_destroy(struct xio_connection *connection)
 	} else {
 		ERROR_LOG("connection not found:%p\n", connection);
 		xio_set_error(XIO_E_USER_OBJ_NOT_FOUND);
+#ifdef XIO_THREAD_SAFE_DEBUG
+		if (connection != connection->session->lead_connection)
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 		return -1;
 	}
 
@@ -2245,6 +2350,10 @@ int xio_connection_destroy(struct xio_connection *connection)
 			  xio_connection_state_str((enum xio_connection_state)
 							connection->state));
 		xio_set_error(EPERM);
+#ifdef XIO_THREAD_SAFE_DEBUG
+		if (connection != connection->session->lead_connection)
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 		return -1;
 	}
 	/* if there is any delayed timeout -  stop it.
@@ -2262,6 +2371,10 @@ int xio_connection_destroy(struct xio_connection *connection)
 				 &connection->ka.timer);
 
 	kref_put(&connection->kref, xio_connection_post_destroy);
+#ifdef XIO_THREAD_SAFE_DEBUG
+	if (connection != connection->session->lead_connection)
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 
 	return retval;
 }
