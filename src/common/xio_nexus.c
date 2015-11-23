@@ -1053,7 +1053,7 @@ static void xio_nexus_release_cb(void *data)
 	}
 
 	/* now it is zero */
-	if (nexus->transport->close)
+	if (nexus->transport && nexus->transport->close)
 		nexus->transport->close(nexus->transport_hndl);
 }
 
@@ -2524,6 +2524,10 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 
 	if (!nexus->transport->dup2)
 		return -1;
+
+	if (nexus->state == XIO_NEXUS_STATE_RECONNECT){
+		return 0;
+	}
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
 
