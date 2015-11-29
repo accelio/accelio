@@ -200,6 +200,9 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 		break;
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		g_options.reconnect = *((int *)optval);
+		if (g_options.reconnect){
+			g_options.enable_keepalive = 0;
+		}
 		return 0;
 	case XIO_OPTNAME_ENABLE_FLOW_CONTROL:
 		g_options.enable_flow_control = *((int *)optval);
