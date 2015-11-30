@@ -913,7 +913,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	if (connection) {
 		ERROR_LOG("context:%p, already assigned connection:%p\n",
 			  ctx, connection);
-		goto cleanup;
+		goto cleanup2;
 	}
 	if (session->state == XIO_SESSION_STATE_INIT) {
 		char portal[64];
