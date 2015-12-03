@@ -643,8 +643,6 @@ int xio_on_nexus_refused(struct xio_session *session,
 
 	/* enable the teardown */
 	session->disable_teardown  = 0;
-	session->lead_connection = NULL;
-	session->redir_connection = NULL;
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:

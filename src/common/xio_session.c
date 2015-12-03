@@ -1153,8 +1153,6 @@ int xio_on_nexus_error(struct xio_session *session, struct xio_nexus *nexus,
 
 	/* disable the teardown */
 	session->disable_teardown = 0;
-	session->lead_connection  = NULL;
-	session->redir_connection = NULL;
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:
