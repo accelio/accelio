@@ -1103,7 +1103,8 @@ int xio_on_nexus_closed(struct xio_session *session,
 		connection = session->lead_connection;
 	else
 		connection = xio_session_find_connection(session, nexus);
-	connection->nexus = NULL;
+	if (connection)
+		connection->nexus = NULL;
 
 	return 0;
 }
