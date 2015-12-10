@@ -3528,7 +3528,32 @@ struct xio_transport xio_rdma_transport = {
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_get_transport_func_list					     */
+/* xio_is_rdma_dev_exist                                                     */
+/*---------------------------------------------------------------------------*/
+int xio_is_rdma_dev_exist()
+{
+
+    struct ibv_device **dev_list;
+	int num_devices = 0;
+    int retval = 0;
+
+	dev_list = ibv_get_device_list(&num_devices);
+	if (!dev_list)
+		return -1;
+
+	if (!*dev_list || num_devices == 0) {
+        retval = -1;
+		goto exit;
+    }
+
+exit:
+	ibv_free_device_list(dev_list);
+
+    return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_get_transport_func_list                                          */
 /*---------------------------------------------------------------------------*/
 struct xio_transport *xio_rdma_get_transport_func_list(void)
 {
@@ -3536,11 +3561,10 @@ struct xio_transport *xio_rdma_get_transport_func_list(void)
 	 * infiniband devices are not installed on the machines.
 	 * this case ignore rdma (only tcp is available for usage)
 	 */
-	if (access("/sys/class/infiniband", F_OK) != 0) {
-		DEBUG_LOG("/sys/class/infiniband does not exists." \
-			  "no capable device installed\n");
-		INIT_LIST_HEAD(&dev_list);
-		return NULL;
+    if (xio_is_rdma_dev_exist() == -1) {
+	    DEBUG_LOG("no capable device installed\n");
+	    INIT_LIST_HEAD(&dev_list);
+	    return NULL;
 	}
 
 	return &xio_rdma_transport;
