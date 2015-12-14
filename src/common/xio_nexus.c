@@ -496,8 +496,12 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *_new)
 		return -1;
 	}
 
-	/* silently close new_nexus */
-	xio_nexus_close(_new, NULL);
+	/* silently destroy new_nexus (it was temporary) but do not close
+	 * its transport handler since it was copied from _new to old,
+	 * _new->transport_hndl is now used as old_nexus->transport_hndl
+	 */
+	_new->transport_hndl = NULL;
+	xio_nexus_destroy(_new);
 
 	/* TODO what about messages held by the application */
 
