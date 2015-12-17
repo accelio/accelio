@@ -1710,7 +1710,9 @@ static void xio_fin_req_timeout(void *data)
 	if (connection->state == XIO_CONNECTION_STATE_LAST_ACK) {
 		connection->state = XIO_CONNECTION_STATE_CLOSED;
 		goto exit;
-	}
+	} else if (connection->state == XIO_CONNECTION_STATE_FIN_WAIT_1) {
+                kref_put(&connection->kref, xio_connection_post_destroy);
+        }
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
