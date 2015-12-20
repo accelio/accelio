@@ -63,6 +63,7 @@ int xio_tasks_pool_alloc_slab(struct xio_tasks_pool *q, void *context)
 	int			tot_sz;
 	int			huge_alloc = 0;
 	LIST_HEAD(tmp_list);
+	INIT_LIST_HEAD(&tmp_list);
 
 	if ((int)q->params.start_nr < 0  || (int)q->params.max_nr < 0 ||
 	    (int)q->params.alloc_nr < 0) {
