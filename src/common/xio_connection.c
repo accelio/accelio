@@ -2257,7 +2257,9 @@ static void xio_connection_post_destroy(struct kref *kref)
 	/* remove the connection from the session's connections list */
 	if (connection->nexus) {
 		xio_connection_flush_tasks(connection);
-		xio_nexus_close(connection->nexus, &session->observer);
+		/* for race condition between connection teardown and transport closed */
+		if (connection->state != XIO_CONNECTION_STATE_DISCONNECTED)
+			xio_nexus_close(connection->nexus, &session->observer);
 	}
 
 	/* leading connection */
