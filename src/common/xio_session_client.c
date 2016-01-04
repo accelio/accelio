@@ -657,7 +657,8 @@ int xio_on_nexus_refused(struct xio_session *session,
 		break;
 	default:
 		connection = xio_session_find_connection(session, nexus);
-		xio_connection_refused(connection);
+		if (connection)
+			xio_connection_refused(connection);
 		break;
 	}
 
