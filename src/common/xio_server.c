@@ -122,6 +122,12 @@ static int xio_on_new_message(struct xio_server *server,
 			  "invalid parameter\n");
 		return -1;
 	}
+	if (nexus->state == XIO_NEXUS_STATE_CLOSED) {
+		ERROR_LOG("got a request for server %p but the corresponding nexus %p is closing\n",
+				server, nexus);
+		return -1;
+	}
+
 	task			= event_data->msg.task;
 
 	params.type		= XIO_SESSION_SERVER;

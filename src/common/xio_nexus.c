@@ -528,6 +528,10 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 	int      retval = 0;
 	uint16_t flags = 0;
 
+	if (new_nexus->state == XIO_NEXUS_STATE_CLOSED) {
+		ERROR_LOG("got a request for a closing nexus %p\n", new_nexus);
+	}
+
 	TRACE_LOG("receiving setup request\n");
 	retval = xio_nexus_read_setup_req(task, &req);
 	if (retval != 0)
