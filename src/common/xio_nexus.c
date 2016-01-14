@@ -92,7 +92,7 @@ static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
 static void xio_nexus_destroy_handler(void *nexus_);
-static void xio_nexus_disconnect_handler(void *nexus_);
+static void xio_nexus_disconnected(void *nexus_);
 static void xio_nexus_trans_error_handler(void *ev_params_);
 
 /*---------------------------------------------------------------------------*/
@@ -1225,9 +1225,6 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	nexus->destroy_event.handler		= xio_nexus_destroy_handler;
 	nexus->destroy_event.data		= nexus;
 
-	nexus->disconnect_event.handler		= xio_nexus_disconnect_handler;
-	nexus->disconnect_event.data		= nexus;
-
 	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
 	nexus->trans_error_event.data		= NULL;
 
@@ -1348,9 +1345,9 @@ static void xio_nexus_destroy_handler(void *nexus_)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_disconnect_handler						     */
+/* xio_nexus_disconnected						     */
 /*---------------------------------------------------------------------------*/
-static void xio_nexus_disconnect_handler(void *nexus_)
+static void xio_nexus_disconnected(void *nexus_)
 {
 	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
 	int ret;
@@ -1418,8 +1415,7 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
 				 &nexus->close_time_hndl);
 
-	xio_context_add_event(nexus->transport_hndl->ctx,
-			      &nexus->disconnect_event);
+	xio_nexus_disconnected(nexus);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1709,7 +1705,6 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
 	xio_context_disable_event(&nexus->destroy_event);
-	xio_context_disable_event(&nexus->disconnect_event);
 	xio_context_disable_event(&nexus->trans_error_event);
 
 	kfree(nexus->trans_error_event.data);
@@ -1902,9 +1897,6 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	}
 	nexus->destroy_event.handler	= xio_nexus_destroy_handler;
 	nexus->destroy_event.data	= nexus;
-
-	nexus->disconnect_event.handler	= xio_nexus_disconnect_handler;
-	nexus->disconnect_event.data	= nexus;
 
 	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
 	nexus->trans_error_event.data		= NULL;
