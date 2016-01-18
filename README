@@ -64,6 +64,15 @@ to build the library follow the following steps:
   - run make
   - follow examples in ./examples/
 
+to build rpm package, execute:
+  $ ACCELIO_VERSION=1.6 #if version if higher, change the value
+  $ git archive --format=tar --prefix=accelio-$ACCELIO_VERSION/ HEAD > ~/rpmbuild/SOURCES/v$ACCELIO_VERSION.tar.gz
+  $ rpmbuild -ba libxio.spec
+
+  - you can add flags to rpmbuild command:
+    --with devel_mode    # it will remove ./configure flags `--enable-stat-counters=no` and `--enable-extra-checks=no`.
+    --without kmod       # it will not build libxio as a kernel module
+
 Examples
 --------
 
