@@ -495,6 +495,7 @@ int main(int argc, char *argv[])
 	struct xio_session_params	params;
 	struct xio_connection_params	cparams;
 
+	xio_init();
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 

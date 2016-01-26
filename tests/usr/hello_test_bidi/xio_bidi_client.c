@@ -586,6 +586,7 @@ int main(int argc, char *argv[])
 
 	nrecv = 0;
 	nsent = 0;
+	xio_init();
 
 	memset(&reg_mem, 0, sizeof reg_mem);
 

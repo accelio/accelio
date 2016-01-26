@@ -154,15 +154,3 @@ void xio_shutdown(void)
 	mutex_unlock(&ini_mutex);
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
-/*---------------------------------------------------------------------------*/
-LIBRARY_INITIALIZER(xio_constructor)
-{
-	xio_init();
-}
-
-LIBRARY_FINALIZER(xio_destructor)
-{
-	xio_shutdown();
-}

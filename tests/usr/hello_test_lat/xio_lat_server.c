@@ -405,6 +405,7 @@ int main(int argc, char *argv[])
 	char			url[256];
 	int			opt;
 
+	xio_init();
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 

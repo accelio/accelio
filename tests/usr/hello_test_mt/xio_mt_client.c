@@ -629,6 +629,7 @@ int main(int argc, char *argv[])
 	int			exit_code = 0;
 	struct xio_session_params params;
 
+	xio_init();
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
