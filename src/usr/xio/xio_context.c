@@ -137,6 +137,8 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 				!!ctx_params->prealloc_xio_inline_bufs;
 		ctx->max_conns_per_ctx =
 				max(ctx_params->max_conns_per_ctx, 2);
+                ctx->register_internal_mempool =
+                        !!ctx_params->register_internal_mempool;
 	}
 	if (!ctx->max_conns_per_ctx)
 		ctx->max_conns_per_ctx = 100;

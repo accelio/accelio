@@ -145,6 +145,10 @@ struct xio_mempool *xio_transport_mempool_get(
 	if (ctx->mempool)
 		return (struct xio_mempool *)ctx->mempool;
 
+        /* user asked to force registration and rdma exist on machine*/
+        if (ctx->register_internal_mempool && xio_get_transport("rdma"))
+                reg_mr = 1;
+
 	ctx->mempool = xio_mempool_create_prv(
 			ctx->nodeid,
 			(reg_mr ? XIO_MEMPOOL_FLAG_REG_MR : 0) |

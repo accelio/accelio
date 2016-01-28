@@ -249,7 +249,13 @@ struct xio_context_params {
 
 	/**< number of connections that this context will handle		*/
 	int			max_conns_per_ctx;
+
+	/**< apply memory registration to internal accelio memory pool		*/
+        int                     register_internal_mempool;
+
+        int                     reserved;
 };
+
 
 /**
  * creates xio context - a context object represent concurrency unit
