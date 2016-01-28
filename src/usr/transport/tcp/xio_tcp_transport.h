@@ -302,7 +302,8 @@ struct xio_tcp_transport {
 	struct list_head		io_list;
 
 	struct xio_tcp_socket		sock;
-	int				is_listen;
+	uint16_t			is_listen;
+	uint8_t			        in_epoll[2];
 
 	/* fast path params */
 	enum xio_transport_state	state;
