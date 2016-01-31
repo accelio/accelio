@@ -2007,9 +2007,16 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		nexus->state = XIO_NEXUS_STATE_CONNECTING;
 		break;
 	case XIO_NEXUS_STATE_CONNECTED:
-		xio_nexus_notify_observer(nexus, observer,
-					  XIO_NEXUS_EVENT_ESTABLISHED,
-					  NULL);
+		/* moving the notification to the ctx the nexus is running on
+		 * to avoid session_setup_request from being sent on another thread
+		 */
+		nexus->observer_event.observer = observer;
+		nexus->observer_event.observable = &nexus->observable;
+		nexus->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
+		nexus->observer_event.event_data = NULL;
+		xio_ctx_add_work(nexus->transport_hndl->ctx, &nexus->observer_event,
+				xio_observable_notify_observer_wrapper, &nexus->observer_work);
+
 		break;
 	default:
 		break;

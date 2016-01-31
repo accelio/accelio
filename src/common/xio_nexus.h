@@ -173,6 +173,9 @@ struct xio_nexus {
 	struct xio_ev_data		destroy_event;
 	struct xio_ev_data		trans_error_event;
 
+	struct xio_observer_event	observer_event;
+	xio_work_handle_t               observer_work;
+
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };
 

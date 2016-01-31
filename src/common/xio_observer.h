@@ -76,6 +76,14 @@ struct xio_observable {
 	struct xio_observer_node *observer_node; /* for one observer */
 };
 
+struct xio_observer_event{
+	struct xio_observer	*observer;
+	struct xio_observable *observable;
+	void *event_data;
+	int event;
+	int pad;
+};
+
 #define XIO_OBSERVABLE_INIT(name, obj) \
 	{ (name)->impl = obj; INIT_LIST_HEAD(&(name)->observers_list); \
 	  (name)->observer_node = NULL; }
@@ -127,5 +135,10 @@ static inline int xio_observable_is_empty(struct xio_observable *observable)
 {
 	return list_empty(&observable->observers_list);
 }
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_notify_observer_wrapper					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_notify_observer_wrapper(void *_observer_event);
 
 #endif /* XIO_OBSERVER_H */
