@@ -2276,7 +2276,14 @@ static void xio_connection_post_destroy(struct kref *kref)
 	spin_lock(&session->connections_list_lock);
 	if (session->lead_connection &&
 	    session->lead_connection->nexus == connection->nexus) {
-		tmp_connection = session->lead_connection;
+                if ((connection->state == XIO_CONNECTION_STATE_INIT ||
+                     connection->state == XIO_CONNECTION_STATE_DISCONNECTED ||
+                     connection->state == XIO_CONNECTION_STATE_ERROR) &&
+                        session->connections_nr) {
+                        session->connections_nr--;
+                        list_del(&connection->connections_list_entry);
+                }
+                tmp_connection = session->lead_connection;
 		session->lead_connection = NULL;
 		TRACE_LOG("lead connection is closed\n");
 	} else if (session->redir_connection &&
