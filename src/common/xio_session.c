@@ -177,10 +177,16 @@ struct xio_connection *xio_session_find_connection_by_ctx(
 {
 	struct xio_connection		*connection;
 
-	list_for_each_entry(connection, &ctx->ctx_list, ctx_list_entry) {
-		if (connection->session == session)
+	spin_lock(&session->connections_list_lock);
+	list_for_each_entry(connection, &session->connections_list,
+				connections_list_entry) {
+		if (connection->ctx == ctx) {
+			spin_unlock(&session->connections_list_lock);
 			return connection;
+		}
 	}
+	spin_unlock(&session->connections_list_lock);
+
 	return NULL;
 }
 

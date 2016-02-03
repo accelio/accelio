@@ -233,7 +233,9 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 		xio_msg_list_init(&connection->in_flight_rsps_msgq);
 
 		kref_init(&connection->kref);
+		spin_lock(&ctx->ctx_list_lock);
 		list_add_tail(&connection->ctx_list_entry, &ctx->ctx_list);
+		spin_unlock(&ctx->ctx_list_lock);
 
 		return connection;
 }
@@ -1453,8 +1455,9 @@ static void xio_connection_post_close(void *_connection)
 	xio_ctx_del_work(connection->ctx, &connection->fin_work);
 
 	xio_ctx_del_work(connection->ctx, &connection->teardown_work);
-
+	spin_lock(&connection->ctx->ctx_list_lock);
 	list_del(&connection->ctx_list_entry);
+	spin_unlock(&connection->ctx->ctx_list_lock);
 
 	kfree(connection);
 

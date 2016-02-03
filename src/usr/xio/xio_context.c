@@ -180,6 +180,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 #ifdef XIO_THREAD_SAFE_DEBUG
 	pthread_mutex_init(&ctx->dbg_thread_mutex, NULL);
 #endif
+	spin_lock_init(&ctx->ctx_list_lock);
 
 	DEBUG_LOG("context created. context:%p\n", ctx);
 

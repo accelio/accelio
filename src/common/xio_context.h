@@ -125,9 +125,10 @@ struct xio_context {
 	xio_work_handle_t               destroy_ctx_work;
 
 	int				max_conns_per_ctx;
-	int 			nptrs;
-	pthread_mutex_t dbg_thread_mutex;
-	void 			*buffer[BACKTRACE_BUFFER_SIZE];
+	int				nptrs;
+	pthread_mutex_t			dbg_thread_mutex;
+	void				*buffer[BACKTRACE_BUFFER_SIZE];
+	spinlock_t                      ctx_list_lock;
 };
 #else
 struct xio_context {
@@ -168,9 +169,9 @@ struct xio_context {
 	struct xio_observable		observable;
 	void				*netlink_sock;
 	xio_work_handle_t               destroy_ctx_work;
+	spinlock_t                      ctx_list_lock;
 
 	int				max_conns_per_ctx;
-	int				pad;
 };
 #endif
 
