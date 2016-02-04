@@ -191,9 +191,9 @@ static int xio_nexus_delete_observer(struct xio_nexus *nexus,
 struct xio_observer *xio_nexus_observer_lookup(struct xio_nexus *nexus,
 					       uint32_t id)
 {
-	struct xio_observers_htbl_node	*node;
+	struct xio_observers_htbl_node	*node, *next_node;
 
-	list_for_each_entry(node,
+	list_for_each_entry_safe(node, next_node,
 			    &nexus->observers_htbl,
 			    observers_htbl_node) {
 		if (node->id == id)
@@ -210,8 +210,10 @@ void xio_nexus_reg_observer(struct xio_nexus *nexus,
 			    struct xio_observer *observer,
 			    uint32_t oid)
 {
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_observable_reg_observer(&nexus->observable, observer);
 	xio_nexus_hash_observer(nexus, observer, oid);
+	spin_unlock(&nexus->nexus_obs_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -220,8 +222,10 @@ void xio_nexus_reg_observer(struct xio_nexus *nexus,
 void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 			      struct xio_observer *observer)
 {
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_nexus_delete_observer(nexus, observer);
 	xio_observable_unreg_observer(&nexus->observable, observer);
+	spin_unlock(&nexus->nexus_obs_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1175,6 +1179,8 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	XIO_OBSERVER_INIT(&nexus->srv_observer, nexus,
 			  xio_on_server_event);
 
+	spin_lock_init(&nexus->nexus_obs_lock);
+
 	XIO_OBSERVABLE_INIT(&nexus->observable, nexus);
 
 	xio_nexus_init_observers_htbl(nexus);
@@ -1721,8 +1727,10 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 		xio_transport_unreg_observer(nexus->transport_hndl,
 					     &nexus->trans_observer);
 
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_nexus_free_observers_htbl(nexus);
 	xio_observable_unreg_all_observers(&nexus->observable);
+	spin_unlock(&nexus->nexus_obs_lock);
 
 	if (nexus->transport_hndl)
 		xio_ctx_del_delayed_work(
@@ -1791,9 +1799,11 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	     nexus->state == XIO_NEXUS_STATE_LISTEN ||
 	     nexus->state == XIO_NEXUS_STATE_INIT)) {
 		if (observer) {
+			spin_lock(&nexus->nexus_obs_lock);
 			xio_observable_reg_observer(&nexus->observable,
 						    observer);
 			xio_nexus_hash_observer(nexus, observer, oid);
+			spin_unlock(&nexus->nexus_obs_lock);
 		}
 		if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
 			xio_ctx_del_delayed_work(ctx,
@@ -1849,8 +1859,10 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	xio_nexus_init_observers_htbl(nexus);
 
 	if (observer) {
+		spin_lock(&nexus->nexus_obs_lock);
 		xio_observable_reg_observer(&nexus->observable, observer);
 		xio_nexus_hash_observer(nexus, observer, oid);
+		spin_unlock(&nexus->nexus_obs_lock);
 	}
 
 	/* start listen to server events */

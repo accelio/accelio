@@ -172,6 +172,8 @@ struct xio_nexus {
 	struct xio_transport_init_attr	trans_attr;
 	struct xio_ev_data		destroy_event;
 	struct xio_ev_data		trans_error_event;
+	spinlock_t			nexus_obs_lock;
+	int 					pad2;
 
 	struct xio_observer_event	observer_event;
 	xio_work_handle_t               observer_work;
