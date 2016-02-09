@@ -3064,7 +3064,7 @@ int xio_connection_send_ka_req(struct xio_connection *connection)
 	    connection->ka.req_sent)
 		return 0;
 
-	DEBUG_LOG("send keepalive request. session:%p, connection:%p\n",
+	TRACE_LOG("send keepalive request. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
@@ -3092,7 +3092,7 @@ int xio_connection_send_ka_rsp(struct xio_connection *connection,
 {
 	struct xio_msg	*msg;
 
-	DEBUG_LOG("send keepalive response. session:%p, connection:%p\n",
+	TRACE_LOG("send keepalive response. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	msg = (struct xio_msg *)xio_context_msg_pool_get(connection->ctx);
@@ -3119,7 +3119,7 @@ int xio_on_connection_ka_rsp_recv(struct xio_connection *connection,
 {
 	int retval;
 
-	DEBUG_LOG("recv keepalive response. session:%p, connection:%p\n",
+	TRACE_LOG("recv keepalive response. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	xio_ctx_del_delayed_work(connection->ctx,
@@ -3155,7 +3155,7 @@ int xio_on_connection_ka_req_recv(struct xio_connection *connection,
 				  struct xio_task *task)
 {
 	/* delayed disconnect request should be done now */
-	DEBUG_LOG("recv keepalive request. session:%p, connection:%p\n",
+	TRACE_LOG("recv keepalive request. session:%p, connection:%p\n",
 		  connection->session, connection);
 
 	connection->ka.timedout = 0;
