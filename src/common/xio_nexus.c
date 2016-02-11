@@ -502,10 +502,15 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *_new)
 
 	/* silently destroy new_nexus (it was temporary) but do not close
 	 * its transport handler since it was copied from _new to old,
-	 * _new->transport_hndl is now used as old_nexus->transport_hndl
+	 * _new->transport_hndl is now used as old_nexus->transport_hndl.
+	 *
+	 * if the failure is on the client side, destroy the temporary new_nexus.
+	 * if the failure is on the server side, the temporary new_nexus will be
+	 * destroyed after the transport closes (by calling xio_nexus_on_transport_closed
+	 * after a XIO_TRANSPORT_EVENT_CLOSED occurs on the server side.
 	 */
 	_new->transport_hndl = NULL;
-	xio_nexus_destroy(_new);
+	if (old->transport_hndl->is_client) xio_nexus_destroy(_new);
 
 	/* TODO what about messages held by the application */
 
