@@ -270,7 +270,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 
 		/* phantom task */
-		if (unlikely(rdma_task->phantom_idx)) {
+		if (rdma_task->phantom_idx) {
 			if (req_nr >= window)
 				break;
 			curr_wr = &rdma_task->rdmad;
