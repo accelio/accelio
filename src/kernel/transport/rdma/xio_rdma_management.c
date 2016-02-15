@@ -2899,23 +2899,30 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	void			*sgtbl;
 	void			*sge;
 	unsigned int		nents, max_nents;
-	uint64_t		length = 0;
+	size_t		length = 0;
 
 	/* kernel works only with kernel's scatterlist */
 	if (unlikely(vmsg->sgl_type != XIO_SGL_TYPE_SCATTERLIST)) {
 		/* src/common/xio_session_client.c uses XIO_SGL_TYPE_IOV but len
 		 * should be zero. Note, other types are not supported!
 		 */
-		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV)
+		if (vmsg->sgl_type != XIO_SGL_TYPE_IOV) {
+			ERROR_LOG("Incompatible sgl type %d\n", vmsg->sgl_type);
 			return 0;
-		if (vmsg->data_tbl.nents)
+		}
+		if (vmsg->data_tbl.nents){
+			ERROR_LOG("Bad data_tbl.nents %d\n", vmsg->data_tbl.nents);
 			return 0;
+		}
 		/* Just check header */
 		if (vmsg->header.iov_base &&
-		    (vmsg->header.iov_len == 0))
+		    (vmsg->header.iov_len == 0)){
+			ERROR_LOG("Bad header %p %zu\n", vmsg->header.iov_base,
+				vmsg->header.iov_len);
 			return 0;
-		else
+		} else {
 			return 1;
+		}
 	}
 
 	sgtbl		= xio_sg_table_get(vmsg);
@@ -2926,21 +2933,31 @@ static int xio_rdma_is_valid_in_req(struct xio_msg *msg)
 	if ((nents > rdma_options.max_in_iovsz) ||
 	    (nents > max_nents) ||
 	    (max_nents > rdma_options.max_in_iovsz)) {
+		ERROR_LOG("Too many SG entries %u (%u, %u)\n",
+			nents, max_nents, rdma_options.max_in_iovsz);
 		return 0;
 	}
 
 	if (vmsg->header.iov_base  &&
-	    (vmsg->header.iov_len == 0))
+	    (vmsg->header.iov_len == 0)) {
+		ERROR_LOG("Bad header %p %zu\n", vmsg->header.iov_base,
+			vmsg->header.iov_len);
 		return 0;
+	}
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		length += sge_length(sgtbl_ops, sge);
 		if (sge_addr(sgtbl_ops, sge) &&
-		    (sge_length(sgtbl_ops, sge)  == 0))
+		    (sge_length(sgtbl_ops, sge)  == 0)){
+			ERROR_LOG("Zero SGE length\n");
 			return 0;
+		}
 	}
-	if (length >= (XIO_MAX_IOV + 1) * PAGE_SIZE)
+	if (length >= (XIO_MAX_IOV + 1) * PAGE_SIZE) {
+		ERROR_LOG("Total length %zu > %zu\n",
+			length, (XIO_MAX_IOV + 1) * PAGE_SIZE);
 		return 0;
+	}
 
 	return 1;
 }
