@@ -3404,17 +3404,27 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
 	if ((nents > rdma_options.max_out_iovsz) ||
-	    (nents > max_nents))
+	    (nents > max_nents)) {
+		ERROR_LOG("sgl exceeded allowed size (nents=%zu, max_nents=%zu, max_out_iovsz=%zu)\n",
+			nents, max_nents, rdma_options.max_out_iovsz);
 		return 0;
+	}
 
-	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN) {
+		ERROR_LOG("sgl (iovec) too big (nents=%zu, max=%zu)\n", XIO_IOVLEN);
 		return 0;
+	}
 
-	if (!vmsg->header.iov_base  && (vmsg->header.iov_len != 0))
+	if (!vmsg->header.iov_base  && (vmsg->header.iov_len != 0)) {
+		ERROR_LOG("Header ptr is NULL (vmsg=%p)\n", vmsg);
 		return 0;
+	}
 
-	if (vmsg->header.iov_len > (size_t)g_options.max_inline_xio_hdr)
+	if (vmsg->header.iov_len > (size_t)g_options.max_inline_xio_hdr){
+		ERROR_LOG("Header length exceeds max (len=%zu, max=%zu)\n",
+			vmsg->header.iov_len, (size_t)g_options.max_inline_xio_hdr);
 		return 0;
+	}
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		if (sge_mr(sgtbl_ops, sge))
@@ -3424,8 +3434,12 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 			return 0;
 	}
 
-	if (mr_found != nents && mr_found)
+	if (mr_found != nents && mr_found){
+		ERROR_LOG(
+			"not all entries has mr (mr_found=%d, nents=%zu)\n",
+			mr_found, nents);
 		return 0;
+	}
 
 	return 1;
 }

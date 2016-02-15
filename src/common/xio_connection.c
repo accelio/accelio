@@ -315,7 +315,7 @@ int xio_connection_send(struct xio_connection *connection,
 		if (connection->session->peer_rcv_queue_depth_bytes <
 		    tx_bytes) {
 			ERROR_LOG(
-			    "message length %zd is bigger then peer " \
+			    "message length %zd is bigger than peer " \
 			    "receive queue size %llu\n", tx_bytes,
 			    connection->session->peer_rcv_queue_depth_bytes);
 			return -XIO_E_PEER_QUEUE_SIZE_MISMATCH;
@@ -438,6 +438,7 @@ int xio_connection_send(struct xio_connection *connection,
 	/* send it */
 	retval = xio_nexus_send(connection->nexus, task);
 	if (retval != 0) {
+		ERROR_LOG("xio_nexus_send failed with %d\n", retval);
 		rc = (retval == -EAGAIN) ? EAGAIN : xio_errno();
 		if (!task->is_control || task->tlv_type == XIO_ACK_REQ) {
 			if (connection->enable_flow_control) {
@@ -1353,6 +1354,10 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 		if (connection->enable_flow_control) {
 			connection->tx_queued_msgs++;
 			connection->tx_bytes += tx_bytes;
+			TRACE_LOG(
+				"connection->tx_queued_msgs=%zu, connection->tx_bytes=%zu\n",
+				connection->tx_queued_msgs,
+				connection->tx_bytes);
 		}
 		if (nr == -1)
 			xio_msg_list_insert_tail(&connection->reqs_msgq, pmsg,
