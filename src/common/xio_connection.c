@@ -59,7 +59,6 @@
 #include <xio_env_adv.h>
 
 #define MSG_POOL_SZ			1024
-#define XIO_CONNECTION_TIMEOUT		300000
 #define XIO_IOV_THRESHOLD		20
 
 static struct xio_transition xio_transition_table[][2] = {
@@ -218,6 +217,9 @@ struct xio_connection *xio_connection_create(struct xio_session *session,
 
 		connection->conn_idx	= conn_idx;
 		connection->cb_user_context = cb_user_context;
+
+	        connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
+
 		memcpy(&connection->ses_ops, &session->ses_ops,
 		       sizeof(session->ses_ops));
 
@@ -1768,7 +1770,7 @@ int xio_send_fin_req(struct xio_connection *connection)
 	connection->fin_req_timeout = 0;
 	retval = xio_ctx_add_delayed_work(
 				connection->ctx,
-				XIO_CONNECTION_TIMEOUT, connection,
+				connection->disconnect_timeout, connection,
 				xio_fin_req_timeout,
 				&connection->fin_timeout_work);
 	if (retval != 0) {
@@ -2081,7 +2083,17 @@ int xio_modify_connection(struct xio_connection *connection,
 	}
 	if (test_bits(XIO_CONNECTION_ATTR_USER_CTX, &attr_mask))
 		connection->cb_user_context = attr->user_context;
-	/*
+        if (test_bits(XIO_CONNECTION_ATTR_DISCONNECT_TIMEOUT, &attr_mask)) {
+                if (attr->disconnect_timeout_secs) {
+                        if (attr->disconnect_timeout_secs < XIO_MIN_CONNECTION_TIMEOUT)
+                                connection->disconnect_timeout = XIO_MIN_CONNECTION_TIMEOUT;
+                        else
+                                connection->disconnect_timeout = attr->disconnect_timeout_secs * 1000;
+                } else {
+                        connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
+                }
+        }
+		/*
 	memset(&nattr, 0, sizeof(nattr));
 	if (test_bits(XIO_CONNECTION_ATTR_TOS, &attr_mask)) {
 		nattr.tos = attr->tos;
@@ -2131,6 +2143,9 @@ int xio_query_connection(struct xio_connection *connection,
 
 	if (attr_mask & XIO_CONNECTION_ATTR_CTX)
 		attr->ctx = connection->ctx;
+
+        if (test_bits(XIO_CONNECTION_ATTR_DISCONNECT_TIMEOUT, &attr_mask))
+                attr->disconnect_timeout_secs = connection->disconnect_timeout/1000;
 
 	if (attr_mask & XIO_CONNECTION_ATTR_PROTO)
 		attr->proto = (enum xio_proto)

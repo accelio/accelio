@@ -749,6 +749,7 @@ enum xio_connection_attr_mask {
 	XIO_CONNECTION_ATTR_PROTO		= 1 << 2,
 	XIO_CONNECTION_ATTR_PEER_ADDR		= 1 << 3,
 	XIO_CONNECTION_ATTR_LOCAL_ADDR		= 1 << 4,
+	XIO_CONNECTION_ATTR_DISCONNECT_TIMEOUT	= 1 << 5,
 };
 
 /**
@@ -761,7 +762,8 @@ struct xio_connection_attr {
 						/**< oriented callbacks      */
 	struct xio_context	*ctx;		/**< context data type	     */
 	uint8_t			tos;		/**< type of service RFC 2474 */
-	uint8_t			pad[3];		/**< padding		     */
+	uint8_t			pad;            /**< padding                 */
+        uint16_t                disconnect_timeout_secs;
 	enum xio_proto		proto;	        /**< protocol type           */
 	struct sockaddr_storage	peer_addr;	/**< address of peer	     */
 	struct sockaddr_storage	local_addr;	/**< address of local	     */
@@ -778,7 +780,9 @@ struct xio_connection_params {
 						/**< then 0 if 0 - auto count */
 	uint8_t			enable_tos;	/**< explicitly enable tos    */
 	uint8_t			tos;		/**< type of service RFC 2474 */
-	uint16_t		pad;
+
+        /**< disconnect timeout in seconds */
+	uint16_t		disconnect_timeout_secs;
 
 	/**< bounded outgoing interface address and/or port - NULL if not     */
 	/**< specified in form:                                               */

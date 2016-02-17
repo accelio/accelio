@@ -57,6 +57,9 @@ enum xio_connection_state {
 #define		SEND_ACK	0x0001
 #define		SEND_FIN	0x0002
 
+#define         XIO_MIN_CONNECTION_TIMEOUT	1000
+#define         XIO_DEF_CONNECTION_TIMEOUT	300000
+
 struct xio_transition {
 	int				valid;
 	enum xio_connection_state	next_state;
@@ -111,7 +114,7 @@ struct xio_connection {
 	uint32_t			close_reason;
 	int32_t				tx_queued_msgs;
 	struct kref			kref;
-	uint32_t			pad2;
+	uint32_t			disconnect_timeout;
 
 	struct xio_msg_list		reqs_msgq;
 	struct xio_msg_list		rsps_msgq;

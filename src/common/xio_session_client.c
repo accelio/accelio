@@ -1035,6 +1035,15 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 		connection->nexus_attr	    = attr;
 	}
 
+	if (cparams->disconnect_timeout_secs) {
+                if (cparams->disconnect_timeout_secs < XIO_MIN_CONNECTION_TIMEOUT)
+                        connection->disconnect_timeout = XIO_MIN_CONNECTION_TIMEOUT;
+                else
+                        connection->disconnect_timeout = cparams->disconnect_timeout_secs * 1000;
+	} else {
+                connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
+        }
+
 	mutex_unlock(&session->lock);
 
 	DEBUG_LOG("xio_connect: session:%p, connection:%p, " \
