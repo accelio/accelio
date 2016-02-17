@@ -540,7 +540,8 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
 		if (!IS_APPLICATION_MSG(pmsg->type)) {
-			if (pmsg->type == XIO_FIN_REQ) {
+			if (pmsg->type == XIO_FIN_REQ &&
+                            connection->state != XIO_CONNECTION_STATE_DISCONNECTED) {
 				connection->fin_request_flushed = 1;
 				/* since fin req was not really sent, need to
 				 * "undo" the kref updates done in
@@ -2457,14 +2458,13 @@ int xio_connection_disconnected(struct xio_connection *connection)
 				connection->session, connection,
 				(enum xio_status)connection->close_reason);
 	}
+	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
 
 	/* flush all messages from in flight message queue to in queue */
 	xio_connection_flush_msgs(connection);
 
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
-
-	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
 
 	if (connection->nexus) {
 		if (connection->session->lead_connection &&
