@@ -293,7 +293,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 
 		/* phantom task */
-		if (unlikely(rdma_task->phantom_idx)) {
+		if (rdma_task->phantom_idx) {
 			if (req_nr >= window)
 				break;
 			curr_wr = &rdma_task->rdmad;
@@ -307,7 +307,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 			rdma_task->txd.send_wr.send_flags &= ~IB_SEND_SIGNALED;
 
-			if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE) {
+			if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE  ||
+			    rdma_task->out_ib_op == XIO_IB_RDMA_WRITE_DIRECT) {
 				/*
 				if (xio_map_txmad_work_req(rdma_hndl->dev,
 							   curr_wr))
@@ -315,6 +316,11 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 				*/
 				xio_prep_rdma_wr_send_req(task, rdma_hndl,
 							  NULL /*no next*/,
+							  0 /* signaled */);
+			}
+
+			if (rdma_task->out_ib_op == XIO_IB_RDMA_READ_DIRECT) {
+				xio_prep_rdma_rd_send_req(task, rdma_hndl,
 							  0 /* signaled */);
 			}
 
