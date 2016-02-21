@@ -154,15 +154,20 @@ struct xio_nexus *xio_nexus_cache_find(struct xio_nexus_query_params *query)
 				continue;
 			if (tos_enabled && nexus->trans_attr.tos != query->tos)
 				continue;
+
 			/* match found */
-			goto found;
+			xio_nexus_addref(nexus);
+
+			TRACE_LOG("nexus: [addref] nexus:%p, refcnt:%d\n", nexus,
+				  atomic_read(&nexus->kref.refcount));
+			goto done;
 		}
 	}
 	nexus = NULL;
 
-found:
+done:
 	spin_unlock(&cs_lock);
-	return  nexus;
+	return nexus;
 }
 
 /*---------------------------------------------------------------------------*/

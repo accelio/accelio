@@ -1817,16 +1817,6 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 			xio_nexus_hash_observer(nexus, observer, oid);
 			spin_unlock(&nexus->nexus_obs_lock);
 		}
-		if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-			xio_ctx_del_delayed_work(ctx,
-						 &nexus->close_time_hndl);
-			kref_init(&nexus->kref);
-		} else {
-			xio_nexus_addref(nexus);
-		}
-
-		TRACE_LOG("nexus: [addref] nexus:%p, refcnt:%d\n", nexus,
-			  atomic_read(&nexus->kref.refcount));
 
 		return nexus;
 	}
