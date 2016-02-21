@@ -1127,7 +1127,7 @@ int xio_on_nexus_message_error(struct xio_session *session,
 	xio_connection_remove_msg_from_queue(task->connection, task->omsg);
 	xio_connection_queue_io_task(task->connection, task);
 
-	if (task->session->ses_ops.on_msg_error) {
+	if (task->session->ses_ops.on_msg_error && IS_APPLICATION_MSG(task->tlv_type)) {
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(task->connection->ctx);
 #endif
@@ -1871,7 +1871,7 @@ int xio_session_notify_msg_error(struct xio_connection *connection,
 				 enum xio_msg_direction direction)
 {
 	/* notify the upper layer */
-	if (connection->ses_ops.on_msg_error) {
+	if (connection->ses_ops.on_msg_error && IS_APPLICATION_MSG(msg->type)) {
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
