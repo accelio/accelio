@@ -2514,7 +2514,7 @@ int xio_connection_refused(struct xio_connection *connection)
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
-	connection->state	 = XIO_CONNECTION_STATE_DISCONNECTED;
+	connection->state	 = XIO_CONNECTION_STATE_ERROR;
 
 	xio_ctx_add_work(
 			connection->ctx,
