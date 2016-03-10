@@ -500,6 +500,11 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *_new)
 		return -1;
 	}
 
+	/*
+	 * Unregister the new_nexus (it was temporary) from the context.
+	 */
+	xio_context_unreg_observer(_new->transport_hndl->ctx, &_new->ctx_observer);
+
 	/* silently destroy new_nexus (it was temporary) but do not close
 	 * its transport handler since it was copied from _new to old,
 	 * _new->transport_hndl is now used as old_nexus->transport_hndl.
