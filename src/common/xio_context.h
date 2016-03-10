@@ -83,54 +83,6 @@ struct xio_statistics {
 	char		*name[XIO_STAT_LAST];
 };
 
-
-#ifdef XIO_THREAD_SAFE_DEBUG
-struct xio_context {
-	void				*ev_loop;
-	void				*mempool;
-	/* pools per transport */
-	struct xio_tasks_pool		*primary_tasks_pool[XIO_PROTO_LAST];
-	struct xio_tasks_pool_ops	*primary_pool_ops[XIO_PROTO_LAST];
-
-	struct xio_tasks_pool		*initial_tasks_pool[XIO_PROTO_LAST];
-	struct xio_tasks_pool_ops	*initial_pool_ops[XIO_PROTO_LAST];
-
-	/* pool per connection */
-	struct xio_objpool		*msg_pool;
-
-	void				*poll_completions_ctx;
-	poll_completions_fn_t		poll_completions_fn;
-
-	int				cpuid;
-	int				nodeid;
-	int				polling_timeout;
-	unsigned int			flags;
-	uint64_t			worker;
-
-	int32_t				run_private;
-
-	uint32_t			is_running:1;
-	uint32_t			defered_destroy:1;
-	uint32_t			prealloc_xio_inline_bufs:1;
-	uint32_t			resereved:29;
-
-	struct xio_statistics		stats;
-	void				*user_context;
-	struct xio_workqueue		*workqueue;
-	struct list_head		ctx_list;  /* per context storage */
-
-	/* list of sessions using this connection */
-	struct xio_observable		observable;
-	void				*netlink_sock;
-	xio_work_handle_t               destroy_ctx_work;
-
-	int				max_conns_per_ctx;
-	int				nptrs;
-	pthread_mutex_t			dbg_thread_mutex;
-	void				*buffer[BACKTRACE_BUFFER_SIZE];
-	spinlock_t                      ctx_list_lock;
-};
-#else
 struct xio_context {
 	void				*ev_loop;
 	void				*mempool;
@@ -173,8 +125,14 @@ struct xio_context {
 	spinlock_t                      ctx_list_lock;
 
 	int				max_conns_per_ctx;
-};
+#ifdef XIO_THREAD_SAFE_DEBUG
+	int                             nptrs;
+	int				pad1;
+	pthread_mutex_t                 dbg_thread_mutex;
+	void                            *buffer[BACKTRACE_BUFFER_SIZE];
 #endif
+
+};
 
 /*---------------------------------------------------------------------------*/
 /* xio_context_reg_observer						     */
