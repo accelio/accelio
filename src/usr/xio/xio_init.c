@@ -45,6 +45,7 @@
 #include "xio_observer.h"
 #include "xio_transport.h"
 #include "xio_idr.h"
+#include "xio_init.h"
 
 int		page_size;
 double		g_mhz;
@@ -152,5 +153,14 @@ void xio_shutdown(void)
 	if (--ini_refcnt == 0)
 		xio_dtor();
 	mutex_unlock(&ini_mutex);
+}
+
+int xio_inited(void)
+{
+	int ret;
+	mutex_lock(&ini_mutex);
+	ret = ini_refcnt;
+	mutex_unlock(&ini_mutex);
+	return ret;
 }
 

@@ -54,6 +54,7 @@
 #include "xio_transport.h"
 #include "xio_context.h"
 #include "xio_usr_utils.h"
+#include "xio_init.h"
 
 #ifdef XIO_THREAD_SAFE_DEBUG
 #include <execinfo.h>
@@ -95,6 +96,12 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	struct xio_context		*ctx = NULL;
 	struct xio_transport		*transport;
 	int				cpu;
+
+	/* check if user called xio_init() */
+	if (!xio_inited()) {
+		ERROR_LOG("xio_init() must be called before any accelio func\n");
+		return NULL;
+	}
 
 	xio_read_logging_level();
 
