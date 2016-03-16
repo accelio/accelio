@@ -569,9 +569,11 @@ static void xio_handle_task_error(struct xio_task *task)
 		xio_rdma_tx_error_handler(rdma_hndl, task);
 		break;
 	case XIO_IB_RDMA_READ:
+	case XIO_IB_RDMA_READ_DIRECT:
 		xio_rdma_rd_error_handler(rdma_hndl, task);
 		break;
 	case XIO_IB_RDMA_WRITE:
+	case XIO_IB_RDMA_WRITE_DIRECT:
 		xio_rdma_wr_error_handler(rdma_hndl, task);
 		break;
 	default:
