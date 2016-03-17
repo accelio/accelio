@@ -71,9 +71,14 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	struct xio_session_hdr		hdr;
 	struct xio_session		*session = connection->session;
 	int				retval;
-	struct xio_session_event_data  error_event = {};
-
-	error_event.event = XIO_SESSION_ERROR_EVENT;
+	struct xio_session_event_data  error_event = {
+		.conn = NULL,
+		.conn_user_context = NULL,
+		.event = XIO_SESSION_ERROR_EVENT,
+		.reason = XIO_E_SUCCESS,
+		.private_data = NULL,
+		.private_data_len = 0,
+	};
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);

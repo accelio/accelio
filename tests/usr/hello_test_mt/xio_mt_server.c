@@ -125,13 +125,15 @@ static struct msg_params msg_prms;
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 static struct xio_test_config  test_config = {
-	XIO_DEF_ADDRESS,
-	XIO_DEF_PORT,
-	XIO_DEF_TRANSPORT,
-	XIO_DEF_CPU,
-	XIO_DEF_HEADER_SIZE,
-	XIO_DEF_DATA_SIZE,
-	XIO_DEF_POLL
+	.server_addr = XIO_DEF_ADDRESS,
+	.server_port = XIO_DEF_PORT,
+	.transport = XIO_DEF_TRANSPORT,
+	.cpu = XIO_DEF_CPU,
+	.hdr_len = XIO_DEF_HEADER_SIZE,
+	.data_len = XIO_DEF_DATA_SIZE,
+	.poll_timeout = XIO_DEF_POLL,
+	.finite_run = 0,
+	.pad = 0,
 };
 
 static struct portals_vec *portals_get(struct server_data *server_data,

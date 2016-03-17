@@ -61,7 +61,8 @@ static int sessions_cache_add(struct xio_session *session,
 {
 	struct xio_session *s;
 	struct xio_key_int32  key = {
-		session_id
+		.id = session_id,
+		.pad = {0},
 	};
 	HT_LOOKUP(&sessions_cache, &key, s, sessions_htbl);
 	if (s)

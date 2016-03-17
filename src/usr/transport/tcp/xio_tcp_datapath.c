@@ -3526,9 +3526,9 @@ int xio_tcp_cancel_req(struct xio_transport_base *transport,
 	struct xio_task			*ptask, *next_ptask;
 	union xio_transport_event_data	event_data;
 	struct xio_tcp_task		*tcp_task;
-	struct xio_tcp_cancel_hdr	cancel_hdr = {};
-
-	cancel_hdr.hdr_len = sizeof(cancel_hdr);
+	struct xio_tcp_cancel_hdr	cancel_hdr = {
+		.hdr_len = sizeof(cancel_hdr),
+	};
 
 	/* look in the tx_ready */
 	list_for_each_entry_safe(ptask, next_ptask, &tcp_hndl->tx_ready_list,
@@ -3624,7 +3624,10 @@ int xio_tcp_cancel_rsp(struct xio_transport_base *transport,
 	struct xio_tcp_transport *tcp_hndl =
 		(struct xio_tcp_transport *)transport;
 	struct xio_tcp_task	*tcp_task;
-	struct  xio_tcp_cancel_hdr cancel_hdr = {};
+	struct  xio_tcp_cancel_hdr cancel_hdr = {
+		.hdr_len = sizeof(cancel_hdr),
+		.result       = result,
+	};
 
 	cancel_hdr.hdr_len	= sizeof(cancel_hdr);
 	cancel_hdr.result	= result;
