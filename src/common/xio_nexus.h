@@ -177,6 +177,7 @@ struct xio_nexus {
 
 	struct xio_observer_event	observer_event;
 	xio_work_handle_t               observer_work;
+	struct mutex			lock_connect;      /* lock nexus connect */
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };
