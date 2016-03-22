@@ -48,7 +48,7 @@
 #include <assert.h>
 #include <libraio.h>
 
-#include "../fio.h"
+#include "fio.h"
 
 #ifdef VISIBILITY
 #define __RAIO_PUBLIC __attribute__((visibility("default")))
