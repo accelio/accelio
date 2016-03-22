@@ -302,7 +302,7 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 		return 0;
 	case XIO_OPTNAME_MAX_OUT_IOVLEN:
 		*optlen = sizeof(int);
-		 *((int *)optval) = g_options.max_in_iovsz;
+		 *((int *)optval) = g_options.max_out_iovsz;
 		 return 0;
 	case XIO_OPTNAME_ENABLE_RECONNECT:
 		*optlen = sizeof(int);
