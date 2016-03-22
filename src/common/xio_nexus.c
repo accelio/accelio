@@ -1210,6 +1210,7 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	kref_init(&nexus->kref);
 	nexus->state			= XIO_NEXUS_STATE_OPEN;
 	nexus->is_first_req		= 1;
+	mutex_init(&nexus->lock_connect);
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 
