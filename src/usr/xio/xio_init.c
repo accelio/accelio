@@ -45,6 +45,7 @@
 #include "xio_observer.h"
 #include "xio_transport.h"
 #include "xio_idr.h"
+#include "xio_init.h"
 
 int		page_size;
 double		g_mhz;
@@ -84,6 +85,8 @@ static void xio_dtor(void)
 	size_t i;
 
 	for (i = 0; i < transport_tbl_sz; i++) {
+		if (transport_tbl[i] == NULL)
+			continue;
 		if (transport_tbl[i]->release)
 			transport_tbl[i]->release(transport_tbl[i]);
 
@@ -121,6 +124,8 @@ static void xio_ctor(void)
 	nexus_cache_construct();
 
 	for (i = 0; i < transport_tbl_sz; i++) {
+		if (transport_tbl[i] == NULL)
+			continue;
 		xio_reg_transport(transport_tbl[i]);
 
 		if (transport_tbl[i]->ctor)
@@ -150,15 +155,12 @@ void xio_shutdown(void)
 	mutex_unlock(&ini_mutex);
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_constructor like module init					     */
-/*---------------------------------------------------------------------------*/
-LIBRARY_INITIALIZER(xio_constructor)
+int xio_inited(void)
 {
-	xio_init();
+	int ret;
+	mutex_lock(&ini_mutex);
+	ret = ini_refcnt;
+	mutex_unlock(&ini_mutex);
+	return ret;
 }
 
-LIBRARY_FINALIZER(xio_destructor)
-{
-	xio_shutdown();
-}

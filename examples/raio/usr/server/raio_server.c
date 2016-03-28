@@ -43,6 +43,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <sys/queue.h>
+#include "bitset.h"
 #include "libxio.h"
 #include "raio_handlers.h"
 #include <arpa/inet.h>
@@ -50,7 +51,6 @@
 /*---------------------------------------------------------------------------*/
 /* preprocessor macros							     */
 /*---------------------------------------------------------------------------*/
-#define MAX_THREADS		6
 #define POLLING_TIME_USEC	70
 
 #ifndef TAILQ_FOREACH_SAFE
@@ -73,7 +73,7 @@
 struct portals_vec {
 	int				vec_len;
 	int				pad;
-	const char			*vec[MAX_THREADS];
+	const char			**vec;
 };
 
 struct raio_thread_data {
@@ -128,16 +128,17 @@ struct raio_server_data {
 
 	SLIST_HEAD(, raio_session_data)		sessions_list;
 
-	pthread_t				thread_id[MAX_THREADS];
-	struct raio_thread_data			tdata[MAX_THREADS];
+	pthread_t				*thread_id;
+	struct raio_thread_data			*tdata;
 };
 
 static char		*server_addr;
 static char		*transport;
 static int		finite_run;
 static uint16_t		server_port;
-static uint64_t		cpumask;
+static char		*cpumask;
 static int		extra_perf;
+static int		MAX_THREADS;
 
 /*---------------------------------------------------------------------------*/
 /* portals_get								     */
@@ -149,6 +150,8 @@ static struct portals_vec *portals_get(struct raio_server_data *server_data,
 	int			i, j;
 	struct portals_vec *portals =
 		(struct portals_vec *)calloc(1, sizeof(*portals));
+
+	portals->vec = (const char **)calloc(MAX_THREADS, sizeof(char*));
 
 	for (i = 0; i < MAX_THREADS; i++) {
 		j = (server_data->tot_sessions + i) % MAX_THREADS;
@@ -170,6 +173,7 @@ static void portals_free(struct portals_vec *portals)
 	for (i = 0; i < portals->vec_len; i++)
 		free((char *)(portals->vec[i]));
 
+	free(portals->vec);
 	free(portals);
 }
 
@@ -516,6 +520,7 @@ static void usage(const char *app)
 	printf("\t--transport, -t <name> : rdma,tcp (default: rdma)\n");
 	printf("\t--extra-perf, -e       : extra performance at expence\n");
 	printf("\t                         of CPU usage (default: false)\n");
+	printf("\t--threads, -n <num>    : number of threads (default: 6)\n");
 	printf("\t--help, -h             : print this message and exit\n");
 	exit(0);
 }
@@ -530,6 +535,11 @@ static void free_cmdline_params(void)
 		free(transport);
 		transport = NULL;
 	}
+	if (cpumask) {
+		free(cpumask);
+		cpumask = NULL;
+	}
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -544,18 +554,20 @@ int parse_cmdline(int argc, char **argv)
 		{ .name = "transport", .has_arg = 1, .val = 't'},
 		{ .name = "finite", .has_arg = 1, .val = 'f'},
 		{ .name = "extra-perf", .has_arg = 1, .val = 'e'},
+		{ .name = "threads", .has_arg = 1, .val = 'n'},
 		{ .name = "help", .has_arg = 0, .val = 'h'},
 		{0, 0, 0, 0},
 	};
-	static char *short_options = "a:p:c:t:f:h:e:";
+	static char *short_options = "a:p:c:t:f:h:e:n:";
 	int c;
 
 	server_addr = NULL;
 	transport = NULL;
 	server_port = 0;
-	cpumask = 0;
+	cpumask = NULL;
 	finite_run = 0;
 	extra_perf = 0;
+	MAX_THREADS = 6;
 
 	optind = 0;
 	opterr = 0;
@@ -578,7 +590,7 @@ int parse_cmdline(int argc, char **argv)
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'c':
-			cpumask = strtoll(optarg, NULL, 16);
+			cpumask = strdup(optarg);
 			break;
 		case 't':
 			if (!transport)
@@ -592,6 +604,10 @@ int parse_cmdline(int argc, char **argv)
 			break;
 		case 'e':
 			extra_perf =
+				(uint16_t) strtol(optarg, NULL, 0);
+			break;
+		case 'n':
+			MAX_THREADS =
 				(uint16_t) strtol(optarg, NULL, 0);
 			break;
 		case 'h':
@@ -634,7 +650,7 @@ int main(int argc, char *argv[])
 	int			curr_cpu;
 	int			max_cpus;
 	int			opt;
-	uint64_t		cpu_mask;
+        bitset                  *b = NULL, *bdup = NULL;
 
 	parse_cmdline(argc, argv);
 	if (!server_addr || server_port == 0) {
@@ -677,11 +693,28 @@ int main(int argc, char *argv[])
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_XFER_BUF_ALIGN,
 		    &opt, sizeof(int));
 
-	curr_cpu = sched_getcpu();
-	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-	cpu_mask = cpumask;
+	opt = 0;
+	xio_set_opt(NULL,
+		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_KEEPALIVE,
+		    &opt, sizeof(int));
 
 	memset(&server_data, 0, sizeof(server_data));
+
+        curr_cpu = sched_getcpu();
+	max_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+        if (cpumask) {
+                b = str_to_bitset(cpumask, NULL);
+                if (!b) {
+                        fprintf(stderr, "failed to parse cpumask\n");
+                        goto cleanup;
+                }
+                bdup = bitset_dup(b);
+                if (!bdup) {
+                        fprintf(stderr, "failed to duplicate bitset\n");
+                        goto cleanup;
+                }
+        }
 	server_data.finite_run = finite_run;
 	server_data.extra_perf = extra_perf;
 	SLIST_INIT(&server_data.sessions_list);
@@ -700,21 +733,26 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
+	server_data.tdata = (struct raio_thread_data *)
+				calloc(MAX_THREADS, sizeof(struct raio_thread_data));
+	server_data.thread_id = (pthread_t *)
+				calloc(MAX_THREADS, sizeof(pthread_t));
 	/* spawn portals */
 	for (i = 0; i < MAX_THREADS; i++) {
 		server_data.tdata[i].server_data = &server_data;
 		server_data.tdata[i].id = i;
-		if (cpu_mask) {
-			int cpu = ffsll(cpu_mask) - 1;
+                if (b) {
+                        int cpu = bitset_firstset(b);
+                        server_data.tdata[i].affinity = cpu;
 
-			server_data.tdata[i].affinity = cpu;
-			cpu_mask &= ~(1ULL << cpu);
-			if (!cpu_mask)
-				cpu_mask = cpumask;
-		} else {
-			server_data.tdata[i].affinity =
-					(curr_cpu + i) % max_cpus;
-		}
+                        bitset_unset(b, cpu);
+
+                        if (bitset_isempty(b))
+                                bitset_copy(b, bdup);
+                } else {
+                        server_data.tdata[i].affinity =
+                                (curr_cpu + i) % max_cpus;
+                }
 		printf("[%d] affinity:%d/%d\n", i,
 		       server_data.tdata[i].affinity, max_cpus);
 		server_port++;
@@ -732,6 +770,8 @@ int main(int argc, char *argv[])
 	for (i = 0; i < MAX_THREADS; i++)
 		pthread_join(server_data.thread_id[i], NULL);
 
+	free(server_data.thread_id);
+	free(server_data.tdata);
 	/* free the server */
 	xio_unbind(server);
 cleanup:
@@ -739,6 +779,14 @@ cleanup:
 	xio_context_destroy(server_data.ctx);
 
 	xio_shutdown();
+
+        if (b)
+                bitset_free(b);
+
+        if (bdup)
+                bitset_free(bdup);
+
+	free_cmdline_params();
 
 	return 0;
 }

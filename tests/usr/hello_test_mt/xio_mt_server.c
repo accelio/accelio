@@ -617,7 +617,7 @@ int main(int argc, char *argv[])
 	int			exit_code = 0;
 	void			*thr_exit_code;
 
-
+	xio_init();
 
 	memset(&server_data, 0, sizeof(server_data));
 

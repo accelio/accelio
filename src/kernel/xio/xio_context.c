@@ -222,6 +222,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 			goto cleanup2;
 		}
 	}
+	spin_lock_init(&ctx->ctx_list_lock);
 
 	xio_idr_add_uobj(usr_idr, ctx, "xio_context");
 	return ctx;

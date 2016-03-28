@@ -883,9 +883,13 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 
 	tcp_hndl->tx_comp_cnt = 0;
 
-	if (tcp_hndl->tx_ready_tasks_num)
-		xio_tcp_xmit(tcp_hndl);
-
+    /* after work completion - report disconnect */
+    if (tcp_hndl->state == XIO_TRANSPORT_STATE_DISCONNECTED) {
+        xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+    } else {
+        if (tcp_hndl->tx_ready_tasks_num)
+            xio_tcp_xmit(tcp_hndl);
+    }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -893,30 +897,33 @@ static void xio_tcp_tx_completion_handler(void *xio_task)
 /*---------------------------------------------------------------------------*/
 void xio_tcp_disconnect_helper(void *xio_tcp_hndl)
 {
-	struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
-						xio_tcp_hndl;
+        struct xio_tcp_transport *tcp_hndl = (struct xio_tcp_transport *)
+                                             xio_tcp_hndl;
 
-	if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
-		return;
+        if (tcp_hndl->state >= XIO_TRANSPORT_STATE_DISCONNECTED)
+                return;
 
-	tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
+        tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 
-	/* flush all tasks in completion */
+        /* flush all tasks in completion */
         if (!list_empty(&tcp_hndl->in_flight_list)) {
-		struct xio_task *task = NULL;
+                struct xio_task *task = NULL;
 
-		task = list_last_entry(&tcp_hndl->in_flight_list,
-				       struct xio_task,
-				       tasks_list_entry);
-		if (task) {
-		    XIO_TO_TCP_TASK(task, tcp_task);
+                task = list_last_entry(&tcp_hndl->in_flight_list,
+                                       struct xio_task,
+                                       tasks_list_entry);
+                if (task) {
+                        XIO_TO_TCP_TASK(task, tcp_task);
 
-		    xio_ctx_add_work(tcp_hndl->base.ctx, task,
-				     xio_tcp_tx_completion_handler,
-				     &tcp_task->comp_work);
-		}
-	}
-	xio_context_add_event(tcp_hndl->base.ctx, &tcp_hndl->disconnect_event);
+                        xio_ctx_add_work(tcp_hndl->base.ctx, task,
+                                         xio_tcp_tx_completion_handler,
+                                         &tcp_task->comp_work);
+                }
+        } else {
+                /* call disconnect if no message to flush other wise defer */
+                xio_context_add_event(tcp_hndl->base.ctx,
+                                      &tcp_hndl->disconnect_event);
+        }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -962,10 +969,8 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 	uint64_t		bytes_sent;
 
 	if (tcp_hndl->tx_ready_tasks_num == 0 ||
-	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX)
-		return 0;
-
-	if (tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
+	    tcp_hndl->tx_comp_cnt > COMPLETION_BATCH_MAX ||
+	    tcp_hndl->state != XIO_TRANSPORT_STATE_CONNECTED) {
 		xio_set_error(XIO_EAGAIN);
 		return -1;
 	}
@@ -975,7 +980,7 @@ int xio_tcp_xmit(struct xio_tcp_transport *tcp_hndl)
 
 	/* if "ready to send queue" is not empty */
 	while (likely(tcp_hndl->tx_ready_tasks_num &&
-		      tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX)) {
+		      (tcp_hndl->tx_comp_cnt < COMPLETION_BATCH_MAX))) {
 		next_task = list_first_entry_or_null(&task->tasks_list_entry,
 						     struct xio_task,
 						     tasks_list_entry);
@@ -1225,7 +1230,6 @@ handle_completions:
 			return retval2;
 		}
 	}
-
 	xio_context_disable_event(&tcp_hndl->flush_tx_event);
 
 	return retval < 0 ? retval : 0;
@@ -1407,7 +1411,6 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t			retval;
-	int			must_send = 0;
 	size_t			tlv_len;
 
 	/* prepare buffer for response  */
@@ -1442,42 +1445,15 @@ static int xio_tcp_send_req(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->tx_ready_tasks_num++;
 
-	/* transmit only if  available */
-	/* do not batch in tcp since tcp stack has its own considerations */
-	/*
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
-			must_send = 1;
-	}
-	*/
-	must_send = 1;
-
-	if (must_send) {
-		retval = xio_tcp_xmit(tcp_hndl);
-		if (retval) {
-			if (xio_errno() != XIO_EAGAIN) {
-				DEBUG_LOG("xio_tcp_xmit failed\n");
-				return -1;
-			}
-			retval = 0;
+	retval = xio_tcp_xmit(tcp_hndl);
+	if (retval) {
+		if (xio_errno() != XIO_EAGAIN) {
+			DEBUG_LOG("xio_tcp_xmit failed\n");
+			return -1;
 		}
-		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
-		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
-			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
-						  task,
-						  xio_tcp_tx_completion_handler,
-						  &tcp_task->comp_work);
-			if (retval) {
-				ERROR_LOG("xio_ctx_add_work failed.\n");
-				return retval;
-			}
-		}
-	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
+		retval = 0;
 	}
 
 	return retval;
@@ -1706,7 +1682,6 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	uint64_t		ulp_pad_len = 0;
 	uint64_t		ulp_imm_len;
 	size_t			retval;
-	int			must_send = 0;
 	int			enforce_write_rsp;
 	int			tlv_len = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
@@ -1810,45 +1785,18 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 
 	tcp_hndl->tx_ready_tasks_num++;
 
-	/* transmit only if  available */
-	/* do not batch in tcp since tcp stack has its own considerations */
-	/*
-	if (test_bits(XIO_MSG_FLAG_LAST_IN_BATCH, &task->omsg->flags) ||
-	    task->is_control) {
-		must_send = 1;
-	} else {
-		if (tcp_hndl->tx_ready_tasks_num >= TX_BATCH)
-			must_send = 1;
-	}
-	*/
-	must_send = 1;
-
-	if (must_send) {
-		retval = xio_tcp_xmit(tcp_hndl);
-		if (retval) {
-			/* no need xio_get_last_error here */
-			retval = xio_errno();
-			if (retval != XIO_EAGAIN) {
-				ERROR_LOG("xio_xmit_tcp failed. %s\n",
-					  xio_strerror(retval));
-				return -1;
-			}
-			retval = 0;
+	retval = xio_tcp_xmit(tcp_hndl);
+	if (retval) {
+		/* no need xio_get_last_error here */
+		retval = xio_errno();
+		if (retval != XIO_EAGAIN) {
+			ERROR_LOG("xio_xmit_tcp failed. %s\n",
+					xio_strerror(retval));
+			return -1;
 		}
-		if ((task->is_control && tcp_hndl->tx_comp_cnt) ||
-		     test_bits(XIO_MSG_FLAG_IMM_SEND_COMP, &task->omsg->flags)) {
-			retval = xio_ctx_add_work(tcp_hndl->base.ctx,
-						  task,
-						  xio_tcp_tx_completion_handler,
-						  &tcp_task->comp_work);
-			if (retval) {
-				ERROR_LOG("xio_ctx_add_work failed.\n");
-				return retval;
-			}
-		}
-	} else {
 		xio_context_add_event(tcp_hndl->base.ctx,
 				      &tcp_hndl->flush_tx_event);
+		retval = 0;
 	}
 
 	return retval;
@@ -3183,7 +3131,7 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 	int retval = 0, recvmsg_retval = 0;
 	struct xio_tcp_task *tcp_task, *next_tcp_task;
 	struct xio_task *task, *next_task/*, *task1 = NULL, *task2*/;
-	unsigned int i;
+	unsigned int i, last_in_rxq;
 	int batch_count = 0, tmp_count = 0, ret_count = 0;
 	unsigned int iov_len;
 	uint64_t bytes_recv;
@@ -3268,8 +3216,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 						struct xio_task,
 						tasks_list_entry);
 		}
-		tmp_count = 0;
-
 		if (tcp_hndl->tmp_work.msg.msg_iovlen) {
 			tcp_task = (struct xio_tcp_task *)task->dd_data;
 			rxd_work = xio_tcp_get_data_rxd(task);
@@ -3285,9 +3231,21 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 		tcp_hndl->tmp_work.msg_len = 0;
 		tcp_hndl->tmp_work.tot_iov_byte_len = 0;
 
+                /* look for the maximum last in rxq index */
+                tmp_count = 0;
+                last_in_rxq = 0;
+                list_for_each_entry(task, &tcp_hndl->rx_list, tasks_list_entry) {
+                        if (IS_APPLICATION_MSG(task->tlv_type))
+                                last_in_rxq = (int)tmp_count;
+                        if (++tmp_count == (int)i)
+                                break;
+                }
+                tmp_count = 0;
+
 		task = list_first_entry(&tcp_hndl->rx_list, struct xio_task,
 					tasks_list_entry);
 		while (i--) {
+                        task->last_in_rxq = (ret_count == (int)last_in_rxq);
 			++ret_count;
 			tcp_task = (struct xio_tcp_task *)task->dd_data;
 			switch (task->tlv_type) {
@@ -3298,9 +3256,6 @@ int xio_tcp_rx_data_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				xio_tcp_on_recv_cancel_rsp_data(tcp_hndl, task);
 				break;
 			default:
-				task->last_in_rxq =
-				    (IS_APPLICATION_MSG(task->tlv_type) &&
-				     (i == 0));
 				if (IS_REQUEST(task->tlv_type)) {
 					retval =
 					xio_tcp_on_recv_req_data(tcp_hndl,

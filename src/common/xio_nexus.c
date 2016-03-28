@@ -92,7 +92,7 @@ static int xio_nexus_flush_tx_queue(struct xio_nexus *nexus);
 static int xio_nexus_destroy(struct xio_nexus *nexus);
 static int xio_nexus_xmit(struct xio_nexus *nexus);
 static void xio_nexus_destroy_handler(void *nexus_);
-static void xio_nexus_disconnect_handler(void *nexus_);
+static void xio_nexus_disconnected(void *nexus_);
 static void xio_nexus_trans_error_handler(void *ev_params_);
 
 /*---------------------------------------------------------------------------*/
@@ -191,9 +191,9 @@ static int xio_nexus_delete_observer(struct xio_nexus *nexus,
 struct xio_observer *xio_nexus_observer_lookup(struct xio_nexus *nexus,
 					       uint32_t id)
 {
-	struct xio_observers_htbl_node	*node;
+	struct xio_observers_htbl_node	*node, *next_node;
 
-	list_for_each_entry(node,
+	list_for_each_entry_safe(node, next_node,
 			    &nexus->observers_htbl,
 			    observers_htbl_node) {
 		if (node->id == id)
@@ -210,8 +210,10 @@ void xio_nexus_reg_observer(struct xio_nexus *nexus,
 			    struct xio_observer *observer,
 			    uint32_t oid)
 {
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_observable_reg_observer(&nexus->observable, observer);
 	xio_nexus_hash_observer(nexus, observer, oid);
+	spin_unlock(&nexus->nexus_obs_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -220,8 +222,10 @@ void xio_nexus_reg_observer(struct xio_nexus *nexus,
 void xio_nexus_unreg_observer(struct xio_nexus *nexus,
 			      struct xio_observer *observer)
 {
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_nexus_delete_observer(nexus, observer);
 	xio_observable_unreg_observer(&nexus->observable, observer);
+	spin_unlock(&nexus->nexus_obs_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -496,8 +500,22 @@ static int xio_nexus_swap(struct xio_nexus *old, struct xio_nexus *_new)
 		return -1;
 	}
 
-	/* silently close new_nexus */
-	xio_nexus_close(_new, NULL);
+	/*
+	 * Unregister the new_nexus (it was temporary) from the context.
+	 */
+	xio_context_unreg_observer(_new->transport_hndl->ctx, &_new->ctx_observer);
+
+	/* silently destroy new_nexus (it was temporary) but do not close
+	 * its transport handler since it was copied from _new to old,
+	 * _new->transport_hndl is now used as old_nexus->transport_hndl.
+	 *
+	 * if the failure is on the client side, destroy the temporary new_nexus.
+	 * if the failure is on the server side, the temporary new_nexus will be
+	 * destroyed after the transport closes (by calling xio_nexus_on_transport_closed
+	 * after a XIO_TRANSPORT_EVENT_CLOSED occurs on the server side.
+	 */
+	_new->transport_hndl = NULL;
+	if (old->transport_hndl->is_client) xio_nexus_destroy(_new);
 
 	/* TODO what about messages held by the application */
 
@@ -523,6 +541,10 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 	uint32_t cid;
 	int      retval = 0;
 	uint16_t flags = 0;
+
+	if (new_nexus->state == XIO_NEXUS_STATE_CLOSED) {
+		ERROR_LOG("got a request for a closing nexus %p\n", new_nexus);
+	}
 
 	TRACE_LOG("receiving setup request\n");
 	retval = xio_nexus_read_setup_req(task, &req);
@@ -947,6 +969,7 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 	struct xio_context		*ctx;
 	enum xio_proto			proto;
 	int				retval;
+	struct xio_task			*task;
 
 	transport_hndl  = nexus->transport_hndl;
 	proto		= transport_hndl->proto;
@@ -980,6 +1003,13 @@ static int xio_nexus_primary_pool_create(struct xio_nexus *nexus)
 				ctx->primary_tasks_pool[proto]->dd_data);
 
 	nexus->primary_tasks_pool = ctx->primary_tasks_pool[proto];
+
+	/* set pool context as the nexus's transport handler */
+	nexus->primary_tasks_pool->params.pool_hooks.context = nexus->transport_hndl;
+
+	list_for_each_entry(task, &nexus->primary_tasks_pool->stack, tasks_list_entry) {
+		xio_task_reinit(nexus->transport_hndl, task);
+	}
 
 	return 0;
 }
@@ -1045,7 +1075,7 @@ static void xio_nexus_release_cb(void *data)
 	}
 
 	/* now it is zero */
-	if (nexus->transport->close)
+	if (nexus->transport && nexus->transport->close)
 		nexus->transport->close(nexus->transport_hndl);
 }
 
@@ -1159,6 +1189,8 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	XIO_OBSERVER_INIT(&nexus->srv_observer, nexus,
 			  xio_on_server_event);
 
+	spin_lock_init(&nexus->nexus_obs_lock);
+
 	XIO_OBSERVABLE_INIT(&nexus->observable, nexus);
 
 	xio_nexus_init_observers_htbl(nexus);
@@ -1178,6 +1210,7 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	kref_init(&nexus->kref);
 	nexus->state			= XIO_NEXUS_STATE_OPEN;
 	nexus->is_first_req		= 1;
+	mutex_init(&nexus->lock_connect);
 
 	xio_nexus_cache_add(nexus, &nexus->cid);
 
@@ -1212,9 +1245,6 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	}
 	nexus->destroy_event.handler		= xio_nexus_destroy_handler;
 	nexus->destroy_event.data		= nexus;
-
-	nexus->disconnect_event.handler		= xio_nexus_disconnect_handler;
-	nexus->disconnect_event.data		= nexus;
 
 	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
 	nexus->trans_error_event.data		= NULL;
@@ -1336,9 +1366,9 @@ static void xio_nexus_destroy_handler(void *nexus_)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_disconnect_handler						     */
+/* xio_nexus_disconnected						     */
 /*---------------------------------------------------------------------------*/
-static void xio_nexus_disconnect_handler(void *nexus_)
+static void xio_nexus_disconnected(void *nexus_)
 {
 	struct xio_nexus *nexus = (struct xio_nexus *)nexus_;
 	int ret;
@@ -1406,8 +1436,7 @@ static void xio_nexus_on_transport_disconnected(struct xio_nexus *nexus,
 	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
 				 &nexus->close_time_hndl);
 
-	xio_context_add_event(nexus->transport_hndl->ctx,
-			      &nexus->disconnect_event);
+	xio_nexus_disconnected(nexus);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1697,7 +1726,6 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 	DEBUG_LOG("nexus:%p - close complete\n", nexus);
 
 	xio_context_disable_event(&nexus->destroy_event);
-	xio_context_disable_event(&nexus->disconnect_event);
 	xio_context_disable_event(&nexus->trans_error_event);
 
 	kfree(nexus->trans_error_event.data);
@@ -1710,8 +1738,10 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 		xio_transport_unreg_observer(nexus->transport_hndl,
 					     &nexus->trans_observer);
 
+	spin_lock(&nexus->nexus_obs_lock);
 	xio_nexus_free_observers_htbl(nexus);
 	xio_observable_unreg_all_observers(&nexus->observable);
+	spin_unlock(&nexus->nexus_obs_lock);
 
 	if (nexus->transport_hndl)
 		xio_ctx_del_delayed_work(
@@ -1738,6 +1768,7 @@ static int xio_nexus_destroy(struct xio_nexus *nexus)
 
 	XIO_OBSERVER_DESTROY(&nexus->ctx_observer);
 	XIO_OBSERVER_DESTROY(&nexus->srv_observer);
+	mutex_destroy(&nexus->lock_connect);
 
 	kfree(nexus);
 
@@ -1780,20 +1811,12 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	     nexus->state == XIO_NEXUS_STATE_LISTEN ||
 	     nexus->state == XIO_NEXUS_STATE_INIT)) {
 		if (observer) {
+			spin_lock(&nexus->nexus_obs_lock);
 			xio_observable_reg_observer(&nexus->observable,
 						    observer);
 			xio_nexus_hash_observer(nexus, observer, oid);
+			spin_unlock(&nexus->nexus_obs_lock);
 		}
-		if (xio_is_delayed_work_pending(&nexus->close_time_hndl)) {
-			xio_ctx_del_delayed_work(ctx,
-						 &nexus->close_time_hndl);
-			kref_init(&nexus->kref);
-		} else {
-			xio_nexus_addref(nexus);
-		}
-
-		TRACE_LOG("nexus: [addref] nexus:%p, refcnt:%d\n", nexus,
-			  atomic_read(&nexus->kref.refcount));
 
 		return nexus;
 	}
@@ -1834,12 +1857,15 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 			  xio_nexus_on_transport_event);
 	XIO_OBSERVABLE_INIT(&nexus->observable, nexus);
 	INIT_LIST_HEAD(&nexus->tx_queue);
+	mutex_init(&nexus->lock_connect);
 
 	xio_nexus_init_observers_htbl(nexus);
 
 	if (observer) {
+		spin_lock(&nexus->nexus_obs_lock);
 		xio_observable_reg_observer(&nexus->observable, observer);
 		xio_nexus_hash_observer(nexus, observer, oid);
+		spin_unlock(&nexus->nexus_obs_lock);
 	}
 
 	/* start listen to server events */
@@ -1890,9 +1916,6 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	}
 	nexus->destroy_event.handler	= xio_nexus_destroy_handler;
 	nexus->destroy_event.data	= nexus;
-
-	nexus->disconnect_event.handler	= xio_nexus_disconnect_handler;
-	nexus->disconnect_event.data	= nexus;
 
 	nexus->trans_error_event.handler	= xio_nexus_trans_error_handler;
 	nexus->trans_error_event.data		= NULL;
@@ -1972,6 +1995,7 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		return -1;
 	}
 
+	mutex_lock(&nexus->lock_connect);
 	switch (nexus->state) {
 	case XIO_NEXUS_STATE_OPEN:
 		/* for reconnect */
@@ -1999,13 +2023,21 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		nexus->state = XIO_NEXUS_STATE_CONNECTING;
 		break;
 	case XIO_NEXUS_STATE_CONNECTED:
-		xio_nexus_notify_observer(nexus, observer,
-					  XIO_NEXUS_EVENT_ESTABLISHED,
-					  NULL);
+		/* moving the notification to the ctx the nexus is running on
+		 * to avoid session_setup_request from being sent on another thread
+		 */
+		nexus->observer_event.observer = observer;
+		nexus->observer_event.observable = &nexus->observable;
+		nexus->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
+		nexus->observer_event.event_data = NULL;
+		xio_ctx_add_work(nexus->transport_hndl->ctx, &nexus->observer_event,
+				xio_observable_notify_observer_wrapper, &nexus->observer_work);
+
 		break;
 	default:
 		break;
 	}
+	mutex_unlock(&nexus->lock_connect);
 
 	return 0;
 
@@ -2017,6 +2049,7 @@ cleanup2:
 	nexus->portal_uri = NULL;
 cleanup1:
 	ERROR_LOG("transport connect failed\n");
+	mutex_unlock(&nexus->lock_connect);
 	return -1;
 }
 
@@ -2516,6 +2549,10 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 
 	if (!nexus->transport->dup2)
 		return -1;
+
+	if (nexus->state == XIO_NEXUS_STATE_RECONNECT){
+		return 0;
+	}
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
 

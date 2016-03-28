@@ -191,6 +191,17 @@ void xio_observable_unreg_observer(struct xio_observable *observable,
 }
 EXPORT_SYMBOL(xio_observable_unreg_observer);
 
+
+/*---------------------------------------------------------------------------*/
+/* xio_observable_notify_observer_wrapper					     */
+/*---------------------------------------------------------------------------*/
+void xio_observable_notify_observer_wrapper(void *_observer_event)
+{
+	struct xio_observer_event *observer_event = (struct xio_observer_event *) _observer_event;
+	xio_observable_notify_observer(observer_event->observable, observer_event->observer,
+			observer_event->event, observer_event->event_data);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_observable_notify_observer					     */
 /*---------------------------------------------------------------------------*/
@@ -219,7 +230,8 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 				 observers_list_node) {
-		observer_node->observer->notify(
+		if(likely(observable->impl && observer_node->observer->impl))
+			observer_node->observer->notify(
 				observer_node->observer->impl,
 				observable->impl, event, event_data);
 	}

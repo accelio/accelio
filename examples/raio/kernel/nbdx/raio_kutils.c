@@ -293,16 +293,17 @@ void pack_submit_command(struct raio_iocb *iocb, int is_last_in_batch,
 /*---------------------------------------------------------------------------*/
 /* pack_setup_command				                             */
 /*---------------------------------------------------------------------------*/
-void pack_setup_command(int maxevents, void *buf, size_t *len)
+void pack_setup_command(int queues, int qdepth, void *buf, size_t *len)
 {
 	char		*buffer = buf;
-	unsigned int	overall_size = sizeof(maxevents);
+	unsigned int	overall_size = sizeof(queues) + sizeof(qdepth);
 	struct raio_command cmd = { RAIO_CMD_IO_SETUP, overall_size };
 
-	pack_u32((uint32_t *)&maxevents,
+	pack_u32((uint32_t *)&queues,
+	pack_u32((uint32_t *)&qdepth,
 	pack_u32(&cmd.data_len,
 	pack_u32(&cmd.command,
-		 buffer)));
+		 buffer))));
 
 	*len = sizeof(cmd) + overall_size;
 }

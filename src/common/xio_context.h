@@ -42,6 +42,11 @@
 #define xio_ctx_delayed_work_t  xio_delayed_work_handle_t
 
 #define XIO_PROTO_LAST  2	/* from enum xio_proto */
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+#define BACKTRACE_BUFFER_SIZE 2048
+#endif
+
 /*---------------------------------------------------------------------------*/
 /* enum									     */
 /*---------------------------------------------------------------------------*/
@@ -105,7 +110,8 @@ struct xio_context {
 	uint32_t			is_running:1;
 	uint32_t			defered_destroy:1;
 	uint32_t			prealloc_xio_inline_bufs:1;
-	uint32_t			resereved:29;
+	uint32_t			register_internal_mempool:1;
+	uint32_t			resereved:28;
 
 	struct xio_statistics		stats;
 	void				*user_context;
@@ -116,9 +122,16 @@ struct xio_context {
 	struct xio_observable		observable;
 	void				*netlink_sock;
 	xio_work_handle_t               destroy_ctx_work;
+	spinlock_t                      ctx_list_lock;
 
 	int				max_conns_per_ctx;
-	int				pad;
+#ifdef XIO_THREAD_SAFE_DEBUG
+	int                             nptrs;
+	int				pad1;
+	pthread_mutex_t                 dbg_thread_mutex;
+	void                            *buffer[BACKTRACE_BUFFER_SIZE];
+#endif
+
 };
 
 /*---------------------------------------------------------------------------*/
@@ -290,6 +303,12 @@ static inline void xio_context_msg_pool_put(void *obj)
 /*---------------------------------------------------------------------------*/
 int xio_ctx_pool_create(struct xio_context *ctx, enum xio_proto proto,
 		        enum xio_context_pool_class pool_cls);
+
+
+#ifdef XIO_THREAD_SAFE_DEBUG
+int xio_ctx_debug_thread_lock(struct xio_context *ctx);
+int xio_ctx_debug_thread_unlock(struct xio_context *ctx);
+#endif
 
 #endif /*XIO_CONTEXT_H */
 

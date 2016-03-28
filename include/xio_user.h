@@ -249,7 +249,13 @@ struct xio_context_params {
 
 	/**< number of connections that this context will handle		*/
 	int			max_conns_per_ctx;
+
+	/**< apply memory registration to internal accelio memory pool		*/
+        int                     register_internal_mempool;
+
+        int                     reserved;
 };
+
 
 /**
  * creates xio context - a context object represent concurrency unit
@@ -401,7 +407,8 @@ int xio_context_poll_wait(struct xio_context *ctx, int timeout_ms);
 /*---------------------------------------------------------------------------*/
 
 /**
- * Initiates use of the libxio.so by a process.
+ * Initiates use of the libxio.so by a process. MUST BE CALLED in the "main"
+ * method before any accelio methods are called
  *
  * Idempotent routine to initialize the library.
  *

@@ -280,6 +280,11 @@ static struct xio_mr *xio_reg_mr_ex(void **addr, size_t length, uint64_t access)
 	int				retval;
 	static int			init_transport = 1;
 
+	/* Show a warning in case the memory is non aligned */
+	if ((access & IBV_XIO_ACCESS_ALLOCATE_MR) == 0 &&
+	    ((uintptr_t)(*addr) & (page_size - 1)) != 0) {
+		WARN_LOG("Unaligned memory for address %p: length is %d while page size is %d.\n.", *addr, length, page_size);
+	}
 	/* this may the first call in application so initialize the rdma */
 	if (init_transport) {
 		struct xio_transport *transport = xio_get_transport("rdma");
@@ -467,7 +472,7 @@ int xio_mem_register(void *addr, size_t length, struct xio_reg_mem *reg_mem)
 		return -1;
 	}
 	if (list_empty(&dev_list)) {
-		if (xio_register_transport() && list_empty(&dev_list))
+		if (!xio_register_transport() && list_empty(&dev_list))
 			return xio_mem_register_no_dev(addr, length, reg_mem);
 	}
 
@@ -520,7 +525,7 @@ int xio_mem_alloc(size_t length, struct xio_reg_mem *reg_mem)
 		return -1;
 	}
 	if (list_empty(&dev_list)) {
-		if (xio_register_transport() && list_empty(&dev_list))
+		if (!xio_register_transport() && list_empty(&dev_list))
 			return xio_mem_alloc_no_dev(length, reg_mem);
 	}
 

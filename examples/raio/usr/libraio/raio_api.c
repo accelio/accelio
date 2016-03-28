@@ -405,17 +405,14 @@ struct xio_session_ops ses_ops = {
 };
 
 /*---------------------------------------------------------------------------*/
-/* raio_open								     */
+/* raio_start								     */
 /*---------------------------------------------------------------------------*/
-__RAIO_PUBLIC int raio_open(const char *transport,
-			    const struct sockaddr *addr, socklen_t addrlen,
-			    const char *pathname, int flags)
+__RAIO_PUBLIC int raio_start(const char *transport,
+			    const struct sockaddr *addr, socklen_t addrlen)
 
 {
-	int				retval;
 	char				url[256];
 	struct raio_session_data	*session_data;
-	int				raio_err = 0;
 	int				fd;
 	int				opt;
 	struct xio_session_params	params;
@@ -488,36 +485,6 @@ __RAIO_PUBLIC int raio_open(const char *transport,
 	if (session_data->conn == NULL)
 		goto cleanup1;
 
-	msg_reset(&session_data->cmd_req);
-	pack_open_command(pathname, flags,
-			  session_data->cmd_req.out.header.iov_base,
-			  &session_data->cmd_req.out.header.iov_len);
-
-	xio_send_request(session_data->conn, &session_data->cmd_req);
-
-	/* the default xio supplied main loop */
-	xio_context_run_loop(session_data->ctx, XIO_INFINITE);
-
-	if (session_data->disconnected) {
-		retval = -1;
-		raio_err = ECONNREFUSED;
-		goto cleanup1;
-	}
-
-	retval = unpack_open_answer(
-			(char *)session_data->cmd_rsp->in.header.iov_base,
-			session_data->cmd_rsp->in.header.iov_len,
-			&session_data->fd);
-
-	/* acknowledge xio that response is no longer needed */
-	xio_release_response(session_data->cmd_rsp);
-
-	if (retval == -1) {
-		raio_err = errno;
-		xio_disconnect(session_data->conn);
-		goto cleanup1;
-	}
-
 	errno = 0;
 	fd = rsd_list_add(session_data);
 
@@ -537,11 +504,86 @@ cleanup:
 	/* free the context */
 	xio_context_destroy(session_data->ctx);
 
-	errno = raio_err;
-
-	printf("libraio: raio_open failed. %m\n");
+	printf("libraio: raio_start failed. %m\n");
 
 	return -1;
+}
+
+/*---------------------------------------------------------------------------*/
+/* raio_stop								     */
+/*---------------------------------------------------------------------------*/
+__RAIO_PUBLIC int raio_stop(int fd)
+{
+	struct raio_session_data *session_data = rsd_list_find(fd);
+	if (session_data == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	rsd_list_remove(session_data);
+
+	if (!session_data->disconnected) {
+		xio_disconnect(session_data->conn);
+		xio_context_run_loop(session_data->ctx, XIO_INFINITE);
+		xio_session_destroy(session_data->session);
+	}
+	/* free the context */
+	xio_context_destroy(session_data->ctx);
+
+	xio_shutdown();
+
+	free(session_data);
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* raio_open								     */
+/*---------------------------------------------------------------------------*/
+__RAIO_PUBLIC int raio_open(int fd, const char *pathname, int flags)
+
+{
+	int				retval;
+
+	struct raio_session_data *session_data = rsd_list_find(fd);
+	if (session_data == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	msg_reset(&session_data->cmd_req);
+	pack_open_command(pathname, flags,
+			  session_data->cmd_req.out.header.iov_base,
+			  &session_data->cmd_req.out.header.iov_len);
+
+	xio_send_request(session_data->conn, &session_data->cmd_req);
+
+	/* the default xio supplied main loop */
+	xio_context_run_loop(session_data->ctx, XIO_INFINITE);
+
+	if (session_data->disconnected) {
+		errno  = ECONNRESET;
+		return -1;
+	}
+
+	retval = unpack_open_answer(
+			(char *)session_data->cmd_rsp->in.header.iov_base,
+			session_data->cmd_rsp->in.header.iov_len,
+			&session_data->fd);
+
+	if (retval == -1)
+		retval = errno;
+
+	/* acknowledge xio that response is no longer needed */
+	xio_release_response(session_data->cmd_rsp);
+
+	if (retval) {
+		errno = retval;
+		return -1;
+	}
+
+	errno = 0;
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -550,7 +592,6 @@ cleanup:
 __RAIO_PUBLIC int raio_close(int fd)
 {
 	int				retval = -1;
-	int				raio_err = 0;
 
 	struct raio_session_data *session_data = rsd_list_find(fd);
 	if (session_data == NULL) {
@@ -560,8 +601,7 @@ __RAIO_PUBLIC int raio_close(int fd)
 
 
 	if (session_data->disconnected) {
-		retval  = 0;
-		goto cleanup;
+		return 0;
 	}
 
 	msg_reset(&session_data->cmd_req);
@@ -579,29 +619,12 @@ __RAIO_PUBLIC int raio_close(int fd)
 			(char *)session_data->cmd_rsp->in.header.iov_base,
 			session_data->cmd_rsp->in.header.iov_len);
 	if (retval == -1) {
-		raio_err = errno;
 		printf("libraio: raio_close failed: %m\n");
 	}
 
 	/* acknowledge xio that response is no longer needed */
 	xio_release_response(session_data->cmd_rsp);
 
-cleanup:
-	rsd_list_remove(session_data);
-
-	if (!session_data->disconnected) {
-		xio_disconnect(session_data->conn);
-		xio_context_run_loop(session_data->ctx, XIO_INFINITE);
-		xio_session_destroy(session_data->session);
-	}
-	/* free the context */
-	xio_context_destroy(session_data->ctx);
-
-	xio_shutdown();
-
-	free(session_data);
-
-	errno = raio_err;
 	return retval;
 }
 
@@ -672,8 +695,8 @@ __RAIO_PUBLIC int raio_setup(int fd, int maxevents, raio_context_t *ctxp)
 
 	msg_reset(&session_data->cmd_req);
 	pack_setup_command(
-			session_data->fd,
-			session_data->maxevents,
+			1 /* queues */,
+			session_data->maxevents /* queue depth */,
 			session_data->cmd_req.out.header.iov_base,
 			&session_data->cmd_req.out.header.iov_len);
 

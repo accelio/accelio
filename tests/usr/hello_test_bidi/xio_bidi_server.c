@@ -622,6 +622,7 @@ int main(int argc, char *argv[])
 	if (parse_cmdline(&test_config, argc, argv) != 0)
 		return -1;
 
+	xio_init();
 	memset(&reg_mem, 0, sizeof reg_mem);
 	print_test_config(&test_config);
 

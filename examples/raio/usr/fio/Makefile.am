@@ -8,10 +8,11 @@ else
 endif
 
 AM_CFLAGS = -D_GNU_SOURCE -DFIO_INC_DEBUG -DPIC			    \
-	    -include ../config-host.h 				    \
+	    -include $(FIO_ROOT)/config-host.h 			    \
 	    -Wall -O2 -g -shared -rdynamic -fPIC		    \
 	    -I$(top_srcdir)/include/  		  		    \
-	    -I$(top_srcdir)/examples/raio/usr/libraio	    \
+	    -I$(top_srcdir)/examples/raio/usr/libraio	    	    \
+	    -I$(FIO_ROOT)/					    \
 	    -I$(FIO_ROOT)/engines/
 
 #AM_LDFLAGS = -lraio -lxio -lrdmacm -libverbs -ldl -lrt -lpthread  \

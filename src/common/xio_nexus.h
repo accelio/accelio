@@ -171,8 +171,13 @@ struct xio_nexus {
 	uint32_t			trans_attr_mask;
 	struct xio_transport_init_attr	trans_attr;
 	struct xio_ev_data		destroy_event;
-	struct xio_ev_data		disconnect_event;
 	struct xio_ev_data		trans_error_event;
+	spinlock_t			nexus_obs_lock;
+	int 					pad2;
+
+	struct xio_observer_event	observer_event;
+	xio_work_handle_t               observer_work;
+	struct mutex			lock_connect;      /* lock nexus connect */
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;
 };

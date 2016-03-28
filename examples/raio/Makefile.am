@@ -43,7 +43,8 @@ libraio_la_LDFLAGS = -lxio $(libxio_rdma_ldflags) -laio -lrt -lpthread \
 		     -L$(top_builddir)/src/usr/
 
 # list of sources for the binary
-raio_server_SOURCES = ./usr/server/raio_server.c			\
+raio_server_SOURCES = ./usr/server/bitset.c				\
+		      ./usr/server/raio_server.c			\
 		      ./usr/server/raio_handlers.c			\
 		      ./usr/server/raio_bs.c 				\
 		      ./usr/server/raio_bs_null.c			\

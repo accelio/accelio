@@ -516,10 +516,17 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		session->state = XIO_SESSION_STATE_ONLINE;
 		TRACE_LOG("session state is now ONLINE. session:%p\n", session);
 		/* notify the upper layer */
-		if (session->ses_ops.on_session_established)
+		if (session->ses_ops.on_session_established) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
 			session->ses_ops.on_session_established(
 					session, rsp,
 					session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+			xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+		}
 
 		kfree(rsp->private_data);
 		rsp->private_data = NULL;
@@ -636,8 +643,6 @@ int xio_on_nexus_refused(struct xio_session *session,
 
 	/* enable the teardown */
 	session->disable_teardown  = 0;
-	session->lead_connection = NULL;
-	session->redir_connection = NULL;
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:
@@ -652,7 +657,8 @@ int xio_on_nexus_refused(struct xio_session *session,
 		break;
 	default:
 		connection = xio_session_find_connection(session, nexus);
-		xio_connection_refused(connection);
+		if (connection)
+			xio_connection_refused(connection);
 		break;
 	}
 
@@ -690,10 +696,17 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			ev_data.conn =  session->lead_connection;
 			ev_data.conn_user_context =
 				session->lead_connection->cb_user_context;
-			if (session->ses_ops.on_session_event)
+			if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_unlock(session->lead_connection->ctx);
+#endif
 				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_lock(session->lead_connection->ctx);
+#endif
+			}
 		}
 
 		break;
@@ -712,10 +725,18 @@ int xio_on_client_nexus_established(struct xio_session *session,
 			ev_data.conn =  session->redir_connection;
 			ev_data.conn_user_context =
 				session->redir_connection->cb_user_context;
-			if (session->ses_ops.on_session_event)
+			if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_unlock(session->redir_connection->ctx);
+#endif
 				session->ses_ops.on_session_event(
 						session, &ev_data,
 						session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+				xio_ctx_debug_thread_lock(session->redir_connection->ctx);
+#endif
+			}
+
 		}
 		break;
 	case XIO_SESSION_STATE_ONLINE:
@@ -891,7 +912,7 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	if (connection) {
 		ERROR_LOG("context:%p, already assigned connection:%p\n",
 			  ctx, connection);
-		goto cleanup;
+		goto cleanup2;
 	}
 	if (session->state == XIO_SESSION_STATE_INIT) {
 		char portal[64];
@@ -1013,6 +1034,15 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 		connection->nexus_attr_mask = attr_mask;
 		connection->nexus_attr	    = attr;
 	}
+
+	if (cparams->disconnect_timeout_secs) {
+                if (cparams->disconnect_timeout_secs < XIO_MIN_CONNECTION_TIMEOUT)
+                        connection->disconnect_timeout = XIO_MIN_CONNECTION_TIMEOUT;
+                else
+                        connection->disconnect_timeout = cparams->disconnect_timeout_secs * 1000;
+	} else {
+                connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
+        }
 
 	mutex_unlock(&session->lock);
 

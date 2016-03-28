@@ -293,7 +293,7 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 		}
 
 		/* phantom task */
-		if (unlikely(rdma_task->phantom_idx)) {
+		if (rdma_task->phantom_idx) {
 			if (req_nr >= window)
 				break;
 			curr_wr = &rdma_task->rdmad;
@@ -307,7 +307,8 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 
 			rdma_task->txd.send_wr.send_flags &= ~IB_SEND_SIGNALED;
 
-			if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE) {
+			if (rdma_task->out_ib_op == XIO_IB_RDMA_WRITE  ||
+			    rdma_task->out_ib_op == XIO_IB_RDMA_WRITE_DIRECT) {
 				/*
 				if (xio_map_txmad_work_req(rdma_hndl->dev,
 							   curr_wr))
@@ -315,6 +316,11 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 				*/
 				xio_prep_rdma_wr_send_req(task, rdma_hndl,
 							  NULL /*no next*/,
+							  0 /* signaled */);
+			}
+
+			if (rdma_task->out_ib_op == XIO_IB_RDMA_READ_DIRECT) {
+				xio_prep_rdma_rd_send_req(task, rdma_hndl,
 							  0 /* signaled */);
 			}
 
@@ -1330,8 +1336,7 @@ void xio_rdma_poll_completions(struct xio_cq *tcq, int timeout_us)
 					if (!rdma_task->phantom_idx) {
 						tlv_type = xio_mbuf_read_type(
 								&task->mbuf);
-						if (IS_APPLICATION_MSG(
-							task->tlv_type)) {
+						if (IS_APPLICATION_MSG(tlv_type)) {
 							last_in_rxq = i;
 							break;
 						}
@@ -2807,6 +2812,7 @@ static int xio_rdma_prep_rsp_out_data(
 		} else {
 			/* no data at all */
 			tbl_set_nents(sgtbl_ops, sgtbl, 0);
+			rdma_task->txd.nents = 1;
 		}
 	} else {
 		if (rdma_task->req_in_sge[0].addr &&
@@ -4262,6 +4268,11 @@ static int xio_rdma_send_setup_req(struct xio_rdma_transport *rdma_hndl,
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
+
+	/* set the lkey prior to sending */
+	rdma_task->txd.send_wr.sg_list[0].lkey = rdma_hndl->dev->mr->lkey;
+
+	/* send the setup request */
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
 
 	return 0;
@@ -4319,6 +4330,11 @@ static int xio_rdma_send_setup_rsp(struct xio_rdma_transport *rdma_hndl,
 	list_move(&task->tasks_list_entry, &rdma_hndl->in_flight_list);
 
 	rdma_hndl->peer_credits--;
+
+        /* set the lkey prior to sending */
+        rdma_task->txd.send_wr.sg_list[0].lkey = rdma_hndl->dev->mr->lkey;
+
+        /* send the setup request */
 	xio_post_send(rdma_hndl, &rdma_task->txd, 1);
 
 	return 0;

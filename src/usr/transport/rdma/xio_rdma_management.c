@@ -3404,17 +3404,27 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 	max_nents	= tbl_max_nents(sgtbl_ops, sgtbl);
 
 	if ((nents > rdma_options.max_out_iovsz) ||
-	    (nents > max_nents))
+	    (nents > max_nents)) {
+		ERROR_LOG("sgl exceeded allowed size (nents=%zu, max_nents=%zu, max_out_iovsz=%zu)\n",
+			nents, max_nents, rdma_options.max_out_iovsz);
 		return 0;
+	}
 
-	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN)
+	if (vmsg->sgl_type == XIO_SGL_TYPE_IOV && nents > XIO_IOVLEN) {
+		ERROR_LOG("sgl (iovec) too big (nents=%zu, max=%zu)\n", XIO_IOVLEN);
 		return 0;
+	}
 
-	if (!vmsg->header.iov_base  && (vmsg->header.iov_len != 0))
+	if (!vmsg->header.iov_base  && (vmsg->header.iov_len != 0)) {
+		ERROR_LOG("Header ptr is NULL (vmsg=%p)\n", vmsg);
 		return 0;
+	}
 
-	if (vmsg->header.iov_len > (size_t)g_options.max_inline_xio_hdr)
+	if (vmsg->header.iov_len > (size_t)g_options.max_inline_xio_hdr){
+		ERROR_LOG("Header length exceeds max (len=%zu, max=%zu)\n",
+			vmsg->header.iov_len, (size_t)g_options.max_inline_xio_hdr);
 		return 0;
+	}
 
 	for_each_sge(sgtbl, sgtbl_ops, sge, i) {
 		if (sge_mr(sgtbl_ops, sge))
@@ -3424,8 +3434,12 @@ static int xio_rdma_is_valid_out_msg(struct xio_msg *msg)
 			return 0;
 	}
 
-	if (mr_found != nents && mr_found)
+	if (mr_found != nents && mr_found){
+		ERROR_LOG(
+			"not all entries has mr (mr_found=%d, nents=%zu)\n",
+			mr_found, nents);
 		return 0;
+	}
 
 	return 1;
 }
@@ -3528,9 +3542,44 @@ struct xio_transport xio_rdma_transport = {
 };
 
 /*---------------------------------------------------------------------------*/
-/* xio_rdma_get_transport_func_list					     */
+/* xio_is_rdma_dev_exist                                                     */
+/*---------------------------------------------------------------------------*/
+int xio_is_rdma_dev_exist()
+{
+
+    struct ibv_device **dev_list;
+	int num_devices = 0;
+    int retval = 0;
+
+	dev_list = ibv_get_device_list(&num_devices);
+	if (!dev_list)
+		return -1;
+
+	if (!*dev_list || num_devices == 0) {
+        retval = -1;
+		goto exit;
+    }
+
+exit:
+	ibv_free_device_list(dev_list);
+
+    return retval;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_rdma_get_transport_func_list                                          */
 /*---------------------------------------------------------------------------*/
 struct xio_transport *xio_rdma_get_transport_func_list(void)
 {
+	/* we wish to compile and link with rdma but
+	 * infiniband devices are not installed on the machines.
+	 * this case ignore rdma (only tcp is available for usage)
+	 */
+    if (xio_is_rdma_dev_exist() == -1) {
+	    DEBUG_LOG("no capable device installed\n");
+	    INIT_LIST_HEAD(&dev_list);
+	    return NULL;
+	}
+
 	return &xio_rdma_transport;
 }

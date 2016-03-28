@@ -224,25 +224,40 @@ int main(int argc, char *argv[])
 	struct server_data	server_data;
 	char			url[256];
 	struct	xio_msg		*rsp;
-	int			i;
+	int			i, opt, optlen;
+	struct xio_reg_mem      xbuf;
+        int 			msg_size = 0;
+        int 			max_msg_size = 0;
+        uint8_t 		*data = NULL;
 
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>"\
-		       "<finite run:optional>\n", argv[0]);
+		       "<finite run:optional> <msg size:optional>\n", argv[0]);
 		exit(1);
 	}
-	if (argc > 4)
-		test_disconnect = atoi(argv[4]);
-	else
-		test_disconnect = 0;
+        if (argc > 4)
+                test_disconnect = atoi(argv[4]);
+        else
+                test_disconnect = 0;
+        if (argc > 5)
+                msg_size = atoi(argv[5]);
 
 	/* initialize library */
 	xio_init();
+
+        /* get max msg size */
+        /* this size distinguishes between big and small msgs, where for small msgs rdma_post_send/rdma_post_recv
+        are called as opposed to to big msgs where rdma_write/rdma_read are called */
+        xio_get_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+                    XIO_OPTNAME_MAX_INLINE_XIO_DATA,
+                    &opt, &optlen);
+        max_msg_size = opt;
 
 	/* create "hello world" message */
 	memset(&server_data, 0, sizeof(server_data));
 	rsp = server_data.rsp_ring;
 	for (i = 0; i < QUEUE_DEPTH; i++) {
+		/* header */
 		rsp->out.header.iov_base =
 			strdup("hello world header response");
 		rsp->out.header.iov_len =
@@ -252,13 +267,28 @@ int main(int argc, char *argv[])
 		rsp->out.sgl_type	   = XIO_SGL_TYPE_IOV;
 		rsp->out.data_iov.max_nents = XIO_IOVLEN;
 
-		rsp->out.data_iov.sglist[0].iov_base =
-			strdup("hello world data response");
+		/* data */
+		if (msg_size < max_msg_size) { /* small msgs */
+                        rsp->out.data_iov.sglist[0].iov_base =
+                                strdup("hello world data response");
+                } else { /* big msgs */
+			if (data == NULL) {
+				printf("allocating xio memory...\n");
+				xio_mem_alloc(msg_size, &xbuf);
+				data = (uint8_t *)xbuf.addr;
+				memset(data, 0, msg_size);
+				sprintf((char *)data, "hello world data response");
+			}
+	                rsp->out.data_iov.sglist[0].mr = xbuf.mr;
+			rsp->out.data_iov.sglist[0].iov_base = data;
+		}
 
-		rsp->out.data_iov.sglist[0].iov_len =
-			strlen((const char *)
-			       rsp->out.data_iov.sglist[0].iov_base) + 1;
+                rsp->out.data_iov.sglist[0].iov_len =
+                        strlen((const char *)
+                               rsp->out.data_iov.sglist[0].iov_base) + 1;
+
 		rsp->out.data_iov.nents = 1;
+
 		rsp++;
 	}
 
@@ -289,9 +319,14 @@ int main(int argc, char *argv[])
 	rsp = server_data.rsp_ring;
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		free(rsp->out.header.iov_base);
-		free(rsp->out.data_iov.sglist[0].iov_base);
+		if (msg_size < max_msg_size) free(rsp->out.data_iov.sglist[0].iov_base);
 		rsp++;
 	}
+	if (xbuf.addr) {
+		printf("freeing xio memory...\n");
+                xio_mem_free(&xbuf);
+                xbuf.addr = NULL;
+        }
 
 	/* free the context */
 	xio_context_destroy(server_data.ctx);

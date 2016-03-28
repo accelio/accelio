@@ -35,6 +35,8 @@ DISTFILES = Makefile.in configure.ac configure ../install-sh \
 	../../common/xio_utils.c \
 	../transport/xio_ktransport.c
 
+#TODO: add prefix here to manage directory, where to place headers
+includedir = /opt/xio/include
 xiomoduledir = @kmoduledir@/extra/net/xio
 
 xiomodule := xio_core.ko
@@ -53,12 +55,12 @@ SUBDIRS ?=`pwd`
 
 install-y: all
 	$(mkdir_p) $(DESTDIR)$(xiomoduledir)
-	$(mkdir_p) /opt/xio/include
+	$(mkdir_p) $(DESTDIR)$(includedir)
 	$(INSTALL) -m 644 $(xiomodule) $(DESTDIR)$(xiomoduledir)/$(xiomodule)
-	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/libxio.h /opt/xio/include
-	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_base.h /opt/xio/include
-	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_kernel.h /opt/xio/include
-	$(INSTALL) -m 644 Module.symvers /opt/xio/include
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/libxio.h $(DESTDIR)$(includedir)
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_base.h $(DESTDIR)$(includedir)
+	$(INSTALL) -m 644 $(SUBDIRS)/../../../include/xio_kernel.h $(DESTDIR)$(includedir)
+	$(INSTALL) -m 644 Module.symvers $(DESTDIR)$(includedir)
 	-/sbin/depmod -a
 
 uninstall-y:

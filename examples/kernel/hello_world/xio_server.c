@@ -55,13 +55,19 @@ MODULE_DESCRIPTION("XIO hello server "	\
 		   "v" DRV_VERSION " (" DRV_RELDATE ")");
 MODULE_LICENSE("Dual BSD/GPL");
 
-static char *xio_argv[] = {"xio_server_example", 0, 0};
+static char *xio_argv[] = {"xio_server_example", 0, 0, 0, "rdma"};
 
 module_param_named(ip, xio_argv[1], charp, 0);
 MODULE_PARM_DESC(ip, "IP of NIC to receice request from");
 
 module_param_named(port, xio_argv[2], charp, 0);
 MODULE_PARM_DESC(port, "Port to receive request from");
+
+module_param_named(data_len, xio_argv[3], charp, 0);
+MODULE_PARM_DESC(data_len, "Msg data len of the response");
+
+module_param_named(transport, xio_argv[4], charp, 0);
+MODULE_PARM_DESC(transport, "Transport protocol to send responses with");
 
 static struct task_struct *xio_main_th;
 static struct completion cleanup_complete;
@@ -80,6 +86,7 @@ struct server_data {
 
 static struct server_data *g_server_data;
 atomic_t module_state;
+unsigned long max_data_len;
 
 #define SG_TBL_LEN 64
 /*---------------------------------------------------------------------------*/
@@ -254,8 +261,9 @@ static int xio_server_main(void *data)
 	struct xio_context_params ctx_params;
 	struct xio_context	*ctx;
 	int			i;
-	struct xio_vmsg *omsg;
-	void *buf;
+	struct xio_vmsg 	*omsg;
+	void 			*buf = NULL;
+	unsigned long           data_len = 0;
 
 	atomic_add(2, &module_state);
 
@@ -279,26 +287,36 @@ static int xio_server_main(void *data)
 	server_data->ctx = ctx;
 
 	/* create "hello world" message */
+	if (argv[3] != NULL && kstrtoul(argv[3], 0, &data_len)) { /* check, convert and assign data_len */
+		data_len = 0;
+	}
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		xio_reinit_msg(&server_data->rsp[i]);
 		omsg = &server_data->rsp[i].out;
 
 		/* header */
-		buf = kstrdup("hello world header rsp 1", GFP_KERNEL);
-		server_data->rsp[i].out.header.iov_base = buf;
-		server_data->rsp[i].out.header.iov_len = strlen(buf) + 1;
+		server_data->rsp[i].out.header.iov_base = kstrdup("hello world header rsp 1", GFP_KERNEL);
+		server_data->rsp[i].out.header.iov_len = strlen((const char *) server_data->rsp[i].out.header.iov_base) + 1;
 		/* iovec[0]*/
 		sg_alloc_table(&omsg->data_tbl, 64, GFP_KERNEL);
 		/* currently only one entry */
 		xio_init_vmsg(omsg, 1);     /* one entry (max_nents) */
-		buf = kstrdup("hello world iovec rsp", GFP_KERNEL);
+		if (data_len < max_data_len) { /* small msgs */
+			buf = kstrdup("hello world iovec rsp", GFP_KERNEL);
+		} else { /* big msgs */
+			if (!buf) {
+				pr_info("allocating xio memory...\n");
+				buf = kmalloc(data_len, GFP_KERNEL);
+				memcpy(buf, "hello world iovec rsp", 22);
+			}
+		}
 		sg_init_one(omsg->data_tbl.sgl, buf, strlen(buf) + 1);
 		/* orig_nents is 64 */
 		vmsg_sglist_set_nents(omsg, 1);
 	}
 
 	/* create url to connect to */
-	sprintf(url, "rdma://%s:%s", argv[1], argv[2]);
+	sprintf(url, "%s://%s:%s", argv[4], argv[1], argv[2]);
 	/* bind a listener server to a portal/url */
 	server = xio_bind(ctx, &server_ops, url, NULL, 0, server_data);
 	if (server) {
@@ -319,10 +337,18 @@ static int xio_server_main(void *data)
 	/* free the message */
 	for (i = 0; i < QUEUE_DEPTH; i++) {
 		kfree(server_data->rsp[i].out.header.iov_base);
-		/* Currently need to release only one entry */
-		kfree(sg_virt(server_data->rsp[i].out.data_tbl.sgl));
+		if (data_len < max_data_len) {
+			/* Currently need to release only one entry */
+			kfree(sg_virt(server_data->rsp[i].out.data_tbl.sgl));
+		}
 		xio_fini_vmsg(&server_data->rsp[i].out);
 	}
+
+        if (buf){
+                pr_info("freeing xio memory...\n");
+                kfree(buf);
+                buf = NULL;
+        }
 
 	/* free the context */
 	xio_context_destroy(ctx);
@@ -330,13 +356,13 @@ static int xio_server_main(void *data)
 	vfree(server_data);
 
 	complete_and_exit(&cleanup_complete, 0);
-
 	return 0;
 }
 
 static int __init xio_hello_init_module(void)
 {
 	int iov_len = SG_TBL_LEN;
+	int opt, optlen;
 
 	if (!(xio_argv[1] && xio_argv[2])) {
 		pr_err("NO IP or port were given\n");
@@ -353,6 +379,14 @@ static int __init xio_hello_init_module(void)
 	xio_set_opt(NULL,
 		    XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
 		    &iov_len, sizeof(int));
+
+	/* get max msg size */
+	/* this size distinguishes between big and small msgs, where for small msgs rdma_post_send/rdma_post_recv
+	are called as opposed to to big msgs where rdma_write/rdma_read are called */
+	xio_get_opt(NULL, XIO_OPTLEVEL_ACCELIO,
+		     XIO_OPTNAME_MAX_INLINE_XIO_DATA,
+		     &opt, &optlen);
+	max_data_len = opt;
 
 	xio_main_th = kthread_run(xio_server_main, xio_argv,
 				  "xio-hello-server");
