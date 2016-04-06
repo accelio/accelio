@@ -233,6 +233,8 @@ int xio_connection_send_hello_rsp(struct xio_connection *connection,
 
 char *xio_connection_state_str(enum xio_connection_state state);
 
+int xio_connection_reconnect(struct xio_connection *connection);
+
 int xio_connection_restart(struct xio_connection *connection);
 
 int xio_on_fin_req_send_comp(struct xio_connection *connection,

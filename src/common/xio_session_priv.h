@@ -146,6 +146,18 @@ struct xio_connection *xio_session_find_connection_by_ctx(
 /* Server API */
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_notify_reconnecting										     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_reconnecting(struct xio_session *session,
+		  struct xio_connection *connection);
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_reconnected										     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_reconnected(struct xio_session *session,
+		  struct xio_connection *connection);
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_setup_req_recv			                             */
 /*---------------------------------------------------------------------------*/
 int xio_on_setup_req_recv(struct xio_connection *connection,
@@ -277,6 +289,15 @@ static inline void xio_connection_set_nexus(struct xio_connection *connection,
 	connection->nexus = nexus;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_on_nexus_reconnecting												 */
+/*---------------------------------------------------------------------------*/
+int xio_on_nexus_reconnecting(struct xio_session *session,
+			     struct xio_nexus *nexus);
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_nexus_reconnected												     */
+/*---------------------------------------------------------------------------*/
 int xio_on_nexus_reconnected(struct xio_session *session,
 			     struct xio_nexus *nexus);
 

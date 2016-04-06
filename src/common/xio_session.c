@@ -522,6 +522,62 @@ void xio_session_notify_connection_error(struct xio_session *session,
 }
 
 /*---------------------------------------------------------------------------*/
+/* xio_session_notify_reconnecting										     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_reconnecting(struct xio_session *session,
+		  struct xio_connection *connection)
+{
+	struct xio_session_event_data  event = {
+		.conn = connection,
+		.conn_user_context = connection->cb_user_context,
+		.event = XIO_SESSION_CONNECTION_RECONNECTING_EVENT,
+		.reason = (enum xio_status)connection->close_reason,
+		.private_data = NULL,
+		.private_data_len = 0,
+	};
+
+	if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_session_notify_reconnected										     */
+/*---------------------------------------------------------------------------*/
+void xio_session_notify_reconnected(struct xio_session *session,
+		  struct xio_connection *connection)
+{
+	struct xio_session_event_data  event = {
+		.conn = connection,
+		.conn_user_context = connection->cb_user_context,
+		.event = XIO_SESSION_CONNECTION_RECONNECTED_EVENT,
+		.reason = XIO_E_SUCCESS,
+		.private_data = NULL,
+		.private_data_len = 0,
+	};
+
+	if (session->ses_ops.on_session_event) {
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_unlock(connection->ctx);
+#endif
+		session->ses_ops.on_session_event(
+				session, &event,
+				session->cb_user_context);
+#ifdef XIO_THREAD_SAFE_DEBUG
+		xio_ctx_debug_thread_lock(connection->ctx);
+#endif
+	}
+}
+
+/*---------------------------------------------------------------------------*/
 /* xio_on_req_recv				                             */
 /*---------------------------------------------------------------------------*/
 static int xio_on_req_recv(struct xio_connection *connection,
@@ -1085,6 +1141,26 @@ int xio_on_nexus_disconnected(struct xio_session *session,
 			xio_connection_disconnected(connection);
 		}
 	}
+
+	return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_on_nexus_reconnecting		                             */
+/*---------------------------------------------------------------------------*/
+int xio_on_nexus_reconnecting(struct xio_session *session,
+			     struct xio_nexus *nexus)
+{
+	struct xio_connection		*connection;
+
+	if (session->lead_connection &&
+	    session->lead_connection->nexus == nexus)
+		connection = session->lead_connection;
+	else
+		connection = xio_session_find_connection(session, nexus);
+
+	if (connection)
+		xio_connection_reconnect(connection);
 
 	return 0;
 }
@@ -1793,6 +1869,10 @@ const char *xio_session_event_str(enum xio_session_event event)
 		return "connection error";
 	case XIO_SESSION_ERROR_EVENT:
 		return "session error";
+	case XIO_SESSION_CONNECTION_RECONNECTING_EVENT:
+		return "connection reconnecting";
+	case XIO_SESSION_CONNECTION_RECONNECTED_EVENT:
+		return "connection reconnected";
 	};
 	return "unknown session event";
 }
