@@ -967,9 +967,6 @@ int xio_send_rdma(struct xio_connection *conn,
  * release one way message resources back to xio when message is no longer
  * needed
  *
- * @note	the message is allocated by the application and is not freed
- *		by this function
- *
  * @param[in] msg	The released message
  *
  * @return 0 on success, or -1 on error.  If an error occurs, call
