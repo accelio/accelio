@@ -658,6 +658,11 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 			 " session:%p, nexus:%p\n", observer, sender);
 		xio_on_nexus_disconnected(session, nexus, event_data);
 		break;
+	case XIO_NEXUS_EVENT_RECONNECTING:
+		DEBUG_LOG("session: [notification] - connection reconnecting" \
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_reconnecting(session, nexus);
+		break;
 	case XIO_NEXUS_EVENT_RECONNECTED:
 		DEBUG_LOG("session: [notification] - connection reconnected" \
 			 " session:%p, nexus:%p\n", observer, sender);

@@ -2458,6 +2458,10 @@ static int xio_nexus_server_reconnect(struct xio_nexus *nexus)
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
 
+	xio_observable_notify_all_observers(&nexus->observable,
+						XIO_NEXUS_EVENT_RECONNECTING,
+					    NULL);
+
 	/* Just wait and see if some client tries to reconnect */
 	retval = xio_ctx_add_delayed_work(nexus->transport_hndl->ctx,
 					  XIO_SERVER_TIMEOUT, nexus,
@@ -2555,6 +2559,10 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 	}
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
+
+	xio_observable_notify_all_observers(&nexus->observable,
+						XIO_NEXUS_EVENT_RECONNECTING,
+					    NULL);
 
 	/* All portal_uri and out_if were saved in the nexus
 	 * observer is not used in this flow
