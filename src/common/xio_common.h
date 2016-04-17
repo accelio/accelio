@@ -199,6 +199,8 @@ struct xio_options {
 	int			xfer_buf_align;
 	int			inline_xio_data_align;
 	int			enable_keepalive;
+	int			transport_close_timeout;
+	int			pad;
 
 	struct xio_options_keepalive ka;
 };

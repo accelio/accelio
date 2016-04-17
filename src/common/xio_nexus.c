@@ -2152,7 +2152,7 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		/* only client shall cause disconnection */
 		retval = xio_ctx_add_delayed_work(
 				nexus->transport_hndl->ctx,
-				XIO_NEXUS_CLOSE_TIMEOUT, nexus,
+				g_options.transport_close_timeout, nexus,
 				xio_nexus_release_cb,
 				&nexus->close_time_hndl);
 		if (retval)

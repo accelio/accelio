@@ -1234,6 +1234,12 @@ enum xio_optname {
 	 * will send msg without filling "mr" error is expected.
 	 */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,
+	/** time in milliseconds after which the nexus delayed call is
+	 * is triggered, the nexus is released and the transport (tcp
+	 * or rdma) closes. Default value is 60000 milliseconds, which are
+	 * 1 minute.
+	*/
+	XIO_OPTNAME_TRANSPORT_CLOSE_TIMEOUT,
 
 	/* XIO_OPTLEVEL_RDMA */
 	/** number of RDMA-capable HCAs on the machine. Read only	      */
