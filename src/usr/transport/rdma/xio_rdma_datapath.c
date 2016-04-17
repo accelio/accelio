@@ -176,8 +176,6 @@ static int xio_rdma_write_sn(struct xio_task *task,
 
 	/* save the current place */
 	xio_mbuf_push(mbuf);
-	/* goto to the first tlv */
-	xio_mbuf_reset(mbuf);
 	/* goto the first transport header*/
 	xio_mbuf_set_trans_hdr(mbuf);
 
@@ -4420,10 +4418,7 @@ static void xio_read_rdma_read_ack_hdr(struct xio_rdma_transport *rdma_hndl,
 {
 	struct xio_rdma_read_ack_hdr *tmp_rra;
 
-	/* goto to the first tlv */
-	xio_mbuf_reset(&task->mbuf);
-
-	/* set the mbuf after tlv header */
+	/* goto to the first tlv and set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
 
 	/* get the pointer */
@@ -4569,10 +4564,7 @@ static void xio_rdma_read_nop(struct xio_rdma_transport *rdma_hndl,
 {
 	struct  xio_nop_hdr *tmp_nop;
 
-	/* goto to the first tlv */
-	xio_mbuf_reset(&task->mbuf);
-
-	/* set the mbuf after tlv header */
+	/* goto to the first tlv and set the mbuf after tlv header */
 	xio_mbuf_set_val_start(&task->mbuf);
 
 	/* get the pointer */
