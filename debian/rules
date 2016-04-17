@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+export DESTDIR=$(CURDIR)/debian/tmp
+
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    MAKEFLAGS += -j$(NUMJOBS)
+endif
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	dh_testdir
+	./autogen.sh
+	dh_auto_configure
+	dh_auto_build --parallel
+
+override_dh_auto_install:
+	mkdir -p $(DESTDIR)/etc/ld.so.conf.d
+	sed -i 's|/sbin/ldconfig|true|' src/usr/Makefile.am
+	dh_auto_install
