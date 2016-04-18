@@ -12,9 +12,10 @@ rm -fr $releasedir
 mkdir -p $releasedir
 
 vers=$(git describe --match "v*" | sed s/^v//)
-git archive -o $releasedir/rel.tar HEAD
-tar -C $releasedir -xf $releasedir/rel.tar
-cd $releasedir
+name="libxio-$vers"
+git archive --prefix "$name/" --format tar.gz -o $releasedir/${name}.orig.tar.gz HEAD
+tar -C $releasedir -xzf $releasedir/${name}.orig.tar.gz
+cd $releasedir/$name
 dvers="$vers-1"
 chvers=$(head -1 debian/changelog | perl -ne 's/.*\(//; s/\).*//; print')
 if [ "$chvers" != "$dvers" ]; then
@@ -26,4 +27,4 @@ if test $NPROC -gt 1 ; then
     j=-j${NPROC}
 fi
 dpkg-buildpackage $j -uc -us
-ls -ltr $releasedir/../*.deb
+ls -ltr $releasedir/*.deb
