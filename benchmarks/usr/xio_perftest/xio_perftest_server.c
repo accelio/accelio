@@ -152,19 +152,26 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
+	int			retval = 1;
 
 	if (!tdata->in_reg_mem.addr) {
-		xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
+		retval = xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
 	} else if (tdata->in_reg_mem.length < sglist[0].iov_len) {
 		xio_mem_free(&tdata->in_reg_mem);
-		xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
+		retval = xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
 	}
 
-	vmsg_sglist_set_nents(&msg->in, 1);
+	if (!retval){
+		vmsg_sglist_set_nents(&msg->in, 1);
 
-	sglist[0].iov_base	= tdata->in_reg_mem.addr;
-	sglist[0].iov_len	= tdata->in_reg_mem.length;
-	sglist[0].mr		= tdata->in_reg_mem.mr;
+		sglist[0].iov_base	= tdata->in_reg_mem.addr;
+		sglist[0].iov_len	= tdata->in_reg_mem.length;
+		sglist[0].mr		= tdata->in_reg_mem.mr;
+	} else {
+		printf("**** Error - assign_data_in_buf failed with xio_msg:\
+			%p and context: %p.\n", msg, cb_user_context);
+		return -1;
+	}
 
 	return 0;
 }

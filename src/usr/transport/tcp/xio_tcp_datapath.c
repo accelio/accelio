@@ -935,8 +935,6 @@ static int xio_tcp_write_sn(struct xio_task *task, uint16_t sn)
 
 	/* save the current place */
 	xio_mbuf_push(&task->mbuf);
-	/* goto to the first tlv */
-	xio_mbuf_reset(&task->mbuf);
 	/* goto the first transport header*/
 	xio_mbuf_set_trans_hdr(&task->mbuf);
 
@@ -1754,6 +1752,8 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 					tcp_hndl, task,
 					(uint16_t)ulp_hdr_len, 0, ulp_imm_len,
 					XIO_E_SUCCESS);
+			if (retval)
+                                goto cleanup;
 		} else {
 			ERROR_LOG("partial completion of request due " \
 					"to missing, response buffer\n");
@@ -3377,6 +3377,10 @@ int xio_tcp_rx_ctl_handler(struct xio_tcp_transport *tcp_hndl, int batch_nr)
 				break;
 			}
 			retval = xio_mbuf_read_first_tlv(&task->mbuf);
+			if (retval < 0) {
+                                exit = 1;
+                                break;
+                        }
 			tcp_task->rxd.msg.msg_iov[0].iov_base =
 					tcp_task->rxd.msg_iov[1].iov_base;
 			tcp_task->rxd.msg.msg_iov[0].iov_len =

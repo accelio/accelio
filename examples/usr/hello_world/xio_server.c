@@ -230,6 +230,9 @@ int main(int argc, char *argv[])
         int 			max_msg_size = 0;
         uint8_t 		*data = NULL;
 
+	xbuf.addr		= NULL;
+	xbuf.mr			= NULL;
+
 	if (argc < 3) {
 		printf("Usage: %s <host> <port> <transport:optional>"\
 		       "<finite run:optional> <msg size:optional>\n", argv[0]);
@@ -275,9 +278,14 @@ int main(int argc, char *argv[])
 			if (data == NULL) {
 				printf("allocating xio memory...\n");
 				xio_mem_alloc(msg_size, &xbuf);
-				data = (uint8_t *)xbuf.addr;
-				memset(data, 0, msg_size);
-				sprintf((char *)data, "hello world data response");
+				if (xbuf.addr != NULL){
+					data = (uint8_t *)xbuf.addr;
+					memset(data, 0, msg_size);
+					sprintf((char *)data, "hello world data response");
+				} else {
+			                printf("ERROR - xio_mem_alloc failed.\n");
+					exit(1);
+				}
 			}
 	                rsp->out.data_iov.sglist[0].mr = xbuf.mr;
 			rsp->out.data_iov.sglist[0].iov_base = data;
@@ -322,7 +330,7 @@ int main(int argc, char *argv[])
 		if (msg_size < max_msg_size) free(rsp->out.data_iov.sglist[0].iov_base);
 		rsp++;
 	}
-	if (xbuf.addr) {
+	if (data) {
 		printf("freeing xio memory...\n");
                 xio_mem_free(&xbuf);
                 xbuf.addr = NULL;
