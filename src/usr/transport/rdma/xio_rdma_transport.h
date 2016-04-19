@@ -63,6 +63,7 @@ extern spinlock_t		dev_list_lock;
 #define MAX_SEND_WR			(XIO_MAX_IOV + 1)
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
+#define SEND_QE				NUM_START_PRIMARY_POOL_TASKS - EXTRA_RQE - MAX_RECV_WR
 #define MAX_ACKED_CQE			128
 #define XIO_DEV_ATTR_MAX_SGE		 30
 

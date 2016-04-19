@@ -913,29 +913,6 @@ static int xio_rdma_flush_all_tasks(struct xio_rdma_transport *rdma_hndl)
 	return 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_rdma_calc_pool_size						     */
-/*---------------------------------------------------------------------------*/
-void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl)
-{
-	/* four queues are involved:
-	 * tx_ready_queue, recv_queue, sent_queue, io_submit_queue,
-	 * also note that client holds the sent and recv tasks
-	 * simultaneously
-	 */
-
-	rdma_hndl->num_tasks = 100 * (rdma_hndl->sq_depth +
-				      rdma_hndl->actual_rq_depth);
-
-	rdma_hndl->alloc_sz  = rdma_hndl->num_tasks * rdma_hndl->membuf_sz;
-
-	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
-
-	TRACE_LOG("pool size:  alloc_sz:%zd, num_tasks:%d, buf_sz:%zd\n",
-		  rdma_hndl->alloc_sz,
-		  rdma_hndl->num_tasks,
-		  rdma_hndl->membuf_sz);
-}
 
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_initial_pool_slab_pre_create				     */
@@ -1734,8 +1711,11 @@ static void xio_rdma_primary_pool_get_params(
 		    g_poptions->rcv_queue_depth_msgs +
 		    MAX_CQE_PER_QP; /* for ibv_post_recv */
 
+	if (rdma_hndl)
+		*start_nr = rdma_hndl->rq_depth + EXTRA_RQE + SEND_QE;
+	else
+		*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 
-	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr =  max(queued_nr, *start_nr);
 
@@ -2374,10 +2354,16 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->qp			= NULL;
 	rdma_hndl->tcq			= NULL;
 	rdma_hndl->base.ctx		= ctx;
-	rdma_hndl->rq_depth		= MAX_RECV_WR;
-	rdma_hndl->sq_depth		= MAX_SEND_WR;
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->max_inline_buf_sz	= xio_rdma_get_inline_buffer_size();
+
+	if (rdma_hndl->base.ctx->rq_depth) {
+		//user chose to confgure rq depth
+		rdma_hndl->rq_depth = max(g_poptions->max_in_iovsz, rdma_hndl->base.ctx->rq_depth);
+	} else {
+		rdma_hndl->rq_depth = MAX_RECV_WR;
+	}
+	rdma_hndl->sq_depth             = g_poptions->max_out_iovsz + 1;
 
 	rdma_hndl->frwr_task.dd_data = ptr_from_int64(XIO_FRWR_LI_WRID);
 

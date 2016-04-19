@@ -277,6 +277,10 @@ struct xio_context_params {
 
 	/**< number of connections that this context will handle		*/
 	int			max_conns_per_ctx;
+
+	/** depth of receive queue in RDMA.
+	* pass 0 if want the depth to remain default (XIO_MAX_IOV + constant) */
+	int         rq_depth;
 };
 
 /**

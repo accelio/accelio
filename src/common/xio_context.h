@@ -125,6 +125,8 @@ struct xio_context {
 	spinlock_t                      ctx_list_lock;
 
 	int				max_conns_per_ctx;
+	int				rq_depth;
+	int				pad;
 #ifdef XIO_THREAD_SAFE_DEBUG
 	int                             nptrs;
 	int				pad1;
