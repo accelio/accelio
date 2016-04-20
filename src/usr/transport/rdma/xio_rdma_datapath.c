@@ -4287,8 +4287,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		/* current implementation is symmetric */
 		local_buf_size  = xio_rdma_get_inline_buffer_size();
 		rsp->buffer_sz  = min(req.buffer_sz, local_buf_size);
-		rsp->sq_depth	= min(req.sq_depth, rdma_hndl->rq_depth);
-		rsp->rq_depth	= min(req.rq_depth, rdma_hndl->sq_depth);
+		rsp->sq_depth	= max(req.sq_depth, rdma_hndl->rq_depth);
+		rsp->rq_depth	= max(req.rq_depth, rdma_hndl->sq_depth);
 		rsp->max_in_iovsz	= req.max_in_iovsz;
 		rsp->max_out_iovsz	= req.max_out_iovsz;
 		rsp->max_header_len	= req.max_header_len;

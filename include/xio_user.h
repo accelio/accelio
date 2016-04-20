@@ -253,7 +253,10 @@ struct xio_context_params {
 	/**< apply memory registration to internal accelio memory pool		*/
         int                     register_internal_mempool;
 
-        int                     reserved;
+	/** depth of receive queue in RDMA.
+	* pass 0 if want the depth to remain default (XIO_MAX_IOV + constant) */
+	int                     rq_depth;
+
 };
 
 

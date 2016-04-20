@@ -1789,7 +1789,11 @@ static void xio_rdma_primary_pool_get_params(
 		    g_options.rcv_queue_depth_msgs +
 		    MAX_CQE_PER_QP; /* for ibv_post_recv */
 
-	*start_nr = NUM_START_PRIMARY_POOL_TASKS;
+	if (rdma_hndl)
+		*start_nr = rdma_hndl->rq_depth + EXTRA_RQE + SEND_QE;
+	else
+		*start_nr = NUM_START_PRIMARY_POOL_TASKS;
+
 	*alloc_nr = NUM_ALLOC_PRIMARY_POOL_TASKS;
 	*max_nr =  max(queued_nr, *start_nr);
 
@@ -2615,8 +2619,15 @@ static struct xio_transport_base *xio_rdma_open(
 	rdma_hndl->qp			= NULL;
 	rdma_hndl->tcq			= NULL;
 	rdma_hndl->base.ctx		= ctx;
-	rdma_hndl->rq_depth		= MAX_RECV_WR;
-	rdma_hndl->sq_depth		= MAX_SEND_WR;
+
+	if (rdma_hndl->base.ctx->rq_depth) {
+		//user chose to confgure rq depth
+		rdma_hndl->rq_depth = max(g_options.max_in_iovsz, rdma_hndl->base.ctx->rq_depth);
+	} else {
+		rdma_hndl->rq_depth = MAX_RECV_WR;
+	}
+	rdma_hndl->sq_depth		= g_options.max_out_iovsz + 1;
+
 	rdma_hndl->peer_credits		= 0;
 	rdma_hndl->cm_channel		= xio_cm_channel_get(ctx);
 	rdma_hndl->max_inline_buf_sz	= xio_rdma_get_inline_buffer_size();
