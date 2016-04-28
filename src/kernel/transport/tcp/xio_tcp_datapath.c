@@ -1252,23 +1252,31 @@ size_t xio_tcp_dual_sock_set_txd(struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t			iov_len;
-
-	iov_len = xio_mbuf_get_curr_offset(&task->mbuf)
-			- tcp_task->txd.ctl_msg_len;
-	tcp_task->txd.msg_iov[0].iov_len = iov_len;
-	tcp_task->txd.msg_iov[0].iov_base += tcp_task->txd.ctl_msg_len;
-
-	tcp_task->txd.tot_iov_byte_len += iov_len;
-
-	if (tcp_task->txd.msg_iov[0].iov_len == 0) {
-		MSGHDR_IOV(&tcp_task->txd.msg) = &tcp_task->txd.msg_iov[1];
+	if (IS_APPLICATION_MSG(task->tlv_type)) {
+		iov_len = xio_mbuf_get_curr_offset(&task->mbuf);
+		tcp_task->txd.ctl_msg_len = iov_len;
+		tcp_task->txd.msg_iov[0].iov_len = iov_len;
 		--tcp_task->txd.msg_len;
+		if (iov_len == 0)
+			MSGHDR_IOV(&tcp_task->txd.msg) = tcp_task->txd.msg_iov;
+		else
+			MSGHDR_IOV(&tcp_task->txd.msg) = &tcp_task->txd.msg_iov[1];
 	} else {
-		MSGHDR_IOV(&tcp_task->txd.msg) = tcp_task->txd.msg_iov;
+		iov_len = xio_mbuf_get_curr_offset(&task->mbuf)
+				- tcp_task->txd.ctl_msg_len;
+		tcp_task->txd.msg_iov[0].iov_len = iov_len;
+		tcp_task->txd.msg_iov[0].iov_base += tcp_task->txd.ctl_msg_len;
+
+		tcp_task->txd.tot_iov_byte_len += iov_len;
+
+		if (tcp_task->txd.msg_iov[0].iov_len == 0) {
+			MSGHDR_IOV(&tcp_task->txd.msg) = &tcp_task->txd.msg_iov[1];
+			--tcp_task->txd.msg_len;
+		} else {
+			MSGHDR_IOV(&tcp_task->txd.msg) = tcp_task->txd.msg_iov;
+		}
 	}
-
 	MSGHDR_IOVLEN(&tcp_task->txd.msg) = tcp_task->txd.msg_len;
-
 	return tcp_task->txd.ctl_msg_len - XIO_TLV_LEN;
 }
 
@@ -1949,7 +1957,8 @@ void xio_tcp_dual_sock_set_rxd(struct xio_task *task,
 			       void *buf, uint32_t len)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
-
+	if (IS_APPLICATION_MSG(task->tlv_type))
+		buf += task->imsg.in.header.iov_len;
 	tcp_task->rxd.msg_iov[0].iov_base = buf;
 	tcp_task->rxd.msg_iov[0].iov_len = len;
 	tcp_task->rxd.tot_iov_byte_len = len;
@@ -2174,11 +2183,16 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	tcp_task->out_tcp_op = req_hdr.out_tcp_op;
 	tcp_task->in_tcp_op = req_hdr.in_tcp_op;
 
-	tcp_hndl->socket.ops->set_rxd(task, ulp_hdr, req_hdr.ulp_hdr_len +
-			req_hdr.ulp_pad_len + req_hdr.ulp_imm_len);
-
 	switch (req_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
+		if (IS_APPLICATION_MSG(task->tlv_type))
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					(uint32_t)req_hdr.ulp_imm_len);
+		else
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					req_hdr.ulp_hdr_len +
+					req_hdr.ulp_pad_len +
+					(uint32_t)req_hdr.ulp_imm_len);
 		sgtbl		= xio_sg_table_get(&imsg->in);
 		sgtbl_ops	= xio_sg_table_ops_get(imsg->in.sgl_type);
 		if (req_hdr.ulp_imm_len) {
@@ -2196,6 +2210,8 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_READ:
+		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+				(uint32_t)req_hdr.ulp_imm_len
 		/* handle RDMA READ equivalent. */
 		TRACE_LOG("tcp read header\n");
 		retval = xio_tcp_rd_req_header(tcp_hndl, task);
@@ -2313,10 +2329,14 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 
 	switch (rsp_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
-		tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
-					      rsp_hdr.ulp_hdr_len +
-					      rsp_hdr.ulp_pad_len +
-					      rsp_hdr.ulp_imm_len);
+		if (IS_APPLICATION_MSG(task->tlv_type))
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					(uint32_t)rsp_hdr.ulp_imm_len);
+		else
+			tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
+					rsp_hdr.ulp_hdr_len +
+					rsp_hdr.ulp_pad_len +
+					rsp_hdr.ulp_imm_len);
 		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
 			tbl_set_nents(isgtbl_ops, isgtbl, 1);
@@ -2331,9 +2351,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_WRITE:
-		tcp_hndl->socket.ops->set_rxd(task->sender_task, ulp_hdr,
-					      rsp_hdr.ulp_hdr_len +
-					      rsp_hdr.ulp_pad_len);
+		tcp_hndl->socket.ops->set_rxd(task->sender_task, ulp_hdr, 0);
 		if (tcp_task->rsp_out_num_sge >
 		    tcp_sender_task->read_num_mp_mem) {
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
