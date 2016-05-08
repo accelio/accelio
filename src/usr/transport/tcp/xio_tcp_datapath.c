@@ -1381,12 +1381,16 @@ size_t xio_tcp_dual_sock_set_txd(struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t			iov_len;
-
+	/* is this is an application message than send the user header
+	 * with the XIO message to be used with assign_data_in_buf
+	 */
 	if (IS_APPLICATION_MSG(task->tlv_type)) {
 		iov_len = xio_mbuf_get_curr_offset(&task->mbuf);
 		tcp_task->txd.ctl_msg_len = iov_len;
 		tcp_task->txd.msg_iov[0].iov_len = iov_len;
+		/* header is sent with XIO management data*/
 		--tcp_task->txd.msg_len;
+		/* set the send location considering the user header */
 		if (iov_len == 0)
 			tcp_task->txd.msg.msg_iov = tcp_task->txd.msg_iov;
 		else
@@ -2375,6 +2379,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	switch (req_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		if (IS_APPLICATION_MSG(task->tlv_type))
+			/* we already got the header with the XIO management */
 			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
 					(uint32_t)req_hdr.ulp_imm_len);
 		else
@@ -2403,6 +2408,7 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_READ:
+		/* we already got the header with the XIO management */
 		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
 				(uint32_t)req_hdr.ulp_imm_len);
 		/* handle RDMA READ equivalent. */
@@ -2524,6 +2530,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	switch (rsp_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		if (IS_APPLICATION_MSG(task->tlv_type))
+			/* we already got the header with the XIO management */
 			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
 						(uint32_t)rsp_hdr.ulp_imm_len);
 		else
@@ -2545,6 +2552,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_WRITE:
+		/* the data size is set later this is only for the header size */
 		tcp_hndl->sock.ops->set_rxd(task->sender_task, ulp_hdr, 0);
 		if (tcp_task->rsp_out_num_sge >
 		    tcp_sender_task->read_num_reg_mem) {
