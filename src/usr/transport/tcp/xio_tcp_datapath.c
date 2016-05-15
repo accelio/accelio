@@ -1381,23 +1381,37 @@ size_t xio_tcp_dual_sock_set_txd(struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
 	size_t			iov_len;
-
-	iov_len = xio_mbuf_get_curr_offset(&task->mbuf)
-			- tcp_task->txd.ctl_msg_len;
-	tcp_task->txd.msg_iov[0].iov_len = iov_len;
-	inc_ptr(tcp_task->txd.msg_iov[0].iov_base, tcp_task->txd.ctl_msg_len);
-
-	tcp_task->txd.tot_iov_byte_len += iov_len;
-
-	if (tcp_task->txd.msg_iov[0].iov_len == 0) {
-		tcp_task->txd.msg.msg_iov = &tcp_task->txd.msg_iov[1];
+	/* is this is an application message than send the user header
+	 * with the XIO message to be used with assign_data_in_buf
+	 */
+	if (IS_APPLICATION_MSG(task->tlv_type)) {
+		iov_len = xio_mbuf_get_curr_offset(&task->mbuf);
+		tcp_task->txd.ctl_msg_len = iov_len;
+		tcp_task->txd.msg_iov[0].iov_len = iov_len;
+		/* header is sent with XIO management data*/
 		--tcp_task->txd.msg_len;
+		/* set the send location considering the user header */
+		if (iov_len == 0)
+			tcp_task->txd.msg.msg_iov = tcp_task->txd.msg_iov;
+		else
+			tcp_task->txd.msg.msg_iov = &tcp_task->txd.msg_iov[1];
 	} else {
-		tcp_task->txd.msg.msg_iov = tcp_task->txd.msg_iov;
+		iov_len = xio_mbuf_get_curr_offset(&task->mbuf)
+					- tcp_task->txd.ctl_msg_len;
+		tcp_task->txd.msg_iov[0].iov_len = iov_len;
+		inc_ptr(tcp_task->txd.msg_iov[0].iov_base,
+				tcp_task->txd.ctl_msg_len);
+
+		tcp_task->txd.tot_iov_byte_len += iov_len;
+
+		if (tcp_task->txd.msg_iov[0].iov_len == 0) {
+			tcp_task->txd.msg.msg_iov = &tcp_task->txd.msg_iov[1];
+			--tcp_task->txd.msg_len;
+		} else {
+			tcp_task->txd.msg.msg_iov = tcp_task->txd.msg_iov;
+		}
 	}
-
 	tcp_task->txd.msg.msg_iovlen = tcp_task->txd.msg_len;
-
 	return tcp_task->txd.ctl_msg_len - XIO_TLV_LEN;
 }
 
@@ -2124,6 +2138,8 @@ void xio_tcp_dual_sock_set_rxd(struct xio_task *task,
 			       void *buf, uint32_t len)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
+	if (IS_APPLICATION_MSG(task->tlv_type))
+		inc_ptr(buf, task->imsg.in.header.iov_len);
 	tcp_task->rxd.msg_iov[0].iov_base = buf;
 	tcp_task->rxd.msg_iov[0].iov_len = len;
 	tcp_task->rxd.tot_iov_byte_len = len;
@@ -2360,11 +2376,17 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	tcp_task->out_tcp_op = (enum xio_tcp_op_code)req_hdr.out_tcp_op;
 	tcp_task->in_tcp_op = (enum xio_tcp_op_code)req_hdr.in_tcp_op;
 
-	tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, req_hdr.ulp_hdr_len +
-			req_hdr.ulp_pad_len + (uint32_t)req_hdr.ulp_imm_len);
-
 	switch (req_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
+		if (IS_APPLICATION_MSG(task->tlv_type))
+			/* we already got the header with the XIO management */
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					(uint32_t)req_hdr.ulp_imm_len);
+		else
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					req_hdr.ulp_hdr_len +
+					req_hdr.ulp_pad_len +
+					(uint32_t)req_hdr.ulp_imm_len);
 		sgtbl		= xio_sg_table_get(&imsg->in);
 		sgtbl_ops	= (struct xio_sg_table_ops *)
 					xio_sg_table_ops_get(imsg->in.sgl_type);
@@ -2386,6 +2408,9 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_READ:
+		/* we already got the header with the XIO management */
+		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+				(uint32_t)req_hdr.ulp_imm_len);
 		/* handle RDMA READ equivalent. */
 		TRACE_LOG("tcp read header\n");
 		retval = xio_tcp_rd_req_header(tcp_hndl, task);
@@ -2504,9 +2529,14 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 
 	switch (rsp_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
-		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr, rsp_hdr.ulp_hdr_len +
-					    rsp_hdr.ulp_pad_len +
-					    (uint32_t)rsp_hdr.ulp_imm_len);
+		if (IS_APPLICATION_MSG(task->tlv_type))
+			/* we already got the header with the XIO management */
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+						(uint32_t)rsp_hdr.ulp_imm_len);
+		else
+			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+					rsp_hdr.ulp_hdr_len + rsp_hdr.ulp_pad_len +
+					(uint32_t)rsp_hdr.ulp_imm_len);
 		/* if data arrived, set the pointers */
 		if (rsp_hdr.ulp_imm_len) {
 			tbl_set_nents(isgtbl_ops, isgtbl, 1);
@@ -2522,9 +2552,8 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_WRITE:
-		tcp_hndl->sock.ops->set_rxd(task->sender_task, ulp_hdr,
-					    rsp_hdr.ulp_hdr_len +
-					    rsp_hdr.ulp_pad_len);
+		/* the data size is set later this is only for the header size */
+		tcp_hndl->sock.ops->set_rxd(task->sender_task, ulp_hdr, 0);
 		if (tcp_task->rsp_out_num_sge >
 		    tcp_sender_task->read_num_reg_mem) {
 			ERROR_LOG("local in data_iovec is too small %d < %d\n",
