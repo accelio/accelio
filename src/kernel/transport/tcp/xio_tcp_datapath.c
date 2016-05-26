@@ -2186,10 +2186,10 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 	switch (req_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		if (IS_APPLICATION_MSG(task->tlv_type))
-			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+			tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
 					(uint32_t)req_hdr.ulp_imm_len);
 		else
-			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+			tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
 					req_hdr.ulp_hdr_len +
 					req_hdr.ulp_pad_len +
 					(uint32_t)req_hdr.ulp_imm_len);
@@ -2210,8 +2210,8 @@ static int xio_tcp_on_recv_req_header(struct xio_tcp_transport *tcp_hndl,
 		}
 		break;
 	case XIO_TCP_READ:
-		tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
-				(uint32_t)req_hdr.ulp_imm_len
+		tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
+				(uint32_t)req_hdr.ulp_imm_len);
 		/* handle RDMA READ equivalent. */
 		TRACE_LOG("tcp read header\n");
 		retval = xio_tcp_rd_req_header(tcp_hndl, task);
@@ -2330,7 +2330,7 @@ static int xio_tcp_on_recv_rsp_header(struct xio_tcp_transport *tcp_hndl,
 	switch (rsp_hdr.out_tcp_op) {
 	case XIO_TCP_SEND:
 		if (IS_APPLICATION_MSG(task->tlv_type))
-			tcp_hndl->sock.ops->set_rxd(task, ulp_hdr,
+			tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
 					(uint32_t)rsp_hdr.ulp_imm_len);
 		else
 			tcp_hndl->socket.ops->set_rxd(task, ulp_hdr,
