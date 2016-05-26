@@ -1378,7 +1378,7 @@ static int xio_send_typed_msg(struct xio_connection *connection,
 			connection->tx_queued_msgs++;
 			connection->tx_bytes += tx_bytes;
 			TRACE_LOG(
-				"connection->tx_queued_msgs=%zu, connection->tx_bytes=%zu\n",
+				"connection->tx_queued_msgs=%d, connection->tx_bytes=%zu\n",
 				connection->tx_queued_msgs,
 				connection->tx_bytes);
 		}
