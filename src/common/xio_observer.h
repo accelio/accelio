@@ -136,9 +136,4 @@ static inline int xio_observable_is_empty(struct xio_observable *observable)
 	return list_empty(&observable->observers_list);
 }
 
-/*---------------------------------------------------------------------------*/
-/* xio_observable_notify_observer_wrapper					     */
-/*---------------------------------------------------------------------------*/
-void xio_observable_notify_observer_wrapper(void *_observer_event);
-
 #endif /* XIO_OBSERVER_H */
