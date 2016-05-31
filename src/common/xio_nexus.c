@@ -73,6 +73,11 @@ struct xio_event_params {
 	union xio_transport_event_data		event_data;
 };
 
+struct xio_nexus_observer_work {
+	struct xio_observer_event	observer_event;
+	xio_work_handle_t               observer_work;
+};
+
 static int xio_msecs[] = {60000, 30000, 15000, 0};
 
 #define XIO_SERVER_GRACE_PERIOD 1000
@@ -1982,19 +1987,32 @@ int xio_nexus_reconnect(struct xio_nexus *nexus)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_connect		                                             */
+/* xio_nexus_notify_observer_work                                            */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_notify_observer_work(void *_work_params)
+{
+	struct xio_nexus_observer_work  *work_params =
+                (struct xio_nexus_observer_work *) _work_params;
+	xio_observable_notify_observer(work_params->observer_event.observable,
+                                       work_params->observer_event.observer,
+                                       work_params->observer_event.event,
+                                       work_params->observer_event.event_data);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_connect                                                         */
 /*---------------------------------------------------------------------------*/
 int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		      struct xio_observer *observer, const char *out_if)
 {
 	int retval;
+        struct xio_nexus_observer_work *work_params;
 
 	if (!nexus->transport->connect) {
 		ERROR_LOG("transport does not implement \"connect\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-
 	mutex_lock(&nexus->lock_connect);
 	switch (nexus->state) {
 	case XIO_NEXUS_STATE_OPEN:
@@ -2026,12 +2044,24 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		/* moving the notification to the ctx the nexus is running on
 		 * to avoid session_setup_request from being sent on another thread
 		 */
-		nexus->observer_event.observer = observer;
-		nexus->observer_event.observable = &nexus->observable;
-		nexus->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
-		nexus->observer_event.event_data = NULL;
-		xio_ctx_add_work(nexus->transport_hndl->ctx, &nexus->observer_event,
-				xio_observable_notify_observer_wrapper, &nexus->observer_work);
+		work_params = (struct xio_nexus_observer_work *)
+				kmalloc(sizeof(*work_params), GFP_KERNEL);
+		if (unlikely(!work_params)) {
+			ERROR_LOG("failed to allocate memory\n");
+			goto cleanup1;
+		}
+		work_params->observer_event.observer = observer;
+		work_params->observer_event.observable = &nexus->observable;
+		work_params->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
+		work_params->observer_event.event_data = NULL;
+		xio_ctx_add_work(nexus->transport_hndl->ctx,
+                                 work_params,
+                                 xio_nexus_notify_observer_work,
+                                 &work_params->observer_work);
+                xio_ctx_set_work_destructor(nexus->transport_hndl->ctx,
+                                            work_params,
+                                            (void (*)(void *))kfree,
+                                            &work_params->observer_work);
 
 		break;
 	default:
