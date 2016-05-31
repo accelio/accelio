@@ -2030,10 +2030,9 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		nexus->observer_event.observable = &nexus->observable;
 		nexus->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
 		nexus->observer_event.event_data = NULL;
-		xio_ctx_add_work(nexus->transport_hndl->ctx,
-                                 &nexus->observer_event,
-                                 xio_observable_notify_all_observers_wrapper,
-                                 &nexus->observer_work);
+		xio_ctx_add_work(nexus->transport_hndl->ctx, &nexus->observer_event,
+				xio_observable_notify_observer_wrapper, &nexus->observer_work);
+
 		break;
 	default:
 		break;

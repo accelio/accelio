@@ -137,13 +137,8 @@ static inline int xio_observable_is_empty(struct xio_observable *observable)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_observable_notify_observer_wrapper				     */
+/* xio_observable_notify_observer_wrapper					     */
 /*---------------------------------------------------------------------------*/
 void xio_observable_notify_observer_wrapper(void *_observer_event);
-
-/*---------------------------------------------------------------------------*/
-/* xio_observable_notify_all_observers_wrapper				     */
-/*---------------------------------------------------------------------------*/
-void xio_observable_notify_all_observers_wrapper(void *_observer_event);
 
 #endif /* XIO_OBSERVER_H */
