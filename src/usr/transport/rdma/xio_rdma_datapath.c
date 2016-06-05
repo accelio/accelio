@@ -81,7 +81,9 @@ static int xio_rdma_on_recv_cancel_req(struct xio_rdma_transport *rdma_hndl,
 				       struct xio_task *task);
 static int xio_rdma_on_recv_cancel_rsp(struct xio_rdma_transport *rdma_hndl,
 				       struct xio_task *task);
+#ifndef XIO_SRQ_ENABLE
 static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl);
+#endif
 static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 				 struct xio_task *task);
 static void xio_sched_consume_cq(void *data);
@@ -105,7 +107,12 @@ int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
 	struct ibv_recv_wr	*bad_wr	= NULL;
 	int			retval, nr_posted;
 
+#ifdef XIO_SRQ_ENABLE
+	retval = ibv_post_srq_recv(rdma_hndl->tcq->srq->srq,
+			&rdma_task->rxd.recv_wr, &bad_wr);
+#else
 	retval = ibv_post_recv(rdma_hndl->qp, &rdma_task->rxd.recv_wr, &bad_wr);
+#endif
 	if (likely(!retval)) {
 		nr_posted = num_recv_bufs;
 	} else {
@@ -118,7 +125,11 @@ int xio_post_recv(struct xio_rdma_transport *rdma_hndl,
 		ERROR_LOG("ibv_post_recv failed. (errno=%d %s)\n",
 			  retval, strerror(retval));
 	}
+#ifdef XIO_SRQ_ENABLE
+	rdma_hndl->tcq->srq->rqe_avail += nr_posted;
+#else
 	rdma_hndl->rqe_avail += nr_posted;
+#endif
 
 	/* credit updates */
 	rdma_hndl->credits += nr_posted;
@@ -227,11 +238,15 @@ static int xio_rdma_xmit(struct xio_rdma_transport *rdma_hndl)
 	uint16_t		req_nr = 0;
 
 	tx_window = tx_window_sz(rdma_hndl);
+#ifdef XIO_SRQ_ENABLE
+	window = min(rdma_hndl->sqe_avail, tx_window);
+#else
 	/* save one credit for nop */
 	if (rdma_hndl->peer_credits > 1) {
 		window = min(rdma_hndl->peer_credits - 1, tx_window);
 		window = min(window, rdma_hndl->sqe_avail);
 	}
+#endif
 	/*
 	TRACE_LOG("XMIT: tx_window:%d, peer_credits:%d, sqe_avail:%d\n",
 		  tx_window,
@@ -463,7 +478,11 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 	int			num_to_post;
 	int			i;
 
+#ifdef XIO_SRQ_ENABLE
+	num_to_post = SRQ_DEPTH - rdma_hndl->tcq->srq->rqe_avail;
+#else
 	num_to_post = rdma_hndl->rq_depth + EXTRA_RQE - rdma_hndl->rqe_avail;
+#endif
 	for (i = 0; i < num_to_post; i++) {
 		/* get ready to receive message */
 		task = xio_rdma_primary_task_alloc(rdma_hndl);
@@ -586,12 +605,13 @@ static void xio_handle_task_error(struct xio_task *task)
 /*---------------------------------------------------------------------------*/
 /* xio_handle_wc_error                                                       */
 /*---------------------------------------------------------------------------*/
-static void xio_handle_wc_error(struct ibv_wc *wc)
+static void xio_handle_wc_error(struct ibv_wc *wc, struct xio_srq *srq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
 	struct xio_rdma_task		*rdma_task = NULL;
 	struct xio_rdma_transport       *rdma_hndl = NULL;
 	int				retval;
+	struct xio_key_int32		key;
 
 	/* complete in case all flush errors were consumed */
 	if (task && task->dd_data == ptr_from_int64(XIO_BEACON_WRID)) {
@@ -607,7 +627,13 @@ static void xio_handle_wc_error(struct ibv_wc *wc)
 	}
 	if (task && task->dd_data) {
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
-		rdma_hndl = (struct xio_rdma_transport *)task->context;
+		if (srq) {
+			key.id = wc->qp_num;
+			HT_LOOKUP(&srq->ht_rdma_hndl, &key, rdma_hndl,
+					rdma_hndl_htbl);
+		} else {
+			rdma_hndl = (struct xio_rdma_transport *)task->context;
+		}
 	}
 
 	if (wc->status == IBV_WC_WR_FLUSH_ERR) {
@@ -700,9 +726,11 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 	if (!rdma_hndl->sqe_avail)
 		return 0;
 
+#ifndef XIO_SRQ_ENABLE
 	/* Can the peer receive messages? */
 	if (!rdma_hndl->peer_credits)
 		return 0;
+#endif
 
 	/* If we have real messages to send there is no need for
 	 * a special NOP message as credits are piggybacked
@@ -712,6 +740,7 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 		return 0;
 	}
 
+#ifndef XIO_SRQ_ENABLE
 	/* Does the peer have already maximum credits? */
 	if (rdma_hndl->sim_peer_credits >= MAX_RECV_WR)
 		return 0;
@@ -725,7 +754,7 @@ static int xio_rdma_idle_handler(struct xio_rdma_transport *rdma_hndl)
 		  rdma_hndl->sim_peer_credits);
 
 	xio_rdma_send_nop(rdma_hndl);
-
+#endif
 	return 0;
 }
 
@@ -764,20 +793,31 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(
 
 	task->tlv_type = xio_mbuf_tlv_type(&task->mbuf);
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->io_list);
+#ifdef XIO_SRQ_ENABLE
+	rdma_hndl->tcq->srq->rqe_avail--;
+#else
 	rdma_hndl->rqe_avail--;
 	rdma_hndl->sim_peer_credits--;
-
+#endif
 	/* call recv completion  */
 	switch (task->tlv_type) {
 	case XIO_CREDIT_NOP:
 		xio_rdma_on_recv_nop(rdma_hndl, task);
+#ifdef XIO_SRQ_ENABLE
+		if (rdma_hndl->tcq->srq->rqe_avail <= SRQ_DEPTH + 1)
+#else
 		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
+#endif
 			xio_rdma_rearm_rq(rdma_hndl);
 		must_send = 1;
 		break;
 	case XIO_RDMA_READ_ACK:
 		xio_rdma_on_recv_rdma_read_ack(rdma_hndl, task);
+#ifdef XIO_SRQ_ENABLE
+		if (rdma_hndl->tcq->srq->rqe_avail <= SRQ_DEPTH + 1)
+#else
 		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
+#endif
 			xio_rdma_rearm_rq(rdma_hndl);
 		must_send = 1;
 		break;
@@ -793,7 +833,11 @@ static XIO_F_ALWAYS_INLINE int xio_rdma_rx_handler(
 		break;
 	default:
 		/* rearm the receive queue  */
+#ifdef XIO_SRQ_ENABLE
+		if (rdma_hndl->tcq->srq->rqe_avail <= SRQ_DEPTH + 1)
+#else
 		if (rdma_hndl->rqe_avail <= rdma_hndl->rq_depth + 1)
+#endif
 			xio_rdma_rearm_rq(rdma_hndl);
 		if (IS_REQUEST(task->tlv_type))
 			xio_rdma_on_recv_req(rdma_hndl, task);
@@ -1092,12 +1136,19 @@ static XIO_F_ALWAYS_INLINE void xio_rdma_rd_rsp_comp_handler(
 /* xio_handle_wc							     */
 /*---------------------------------------------------------------------------*/
 static XIO_F_ALWAYS_INLINE void xio_handle_wc(struct ibv_wc *wc,
-					      int last_in_rxq)
+					      int last_in_rxq, struct xio_srq *srq)
 {
 	struct xio_task *task = (struct xio_task *)ptr_from_int64(wc->wr_id);
 	int		opcode = wc->opcode;
+	struct xio_key_int32  key;
+	struct xio_rdma_transport *rdma_hndl;
 
-	XIO_TO_RDMA_HNDL(task, rdma_hndl);
+	if (srq) {
+		key.id = wc->qp_num;
+		HT_LOOKUP(&srq->ht_rdma_hndl, &key, rdma_hndl, rdma_hndl_htbl);
+	} else {
+		rdma_hndl = (struct xio_rdma_transport *)task->context;
+	}
 
 	/*
 	TRACE_LOG("received opcode :%s [%x]\n",
@@ -1213,9 +1264,9 @@ static int xio_poll_cq(struct xio_cq *tcq, int max_wc, int timeout_us)
 		wc = &tcq->wc_array[0];
 		for (i = 0; i < err; i++) {
 			if (likely(wc->status == IBV_WC_SUCCESS))
-				xio_handle_wc(wc, (i == last_in_rxq));
+				xio_handle_wc(wc, (i == last_in_rxq), tcq->srq);
 			else
-				xio_handle_wc_error(wc);
+				xio_handle_wc_error(wc, tcq->srq);
 			wc++;
 		}
 		numwc += err;
@@ -4460,6 +4511,7 @@ static int xio_rdma_on_recv_rdma_read_ack(struct xio_rdma_transport *rdma_hndl,
 	return 0;
 }
 
+#ifndef XIO_SRQ_ENABLE
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_write_nop							     */
 /*---------------------------------------------------------------------------*/
@@ -4555,7 +4607,7 @@ static int xio_rdma_send_nop(struct xio_rdma_transport *rdma_hndl)
 
 	return 0;
 }
-
+#endif
 /*---------------------------------------------------------------------------*/
 /* xio_rdma_read_nop							     */
 /*---------------------------------------------------------------------------*/

@@ -38,6 +38,9 @@
 #ifndef XIO_RDMA_TRANSPORT_H
 #define XIO_RDMA_TRANSPORT_H
 
+#include <sys/hashtable.h>
+#include "xio_hash.h"
+
 /*---------------------------------------------------------------------------*/
 /* externals								     */
 /*---------------------------------------------------------------------------*/
@@ -80,6 +83,7 @@ extern spinlock_t		dev_list_lock;
 #define SOFT_CQ_MOD			8
 #define HARD_CQ_MOD			64
 #define SEND_THRESHOLD			8
+#define SRQ_DEPTH			1024
 
 #define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
@@ -310,6 +314,15 @@ struct xio_cq  {
 	struct list_head		cq_list_entry; /* list of all
 						       cq per device */
 	struct xio_observer		observer;
+	/* TODO: to move to more appropraite place */
+	struct xio_srq			*srq;
+};
+
+struct xio_srq {
+	HT_HEAD(, rdma_hndl, HASHTABLE_PRIME_SMALL)  ht_rdma_hndl;
+	struct ibv_srq 			*srq;
+	int				rqe_avail;  /* recv queue elements avail */
+	int 				pad;
 };
 
 struct xio_device {
@@ -374,9 +387,13 @@ struct xio_rdma_transport {
 	struct list_head		rdma_rd_rsp_in_flight_list;
 
 		/* rx parameters */
-	int				rq_depth;	 /* max rcv allowed  */
+	int				rq_depth;	 /* max rcv per qp allowed  */
+#ifdef XIO_SRQ_ENABLE
+	int pad4;
+#else
 	int				rqe_avail;	 /* recv queue elements
 							    avail */
+#endif
 	uint16_t			sim_peer_credits;  /* simulates the peer
 							    * credits management
 							    * to control nop
@@ -471,6 +488,10 @@ struct xio_rdma_transport {
 	struct xio_task			beacon_task;
 	uint32_t			trans_attr_mask;
 	struct xio_transport_attr	trans_attr;
+	uint32_t			local_qp_num;
+	uint32_t			pad3;
+	struct xio_srq			*xio_srq;
+	HT_ENTRY(rdma_hndl, xio_key_int32) rdma_hndl_htbl;
 };
 
 struct xio_cm_channel {

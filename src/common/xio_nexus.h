@@ -151,7 +151,7 @@ struct xio_nexus {
 	short				is_first_req;
 	short				reconnect_retries;
 	int				is_listener;
-	int				pad;
+	int				srq_enabled;
 	xio_delayed_work_handle_t	close_time_hndl;
 
 	struct list_head		observers_htbl;
