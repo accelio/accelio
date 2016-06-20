@@ -152,7 +152,7 @@ static int assign_data_in_buf(struct xio_msg *msg, void *cb_user_context)
 {
 	struct thread_data	*tdata = (struct thread_data *)cb_user_context;
 	struct xio_iovec_ex	*sglist = vmsg_sglist(&msg->in);
-	int			retval = 1;
+	int			retval = 0;
 
 	if (!tdata->in_reg_mem.addr) {
 		retval = xio_mem_alloc(sglist[0].iov_len, &tdata->in_reg_mem);
