@@ -64,7 +64,8 @@ static int nexus_cache_add(struct xio_nexus *nexus, int nexus_id)
 {
 	struct xio_nexus *c;
 	struct xio_key_int32  key = {
-		nexus_id
+		.id = nexus_id,
+		.pad = {0},
 	};
 
 	HT_LOOKUP(&nexus_cache, &key, c, nexus_htbl);

@@ -180,6 +180,23 @@ if test "$enable_debug_thread_safety" = "yes"; then
 fi
 
 ##########################################################################
+# enable shared receive queue (rdma)
+##########################################################################
+# usage: ./configure --enable-shared-receive-queue=yes
+#
+AC_MSG_CHECKING([enables shared receive queue support in rdma transport])
+AC_ARG_ENABLE([shared-receive-queue],
+	      [AS_HELP_STRING([--enable-shared-receive-queue],
+			      [enable shared receive queue - default: no])],
+			       [enable_shared_receive_queue="$enableval"],
+			       [enable_shared_receive_queue=no])
+AC_MSG_RESULT([$enable_shared_receive_queue])
+
+if test "$enable_shared_receive_queue" = "yes"; then
+	AM_CFLAGS="$AM_CFLAGS -DXIO_SRQ_ENABLE"
+fi
+
+##########################################################################
 # raio compilation support
 ##########################################################################
 # usage: ./configure --disable-raio-build

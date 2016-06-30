@@ -73,6 +73,12 @@ struct xio_event_params {
 	union xio_transport_event_data		event_data;
 };
 
+struct xio_nexus_observer_work {
+	struct xio_observer_event	observer_event;
+	xio_work_handle_t               observer_work;
+	struct xio_context 	*ctx;
+};
+
 static int xio_msecs[] = {60000, 30000, 15000, 0};
 
 #define XIO_SERVER_GRACE_PERIOD 1000
@@ -403,9 +409,17 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		trans_hndl = nexus->transport_hndl;
 	}
 
-	task =  xio_tasks_pool_get(nexus->initial_tasks_pool, trans_hndl);
+	if (nexus->srq_enabled) {
+		task =  xio_tasks_pool_get(nexus->primary_tasks_pool,
+			trans_hndl);
+	} else {
+		task =  xio_tasks_pool_get(nexus->initial_tasks_pool,
+			trans_hndl);
+	}
+
 	if (!task) {
-		ERROR_LOG("initial task pool is empty\n");
+		ERROR_LOG("%s task pool is empty\n",
+			((struct xio_tasks_pool*)task->pool)->params.pool_name);
 		return -1;
 	}
 	task->nexus = nexus;
@@ -590,12 +604,15 @@ static int xio_nexus_on_recv_setup_req(struct xio_nexus *new_nexus,
 	}
 
 	cid = nexus->cid;
-	/* time to prepare the primary pool */
-	retval = xio_nexus_primary_pool_create(nexus);
-	if (retval != 0) {
-		ERROR_LOG("create primary pool failed\n");
-		status = ENOMEM;
-		goto send_response;
+	/* time to prepare the primary pool if srq is disabled. In case
+	 * srq was enabled, it was created in order to send the nexus setup */
+	if (!nexus->srq_enabled) {
+		retval = xio_nexus_primary_pool_create(nexus);
+		if (retval != 0) {
+			ERROR_LOG("create primary pool failed\n");
+			status = ENOMEM;
+			goto send_response;
+		}
 	}
 
 send_response:
@@ -740,11 +757,13 @@ static int xio_nexus_on_recv_setup_rsp(struct xio_nexus *nexus,
 	xio_tasks_pool_put(task);
 
 	if (nexus->state != XIO_NEXUS_STATE_RECONNECT) {
-		/* create the primary */
-		retval = xio_nexus_primary_pool_create(nexus);
-		if (retval != 0) {
-			ERROR_LOG("create primary pool failed\n");
-			return -1;
+		if (!nexus->srq_enabled) {
+			/* create the primary */
+			retval = xio_nexus_primary_pool_create(nexus);
+			if (retval != 0) {
+				ERROR_LOG("create primary pool failed\n");
+				return -1;
+			}
 		}
 		nexus->state = XIO_NEXUS_STATE_CONNECTED;
 
@@ -1207,6 +1226,7 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 	nexus->transport_hndl		= transport_hndl;
 	nexus->transport		= parent_nexus->transport;
 	nexus->server			= parent_nexus->server;
+	nexus->srq_enabled		= parent_nexus->srq_enabled;
 	kref_init(&nexus->kref);
 	nexus->state			= XIO_NEXUS_STATE_OPEN;
 	nexus->is_first_req		= 1;
@@ -1237,10 +1257,13 @@ struct xio_nexus *xio_nexus_create(struct xio_nexus *parent_nexus,
 		ERROR_LOG("transport does not implement \"add_observer\"\n");
 		goto cleanup;
 	}
+	if (nexus->srq_enabled)
+		retval = xio_nexus_primary_pool_create(nexus);
+	else
+		retval = xio_nexus_initial_pool_create(nexus);
 
-	retval = xio_nexus_initial_pool_create(nexus);
 	if (retval != 0) {
-		ERROR_LOG("failed to setup initial pool\n");
+		ERROR_LOG("failed to setup pool\n");
 		goto cleanup;
 	}
 	nexus->destroy_event.handler		= xio_nexus_destroy_handler;
@@ -1347,10 +1370,18 @@ static void xio_nexus_on_transport_established(struct xio_nexus *nexus,
 					       union xio_transport_event_data
 					       *event_data)
 {
+	int retval;
+
 	if (!nexus->transport_hndl->is_client)
 		return;
 
-	xio_nexus_initial_pool_create(nexus);
+	if (nexus->srq_enabled)
+		retval = xio_nexus_primary_pool_create(nexus);
+	else
+		retval = xio_nexus_initial_pool_create(nexus);
+
+	if (retval)
+		ERROR_LOG("creation of task pool failed\n");
 
 	xio_nexus_send_setup_req(nexus);
 }
@@ -1900,6 +1931,15 @@ struct xio_nexus *xio_nexus_open(struct xio_context *ctx,
 	kref_init(&nexus->kref);
 	nexus->state = XIO_NEXUS_STATE_OPEN;
 
+#ifdef XIO_SRQ_ENABLE
+	if (nexus->transport_hndl->proto == XIO_PROTO_RDMA)
+		nexus->srq_enabled = 1;
+	else
+		nexus->srq_enabled = 0;
+#else
+	nexus->srq_enabled = 0;
+#endif
+
 	if (nexus->transport->get_pools_setup_ops) {
 		struct xio_context *ctx  = nexus->transport_hndl->ctx;
 		enum xio_proto proto = nexus->transport_hndl->proto;
@@ -1982,19 +2022,36 @@ int xio_nexus_reconnect(struct xio_nexus *nexus)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_connect		                                             */
+/* xio_nexus_notify_observer_work                                            */
+/*---------------------------------------------------------------------------*/
+static void xio_nexus_notify_observer_work(void *_work_params)
+{
+	struct xio_nexus_observer_work  *work_params =
+                (struct xio_nexus_observer_work *) _work_params;
+	xio_observable_notify_observer(work_params->observer_event.observable,
+                                       work_params->observer_event.observer,
+                                       work_params->observer_event.event,
+                                       work_params->observer_event.event_data);
+	xio_ctx_set_work_destructor(work_params->ctx,
+	                                            work_params,
+	                                            (void (*)(void *))kfree,
+	                                            &work_params->observer_work);
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_nexus_connect                                                         */
 /*---------------------------------------------------------------------------*/
 int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		      struct xio_observer *observer, const char *out_if)
 {
 	int retval;
+        struct xio_nexus_observer_work *work_params;
 
 	if (!nexus->transport->connect) {
 		ERROR_LOG("transport does not implement \"connect\"\n");
 		xio_set_error(ENOSYS);
 		return -1;
 	}
-
 	mutex_lock(&nexus->lock_connect);
 	switch (nexus->state) {
 	case XIO_NEXUS_STATE_OPEN:
@@ -2026,13 +2083,21 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 		/* moving the notification to the ctx the nexus is running on
 		 * to avoid session_setup_request from being sent on another thread
 		 */
-		nexus->observer_event.observer = observer;
-		nexus->observer_event.observable = &nexus->observable;
-		nexus->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
-		nexus->observer_event.event_data = NULL;
-		xio_ctx_add_work(nexus->transport_hndl->ctx, &nexus->observer_event,
-				xio_observable_notify_observer_wrapper, &nexus->observer_work);
-
+		work_params = (struct xio_nexus_observer_work *)
+				kmalloc(sizeof(*work_params), GFP_KERNEL);
+		if (unlikely(!work_params)) {
+			ERROR_LOG("failed to allocate memory\n");
+			goto cleanup1;
+		}
+		work_params->observer_event.observer = observer;
+		work_params->observer_event.observable = &nexus->observable;
+		work_params->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
+		work_params->observer_event.event_data = NULL;
+		work_params->ctx = nexus->transport_hndl->ctx;
+		xio_ctx_add_work(nexus->transport_hndl->ctx,
+                                 work_params,
+                                 xio_nexus_notify_observer_work,
+                                 &work_params->observer_work);
 		break;
 	default:
 		break;
@@ -2152,7 +2217,7 @@ static void xio_nexus_delayed_close(struct kref *kref)
 		/* only client shall cause disconnection */
 		retval = xio_ctx_add_delayed_work(
 				nexus->transport_hndl->ctx,
-				XIO_NEXUS_CLOSE_TIMEOUT, nexus,
+				g_options.transport_close_timeout, nexus,
 				xio_nexus_release_cb,
 				&nexus->close_time_hndl);
 		if (retval)
@@ -2458,6 +2523,10 @@ static int xio_nexus_server_reconnect(struct xio_nexus *nexus)
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
 
+	xio_observable_notify_all_observers(&nexus->observable,
+						XIO_NEXUS_EVENT_RECONNECTING,
+					    NULL);
+
 	/* Just wait and see if some client tries to reconnect */
 	retval = xio_ctx_add_delayed_work(nexus->transport_hndl->ctx,
 					  XIO_SERVER_TIMEOUT, nexus,
@@ -2555,6 +2624,10 @@ static int xio_nexus_client_reconnect(struct xio_nexus *nexus)
 	}
 
 	xio_nexus_state_set(nexus, XIO_NEXUS_STATE_RECONNECT);
+
+	xio_observable_notify_all_observers(&nexus->observable,
+						XIO_NEXUS_EVENT_RECONNECTING,
+					    NULL);
 
 	/* All portal_uri and out_if were saved in the nexus
 	 * observer is not used in this flow

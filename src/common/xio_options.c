@@ -60,6 +60,8 @@
 #define XIO_OPTVAL_DEF_KEEPALIVE_PROBES			3
 #define XIO_OPTVAL_DEF_KEEPALIVE_INTVL			20
 #define XIO_OPTVAL_DEF_KEEPALIVE_TIME			60
+#define XIO_OPTVAL_DEF_TRANSPORT_CLOSE_TIMEOUT		60000
+#define XIO_OPTVAL_DEF_PAD				0
 
 /* xio options */
 struct xio_options			g_options = {
@@ -76,6 +78,8 @@ struct xio_options			g_options = {
 	XIO_OPTVAL_DEF_XFER_BUF_ALIGN,		/* xfer_buf_align */
 	XIO_OPTVAL_DEF_INLINE_XIO_DATA_ALIGN,	/* inline_xio_data_align */
 	XIO_OPTVAL_DEF_ENABLE_KEEPALIVE,
+	XIO_OPTVAL_DEF_TRANSPORT_CLOSE_TIMEOUT, /* transport_close_timeout */
+	XIO_OPTVAL_DEF_PAD,
 	{
 		XIO_OPTVAL_DEF_KEEPALIVE_PROBES,
 		XIO_OPTVAL_DEF_KEEPALIVE_TIME,
@@ -277,6 +281,13 @@ static int xio_general_set_opt(void *xio_obj, int optname,
 			return -1;
 		}
 		break;
+	case XIO_OPTNAME_TRANSPORT_CLOSE_TIMEOUT:
+		if (optlen != sizeof(int))
+			break;
+		if (*((int *)optval) < 0)
+			break;
+		g_options.transport_close_timeout = *((int *)optval);
+		return 0;
 	default:
 		break;
 	}
@@ -356,6 +367,10 @@ static int xio_general_get_opt(void  *xio_obj, int optname,
 			xio_set_error(EINVAL);
 			return -1;
 		}
+	case XIO_OPTNAME_TRANSPORT_CLOSE_TIMEOUT:
+		*optlen = sizeof(int);
+		*((int *)optval) = g_options.transport_close_timeout;
+		return 0;
 	default:
 		break;
 	}

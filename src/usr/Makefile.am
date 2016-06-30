@@ -44,7 +44,7 @@ install-exec-hook:
 		echo "/sbin/ldconfig"; \
 	else \
 		echo "You are root" ; \
-		echo "$(libdir)" > /etc/ld.so.conf.d/libxio.conf ; \
+		echo "$(libdir)" > $(DESTDIR)/etc/ld.so.conf.d/libxio.conf ; \
 		/sbin/ldconfig; \
 	fi
 

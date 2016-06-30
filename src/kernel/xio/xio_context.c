@@ -153,6 +153,7 @@ struct xio_context *xio_context_create(struct xio_context_params *ctx_params,
 	ctx->polling_timeout = polling_timeout;
 	ctx->prealloc_xio_inline_bufs =
 		!!ctx_params->prealloc_xio_inline_bufs;
+	ctx->rq_depth = ctx_params->rq_depth;
 
 	if (!ctx_params->max_conns_per_ctx)
 		ctx->max_conns_per_ctx = 100;

@@ -119,13 +119,16 @@ struct session_data {
 /* globals								     */
 /*---------------------------------------------------------------------------*/
 static struct xio_test_config  test_config = {
-	XIO_DEF_ADDRESS,
-	XIO_DEF_PORT,
-	XIO_DEF_TRANSPORT,
-	XIO_DEF_CPU,
-	XIO_DEF_HEADER_SIZE,
-	XIO_DEF_DATA_SIZE,
-	XIO_DEF_POLL
+	.server_addr = XIO_DEF_ADDRESS,
+	.server_port = XIO_DEF_PORT,
+	.transport = XIO_DEF_TRANSPORT,
+	.cpu = XIO_DEF_CPU,
+	.hdr_len = XIO_DEF_HEADER_SIZE,
+	.data_len = XIO_DEF_DATA_SIZE,
+	.conn_idx = XIO_DEF_POLL,
+	.poll_timeout = 0,
+	.finite_run = 0,
+	.padding = 0,
 };
 
 static struct msg_params msg_params;

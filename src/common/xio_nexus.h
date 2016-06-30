@@ -43,11 +43,6 @@ extern "C" {
 #endif
 
 /*---------------------------------------------------------------------------*/
-/* defines	                                                             */
-/*---------------------------------------------------------------------------*/
-#define XIO_NEXUS_CLOSE_TIMEOUT	60000
-
-/*---------------------------------------------------------------------------*/
 /* typedefs								     */
 /*---------------------------------------------------------------------------*/
 struct xio_nexus;
@@ -59,6 +54,7 @@ enum xio_nexus_event {
 	XIO_NEXUS_EVENT_NEW_CONNECTION,
 	XIO_NEXUS_EVENT_ESTABLISHED,
 	XIO_NEXUS_EVENT_DISCONNECTED,
+	XIO_NEXUS_EVENT_RECONNECTING,
 	XIO_NEXUS_EVENT_RECONNECTED,
 	XIO_NEXUS_EVENT_CLOSED,
 	XIO_NEXUS_EVENT_REFUSED,
@@ -155,7 +151,7 @@ struct xio_nexus {
 	short				is_first_req;
 	short				reconnect_retries;
 	int				is_listener;
-	int				pad;
+	int				srq_enabled;
 	xio_delayed_work_handle_t	close_time_hndl;
 
 	struct list_head		observers_htbl;
@@ -173,10 +169,7 @@ struct xio_nexus {
 	struct xio_ev_data		destroy_event;
 	struct xio_ev_data		trans_error_event;
 	spinlock_t			nexus_obs_lock;
-	int 					pad2;
-
-	struct xio_observer_event	observer_event;
-	xio_work_handle_t               observer_work;
+	int 				pad2;
 	struct mutex			lock_connect;      /* lock nexus connect */
 
 	HT_ENTRY(xio_nexus, xio_key_int32) nexus_htbl;

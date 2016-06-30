@@ -71,9 +71,14 @@ int xio_on_setup_req_recv(struct xio_connection *connection,
 	struct xio_session_hdr		hdr;
 	struct xio_session		*session = connection->session;
 	int				retval;
-	struct xio_session_event_data  error_event = {};
-
-	error_event.event = XIO_SESSION_ERROR_EVENT;
+	struct xio_session_event_data  error_event = {
+		.conn = NULL,
+		.conn_user_context = NULL,
+		.event = XIO_SESSION_ERROR_EVENT,
+		.reason = XIO_E_SUCCESS,
+		.private_data = NULL,
+		.private_data_len = 0,
+	};
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
@@ -652,6 +657,11 @@ int xio_server_on_nexus_event(void *observer, void *sender, int event,
 		DEBUG_LOG("session: [notification] - connection disconnected" \
 			 " session:%p, nexus:%p\n", observer, sender);
 		xio_on_nexus_disconnected(session, nexus, event_data);
+		break;
+	case XIO_NEXUS_EVENT_RECONNECTING:
+		DEBUG_LOG("session: [notification] - connection reconnecting" \
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_reconnecting(session, nexus);
 		break;
 	case XIO_NEXUS_EVENT_RECONNECTED:
 		DEBUG_LOG("session: [notification] - connection reconnected" \

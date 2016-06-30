@@ -57,6 +57,7 @@ extern struct xio_options	*g_poptions;
 #define MAX_SEND_WR			(XIO_MAX_IOV + 1)
 #define MAX_RECV_WR			(XIO_MAX_IOV)
 #define EXTRA_RQE			32
+#define SEND_QE             NUM_START_PRIMARY_POOL_TASKS - EXTRA_RQE - MAX_RECV_WR
 #define XIO_DEV_ATTR_MAX_SGE		30
 
 /*  - one for send, (one for frwr, one for local invalidate) x (r1 + w1)
@@ -471,7 +472,6 @@ struct xio_rdma_transport {
 	uint32_t			peer_max_out_iovsz;
 
 	/* connection's flow control */
-	size_t				alloc_sz;
 	size_t				membuf_sz;
 
 	struct xio_transport		*transport;
@@ -567,7 +567,6 @@ int xio_rdma_get_max_header_size(void);
 int xio_rdma_get_inline_buffer_size(void);
 
 void xio_rdma_close_cb(struct kref *kref);
-void xio_rdma_calc_pool_size(struct xio_rdma_transport *rdma_hndl);
 
 /* Should create a xio_memory.h */
 void xio_unmap_rx_work_req(struct xio_device *dev, struct xio_work_req *xd);

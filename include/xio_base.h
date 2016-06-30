@@ -421,6 +421,8 @@ enum xio_session_event {
 	XIO_SESSION_CONNECTION_REFUSED_EVENT,	  /**< connection refused event*/
 	XIO_SESSION_CONNECTION_ERROR_EVENT,	  /**< connection error event */
 	XIO_SESSION_ERROR_EVENT,		  /**< session error event    */
+	XIO_SESSION_CONNECTION_RECONNECTING_EVENT,		  /**< connection reconnecting event    */
+	XIO_SESSION_CONNECTION_RECONNECTED_EVENT,		  /**< connection reconnected event    */
 };
 
 /**
@@ -965,9 +967,6 @@ int xio_send_rdma(struct xio_connection *conn,
  * release one way message resources back to xio when message is no longer
  * needed
  *
- * @note	the message is allocated by the application and is not freed
- *		by this function
- *
  * @param[in] msg	The released message
  *
  * @return 0 on success, or -1 on error.  If an error occurs, call
@@ -1203,7 +1202,7 @@ enum xio_optname {
 	/** maximum rx queued bytes. Default value is 64M		      */
 	XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
 	/** configure internal memory pool. In case the user wants to
-	 * configure accelio’s memory slab, he needs to pass this flag.
+	 * configure accelio's memory slab, he needs to pass this flag.
 	 */
 	XIO_OPTNAME_CONFIG_MEMPOOL,
 
@@ -1219,7 +1218,7 @@ enum xio_optname {
 	 */
 	XIO_OPTNAME_MAX_INLINE_XIO_DATA,
 	/** set/get alignment of data buffer address. Used to configure buffer
-	 * alignment inside accelio’s internal pool.
+	 * alignment inside accelio's internal pool.
 	 */
 	XIO_OPTNAME_XFER_BUF_ALIGN,
 	/** set/get alignment of inline xio data buffer address		      */
@@ -1232,9 +1231,15 @@ enum xio_optname {
 	 * is always registered this pool can be disabled in order to save
 	 * memory. This requires the user to implement the "assign_in_buffer"
 	 * and take full ownership on memory registration.  In case the user
-	 * will send msg without filling “mr” error is expected.
+	 * will send msg without filling "mr" error is expected.
 	 */
 	XIO_OPTNAME_ENABLE_MEM_POOL = 200,
+	/** time in milliseconds after which the nexus delayed call is
+	 * is triggered, the nexus is released and the transport (tcp
+	 * or rdma) closes. Default value is 60000 milliseconds, which are
+	 * 1 minute.
+	*/
+	XIO_OPTNAME_TRANSPORT_CLOSE_TIMEOUT,
 
 	/* XIO_OPTLEVEL_RDMA */
 	/** number of RDMA-capable HCAs on the machine. Read only	      */

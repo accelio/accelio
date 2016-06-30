@@ -654,9 +654,11 @@ static void xio_handle_task_error(struct xio_task *task)
 		xio_rdma_tx_error_handler(rdma_hndl, task);
 		break;
 	case XIO_IB_RDMA_READ:
+	case XIO_IB_RDMA_READ_DIRECT:
 		xio_rdma_rd_error_handler(rdma_hndl, task);
 		break;
 	case XIO_IB_RDMA_WRITE:
+	case XIO_IB_RDMA_WRITE_DIRECT:
 		xio_rdma_wr_error_handler(rdma_hndl, task);
 		break;
 	default:
@@ -4383,8 +4385,8 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		/* current implementation is symmetric */
 		local_buf_size          = xio_rdma_get_inline_buffer_size();
 		rsp->buffer_sz		= min(req.buffer_sz, local_buf_size);
-		rsp->sq_depth		= min(req.sq_depth, ((u16)rdma_hndl->rq_depth));
-		rsp->rq_depth		= min(req.rq_depth, ((u16)rdma_hndl->sq_depth));
+		rsp->sq_depth		= max((int)req.sq_depth, rdma_hndl->rq_depth);
+		rsp->rq_depth		= max((int)req.rq_depth, rdma_hndl->sq_depth);
 		rsp->max_in_iovsz	= req.max_in_iovsz;
 		rsp->max_out_iovsz	= req.max_out_iovsz;
 		rsp->max_header_len	= req.max_header_len;
@@ -4410,8 +4412,9 @@ static int xio_rdma_on_setup_msg(struct xio_rdma_transport *rdma_hndl,
 	rdma_hndl->exp_sn = 0;
 	rdma_hndl->max_exp_sn = 0;
 
-	/* now we can calculate  primary pool size */
-	xio_rdma_calc_pool_size(rdma_hndl);
+	rdma_hndl->max_tx_ready_tasks_num = rdma_hndl->sq_depth;
+	rdma_hndl->num_tasks = rdma_hndl->base.ctx->max_conns_per_ctx *
+			(rdma_hndl->sq_depth + rdma_hndl->actual_rq_depth);
 
 	/* fill notification event */
 	event_data.msg.op	= XIO_WC_OP_RECV;

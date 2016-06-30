@@ -675,10 +675,14 @@ int xio_on_client_nexus_established(struct xio_session *session,
 	int				retval = 0;
 	struct xio_connection		*connection;
 	struct xio_msg			*msg;
-	struct xio_session_event_data	ev_data = {};
-
-	ev_data.event = XIO_SESSION_ERROR_EVENT;
-	ev_data.reason = XIO_E_SESSION_REFUSED;
+	struct xio_session_event_data	ev_data = {
+		.conn = NULL,
+		.conn_user_context = NULL,
+		.event = XIO_SESSION_ERROR_EVENT,
+		.private_data = NULL,
+		.private_data_len = 0,
+		.reason = XIO_E_SESSION_REFUSED,
+	};
 
 	switch (session->state) {
 	case XIO_SESSION_STATE_CONNECT:
@@ -818,6 +822,11 @@ int xio_client_on_nexus_event(void *observer, void *sender, int event,
 		DEBUG_LOG("session: [notification] - nexus disconnected" \
 			 " session:%p, nexus:%p\n", observer, sender);
 		xio_on_nexus_disconnected(session, nexus, event_data);
+		break;
+	case XIO_NEXUS_EVENT_RECONNECTING:
+		DEBUG_LOG("session: [notification] - connection reconnecting" \
+			 " session:%p, nexus:%p\n", observer, sender);
+		xio_on_nexus_reconnecting(session, nexus);
 		break;
 	case XIO_NEXUS_EVENT_RECONNECTED:
 		DEBUG_LOG("session: [notification] - connection reconnected" \

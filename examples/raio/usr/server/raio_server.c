@@ -590,7 +590,13 @@ int parse_cmdline(int argc, char **argv)
 				(uint16_t)strtol(optarg, NULL, 0);
 			break;
 		case 'c':
+			if (cpumask) {
+				free(cpumask);
+				cpumask = NULL;
+			}
 			cpumask = strdup(optarg);
+			if (!cpumask)
+                                goto cleanup;
 			break;
 		case 't':
 			if (!transport)
@@ -622,7 +628,7 @@ int parse_cmdline(int argc, char **argv)
 		}
 	}
 	if (argc == 1)
-		usage(argv[0]);
+		goto cleanup;
 	if (optind < argc) {
 		fprintf(stderr, "\nError:\n\tInvalid param: %s\n",
 			argv[optind]);
