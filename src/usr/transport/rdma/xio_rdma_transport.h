@@ -320,6 +320,7 @@ struct xio_cq  {
 struct xio_srq {
 	HT_HEAD(, rdma_hndl, HASHTABLE_PRIME_SMALL)  ht_rdma_hndl;
 	struct ibv_srq 			*srq;
+	struct list_head		rx_list;
 	int				rqe_avail;  /* recv queue elements
 						       avail */
 	int				pad;

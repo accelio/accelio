@@ -501,7 +501,12 @@ int xio_rdma_rearm_rq(struct xio_rdma_transport *rdma_hndl)
 		prev_task = task;
 		prev_rdma_task = rdma_task;
 		rdma_task->out_ib_op = XIO_IB_RECV;
+#ifdef XIO_SRQ_ENABLE
+		list_add_tail(&task->tasks_list_entry,
+				&rdma_hndl->tcq->srq->rx_list);
+#else
 		list_add_tail(&task->tasks_list_entry, &rdma_hndl->rx_list);
+#endif
 	}
 	if (prev_task) {
 		prev_rdma_task->rxd.recv_wr.next = NULL;

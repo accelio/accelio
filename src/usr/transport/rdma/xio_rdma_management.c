@@ -356,6 +356,7 @@ static struct xio_srq *xio_srq_get(struct xio_rdma_transport *rdma_hndl,
 
 	HT_INIT(&srq->ht_rdma_hndl, xio_int32_hash, xio_int32_cmp,
 			xio_int32_cp);
+	INIT_LIST_HEAD(&srq->rx_list);
 
 	tcq->srq = srq;
 	return srq;
@@ -370,6 +371,10 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_srq_destroy(struct xio_srq *srq)
 {
+	if (!list_empty(&srq->rx_list)) {
+		TRACE_LOG("rx_list not empty!\n");
+		xio_transport_flush_task_list(&srq->rx_list);
+	}
 	if (ibv_destroy_srq(srq->srq)) {
 		ERROR_LOG("ibv_destroy_srq failed\n");
 		return -1;
@@ -1404,6 +1409,11 @@ static int xio_rdma_initial_pool_post_create(
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
 
 		rdma_task->out_ib_op	= XIO_IB_RECV;
+
+		/* When using SRQ the rx_list used is that of the SRQ and not
+		 * the rdma_hndl. However, in this case the initial pool is not
+		 * created (we don't reach this flow) so it's not necessary to
+		 * handle the SRQ case here. */
 		list_add_tail(&task->tasks_list_entry, &rdma_hndl->rx_list);
 	}
 
