@@ -501,7 +501,7 @@ int xio_context_run_loop(struct xio_context *ctx, int timeout_ms)
 #endif
 
 	ctx->is_running = 1;
-	retval = (timeout_ms == -1) ? xio_ev_loop_run(ctx->ev_loop) :
+	retval = (timeout_ms == XIO_INFINITE) ? xio_ev_loop_run(ctx->ev_loop) :
 		  xio_ev_loop_run_timeout(ctx->ev_loop, timeout_ms);
 	ctx->is_running = 0;
 
