@@ -390,6 +390,7 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 	struct xio_nexus_setup_req req = {0};
 	struct xio_transport_base *trans_hndl;
 	int    retval = 0;
+	struct xio_tasks_pool *pool;
 
 	TRACE_LOG("send setup request\n");
 
@@ -409,17 +410,13 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		trans_hndl = nexus->transport_hndl;
 	}
 
-	if (nexus->srq_enabled) {
-		task =  xio_tasks_pool_get(nexus->primary_tasks_pool,
-			trans_hndl);
-	} else {
-		task =  xio_tasks_pool_get(nexus->initial_tasks_pool,
-			trans_hndl);
-	}
-
+	if (nexus->srq_enabled)
+		pool = nexus->primary_tasks_pool;
+	else
+		pool = nexus->initial_tasks_pool;
+	task =  xio_tasks_pool_get(pool, trans_hndl);
 	if (!task) {
-		ERROR_LOG("%s task pool is empty\n",
-			((struct xio_tasks_pool*)task->pool)->params.pool_name);
+		ERROR_LOG("%s task pool is empty\n", pool->params.pool_name);
 		return -1;
 	}
 	task->nexus = nexus;

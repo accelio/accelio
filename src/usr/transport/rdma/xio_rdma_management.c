@@ -343,7 +343,7 @@ static struct xio_srq *xio_srq_get(struct xio_rdma_transport *rdma_hndl,
 
 	memset(&srq_init_attr, 0, sizeof(srq_init_attr));
 
-	srq_init_attr.attr.max_wr  = 16383; /* 16k-1: the max for connectX3 */
+	srq_init_attr.attr.max_wr = SRQ_DEPTH;
 	srq_init_attr.attr.max_sge = 1;
 
 	srq->srq = ibv_create_srq(rdma_hndl->dev->pd, &srq_init_attr);
@@ -356,6 +356,7 @@ static struct xio_srq *xio_srq_get(struct xio_rdma_transport *rdma_hndl,
 
 	HT_INIT(&srq->ht_rdma_hndl, xio_int32_hash, xio_int32_cmp,
 			xio_int32_cp);
+	INIT_LIST_HEAD(&srq->rx_list);
 
 	tcq->srq = srq;
 	return srq;
@@ -370,6 +371,10 @@ cleanup:
 /*---------------------------------------------------------------------------*/
 static int xio_srq_destroy(struct xio_srq *srq)
 {
+	if (!list_empty(&srq->rx_list)) {
+		TRACE_LOG("rx_list not empty!\n");
+		xio_transport_flush_task_list(&srq->rx_list);
+	}
 	if (ibv_destroy_srq(srq->srq)) {
 		ERROR_LOG("ibv_destroy_srq failed\n");
 		return -1;
@@ -966,10 +971,10 @@ static int xio_cq_free_slots(struct xio_cq *tcq, int cqe_num)
 static void xio_srq_qp_added(struct xio_rdma_transport *rdma_hndl,
 		struct xio_srq *srq)
 {
-	HT_INSERT(&srq->ht_rdma_hndl, &rdma_hndl->local_qp_num, rdma_hndl,
+	HT_INSERT(&srq->ht_rdma_hndl, &rdma_hndl->qp->qp_num, rdma_hndl,
 			rdma_hndl_htbl);
 	DEBUG_LOG("adding rdma hndl %p with id %d\n", rdma_hndl,
-			rdma_hndl->local_qp_num);
+			rdma_hndl->qp->qp_num);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -981,12 +986,12 @@ static void xio_srq_qp_deleted(struct xio_rdma_transport *rdma_hndl,
 	struct xio_key_int32  key;
 	struct xio_rdma_transport *c;
 
-	key.id = rdma_hndl->local_qp_num;
+	key.id = rdma_hndl->qp->qp_num;
 
 	HT_LOOKUP(&srq->ht_rdma_hndl, &key, c, rdma_hndl_htbl);
 	HT_REMOVE(&srq->ht_rdma_hndl, c, rdma_hndl, rdma_hndl_htbl);
 	DEBUG_LOG("removing rdma hndl %p with id %d\n", rdma_hndl,
-			rdma_hndl->local_qp_num);
+			rdma_hndl->qp->qp_num);
 }
 #endif
 
@@ -1030,7 +1035,6 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	}
 	qp_init_attr.srq		  = srq->srq;
 #else
-	tcq->srq = NULL;
 	qp_init_attr.cap.max_recv_wr	  = MAX_RECV_WR + EXTRA_RQE;
 	qp_init_attr.cap.max_recv_sge	  = 1;
 
@@ -1057,7 +1061,6 @@ static int xio_qp_create(struct xio_rdma_transport *rdma_hndl)
 	rdma_hndl->sqe_avail	= MAX_SEND_WR;
 
 #ifdef XIO_SRQ_ENABLE
-	rdma_hndl->local_qp_num = rdma_hndl->qp->qp_num;
 	xio_srq_qp_added(rdma_hndl, srq);
 #endif
 	rdma_hndl->beacon_task.dd_data = ptr_from_int64(XIO_BEACON_WRID);
@@ -1100,13 +1103,13 @@ static void xio_qp_release(struct xio_rdma_transport *rdma_hndl)
 		TRACE_LOG("rdma qp: [close] handle:%p, qp:%p\n", rdma_hndl,
 			  rdma_hndl->qp);
 #ifdef XIO_SRQ_ENABLE
-		xio_srq_qp_deleted(rdma_hndl,rdma_hndl->tcq->srq);
+		xio_srq_qp_deleted(rdma_hndl, rdma_hndl->tcq->srq);
 #endif
 		xio_cq_free_slots(rdma_hndl->tcq, MAX_CQE_PER_QP);
 		list_del(&rdma_hndl->trans_list_entry);
 		rdma_destroy_qp(rdma_hndl->cm_id);
 		xio_cq_release(rdma_hndl->tcq);
-		rdma_hndl->qp	= NULL;
+		rdma_hndl->qp = NULL;
 	}
 }
 
@@ -1406,6 +1409,11 @@ static int xio_rdma_initial_pool_post_create(
 		rdma_task = (struct xio_rdma_task *)task->dd_data;
 
 		rdma_task->out_ib_op	= XIO_IB_RECV;
+
+		/* When using SRQ the rx_list used is that of the SRQ and not
+		 * the rdma_hndl. However, in this case the initial pool is not
+		 * created (we don't reach this flow) so it's not necessary to
+		 * handle the SRQ case here. */
 		list_add_tail(&task->tasks_list_entry, &rdma_hndl->rx_list);
 	}
 
