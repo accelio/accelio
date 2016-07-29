@@ -871,6 +871,13 @@ static inline void xio_session_refuse_connection(void *conn)
 	xio_connection_refused(connection);
 }
 
+static void xio_connect_timeout(void *data)
+{
+	struct xio_connection *connection = (struct xio_connection *)data;
+
+	xio_connection_force_disconnect(connection, XIO_E_TIMEOUT);
+}
+
 /*---------------------------------------------------------------------------*/
 /* xio_connect								     */
 /*---------------------------------------------------------------------------*/
@@ -1042,6 +1049,19 @@ struct xio_connection *xio_connect(struct xio_connection_params *cparams)
 	if (cparams->enable_tos) {
 		connection->nexus_attr_mask = attr_mask;
 		connection->nexus_attr	    = attr;
+	}
+	if (cparams->connect_timeout_secs) {
+		int  connect_timeout = cparams->connect_timeout_secs * 1000;
+		retval = xio_ctx_add_delayed_work(
+						  connection->ctx,
+						  connect_timeout,
+						  connection,
+						  xio_connect_timeout,
+						  &connection->connect_work);
+		if (unlikely(retval)) {
+			ERROR_LOG("xio_ctx_delayed_work failed. rc:%d\n", retval);
+			/* not critical - do not exit */
+		}
 	}
 
 	if (cparams->disconnect_timeout_secs) {

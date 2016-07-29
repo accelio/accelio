@@ -143,6 +143,7 @@ struct xio_connection {
 	struct xio_nexus_init_attr	nexus_attr;
 
 	xio_work_handle_t		teardown_work;
+	xio_delayed_work_handle_t	connect_work;
 
 #ifdef XIO_SESSION_DEBUG
 	uint64_t			peer_connection;
@@ -281,5 +282,8 @@ int xio_on_connection_ka_rsp_recv(struct xio_connection *connection,
 				  struct xio_task *task);
 
 void xio_connection_keepalive_start(void *_connection);
+
+int xio_connection_force_disconnect(struct xio_connection *connection,
+                                    enum xio_status reason);
 
 #endif /*XIO_CONNECTION_H */

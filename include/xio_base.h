@@ -782,6 +782,10 @@ struct xio_connection_params {
 						/**< then 0 if 0 - auto count */
 	uint8_t			enable_tos;	/**< explicitly enable tos    */
 	uint8_t			tos;		/**< type of service RFC 2474 */
+	uint16_t		pad[3];
+
+        /**< connect timeout in seconds */
+	uint16_t		connect_timeout_secs;
 
         /**< disconnect timeout in seconds */
 	uint16_t		disconnect_timeout_secs;

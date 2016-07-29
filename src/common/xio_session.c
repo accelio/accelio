@@ -358,6 +358,8 @@ void xio_session_notify_connection_established(
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
+		xio_ctx_del_delayed_work(connection->ctx,
+					 &connection->connect_work);
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
@@ -391,6 +393,8 @@ void xio_session_notify_connection_closed(struct xio_session *session,
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
+                xio_ctx_del_delayed_work(connection->ctx,
+				         &connection->connect_work);
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
@@ -426,6 +430,9 @@ void xio_session_notify_connection_disconnected(
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
+		xio_ctx_del_delayed_work(connection->ctx,
+					 &connection->connect_work);
+
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
@@ -455,6 +462,9 @@ void xio_session_notify_connection_refused(struct xio_session *session,
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
+                xio_ctx_del_delayed_work(connection->ctx,
+                                         &connection->connect_work);
+
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);
@@ -512,6 +522,9 @@ void xio_session_notify_connection_error(struct xio_session *session,
 #ifdef XIO_THREAD_SAFE_DEBUG
 		xio_ctx_debug_thread_unlock(connection->ctx);
 #endif
+                xio_ctx_del_delayed_work(connection->ctx,
+                                         &connection->connect_work);
+
 		session->ses_ops.on_session_event(
 				session, &event,
 				session->cb_user_context);

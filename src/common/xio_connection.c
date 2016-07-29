@@ -1880,6 +1880,17 @@ int xio_disconnect_initial_connection(struct xio_connection *connection)
 	kref_get(&connection->kref); /* for send comp */
 	kref_get(&connection->kref); /* for time wait */
 
+	/* trigger the timer */
+	connection->fin_req_timeout = 0;
+	retval = xio_ctx_add_delayed_work(
+				connection->ctx,
+				connection->disconnect_timeout, connection,
+				xio_fin_req_timeout,
+				&connection->fin_timeout_work);
+	if (unlikely(retval)) {
+		ERROR_LOG("xio_ctx_add_delayed_work failed.\n");
+		/* not critical - do not exit */
+	}
 	/* we don't want to send all queued messages yet - send directly */
 	retval = xio_connection_send(connection, msg);
 	if (retval == -EAGAIN)
@@ -3339,5 +3350,38 @@ void xio_connection_keepalive_start(void *_connection)
 		ERROR_LOG("keepalive timeout failed - abort\n");
 		return;
 	}
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_connection_force_disconnect					     */
+/*---------------------------------------------------------------------------*/
+int xio_connection_force_disconnect(struct xio_connection *connection,
+				    enum xio_status reason)
+{
+
+	connection->close_reason = reason;
+
+	xio_session_notify_connection_error(connection->session, connection,
+					    reason);
+
+	if (connection->state != XIO_CONNECTION_STATE_DISCONNECTED)
+		xio_nexus_close(connection->nexus,
+				&connection->session->observer);
+
+        /* flush all messages from in flight message queue to in queue */
+	xio_connection_flush_msgs(connection);
+
+        /* flush all messages back to user */
+	xio_connection_notify_msgs_flush(connection);
+
+	connection->state	 = XIO_CONNECTION_STATE_ERROR;
+
+	xio_ctx_add_work(
+			 connection->ctx,
+			 connection,
+			 xio_connection_teardown_handler,
+			 &connection->teardown_work);
+
+	return 0;
 }
 
