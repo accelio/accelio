@@ -450,14 +450,14 @@ static inline int xio_set_blocking(socket_t sock, unsigned long mode)
 /*---------------------------------------------------------------------------*/
 static inline int xio_pipe(int socks[2], int is_blocking)
 {
-	return pipe2(socks, is_blocking ? 0 : O_NONBLOCK);
+	return pipe2(socks, O_CLOEXEC | (is_blocking ? 0 : O_NONBLOCK));
 }
 
 /*---------------------------------------------------------------------------*/
 static inline socket_t xio_socket_non_blocking(int domain, int type,
 					       int protocol)
 {
-	return socket(domain, type | SOCK_NONBLOCK, protocol);
+	return socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -482,7 +482,7 @@ static inline void xio_env_startup(void)
 /*---------------------------------------------------------------------------*/
 static inline int xio_timerfd_create(void)
 {
-	return timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
+	return timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 }
 
 /*---------------------------------------------------------------------------*/

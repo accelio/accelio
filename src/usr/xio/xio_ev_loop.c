@@ -264,7 +264,7 @@ void *xio_ev_loop_create()
 	loop->stop_loop		= 0;
 	loop->wakeup_armed	= 0;
 	loop->deleted_events_nr = 0;
-	loop->efd		= epoll_create(4096);
+	loop->efd		= epoll_create1(EPOLL_CLOEXEC);
 	if (loop->efd == -1) {
 		xio_set_error(errno);
 		ERROR_LOG("epoll_create failed. %m\n");
