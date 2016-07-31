@@ -105,7 +105,7 @@ extern struct xio_options		*g_poptions;
 
 #define MAX_ACCEPT_BATCH		4    /* Max sockets to accept at once*/
 
-#define MAX_BACKLOG			1024 /* listen socket max backlog   */
+#define TCP_DEFAULT_BACKLOG		1024 /* listen socket default backlog   */
 
 #define TMP_RX_BUF_SIZE			(RX_BATCH * MAX_HDR_SZ)
 

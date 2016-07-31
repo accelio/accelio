@@ -72,7 +72,7 @@ extern double				g_mhz;
 
 #define RX_BATCH			32   /* Number of RX tasks to batch */
 
-#define MAX_BACKLOG			1024 /* listen socket max backlog   */
+#define TCP_DEFAULT_BACKLOG		1024 /* listen socket default backlog */
 
 #define TMP_RX_BUF_SIZE			(RX_BATCH * MAX_HDR_SZ)
 

@@ -87,6 +87,8 @@ extern spinlock_t		dev_list_lock;
 
 #define XIO_BEACON_WRID			0xfffffffffffffffeULL
 
+#define RDMA_DEFAULT_BACKLOG	4 /* rdma_listen default backlog */
+
 #define PAGE_SIZE			page_size
 /* see if a pointer is page aligned. */
 #define IS_PAGE_ALIGNED(ptr)		\

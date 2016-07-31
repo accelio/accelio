@@ -3186,7 +3186,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		goto exit2;
 	}
 
-	/* 0 == maximum backlog */
+	backlog = backlog > 0 ? backlog : RDMA_DEFAULT_BACKLOG;
 	retval  = rdma_listen(rdma_hndl->cm_id, backlog);
 	if (retval) {
 		xio_set_error(errno);

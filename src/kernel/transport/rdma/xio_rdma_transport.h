@@ -87,6 +87,8 @@ extern struct xio_options	*g_poptions;
 #define HARD_CQ_MOD			64
 #define SEND_THRESHOLD			8
 
+#define RDMA_DEFAULT_BACKLOG	4 /* rdma_listen default backlog */
+
 #ifndef PAGE_SHIFT
 #define PAGE_SHIFT			12
 #endif

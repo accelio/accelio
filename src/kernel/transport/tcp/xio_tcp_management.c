@@ -1490,7 +1490,7 @@ static int xio_tcp_listen(struct xio_transport_base *transport,
 	tcp_hndl->is_listen = 1;
 
 	retval  = kernel_listen(tcp_hndl->socket.ctl.ksock,
-				backlog > 0 ? backlog : MAX_BACKLOG);
+				backlog > 0 ? backlog : TCP_DEFAULT_BACKLOG);
 	if (retval) {
 		xio_set_error(-retval);
 		ERROR_LOG("tcp listen failed. (errno=%d)\n", -retval);

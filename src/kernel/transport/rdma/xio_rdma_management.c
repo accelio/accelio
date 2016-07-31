@@ -2780,7 +2780,7 @@ static int xio_rdma_listen(struct xio_transport_base *transport,
 		goto exit2;
 	}
 
-	/* TODO (Alex): Why was backlog set to 0? */
+	backlog = backlog > 0 ? backlog : RDMA_DEFAULT_BACKLOG;
 	DEBUG_LOG("Calling rdma_listen() for CM with backlog %d\n", backlog);
 	retval = rdma_listen(rdma_hndl->cm_id, backlog);
 	if (retval) {

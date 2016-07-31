@@ -320,7 +320,7 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 {
 	struct xio_server	*server;
 	int			retval;
-	int			backlog = 4;
+	int			backlog = 0; /* setting to 0 will use the transport default */
 
 	if (!ctx  || !ops || !uri) {
 		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
