@@ -427,6 +427,17 @@ int run_client_test(struct perf_parameters *user_param)
 
 	xio_init();
 
+	if (user_param->output_file) {
+                fd = fopen(user_param->output_file, "w");
+                if (fd == NULL) {
+                        fprintf(stderr, "file open failed. %s\n",
+                                user_param->output_file);
+                        goto cleanup1;
+                }
+                fprintf(fd, "size, threads, tps, bw[Mbps], lat[usec]\n");
+                fflush(fd);
+        }
+
 	g_mhz		= get_cpu_mhz(0);
 	max_cpus	= sysconf(_SC_NPROCESSORS_ONLN);
 	threads_iter    = user_param->start_thread;
@@ -435,7 +446,7 @@ int run_client_test(struct perf_parameters *user_param)
 	tdata = (struct thread_data *)
 			calloc(user_param->threads_num, sizeof(*tdata));
 	if (tdata == NULL) {
-		fprintf(fd, "malloc failed\n");
+		fprintf(stderr, "malloc failed.\n");
 		goto cleanup1;
 	}
 
@@ -445,16 +456,6 @@ int run_client_test(struct perf_parameters *user_param)
 		goto cleanup2;
 	}
 
-	if (user_param->output_file) {
-		fd = fopen(user_param->output_file, "w");
-		if (fd == NULL) {
-			fprintf(fd, "file open failed. %s\n",
-				user_param->output_file);
-			goto cleanup2;
-		}
-		fprintf(fd, "size, threads, tps, bw[Mbps], lat[usec]\n");
-		fflush(fd);
-	}
 	i = intf_name_best_cpus(user_param->intf_name, &cpusmask, &cpusnr);
 	if (i == 0) {
 		printf("best cpus [%d] %s\n", cpusnr,
@@ -580,9 +581,6 @@ int run_client_test(struct perf_parameters *user_param)
 	printf("%s", RESULT_LINE);
 
 cleanup:
-	if (fd)
-		fclose(fd);
-
 	ctx_hand_shake(comm);
 
 cleanup2:
@@ -593,6 +591,9 @@ cleanup2:
 	free(tdata);
 
 cleanup1:
+	if (fd)
+                fclose(fd);
+	
 	xio_shutdown();
 
 	return 0;
