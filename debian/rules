@@ -14,7 +14,7 @@ endif
 override_dh_auto_build:
 	dh_testdir
 	./autogen.sh
-	dh_auto_configure
+	dh_auto_configure -- $(ACCELIO_EXTRA_CMAKE_ARGS)
 	dh_auto_build --parallel
 
 override_dh_auto_install:
