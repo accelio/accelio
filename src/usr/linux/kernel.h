@@ -135,8 +135,27 @@ static inline void spin_unlock(spinlock_t* spinlock)
 #else
 /*DPDK spin lock */
 
-#include <emmintrin.h>
-
+#if defined(__x86_64__) || defined(__i386__)
+	#include <emmintrin.h>
+	#define XIO_PAUSE() _mm_pause()
+/*
+ * PPC implementation
+ *
+ * From: http://stackoverflow.com/questions/5425506/equivalent-of-x86-pause-instruction-for-ppc
+ *
+ * In the Linux kernel we have this in arch/powerpc/include/asm/processor.h
+ * Macros for adjusting thread priority (hardware multi-threading):
+ * #define HMT_very_low()   asm volatile("or 31,31,31   # very low priority")
+ *
+ * note:	or 27,27,27
+ *	This form of or provides a hint that performance will be improved if
+ *	shared resources dedicated to the executing processor are released for
+ *	use by other processors.
+ */
+#elif defined(__ppc__)   || defined(_ARCH_PPC)  || \
+      defined(_ARCH_PWR) || defined(_ARCH_PWR2) || defined(_POWER)
+	#define XIO_PAUSE() __asm__ volatile ("or 27,27,27")
+#endif
 static inline void spin_lock_init(spinlock_t* spinlock)
 {
 	spinlock = 0;
@@ -146,7 +165,7 @@ static inline void spin_lock(spinlock_t* spinlock)
 {
 	while (__sync_lock_test_and_set(spinlock, 1))
 		while (*spinlock)
-			_mm_pause();
+			XIO_PAUSE();
 }
 
 static inline int spin_try_lock(spinlock_t* spinlock)
