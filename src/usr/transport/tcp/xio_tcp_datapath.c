@@ -3087,7 +3087,7 @@ static int xio_tcp_send_cancel(struct xio_tcp_transport *tcp_hndl,
 		return  -1;
 
 	task->omsg = NULL;
-	free(tcp_hndl->dummy_msg.out.header.iov_base);
+	ufree(tcp_hndl->dummy_msg.out.header.iov_base);
 
 	tcp_hndl->tx_ready_tasks_num++;
 	list_move_tail(&task->tasks_list_entry, &tcp_hndl->tx_ready_list);

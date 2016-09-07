@@ -4188,7 +4188,7 @@ static void xio_rdma_read_setup_msg(struct xio_rdma_transport *rdma_hndl,
 		return;
 
 	rdma_hndl->peer_rkey_tbl = (struct xio_rkey_tbl *)
-				       calloc(msg->rkey_tbl_size, sizeof(*tbl));
+				       ucalloc(msg->rkey_tbl_size, sizeof(*tbl));
 	if (unlikely(!rdma_hndl->peer_rkey_tbl)) {
 		ERROR_LOG("calloc failed. (errno=%m)\n");
 		xio_strerror(ENOMEM);
@@ -4740,7 +4740,7 @@ static int xio_rdma_send_cancel(struct xio_rdma_transport *rdma_hndl,
 	rdma_task->txd.send_wr.num_sge	= 1;
 
 	task->omsg = NULL;
-	free(rdma_hndl->dummy_msg.out.header.iov_base);
+	ufree(rdma_hndl->dummy_msg.out.header.iov_base);
 
 	rdma_hndl->tx_ready_tasks_num++;
 	list_move_tail(&task->tasks_list_entry, &rdma_hndl->tx_ready_list);

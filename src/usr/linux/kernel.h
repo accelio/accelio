@@ -170,14 +170,16 @@ static inline char *kstrdup(const char *s, gfp_t gfp)
 {
 	/* Make sure code transfered to kernel will work as expected */
 	assert(gfp == GFP_KERNEL);
-	return strdup(s);
+
+	return ustrdup(s);
 }
 
 static inline char *kstrndup(const char *s, size_t len, gfp_t gfp)
 {
 	/* Make sure code transfered to kernel will work as expected */
 	assert(gfp == GFP_KERNEL);
-	return strndup(s, len);
+
+	return ustrndup(s, len);
 }
 
 #endif /* _LINUX_KERNEL_H */

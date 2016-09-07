@@ -3127,7 +3127,7 @@ static int xio_rdma_connect(struct xio_transport_base *trans_hndl,
 	}
 
 	/* allocate memory for portal_uri */
-	trans_hndl->portal_uri = strdup(portal_uri);
+	trans_hndl->portal_uri = ustrdup(portal_uri);
 	if (!trans_hndl->portal_uri) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("calloc failed. %m\n");
@@ -3140,7 +3140,7 @@ static int xio_rdma_connect(struct xio_transport_base *trans_hndl,
 	return 0;
 
 exit2:
-	free(trans_hndl->portal_uri);
+	ufree(trans_hndl->portal_uri);
 	trans_hndl->portal_uri = NULL;
 
 exit1:

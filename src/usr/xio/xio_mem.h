@@ -162,5 +162,28 @@ static inline void unuma_free(void *ptr)
 		xio_numa_free_ptr(ptr);
 }
 
+static inline char *ustrdup(char const *s)
+{
+	size_t len = strlen(s) + 1;
+	char *new1 = (char*)umalloc(len);
+
+	if (new1 == NULL)
+		return NULL;
+
+	return (char*)memcpy(new1, s, len);
+}
+
+static inline char *ustrndup(char const *s, size_t n)
+{
+	size_t len = strnlen(s, n);
+	char *new1 = (char*)umalloc(len + 1);
+
+	if (new1 == NULL)
+		return NULL;
+
+	new1[len] = '\0';
+	return (char*)memcpy(new1, s, len);
+}
+
 #endif
 

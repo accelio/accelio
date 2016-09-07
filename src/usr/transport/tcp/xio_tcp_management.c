@@ -1641,7 +1641,7 @@ static int xio_tcp_connect(struct xio_transport_base *transport,
 		goto exit1;
 	}
 	/* allocate memory for portal_uri */
-	tcp_hndl->base.portal_uri = strdup(portal_uri);
+	tcp_hndl->base.portal_uri = ustrdup(portal_uri);
 	if (!tcp_hndl->base.portal_uri) {
 		xio_set_error(ENOMEM);
 		ERROR_LOG("strdup failed. %m\n");
