@@ -2714,11 +2714,9 @@ static int xio_rdma_connect(struct xio_transport_base *trans_hndl,
 	return 0;
 
 exit2:
-	rdma_destroy_id(rdma_hndl->cm_id);
-	rdma_hndl->cm_id = NULL;
-exit1:
 	kfree(trans_hndl->portal_uri);
 
+exit1:
 	return -1;
 }
 
