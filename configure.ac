@@ -251,7 +251,6 @@ if test "$enable_kernel_module" != "no"; then
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_lat])
 	AC_CONFIG_SUBDIRS([tests/kernel/hello_test_ow])
-	AC_CONFIG_SUBDIRS([tests/kernel/direct_rdma_test])
 	if test "$enable_raio_build" == "yes"; then
 		AC_CONFIG_SUBDIRS([examples/raio/kernel/nbdx])
 	fi
@@ -346,7 +345,9 @@ AC_CONFIG_FILES([tests/usr/hello_test_lat/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_ow/Makefile])
 AC_CONFIG_FILES([tests/usr/hello_test_oneway/Makefile])
 AC_CONFIG_FILES([tests/usr/event_loop_tests/Makefile])
+if test "$enable_rdma" != "no"; then
 AC_CONFIG_FILES([tests/usr/direct_rdma_test/Makefile])
+fi
 AC_CONFIG_FILES([benchmarks/usr/xio_perftest/Makefile])
 AC_CONFIG_FILES([regression/usr/reg_basic_mt/Makefile])
 
