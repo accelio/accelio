@@ -3273,15 +3273,6 @@ void xio_connection_keepalive_intvl(void *_connection)
 		connection->ka.probes = 0;
 		connection->ka.req_sent = 0;
 
-		retval = xio_ctx_add_delayed_work(
-				connection->ctx,
-				1000 * g_options.ka.time, connection,
-				xio_connection_keepalive_start,
-				&connection->ka.timer);
-		if (retval != 0) {
-			ERROR_LOG("periodic keepalive failed - abort\n");
-			return;
-		}
 		/* notify the application of connection error */
 		xio_session_notify_connection_error(
 				connection->session, connection, XIO_E_TIMEOUT);
