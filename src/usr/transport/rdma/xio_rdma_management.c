@@ -362,7 +362,7 @@ static struct xio_srq *xio_srq_get(struct xio_rdma_transport *rdma_hndl,
 	return srq;
 
 cleanup:
-	free(srq);
+	ufree(srq);
 	return NULL;
 }
 
@@ -379,7 +379,7 @@ static int xio_srq_destroy(struct xio_srq *srq)
 		ERROR_LOG("ibv_destroy_srq failed\n");
 		return -1;
 	}
-	free(srq);
+	ufree(srq);
 	return 0;
 }
 #endif
