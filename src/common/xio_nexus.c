@@ -2089,6 +2089,8 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 			ERROR_LOG("failed to allocate memory\n");
 			goto cleanup1;
 		}
+		memset(&work_params->observer_work, 0,
+		       sizeof(work_params->observer_work));
 		work_params->observer_event.observer = observer;
 		work_params->observer_event.observable = &nexus->observable;
 		work_params->observer_event.event = XIO_NEXUS_EVENT_ESTABLISHED;
