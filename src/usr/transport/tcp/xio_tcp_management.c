@@ -182,9 +182,8 @@ int xio_tcp_single_sock_del_ev_handlers(struct xio_tcp_transport *tcp_hndl)
 {
 	int retval;
 
-        if (tcp_hndl->in_epoll[0])
-                return 0;
-
+	if (!tcp_hndl->in_epoll[0])
+		return 0;
 	/* remove from epoll */
 	retval = xio_context_del_ev_handler(tcp_hndl->base.ctx,
 					    tcp_hndl->sock.cfd);
