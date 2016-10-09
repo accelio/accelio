@@ -437,8 +437,8 @@ static int xio_nexus_send_setup_req(struct xio_nexus *nexus)
 		xio_tasks_pool_put(task);
 		return -1;
 	}
-	TRACE_LOG("%s: nexus:%p, rdma_hndl:%p\n", __func__,
-		  nexus, trans_hndl);
+	TRACE_LOG("%s: nexus:%p, %s_hndl:%p\n", __func__,
+		  nexus, xio_proto_str(trans_hndl->proto), trans_hndl);
 	retval = nexus->transport->send(trans_hndl, task);
 	if (retval != 0) {
 		ERROR_LOG("send setup request failed\n");
@@ -1079,8 +1079,9 @@ static void xio_nexus_release_cb(void *data)
 {
 	struct xio_nexus *nexus = (struct xio_nexus *)data;
 
-	TRACE_LOG("physical nexus close. nexus:%p rdma_hndl:%p\n",
-		  nexus, nexus->transport_hndl);
+	TRACE_LOG("physical nexus close. nexus:%p %s_hndl:%p\n",
+		  nexus, xio_proto_str(nexus->transport_hndl->proto),
+		  nexus->transport_hndl);
 
 	if (!nexus->is_listener)
 		xio_nexus_cache_remove(nexus->cid);
@@ -1102,8 +1103,9 @@ static void xio_nexus_release(void *data)
 {
 	struct xio_nexus *nexus = (struct xio_nexus *)data;
 
-	TRACE_LOG("physical nexus close. nexus:%p rdma_hndl:%p\n",
-		  nexus, nexus->transport_hndl);
+	TRACE_LOG("physical nexus close. nexus:%p %s_hndl:%p\n",
+		  nexus, xio_proto_str(nexus->transport_hndl->proto),
+		  nexus->transport_hndl);
 
 	xio_ctx_del_delayed_work(nexus->transport_hndl->ctx,
 				 &nexus->close_time_hndl);
@@ -2067,8 +2069,9 @@ int xio_nexus_connect(struct xio_nexus *nexus, const char *portal_uri,
 				goto cleanup2;
 			}
 		}
-		TRACE_LOG("%s: nexus:%p, rdma_hndl:%p, portal:%s\n", __func__,
-			  nexus, nexus->transport_hndl, portal_uri);
+		TRACE_LOG("%s: nexus:%p, %s_hndl:%p, portal:%s\n", __func__,
+			  nexus, xio_proto_str(nexus->transport_hndl->proto),
+			  nexus->transport_hndl, portal_uri);
 		retval = nexus->transport->connect(nexus->transport_hndl,
 						  portal_uri,
 						  out_if);
