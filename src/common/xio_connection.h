@@ -71,7 +71,7 @@ struct xio_ka {
 	int				probes;
 	int				req_sent;
 	int				timedout;
-	int				pad;
+	int				io_rcv;
 };
 
 struct xio_connection {

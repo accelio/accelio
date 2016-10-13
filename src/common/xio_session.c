@@ -629,6 +629,7 @@ static int xio_on_req_recv(struct xio_connection *connection,
 				  connection->req_exp_sn, hdr.sn);
 		}
 	}
+	connection->ka.io_rcv = 1;
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
 		  __func__,
@@ -732,6 +733,7 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 		xio_release_response_task(task);
 		goto exit;
 	}
+	connection->ka.io_rcv = 1;
 
 	/* read session header */
 	xio_session_read_header(task, &hdr);
