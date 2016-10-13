@@ -540,7 +540,7 @@ static void xio_connection_notify_req_msgs_flush(struct xio_connection
 				  tmp_pmsg, pdata) {
 		xio_msg_list_remove(&connection->reqs_msgq, pmsg, pdata);
 		if (!IS_APPLICATION_MSG(pmsg->type)) {
-			if (pmsg->type == XIO_FIN_REQ &&
+			if (test_flag(XIO_FIN_REQ, &pmsg->type) &&
                             connection->state != XIO_CONNECTION_STATE_DISCONNECTED) {
 				connection->fin_request_flushed = 1;
 				/* since fin req was not really sent, need to

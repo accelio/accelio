@@ -250,15 +250,6 @@ struct xio_task *xio_nexus_get_primary_task(struct xio_nexus *nexus)
 }
 
 /*---------------------------------------------------------------------------*/
-/* xio_nexus_task_lookup						     */
-/*---------------------------------------------------------------------------*/
-static inline struct xio_task *xio_nexus_task_lookup(void *nexus, int id)
-{
-	return xio_tasks_pool_lookup(
-			((struct xio_nexus *)nexus)->primary_tasks_pool, id);
-}
-
-/*---------------------------------------------------------------------------*/
 /* xio_nexus_notify_server		                                     */
 /*---------------------------------------------------------------------------*/
 static void xio_nexus_notify_server(struct xio_nexus *nexus, int event,
