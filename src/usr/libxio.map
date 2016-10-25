@@ -50,6 +50,7 @@ XIO_1.0 {
 		xio_redirect;
 		xio_reject;
 		xio_bind;
+		xio_bind_ex;
 		xio_unbind;
 		xio_mempool_create;
 		xio_mempool_create_ex;

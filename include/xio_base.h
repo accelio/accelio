@@ -1021,12 +1021,48 @@ void xio_unregister_remote_key(struct xio_managed_rkey *managed_rkey);
 /* XIO server API							     */
 /*---------------------------------------------------------------------------*/
 /**
+ * @struct xio_bind_params
+ * @brief bind parameters structure
+ */
+struct xio_bind_params {
+	/**< xio context handle	     */
+	struct xio_context	*ctx;
+
+	/**< server's event handlers */
+	struct xio_session_ops	*ops;
+
+	/**< listen uri of server    */
+	const char		*uri;
+
+	/**< message related flags  as defined in enum xio_msg_flags */
+	uint32_t		flags;
+
+	/**< backlog of incoming connection requests. set to 0 for default */
+	int32_t			backlog;
+
+	/**< private data pointer to pass to each callback */
+	void			*private_data;
+};
+
+/**
+ * open a server listener object
+ *
+ * @param[in] bind_prms	Structure of server bind parameters
+ * @param[out] src_port Returned listen port in host order, can be NULL
+ *			if not needed
+ *
+ * @return xio server context, or NULL upon error
+ */
+struct xio_server *xio_bind_ex(struct xio_bind_params *bind_prms,
+			       uint16_t *src_port);
+
+/**
  * open a server listener object
  *
  * @param[in] ctx	The xio context handle
  * @param[in] ops	Structure of server's event handlers
  * @param[in] uri	Uri to connect or to bind
- * @param[in] src_port  Returned listen port in host order, can be NULL
+ * @param[out] src_port Returned listen port in host order, can be NULL
  *			if not needed
  * @param[in] flags	Message related flags as defined in enum xio_msg_flags
  * @param[in] cb_user_context Private data pointer to pass to each callback

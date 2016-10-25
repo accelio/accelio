@@ -311,25 +311,26 @@ static int xio_on_nexus_event(void *observer, void *notifier, int event,
 /*---------------------------------------------------------------------------*/
 /* xio_bind								     */
 /*---------------------------------------------------------------------------*/
-struct xio_server *xio_bind(struct xio_context *ctx,
-			    struct xio_session_ops *ops,
-			    const char *uri,
-			    uint16_t *src_port,
-			    uint32_t session_flags,
-			    void *cb_private_data)
+struct xio_server *xio_bind_ex(struct xio_bind_params *bind_prms,
+			       uint16_t *src_port)
 {
 	struct xio_server	*server;
 	int			retval;
-	int			backlog = 0; /* setting to 0 will use the transport default */
 
-	if (!ctx  || !ops || !uri) {
-		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
-			  ctx, ops, uri);
+	if (!bind_prms) {
+		ERROR_LOG("invalid parameter bind_prms:null\n");
 		xio_set_error(EINVAL);
 		return NULL;
 	}
 
-	TRACE_LOG("bind to %s\n", uri);
+	if (!bind_prms->ctx  || !bind_prms->ops || !bind_prms->uri) {
+		ERROR_LOG("invalid parameters ctx:%p, ops:%p, uri:%p\n",
+			  bind_prms->ctx, bind_prms->ops, bind_prms->uri);
+		xio_set_error(EINVAL);
+		return NULL;
+	}
+
+	TRACE_LOG("bind to %s\n", bind_prms->uri);
 
 	/* create the server */
 	server = (struct xio_server *)
@@ -341,24 +342,27 @@ struct xio_server *xio_bind(struct xio_context *ctx,
 	kref_init(&server->kref);
 
 	/* fill server data*/
-	server->ctx = ctx;
-	server->cb_private_data	= cb_private_data;
-	server->uri = kstrdup(uri, GFP_KERNEL);
+	server->ctx = bind_prms->ctx;
+	server->cb_private_data	= bind_prms->private_data;
+	server->uri = kstrdup(bind_prms->uri, GFP_KERNEL);
 
-	server->session_flags = session_flags;
-	memcpy(&server->ops, ops, sizeof(*ops));
+	server->session_flags = bind_prms->flags;
+	memcpy(&server->ops, bind_prms->ops, sizeof(*bind_prms->ops));
 
 	XIO_OBSERVER_INIT(&server->observer, server, xio_on_nexus_event);
 
 	XIO_OBSERVABLE_INIT(&server->nexus_observable, server);
 
-	server->listener = xio_nexus_open(ctx, uri, NULL, 0, 0, NULL);
+	server->listener = xio_nexus_open(bind_prms->ctx,
+					  bind_prms->uri,
+					  NULL, 0, 0, NULL);
 	if (!server->listener) {
 		ERROR_LOG("failed to create connection\n");
 		goto cleanup;
 	}
 	retval = xio_nexus_listen(server->listener,
-				  uri, src_port, backlog);
+				  bind_prms->uri, src_port,
+				  bind_prms->backlog);
 	if (retval != 0) {
 		ERROR_LOG("connection listen failed\n");
 		goto cleanup1;
@@ -375,6 +379,28 @@ cleanup:
 	kfree(server);
 
 	return NULL;
+}
+EXPORT_SYMBOL(xio_bind_ex);
+
+/*---------------------------------------------------------------------------*/
+/* xio_bind								     */
+/*---------------------------------------------------------------------------*/
+struct xio_server *xio_bind(struct xio_context *ctx,
+			    struct xio_session_ops *ops,
+			    const char *uri,
+			    uint16_t *src_port,
+			    uint32_t session_flags,
+			    void *cb_private_data)
+{
+	struct xio_bind_params bind_prms = {
+		.ctx = ctx,
+		.ops = ops,
+		.uri = uri,
+		.flags = session_flags,
+		.backlog = 0,
+		.private_data = cb_private_data
+	};
+	return xio_bind_ex(&bind_prms, src_port);
 }
 EXPORT_SYMBOL(xio_bind);
 
