@@ -1751,6 +1751,9 @@ static void xio_fin_req_timeout(void *data)
 	/* flush all messages back to user */
 	xio_connection_notify_msgs_flush(connection);
 
+	if (connection->nexus)
+		xio_nexus_close(connection->nexus, &connection->session->observer);
+
 	connection->state = XIO_CONNECTION_STATE_CLOSED;
 
 	if (!connection->disable_notify)
@@ -2312,12 +2315,11 @@ static void xio_connection_post_destroy(struct kref *kref)
 		  session->connections_nr);
 
 	/* remove the connection from the session's connections list */
-	if (connection->nexus) {
-		xio_connection_flush_tasks(connection);
-		/* for race condition between connection teardown and transport closed */
-		if (connection->state != XIO_CONNECTION_STATE_DISCONNECTED)
-			xio_nexus_close(connection->nexus, &session->observer);
-	}
+	xio_connection_flush_tasks(connection);
+
+	/* for race condition between connection teardown and transport closed */
+	if (connection->nexus && connection->state != XIO_CONNECTION_STATE_DISCONNECTED)
+		xio_nexus_close(connection->nexus, &session->observer);
 
 	/* leading connection */
 	spin_lock(&session->connections_list_lock);
