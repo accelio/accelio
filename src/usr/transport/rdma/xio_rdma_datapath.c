@@ -3280,6 +3280,7 @@ static int xio_prep_rdma_op(
 
 			tot_len				+= rlen;
 			int_len				+= rlen;
+			rint_len			= 0;
 			tmp_rdma_task->out_ib_op	= xio_out_ib_op;
 			tmp_rdma_task->phantom_idx	= task_idx;
 

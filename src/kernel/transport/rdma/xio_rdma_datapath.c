@@ -1715,6 +1715,7 @@ static int xio_prep_rdma_op(struct xio_task *task,
 			rdmad->nents			= k + 1;
 			k				= 0;
 
+			rint_len			= 0;
 			tot_len				+= rlen;
 			int_len				+= rlen;
 			tmp_rdma_task->out_ib_op		= xio_out_ib_op;
