@@ -55,6 +55,8 @@
 #include "xio_server.h"
 #include "xio_session.h"
 #include "xio_nexus.h"
+#include "xio_msg_list.h"
+#include "xio_connection.h"
 #include <xio_env_adv.h>
 
 /*---------------------------------------------------------------------------*/
@@ -875,6 +877,12 @@ static int xio_nexus_on_recv_rsp(struct xio_nexus *nexus,
 			DEBUG_LOG("spurious event\n");
 			return 0;
 		}
+		if (unlikely(task->sender_task->connection &&
+			     task->sender_task->connection->nexus != nexus)) {
+			DEBUG_LOG("connection disconnected from nexus. task dismissed\n");
+			return 0;
+		}
+
 		/* route the response to the sender session */
 		xio_observable_notify_observer(
 				&nexus->observable,
