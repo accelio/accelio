@@ -423,8 +423,11 @@ void xio_init(void);
  *
  * Idempotent routine to shutdown the library.
  *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ *      EBUSY - indicates xio objects leakage
  */
-void xio_shutdown(void);
+int xio_shutdown(void);
 
 /*---------------------------------------------------------------------------*/
 /* Memory registration/allocation API					     */

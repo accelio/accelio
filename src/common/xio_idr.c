@@ -163,12 +163,15 @@ struct xio_idr *xio_idr_create(void)
 /*---------------------------------------------------------------------------*/
 /* xio_idr_destroy							     */
 /*---------------------------------------------------------------------------*/
-void xio_idr_destroy(struct xio_idr *idr)
+int xio_idr_destroy(struct xio_idr *idr)
 {
 	struct xio_idr_entry *idr_entry = NULL;
+	int ret = 0;
 
-	if (!idr)
-		return;
+	if (!idr) {
+		xio_set_error(EINVAL);
+		return -1;
+	}
 
 	HT_FOREACH_SAFE(idr_entry, &idr->cache, idr_ht_entry) {
 		HT_REMOVE(&idr->cache, idr_entry, xio_idr_entry, idr_ht_entry);
@@ -176,7 +179,13 @@ void xio_idr_destroy(struct xio_idr *idr)
 			  idr_entry->key, idr_entry->name);
 		kfree(idr_entry->name);
 		kfree(idr_entry);
+		ret = -1;
 	}
 	kfree(idr);
+
+	if (ret == -1) {
+		xio_set_error(EBUSY);
+	}
+	return ret;
 }
 

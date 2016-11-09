@@ -80,9 +80,10 @@ extern double xio_get_cpu_mhz(void);
 /*---------------------------------------------------------------------------*/
 /* xio_dtor								     */
 /*---------------------------------------------------------------------------*/
-static void xio_dtor(void)
+static int xio_dtor(void)
 {
 	size_t i;
+	int ret = 0;
 
 	for (i = 0; i < transport_tbl_sz; i++) {
 		if (transport_tbl[i] == NULL)
@@ -95,9 +96,11 @@ static void xio_dtor(void)
 
 		xio_unreg_transport(transport_tbl[i]);
 	}
-	xio_idr_destroy(usr_idr);
+	ret = xio_idr_destroy(usr_idr);
 	xio_thread_data_destruct();
 	xio_env_cleanup();
+
+	return ret;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -141,18 +144,21 @@ void xio_init(void)
 	mutex_unlock(&ini_mutex);
 }
 
-void xio_shutdown(void)
+int xio_shutdown(void)
 {
+	int ret = 0;
 	mutex_lock(&ini_mutex);
 	if (ini_refcnt <= 0) {
 		ERROR_LOG("reference count < 0\n");
 		abort();
 		mutex_unlock(&ini_mutex);
-		return;
+		return ret;
 	}
 	if (--ini_refcnt == 0)
-		xio_dtor();
+		ret = xio_dtor();
+
 	mutex_unlock(&ini_mutex);
+	return ret;
 }
 
 int xio_inited(void)

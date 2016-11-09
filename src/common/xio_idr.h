@@ -51,7 +51,7 @@ int xio_idr_remove_uobj(struct xio_idr *cache, void *uobj);
 
 int xio_idr_lookup_uobj(struct xio_idr *cache, void *uobj);
 
-void xio_idr_destroy(struct xio_idr *cache);
+int xio_idr_destroy(struct xio_idr *cache);
 
 #endif /*XIO_IDR_H */
 
