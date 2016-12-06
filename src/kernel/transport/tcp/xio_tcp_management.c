@@ -448,7 +448,9 @@ static void xio_tcp_close_cb(struct kref *kref)
 		  tcp_hndl, tcp_hndl->socket.ctl.ksock);
 
 	switch (tcp_hndl->state) {
+	case XIO_TRANSPORT_STATE_INIT:
 	case XIO_TRANSPORT_STATE_LISTEN:
+	case XIO_TRANSPORT_STATE_CONNECTING:
 	case XIO_TRANSPORT_STATE_CONNECTED:
 		tcp_hndl->state = XIO_TRANSPORT_STATE_DISCONNECTED;
 		/*fallthrough*/
