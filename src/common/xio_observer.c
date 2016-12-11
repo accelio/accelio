@@ -198,7 +198,7 @@ void xio_observable_notify_observer(struct xio_observable *observable,
 				    struct xio_observer *observer,
 				    int event, void *event_data)
 {
-	if (likely(observable->impl && observer->impl))
+	if (likely(observable->impl && observer->impl && observer->notify))
 		observer->notify(observer->impl, observable->impl,
 				 event, event_data);
 	else
@@ -219,7 +219,8 @@ void xio_observable_notify_all_observers(struct xio_observable *observable,
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 				 observers_list_node) {
-		if(likely(observable->impl && observer_node->observer->impl))
+		if(likely(observable->impl && observer_node->observer->impl &&
+			  observer_node->observer->notify))
 			observer_node->observer->notify(
 				observer_node->observer->impl,
 				observable->impl, event, event_data);
@@ -235,7 +236,9 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 {
 	struct xio_observer_node *observer_node, *tmp_observer_node;
 
-	if (likely(observable->observer_node)) {
+	if (likely(observable && observable->observer_node &&
+		   observable->observer_node->observer &&
+		   observable->observer_node->observer->notify)) {
 		observable->observer_node->observer->notify(
 				NULL,
 				observable->impl, event, event_data);
@@ -245,11 +248,13 @@ void xio_observable_notify_any_observer(struct xio_observable *observable,
 	list_for_each_entry_safe(observer_node, tmp_observer_node,
 				 &observable->observers_list,
 				 observers_list_node) {
+        if (likely(observer_node->observer && observer_node->observer->notify)) {
 		observer_node->observer->notify(
-				NULL,
-				observable->impl, event, event_data);
-		observable->observer_node = observer_node;
-		break;
+                    NULL,
+                    observable->impl, event, event_data);
+                observable->observer_node = observer_node;
+                break;
+                }
 	}
 }
 EXPORT_SYMBOL(xio_observable_notify_any_observer);
