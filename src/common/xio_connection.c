@@ -3410,3 +3410,70 @@ int xio_connection_force_disconnect(struct xio_connection *connection,
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+/* xio_retain_request							     */
+/*---------------------------------------------------------------------------*/
+int xio_retain_request(struct xio_msg *req)
+{
+	struct xio_task	*task = container_of(req, struct xio_task, imsg);
+	int err;
+
+	/* already on hold */
+	if (unlikely(task->on_hold))
+		return 0;
+
+	if (unlikely(task->sender_task))
+		return -1;
+
+	/* since traditionally accelio used the request task for response
+	 * we wish to save the header so it won't be overwritten by response
+	 */
+	task->sender_task = xio_nexus_get_primary_task(task->nexus);
+	if (unlikely(!task)) {
+		ERROR_LOG("tasks pool is empty\n");
+		xio_set_error(ENOMEM);
+		return -1;
+	}
+	err = xio_task_swap_mbuf(task, task->sender_task);
+	if (unlikely(err)) {
+		ERROR_LOG("xio_task_swap_mbuf failed\n");
+		xio_set_error(EPERM);
+		return -1;
+	}
+
+	task->on_hold = 1;
+	kref_get(&task->kref);
+
+	return 0;
+}
+EXPORT_SYMBOL(xio_retain_request);
+
+/*---------------------------------------------------------------------------*/
+/* xio_dismiss_request							     */
+/*---------------------------------------------------------------------------*/
+int xio_dismiss_request(struct xio_msg *req)
+{
+	struct xio_task	*task = container_of(req, struct xio_task, imsg);
+	int err;
+
+	/* not on hold */
+	if (unlikely(!task->on_hold))
+		return 0;
+
+	if (unlikely(!task->sender_task))
+		return -1;
+
+	/* swap again to original state */
+	err = xio_task_swap_mbuf(task, task->sender_task);
+	if (unlikely(err)) {
+		ERROR_LOG("xio_task_swap_mbuf failed\n");
+		xio_set_error(EPERM);
+		return -1;
+	}
+	task->on_hold = 0;
+	/* release both tasks */
+	xio_release_response_task(task);
+
+	return 0;
+}
+EXPORT_SYMBOL(xio_dismiss_request);

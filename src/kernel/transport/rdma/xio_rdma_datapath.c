@@ -3256,6 +3256,13 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	if (unlikely(verify_rsp_send_limits(rdma_hndl)))
 		return -1;
 
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		sg_set_buf(rdma_task->tx_sgl,
+			   xio_mbuf_buf_head(&task->mbuf),
+			   xio_mbuf_buf_len(&task->mbuf));
+	}
+
 	/* prepare the out message  */
 	retval = xio_rdma_prep_rsp_out_data(rdma_hndl, task);
 	if (unlikely(retval != 0)) {
@@ -3329,6 +3336,13 @@ static int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	union xio_transport_event_data event_data;
+
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		sg_set_buf(rdma_task->tx_sgl,
+			   xio_mbuf_buf_head(&task->sender_task->mbuf),
+			   xio_mbuf_buf_len(&task->sender_task->mbuf));
+	}
 
 	if (rdma_task->out_ib_op == XIO_IB_RDMA_READ) {
 		xio_tasks_pool_put(task);

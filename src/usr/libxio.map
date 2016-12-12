@@ -59,6 +59,8 @@ XIO_1.0 {
 		xio_mempool_alloc;
 		xio_mempool_free;
 		xio_connection_ioctl;
+		xio_retain_request;
+		xio_dismiss_request;
 
 	local: *;
 };

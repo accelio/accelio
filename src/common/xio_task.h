@@ -77,7 +77,8 @@ struct xio_task {
 	uint32_t                rtid;           /* remote task id       */
 	uint32_t                magic;
 	int32_t                 status;
-	int32_t                 pad1;
+	uint32_t                on_hold:1;
+	uint32_t                pad:31;
 
 	void			*pool;
 	void			*slab;
@@ -355,6 +356,24 @@ static inline struct xio_task *xio_tasks_pool_lookup(
 		return task;
 
 	return NULL;
+}
+
+/*---------------------------------------------------------------------------*/
+/* xio_task_swap_mbuf							     */
+/*---------------------------------------------------------------------------*/
+static inline int xio_task_swap_mbuf(struct xio_task *t1,
+				     struct xio_task *t2)
+{
+	struct xio_mbuf	mbuf;
+
+	if (unlikely(t1->pool != t2->pool))
+		return -1;
+
+	mbuf = t1->mbuf;
+	t1->mbuf = t2->mbuf;
+	t2->mbuf = mbuf;
+
+	return 0;
 }
 
 #endif

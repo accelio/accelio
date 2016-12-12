@@ -76,6 +76,10 @@ struct xio_mbuf {
 
 #define xio_mbuf_tlv_head(mbuf)		((mbuf)->tlv.head)
 
+#define xio_mbuf_buf_head(mbuf)		((mbuf)->buf.head)
+
+#define xio_mbuf_buf_len(mbuf)		((mbuf)->buf.buflen)
+
 #define xio_mbuf_tlv_val_ptr(mbuf)	((mbuf)->tlv.val)
 
 #define xio_mbuf_tlv_type(mbuf)		((mbuf)->tlv.type)

@@ -2771,6 +2771,19 @@ static int xio_rdma_send_rsp(struct xio_rdma_transport *rdma_hndl,
 	if (unlikely(verify_rsp_send_limits(rdma_hndl)))
 		return -1;
 
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		struct xio_tasks_slab *slab =
+				(struct xio_tasks_slab *)task->sender_task->slab;
+		struct xio_rdma_tasks_slab *rdma_slab =
+				(struct xio_rdma_tasks_slab *)slab->dd_data;
+		struct ibv_mr *data_mr = xio_rdma_mr_lookup(rdma_slab->data_mr,
+				                                    rdma_hndl->tcq->dev);
+		rdma_task->txd.sge[0].addr =
+				uint64_from_ptr(xio_mbuf_buf_head(&task->mbuf));
+		rdma_task->txd.sge[0].lkey = data_mr->lkey;
+	}
+
 	/* prepare the out message  */
 	retval = xio_rdma_prep_rsp_out_data(rdma_hndl, task);
 	if (unlikely(retval != 0)) {
@@ -2843,6 +2856,19 @@ int xio_rdma_on_rsp_send_comp(struct xio_rdma_transport *rdma_hndl,
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	union xio_transport_event_data event_data;
+
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		struct xio_tasks_slab *slab =
+				(struct xio_tasks_slab *)task->slab;
+		struct xio_rdma_tasks_slab *rdma_slab =
+				(struct xio_rdma_tasks_slab *)slab->dd_data;
+		struct ibv_mr *data_mr = xio_rdma_mr_lookup(rdma_slab->data_mr,
+				                            rdma_hndl->tcq->dev);
+		rdma_task->txd.sge[0].addr =
+				uint64_from_ptr(xio_mbuf_buf_head(&task->sender_task->mbuf));
+		rdma_task->txd.sge[0].lkey = data_mr->lkey;
+	}
 
 	if (rdma_task->out_ib_op == XIO_IB_RDMA_READ) {
 		xio_tasks_pool_put(task);

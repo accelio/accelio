@@ -945,6 +945,26 @@ int xio_cancel(struct xio_msg *req, enum xio_status result);
 int xio_release_response(struct xio_msg *rsp);
 
 /**
+ * safely retain request message on responder side after sending the response
+ *
+ * @param[in] req The request to retain
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_retain_request(struct xio_msg *req);
+
+/**
+ * safely dismiss previously retained request message on responder side
+ *
+ * @param[in] req The retained request to dismiss
+ *
+ * @return 0 on success, or -1 on error.  If an error occurs, call
+ *	    xio_errno function to get the failure reason.
+ */
+int xio_dismiss_request(struct xio_msg *req);
+
+/**
  * send one way message to remote peer
  *
  * @param[in] conn	The xio connection handle

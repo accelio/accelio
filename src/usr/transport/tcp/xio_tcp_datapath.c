@@ -805,13 +805,19 @@ cleanup:
 static int xio_tcp_on_rsp_send_comp(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task)
 {
+	XIO_TO_TCP_TASK(task, tcp_task);
 	union xio_transport_event_data event_data;
+
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		tcp_task->txd.msg_iov[0].iov_base = xio_mbuf_buf_head(&task->sender_task->mbuf);
+		tcp_task->txd.ctl_msg = xio_mbuf_buf_head(&task->sender_task->mbuf);
+	}
 
 	if (IS_CANCEL(task->tlv_type)) {
 		xio_tasks_pool_put(task);
 		return 0;
 	}
-
 	event_data.msg.op	= XIO_WC_OP_SEND;
 	event_data.msg.task	= task;
 
@@ -1698,6 +1704,12 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	int			tlv_len = 0;
 	struct xio_sg_table_ops	*sgtbl_ops;
 	void			*sgtbl;
+
+	if (task->on_hold) {
+		/* dynamically initialize header */
+		tcp_task->txd.msg_iov[0].iov_base = xio_mbuf_buf_head(&task->mbuf);
+		tcp_task->txd.ctl_msg = xio_mbuf_buf_head(&task->mbuf);
+	}
 
 	sgtbl		= xio_sg_table_get(&task->omsg->out);
 	sgtbl_ops	= (struct xio_sg_table_ops *)
