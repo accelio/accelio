@@ -621,13 +621,12 @@ static int xio_on_req_recv(struct xio_connection *connection,
 		}
 		connection->restarted = 0;
 	} else {
-		if (unlikely(connection->restarted)) {
-			connection->req_exp_sn = hdr.sn + 1;
+		if (unlikely(connection->restarted))
 			connection->restarted = 0;
-		} else {
+		else
 			ERROR_LOG("ERROR: sn expected:%d, sn arrived:%d\n",
 				  connection->req_exp_sn, hdr.sn);
-		}
+		connection->req_exp_sn = hdr.sn + 1;
 	}
 	connection->ka.io_rcv = 1;
 	/*
@@ -753,13 +752,12 @@ static int xio_on_rsp_recv(struct xio_connection *connection,
 			connection->peer_credits_bytes += hdr.credits_bytes;
 		}
 	} else {
-		if (unlikely(connection->restarted)) {
-			connection->rsp_exp_sn = hdr.sn + 1;
+		if (unlikely(connection->restarted)) 
 			connection->restarted = 0;
-		} else {
+		else 
 			ERROR_LOG("ERROR: expected sn:%d, arrived sn:%d\n",
 				  connection->rsp_exp_sn, hdr.sn);
-		}
+		connection->rsp_exp_sn = hdr.sn + 1;
 	}
 	/*
 	DEBUG_LOG("[%s] sn:%d, exp:%d, ack:%d, credits:%d, peer_credits:%d\n",
