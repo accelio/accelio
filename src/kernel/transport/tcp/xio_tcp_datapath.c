@@ -651,6 +651,13 @@ static int xio_tcp_prep_req_out_data(
 	ulp_hdr_len	= vmsg->header.iov_len;
 	ulp_imm_len	= tbl_length(sgtbl_ops, sgtbl);
 
+	if (g_poptions->inline_xio_data_align && ulp_imm_len) {
+		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
+
+		ulp_pad_len = ALIGN(hdr_len, g_poptions->inline_xio_data_align) -
+			      hdr_len;
+	}
+
 	xio_hdr_len = xio_mbuf_get_curr_offset(&task->mbuf);
 	xio_hdr_len += sizeof(struct xio_tcp_req_hdr);
 	xio_hdr_len += sizeof(struct xio_sge) * tcp_task->read_num_mp_mem;
@@ -1123,6 +1130,7 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 				    struct xio_task *task)
 {
 	XIO_TO_TCP_TASK(task, tcp_task);
+	size_t				pad_len;
 	size_t				hdr_len;
 	size_t				data_len;
 	size_t				xio_hdr_len;
@@ -1146,10 +1154,12 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len	 = vmsg->header.iov_len;
-	if (hdr_len && hdr_len >= tcp_hndl->peer_max_header) {
-		ERROR_LOG("hdr_len=%zd is bigger than peer_max_reader=%d\n",
+	if (hdr_len > tcp_hndl->peer_max_header) {
+		ERROR_LOG("hdr_len=%zd is bigger than peer_max_header=%d\n",
 				hdr_len, tcp_hndl->peer_max_header);
 		return -1;
+	} else if (!hdr_len) {
+		hdr_len = tcp_hndl->peer_max_header;
 	}
 
 	/* before working on the out - current place after the session header */
@@ -1157,11 +1167,18 @@ static int xio_tcp_prep_req_in_data(struct xio_tcp_transport *tcp_hndl,
 	xio_hdr_len += sizeof(struct xio_tcp_rsp_hdr);
 	xio_hdr_len += sizeof(struct xio_sge) * nents;
 
+	if (g_poptions->inline_xio_data_align && data_len) {
+		uint16_t hdr_len_ex = xio_hdr_len + hdr_len;
+
+		pad_len = ALIGN(hdr_len_ex, g_poptions->inline_xio_data_align) -
+			        hdr_len_ex;
+	}
+
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
 	if (!(task->omsg_flags & XIO_MSG_FLAG_PEER_WRITE_RSP) &&
-	    data_len + hdr_len + xio_hdr_len < tcp_hndl->max_inline_buf_sz) {
+	    data_len + hdr_len + pad_len + xio_hdr_len <= tcp_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		tcp_task->in_tcp_op = XIO_TCP_SEND;
 		tcp_task->read_num_mp_mem = (data_len) ?
@@ -1542,6 +1559,13 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	xio_hdr_len += tcp_task->req_in_num_sge * sizeof(struct xio_sge);
 	enforce_write_rsp = task->imsg_flags & XIO_HEADER_FLAG_PEER_WRITE_RSP;
 
+	if (ulp_hdr_len > tcp_hndl->peer_max_header &&
+	    IS_APPLICATION_MSG(task->tlv_type)) {
+		ERROR_LOG("hdr_len=%llu is bigger than peer_max_header=%d\n",
+				ulp_hdr_len, tcp_hndl->peer_max_header);
+		goto cleanup;
+	}
+
 	if (g_poptions->inline_xio_data_align && ulp_imm_len) {
 		uint16_t hdr_len = xio_hdr_len + ulp_hdr_len;
 
@@ -1565,7 +1589,7 @@ static int xio_tcp_send_rsp(struct xio_tcp_transport *tcp_hndl,
 	if ((ulp_imm_len == 0) || (!enforce_write_rsp &&
 				   ((xio_hdr_len + ulp_hdr_len +
 				     ulp_pad_len + ulp_imm_len)
-				    < tcp_hndl->max_inline_buf_sz))) {
+				    <= tcp_hndl->max_inline_buf_sz))) {
 		tcp_task->out_tcp_op = XIO_TCP_SEND;
 		/* write xio header to the buffer */
 		retval = xio_tcp_prep_rsp_header(

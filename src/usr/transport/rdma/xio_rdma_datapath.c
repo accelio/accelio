@@ -2083,6 +2083,14 @@ static int xio_rdma_prep_rsp_out_data(
 			   (task->imsg_flags &
 			    XIO_HEADER_FLAG_PEER_WRITE_RSP));
 
+	/* force check on application messages only */
+	if (ulp_hdr_len > rdma_hndl->peer_max_header &&
+	    IS_APPLICATION_MSG(task->tlv_type)) {
+		ERROR_LOG("hdr_len=%d is bigger than peer_max_header=%d\n",
+				ulp_hdr_len, rdma_hndl->peer_max_header);
+		goto cleanup;
+	}
+
 	/*
 	if (rdma_hndl->max_inline_buf_sz < xio_hdr_len + ulp_hdr_len) {
 		ERROR_LOG("header size %lu exceeds max header %lu\n",
@@ -2110,7 +2118,7 @@ static int xio_rdma_prep_rsp_out_data(
 	    (!enforce_write_rsp &&
 	     (tbl_nents(sgtbl_ops, sgtbl) <=
 	      (size_t)(rdma_hndl->max_sge - 1)) &&
-	     ((xio_hdr_len + ulp_hdr_len + ulp_pad_len + ulp_imm_len) <
+	     ((xio_hdr_len + ulp_hdr_len + ulp_pad_len + ulp_imm_len) <=
 	      (uint64_t)rdma_hndl->max_inline_buf_sz))) {
 		rdma_task->out_ib_op = XIO_IB_SEND;
 		/* write xio header to the buffer */
@@ -2414,6 +2422,7 @@ static int xio_rdma_prep_req_in_data(
 {
 	XIO_TO_RDMA_TASK(task, rdma_task);
 	size_t				hdr_len;
+	size_t				pad_len = 0;
 	size_t				xio_hdr_len;
 	size_t				data_len;
 	struct xio_vmsg			*vmsg = &task->omsg->in;
@@ -2438,10 +2447,12 @@ static int xio_rdma_prep_req_in_data(
 
 	data_len = tbl_length(sgtbl_ops, sgtbl);
 	hdr_len  = vmsg->header.iov_len;
-	if (hdr_len && hdr_len >= rdma_hndl->peer_max_header) {
-		ERROR_LOG("hdr_len=%d is bigger than peer_max_reader=%d\n",
+	if (hdr_len > rdma_hndl->peer_max_header) {
+		ERROR_LOG("hdr_len=%d is bigger than peer_max_header=%d\n",
 				hdr_len, rdma_hndl->peer_max_header);
 		return -1;
+	} else if (!hdr_len) {
+		hdr_len = rdma_hndl->peer_max_header;
 	}
 
 	/* before working on the out - current place after the session header */
@@ -2449,12 +2460,19 @@ static int xio_rdma_prep_req_in_data(
 	xio_hdr_len += sizeof(struct xio_rdma_rsp_hdr);
 	xio_hdr_len += sizeof(struct xio_sge) * nents;
 
+	if (g_options.inline_xio_data_align && data_len) {
+		uint16_t hdr_len_ex = xio_hdr_len + hdr_len;
+
+		pad_len = ALIGN(hdr_len_ex, g_options.inline_xio_data_align) -
+				hdr_len_ex;
+	}
+
 	/* requester may insist on RDMA for small buffers to eliminate copy
 	 * from receive buffers to user buffers
 	 */
 	enforce_write_rsp = task->omsg_flags & XIO_MSG_FLAG_PEER_WRITE_RSP;
 	if (!enforce_write_rsp &&
-	    data_len + hdr_len + xio_hdr_len < rdma_hndl->max_inline_buf_sz) {
+	    data_len + pad_len + hdr_len + xio_hdr_len <= rdma_hndl->max_inline_buf_sz) {
 		/* user has small response - no rdma operation expected */
 		rdma_task->in_ib_op = XIO_IB_SEND;
 		rdma_task->read_num_reg_mem = (data_len) ? nents : 0;
