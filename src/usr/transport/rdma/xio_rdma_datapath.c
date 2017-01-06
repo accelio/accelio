@@ -3902,6 +3902,7 @@ static int xio_sched_rdma_wr_req(struct xio_rdma_transport *rdma_hndl,
 			       sge_addr(sgtbl_ops, sg),
 			       sge_length(sgtbl_ops, sg));
 		}
+		rdma_task->write_num_reg_mem = tbl_nents(sgtbl_ops, sgtbl);
 	} else {
 		for_each_sge(sgtbl, sgtbl_ops, sg, i) {
 			lsg_list[i].addr	= uint64_from_ptr(
