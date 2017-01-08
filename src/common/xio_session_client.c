@@ -608,9 +608,8 @@ int xio_on_setup_rsp_recv(struct xio_connection *connection,
 		return 0;
 	case XIO_ACTION_REJECT:
 		xio_connection_set_state(connection,
-					 XIO_CONNECTION_STATE_ESTABLISHED);
-		xio_session_notify_connection_established(session,
-							  connection);
+					 XIO_CONNECTION_STATE_ERROR);
+		xio_session_notify_connection_rejected(session, connection);
 
 		session->state = XIO_SESSION_STATE_REJECTED;
 		session->disable_teardown = 0;

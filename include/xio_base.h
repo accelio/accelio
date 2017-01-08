@@ -419,6 +419,7 @@ enum xio_session_event {
 	XIO_SESSION_CONNECTION_CLOSED_EVENT,	  /**< connection closed event*/
 	XIO_SESSION_CONNECTION_DISCONNECTED_EVENT, /**< disconnection event   */
 	XIO_SESSION_CONNECTION_REFUSED_EVENT,	  /**< connection refused event*/
+	XIO_SESSION_CONNECTION_REJECTED_EVENT,    /**< connection rejected event*/
 	XIO_SESSION_CONNECTION_ERROR_EVENT,	  /**< connection error event */
 	XIO_SESSION_ERROR_EVENT,		  /**< session error event    */
 	XIO_SESSION_CONNECTION_RECONNECTING_EVENT,		  /**< connection reconnecting event    */
