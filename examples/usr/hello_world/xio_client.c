@@ -189,6 +189,7 @@ int main(int argc, char *argv[])
 	memset(&session_data, 0, sizeof(session_data));
 	memset(&params, 0, sizeof(params));
 	memset(&cparams, 0, sizeof(cparams));
+	memset(&xbuf, 0, sizeof(xbuf));
 
 	/* initialize library */
 	xio_init();
