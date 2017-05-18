@@ -57,7 +57,6 @@ enum xio_connection_state {
 #define		SEND_ACK	0x0001
 #define		SEND_FIN	0x0002
 
-#define         XIO_MIN_CONNECTION_TIMEOUT	1000
 #define         XIO_DEF_CONNECTION_TIMEOUT	300000
 
 struct xio_transition {

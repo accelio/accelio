@@ -2119,14 +2119,10 @@ int xio_modify_connection(struct xio_connection *connection,
 	if (test_bits(XIO_CONNECTION_ATTR_USER_CTX, &attr_mask))
 		connection->cb_user_context = attr->user_context;
         if (test_bits(XIO_CONNECTION_ATTR_DISCONNECT_TIMEOUT, &attr_mask)) {
-                if (attr->disconnect_timeout_secs) {
-                        if (attr->disconnect_timeout_secs < XIO_MIN_CONNECTION_TIMEOUT)
-                                connection->disconnect_timeout = XIO_MIN_CONNECTION_TIMEOUT;
-                        else
-                                connection->disconnect_timeout = attr->disconnect_timeout_secs * 1000;
-                } else {
-                        connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
-                }
+                if (attr->disconnect_timeout_secs)
+			connection->disconnect_timeout = attr->disconnect_timeout_secs * 1000;
+		else 
+			connection->disconnect_timeout = XIO_DEF_CONNECTION_TIMEOUT;
         }
 		/*
 	memset(&nattr, 0, sizeof(nattr));
