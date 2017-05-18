@@ -1,3 +1,0 @@
-[submodule "src/kernel/compat/compat"]
-	path = src/kernel/compat/compat
-	url = https://github.com/mcgrof/compat
